@@ -63,7 +63,7 @@ const COLLECTION_VARIABLES: readonly OutputTemplateVariable[] = [
     {name: 'episode_site_id', description: 'The id the site gives the episode, such as a YouTube video id', short: 'The site\'s own id'},
     {name: 'episode_uploader', description: 'Who uploaded the episode, when the site says; empty otherwise', short: 'Who uploaded it'},
     {name: 'duration_seconds', description: 'Episode duration in whole seconds', short: 'Length in seconds'},
-    {name: 'dw_episode_number', description: 'Raw episode number exactly as returned by the source', short: 'Number as the site gives it'},
+    {name: 'source_number', description: 'The episode number as its site writes it, such as 2460.10 on The Daily Wire; empty on most sites', short: 'Number as the site gives it'},
     {
         name: 'episode_type',
         description: 'Episode type: ep for a normal episode, or a type the site gives its other content', short: 'ep, or the site\'s own type',

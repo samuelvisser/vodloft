@@ -64,7 +64,7 @@ def upsert_episode(
                 "season_id": season.id,
                 "index": index_value,
                 "episode_identifier": ep_id,
-                "dw_episode_number": ep.episode_number or None,
+                "source_number": ep.episode_number or None,
                 # The Daily Wire names no uploader per episode; the show's host uploads them all.
                 "author_name": collection.author_name or None,
                 "metadata_is_final": metadata_is_final_for_new_episode(
@@ -85,7 +85,7 @@ def upsert_episode(
         episode.season_id = season.id
         episode.index = index_value
         episode.episode_identifier = ep_id
-        episode.dw_episode_number = ep.episode_number or None
+        episode.source_number = ep.episode_number or None
         episode.author_name = episode.author_name or collection.author_name or None
         episode.publish_status = ep.publish_status
         episode.metadata_is_final = metadata_is_final_for_new_episode(

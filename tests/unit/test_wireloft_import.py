@@ -330,3 +330,7 @@ def test_an_imported_season_keeps_its_slug_when_another_collection_uses_it_too(i
     imported = session.scalar(select(Collection).where(Collection.slug != "other-show"))
     # Indexing finds a collection's seasons by the Source's slug, which is unique only within the collection.
     assert [season.slug for season in imported.seasons] == ["morning-show-season-1"]
+
+
+def test_dw_episode_number_becomes_source_number():
+    assert rename_template_variables("{{ dw_episode_number }} dw_episode_number") == "{{ source_number }} dw_episode_number"

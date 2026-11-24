@@ -101,7 +101,7 @@ def episode_view_columns():
         Episode.season_id.label("season_id"),
         Episode.index.label("index"),
         Episode.episode_identifier.label("episode_identifier"),
-        Episode.dw_episode_number.label("dw_episode_number"),
+        Episode.source_number.label("source_number"),
         Episode.publish_status.label("publish_status"),
         Episode.drm_protected.label("drm_protected"),
         Episode.access.label("access"),

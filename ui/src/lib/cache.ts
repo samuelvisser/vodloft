@@ -124,7 +124,7 @@ function compactEpisodes(data: EpisodeReadView[]): EpisodeReadView[] {
     seasonId: episode.seasonId,
     index: episode.index,
     episodeIdentifier: episode.episodeIdentifier,
-    dwEpisodeNumber: episode.dwEpisodeNumber,
+    sourceNumber: episode.sourceNumber,
     episodeType: episode.episodeType,
     episodeExtraType: episode.episodeExtraType,
     episodeNumber: episode.episodeNumber,

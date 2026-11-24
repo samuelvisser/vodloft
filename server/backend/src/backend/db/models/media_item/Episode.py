@@ -79,7 +79,7 @@ class Episode(
                 "Extras are numbered in the order of their index, and an extra keeps its number",
     )
     episode_identifier: Mapped[str] = mapped_column(comment="Unique identifier that is used to identify the episode within the collection")
-    dw_episode_number: Mapped[Optional[str]] = mapped_column(comment="Episode number exactly as returned by The Daily Wire")
+    source_number: Mapped[Optional[str]] = mapped_column(comment="The episode number as its Site writes it, such as 2460.10 on The Daily Wire; empty on most Sites")
     slug: Mapped[str] = mapped_column(index=True, unique=True)
     source_slug: Mapped[str] = mapped_column(
         default=lambda context: context.get_current_parameters()["slug"],

@@ -106,7 +106,7 @@ def test_monitor_reconciles_identifier_while_episode_stays_pending(monkeypatch):
     stored = session.get(Episode, episode.id)
     assert stored is not None
     assert stored.episode_identifier == "ep.2500"
-    assert stored.dw_episode_number == "2500.00"
+    assert stored.source_number == "2500.00"
 
     session.close()
     engine.dispose()

@@ -50,7 +50,7 @@ class _EpisodeIdentifierAPIOut(ResponseBase):
     """Shared canonical episode-identifier fields for API response models."""
 
     episode_identifier: str
-    dw_episode_number: Optional[str]
+    source_number: Optional[str]
     episode_type: Optional[str]
     episode_extra_type: Optional[str]
     episode_number: Optional[str]
