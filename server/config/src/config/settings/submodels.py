@@ -607,7 +607,7 @@ class QuickDownloadSettings(SubmodelBase):
     default_codec: QuickDownloadCodec = Field(default=QuickDownloadCodec.AUTO, description="The video codec quick downloads prefer; auto leaves it to the Source")
     default_audio_format: QuickDownloadAudioFormat = Field(default=QuickDownloadAudioFormat.M4A, description="M4A or MP3 for quick download audio")
     default_mp3_bitrate: int = Field(default=192, description="MP3 bitrate in kbps: 320, 192 or 128")
-    embed_metadata: bool = Field(default=True, description="Embed title, collection or channel and date in quick download files")
+    embed_metadata: bool = Field(default=True, description="Embed title, description, author and date in quick download files")
     embed_artwork: bool = Field(default=True, description="Embed cover art in quick download files")
     keep_downloaded_minutes: int = Field(
         default=10,
