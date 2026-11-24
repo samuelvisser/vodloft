@@ -5,7 +5,6 @@ import {ChosenCollectionCard} from './CollectionPreviewCard'
 import type {CollectionCreatePayloadOut} from '../../types/schemas/collection'
 import LocalMediaProfileForm from '../LocalMediaProfile/LocalMediaProfileForm'
 import CollectionLocalMediaProfileOutputTemplate from '../LocalMediaProfile/CollectionLocalMediaProfileOutputTemplate'
-import IndexingValuesEditorButton from '../LocalMediaProfile/IndexingValuesEditorButton'
 import {useLocalMediaProfileSites, useLocalMediaProfiles} from '../../lib/queries'
 import {CollectionLocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {
@@ -183,7 +182,6 @@ export default function LocalMediaProfileStep({
                                 mode="collection"
                                 isCreating
                                 onCollectionRoot={onCollectionRoot}
-                                outputTemplateActions={<IndexingValuesEditorButton form={form} className="btn btn-small"/>}
                             />
                         </>
                     )}

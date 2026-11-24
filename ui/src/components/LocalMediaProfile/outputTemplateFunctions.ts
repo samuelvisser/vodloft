@@ -33,7 +33,7 @@ export const TEMPLATE_FUNCTIONS: readonly TemplateFunction[] = [
                 name: "'key'",
                 default: 'required',
                 description: 'Which Indexing value to count: its key in quotes, before the |. Add Indexing values '
-                    + 'with the Indexing values button.',
+                    + 'with Edit in the Indexing tab of this reference.',
             },
             {
                 name: 'per',

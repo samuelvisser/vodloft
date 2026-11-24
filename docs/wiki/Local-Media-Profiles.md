@@ -367,7 +367,7 @@ An extra keeps its number, so its files keep their names. A new extra takes the 
 
 ## Custom Indexes
 
-A Custom Index numbers the episodes a template picks out, such as the featurettes of a collection, so they can have their own running number. Add it with **Indexing values** in a Collection profile: give it a name and a key, such as `featurettes`. Then use the key in the template:
+A Custom Index numbers the episodes a template picks out, such as the featurettes of a collection, so they can have their own running number. Add it with **Indexing values** at the top of a Collection profile, or with **Edit** beside **Your Indexing values** in the **Indexing** tab of the template **Reference** (the only place while adding a collection). Give it a name and a key, such as `featurettes`. Then use the key in the template:
 
 ```jinja
 {% if episode_type == 'aux' %}{% set n = 'featurettes' | custom_index %}/downloads/{{ collection_title }}/Featurettes/Featurette {{ n }}.ext{% else %}/downloads/{{ collection_title }}/{{ title }}.ext{% endif %}

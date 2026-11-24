@@ -229,7 +229,7 @@ export default function EditLocalMediaProfilePage() {
             ]}/>
             <div className="view-header">
                 <h1 id="edit-media-profile-title">Edit local media profile</h1>
-                {profile.type === 'collection' && <IndexingValuesEditorButton form={form}/>}
+                {profile.type === 'collection' && <IndexingValuesEditorButton form={form} className="btn" label="Indexing values"/>}
             </div>
 
             <form id={formId} className="form local-media-profile-form" onSubmit={onFormSubmit} noValidate>

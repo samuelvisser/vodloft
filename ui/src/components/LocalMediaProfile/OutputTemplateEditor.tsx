@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type CSSProperties, type ReactNode} from 'react'
+import {useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type CSSProperties} from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import {
     autocompletion,
@@ -26,6 +26,7 @@ import OpaqueOutputTemplateCode from './OpaqueOutputTemplateCode'
 import OutputTemplateStartFields, {FilenameModeField} from './OutputTemplateStartFields'
 import CollectionRootNote from './CollectionRootNote'
 import {JINJA_FILTERS, TEMPLATE_FUNCTIONS} from './outputTemplateFunctions'
+import IndexingValuesEditorButton, {IndexingValuesError} from './IndexingValuesEditorButton'
 import TemplateReference, {SHEET_QUERY, type ReferenceEntry} from './TemplateReference'
 import {useSetExampleEpisode} from './ExampleEpisodeContext'
 import {useProfileFit} from './ProfileFit'
@@ -61,8 +62,6 @@ type Props = {
     isCreating?: boolean
     /** Hears the collection root once an example of the collection being added has shown it. */
     onCollectionRoot?: (path: string) => void
-    /** Buttons beside the template's heading, such as the Indexing values editor. */
-    headerActions?: ReactNode
 }
 
 type TemplateCodeEditorProps = {
@@ -634,7 +633,7 @@ function referenceEntry(variable: OutputTemplateVariable): ReferenceEntry {
     }
 }
 
-export default function OutputTemplateEditor({form, mode, placeholder, readOnly = false, isCreating = false, onCollectionRoot, headerActions}: Props) {
+export default function OutputTemplateEditor({form, mode, placeholder, readOnly = false, isCreating = false, onCollectionRoot}: Props) {
     const {control, formState: {errors}} = form
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
     const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
@@ -899,7 +898,6 @@ export default function OutputTemplateEditor({form, mode, placeholder, readOnly 
                                 : <p id="mp-path-help">Type <code>{'{{'}</code> for variables or <code>{'{%'}</code> for Jinja statements.</p>}
                         </div>
                         <div className="template-editor-heading__actions">
-                            {!readOnly && headerActions}
                             <button
                                 type="button"
                                 className={`btn btn-small template-reference-toggle${referenceOpen ? ' is-active' : ''}`}
@@ -938,6 +936,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, readOnly 
                             {String(errors.outputTemplate.message)}
                         </div>
                     )}
+                    {mode === 'collection' && !readOnly && <IndexingValuesError form={form}/>}
                     {!readOnly && <FilenameModeField form={form}/>}
                     {variableQuery.isError && (
                         <div className="error" role="alert">
@@ -1148,6 +1147,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, readOnly 
                         customIndexes={customIndexEntries}
                         metadata={metadataEntries}
                         onInsert={readOnly ? undefined : insertIntoTemplate}
+                        indexingValuesButton={mode === 'collection' && !readOnly ? <IndexingValuesEditorButton form={form}/> : undefined}
                         onClose={closeReference}
                     />
                 )}
