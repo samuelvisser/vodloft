@@ -180,11 +180,11 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
     }
     const actionLabel = (() => {
         if (!target) return null
-        if (target.kind === 'video') return localVideo ? 'Open video' : addingVideo ? 'Adding video…' : 'Add this video'
-        if (target.kind === 'movie') return localMovie ? 'Open movie' : 'Continue with this movie'
+        if (target.kind === 'video') return localVideo ? 'Open video' : addingVideo ? 'Adding to library…' : 'Add to library'
+        if (target.kind === 'movie') return localMovie ? 'Open movie' : 'Add to library'
         if (localCollection) return 'Open collection'
         if (creatorChoice) return 'Only its videos'
-        return link?.kind === 'episode' ? 'Add its collection' : 'Continue with this collection'
+        return link?.kind === 'episode' ? 'Add its collection' : 'Add to library'
     })()
 
     return (
