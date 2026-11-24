@@ -43,7 +43,7 @@ export default function CollectionsPage() {
         <section className="view" aria-labelledby="collections-title">
             <div className="view-header">
                 <h1 id="collections-title">Collections</h1>
-                <Link className="btn btn-primary" to="/add-collection">Add collection</Link>
+                <Link className="btn btn-primary" to="/add">Add collection</Link>
             </div>
 
             <div className="form-row">

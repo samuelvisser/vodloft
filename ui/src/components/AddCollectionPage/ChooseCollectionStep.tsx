@@ -1,4 +1,5 @@
 import {useEffect, useMemo, useRef} from "react";
+import {Link} from "react-router-dom";
 import DailywireShowCard from "./DailywireShowCard";
 import CollectionPreviewCard from "./CollectionPreviewCard";
 import {useDailywireShow, useDailywireUserInfo, useListedCollectionDetails, useResolvedLink} from "../../lib/queries";
@@ -274,28 +275,14 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                     {String(errors.root.message)}
                 </div>
             )}
-            <div className="form-row">
-                <label htmlFor="collection-url">Collection link</label>
-                <input
-                    id="collection-url"
-                    className="input"
-                    type="url"
-                    inputMode="url"
-                    placeholder="https://…"
-                    {...register("url")}
-                    aria-invalid={!!errors.url}
-                    aria-describedby={errors.url ? "collection-url-validate" : undefined}
-                />
-                {errors.url && (
-                    <div id="collection-url-validate" className="error" role="alert" aria-live="polite">
-                        {errors.url.message as string}
-                    </div>
-                )}
-                <div id="url-help" className="help">
-                    The link to the collection's own page, such as a Daily Wire show, a YouTube channel or a playlist.
-                    To add something else, use Add media.
-                </div>
-            </div>
+            {/* The collection's link comes with the page (?url=...), from Add media, which looked it up. */}
+            <input type="hidden" {...register("url")}/>
+            {!watchedUrl?.trim() && (
+                <p className="help">No collection was chosen. <Link to="/add">Find one in Add media</Link> first.</p>
+            )}
+            {errors.url && (
+                <div className="form-error-card" role="alert" aria-live="polite">{errors.url.message as string}</div>
+            )}
 
             {/* A show from a Source that lists its episodes */}
             {urlParsed.success && !slugFromUrl && (
