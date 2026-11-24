@@ -99,7 +99,7 @@ def _make_episode(
     status: str = "published_final",
     when: datetime | None = None,
     episode_identifier: str | None = None,
-    dw_episode_number: str | None = None,
+    source_number: str | None = None,
 ):
     from backend.db.models import Episode
 
@@ -112,7 +112,7 @@ def _make_episode(
         season=season,
         index=index,
         episode_identifier=episode_identifier or f"ep.{index}",
-        dw_episode_number=dw_episode_number,
+        source_number=source_number,
         slug=f"episode-{index}",
         title=f"Episode {index}",
         description="Description",
@@ -610,7 +610,7 @@ def test_date_based_podcast_omits_episode_numbers(db_session):
         season,
         index=91,
         episode_identifier="ep.2026-09-26T09:00:00.000000",
-        dw_episode_number="2497.10",
+        source_number="2497.10",
     )
     profile = _make_rss_profile(
         db_session,

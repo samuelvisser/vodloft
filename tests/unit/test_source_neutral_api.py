@@ -254,7 +254,7 @@ def test_movie_and_episode_responses_send_every_field(stub_sources):
         "download_delay_passed": True, "download_delay_ready_at": None, "title": "E", "description": None,
         "duration": 1.0, "uuid": "u", "slug": "e", "background_image_path": None,
         "thumbnail_landscape_path": None, "thumbnail_portrait_path": None, "thumbnail_square_path": None,
-        "episode_identifier": "ep.1", "dw_episode_number": None, "episode_type": None,
+        "episode_identifier": "ep.1", "source_number": None, "episode_type": None,
         "episode_extra_type": None, "episode_number": None, "episode_sub_number": None, "episode_label": "1",
         "created_at": now, "updated_at": now, "source_key": "stub",
     }).model_dump(by_alias=True)

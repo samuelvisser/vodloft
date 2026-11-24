@@ -89,7 +89,7 @@ _EXAMPLE_COLLECTION_VALUES = {
     "episode": "the-first-episode",
     "episode_title": "The First Episode",
     "title": "The First Episode",
-    "dw_episode_number": "1.00",
+    "source_number": "1.00",
     "episode_type": "ep",
     "episode_extra_type": "",
     "episode_number": "1",

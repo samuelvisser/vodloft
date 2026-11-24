@@ -33,7 +33,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "b5d81e3c7a26"
+HEAD_REVISION = "4c7e19a2b6d0"
 
 
 @pytest.fixture
@@ -1619,3 +1619,37 @@ def test_every_collection_without_a_link_of_its_own_becomes_a_custom_collection(
         assert connection.execute(text("SELECT id, kind FROM collections ORDER BY id")).all() == [
             (1, "custom"), (2, "channel"), (3, "list"),
         ]
+
+
+def test_dw_episode_number_becomes_source_number_in_episodes_and_saved_templates(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "b5d81e3c7a26")
+    template = "/downloads/{{ dw_episode_number }} {{ title | default('dw_episode_number') }} dw_episode_number.ext"
+    with engine.begin() as connection:
+        connection.execute(text(
+            "INSERT INTO local_media_profiles (id, slug, name, output_template, preferred_format, video_codecs, type) "
+            "VALUES (5, 'p', 'P', :template, 'format_1080p', '[]', 'collection')"
+        ), {"template": template})
+        connection.execute(text(
+            "INSERT INTO local_media_profiles_collection (id, episode_title_template, episode_description_template) "
+            "VALUES (5, '{{ dw_episode_number }} {{ title }}', NULL)"
+        ))
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT output_template FROM local_media_profiles")).scalar_one() == (
+            "/downloads/{{ source_number }} {{ title | default('dw_episode_number') }} dw_episode_number.ext"
+        )
+        assert tuple(connection.execute(text(
+            "SELECT episode_title_template, episode_description_template FROM local_media_profiles_collection"
+        )).one()) == ("{{ source_number }} {{ title }}", None)
+    assert "source_number" in {column["name"] for column in inspect(engine).get_columns("media_items_episode")}
+
+    command.downgrade(config, "b5d81e3c7a26")
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT output_template FROM local_media_profiles")).scalar_one() == template
+    assert "dw_episode_number" in {column["name"] for column in inspect(engine).get_columns("media_items_episode")}

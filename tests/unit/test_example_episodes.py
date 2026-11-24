@@ -81,7 +81,7 @@ def test_daily_wire_numbers_come_from_its_own_episode_numbers_and_seasons(newest
     (_extra_id, extra), (twelve_id, twelve) = _values(_collection("dailywire", "seasonal", seasons))
 
     assert twelve_id == "ep.S02E12"
-    assert (twelve["season_number"], twelve["season_index"], twelve["dw_episode_number"]) == ("2", "3", "12")
+    assert (twelve["season_number"], twelve["season_index"], twelve["source_number"]) == ("2", "3", "12")
     assert extra["episode_type"] == "ep-extra" and extra["episode_label"] == "[episode_label]"
 
 

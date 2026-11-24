@@ -85,8 +85,8 @@ class EpisodePlan:
     episode_id: int
     identifier: str | None
     previous_identifier: str | None
-    dw_episode_number: str | None
-    update_dw_episode_number: bool
+    source_number: str | None
+    update_source_number: bool
 
 
 @dataclass(frozen=True)
@@ -542,12 +542,12 @@ def _plan_collection(
                 episode_id=episode.id,
                 identifier=None if quarantined else final,
                 previous_identifier=final if quarantined else None,
-                dw_episode_number=(
+                source_number=(
                     record.episode_number or None
                     if record is not None
                     else None
                 ),
-                update_dw_episode_number=record is not None,
+                update_source_number=record is not None,
             )
         )
 
@@ -589,8 +589,8 @@ def _apply_collection_plan(plan: CollectionPlan) -> None:
             if episode_plan.identifier is not None and episode.episode_identifier != episode_plan.identifier:
                 changed_identifiers[episode.id] = episode.episode_identifier
                 episode.episode_identifier = f"background-indexing.{episode.id}"
-            if episode_plan.update_dw_episode_number:
-                episode.dw_episode_number = episode_plan.dw_episode_number
+            if episode_plan.update_source_number:
+                episode.source_number = episode_plan.source_number
 
         session.flush()
 

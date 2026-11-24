@@ -35,7 +35,7 @@ def _episode(*, collection_metadata=None):
         published_date=None,
         index=1,
         extra_index=None,
-        dw_episode_number=None,
+        source_number=None,
     )
 
 

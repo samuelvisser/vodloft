@@ -52,7 +52,7 @@ MOVIE_DATE_OUTPUT_TEMPLATE_FIELDS = frozenset({
 
 COLLECTION_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "collection", "collection_title", "season", "season_name", "season_index", "season_type", "season_number",
-    "episode", "episode_title", "title", "dw_episode_number", "episode_type", "episode_extra_type",
+    "episode", "episode_title", "title", "source_number", "episode_type", "episode_extra_type",
     "episode_number", "episode_sub_number", "episode_label", "episode_identifier", "episode_published_date",
     "episode_published_time", "episode_published_datetime", "episode_index", "extra_index",
     "collection_author", "collection_site_id", "episode_site_id", "episode_uploader", "duration_seconds",
@@ -408,7 +408,7 @@ def episode_output_template_values(
         "duration_seconds": str(round(episode.duration or 0)),
         "episode_title": episode.title,
         "title": episode.title,
-        "dw_episode_number": episode.dw_episode_number or "",
+        "source_number": episode.source_number or "",
         "episode_type": ep_info.type or "",
         "episode_extra_type": ep_info.extra_type or "",
         "episode_number": ep_info.episode_number or "",
