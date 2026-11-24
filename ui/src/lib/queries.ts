@@ -78,7 +78,7 @@ import {VideoRead, VideoReadSchema} from "../types/schemas/video";
 import {
     ApiKeyNoteRead, ApiKeyNoteReadSchema, ApiStatusRead, ApiStatusReadSchema, EpisodeTagRead, EpisodeTagReadSchema, PublishStatusLabelRead, PublishStatusLabelReadSchema, ProgramStatusRead, SourceProblemRead,
     SourceProblemReadSchema, ProgramStatusReadSchema, ResolvedLinkRead,
-    ResolvedLinkReadSchema, MediaLinksReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SiteReadSchema, SourceRead, SiteAuthenticationRead, SiteAuthenticationReadSchema, SiteChoiceRead, SiteChoiceReadSchema,
+    ResolvedLinkReadSchema, LinkPreviewRead, LinkPreviewReadSchema, MediaLinksReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SiteReadSchema, SourceRead, SiteAuthenticationRead, SiteAuthenticationReadSchema, SiteChoiceRead, SiteChoiceReadSchema,
     SourceReadSchema,
     YtdlpOptionsReadSchema,
 } from "../types/schemas/source";
@@ -871,9 +871,10 @@ export function useListedCollectionDetails(sourceId: string | undefined, url: st
 }
 
 /** Reads a lookup's answer, such as a creator's or a link's, sent a line of JSON at a time: tells ``onPlan`` the steps of the lookup's plan each
- * time it changes, and returns the result line after them. */
+ * time it changes, and ``onPreview`` a quick first look at what it is finding when one comes, and returns the result
+ * line after them. */
 async function readLookup(
-    response: Response, {onPlan}: {onPlan: (steps: ProgressStep[]) => void},
+    response: Response, {onPlan, onPreview}: {onPlan: (steps: ProgressStep[]) => void, onPreview?: (preview: unknown) => void},
 ): Promise<Record<string, unknown>> {
     if (!response.ok || !response.body) throw await responseError(response)
     const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
@@ -886,6 +887,7 @@ async function readLookup(
         for (const line of lines.filter((item) => item.trim())) {
             const message = JSON.parse(line) as Record<string, unknown>
             if (message.plan) onPlan(lookupSteps(PlanSchema.parse(message.plan)))
+            else if (message.preview) onPreview?.(message.preview)
             else if (typeof message.error === 'string') throw new ApiError(message.error, 502)
             else return message
         }
@@ -1048,9 +1050,11 @@ export async function addCollectionToCreator(slug: string, creatorSlug: string):
 }
 
 /** Ask the backend which Source recognises a link, and what it points to. ``sourceKey`` asks only that Source.
- * ``onPlan`` hears the steps of the lookup as it goes, such as asking yt-dlp. */
+ * ``onPlan`` hears the steps of the lookup as it goes, such as asking yt-dlp, and ``onPreview`` a quick first look
+ * at the link, such as a YouTube video's title and thumbnail, when one comes before the lookup is done. */
 export async function resolveLink(
-    url: string, signal?: AbortSignal, sourceKey?: string, onPlan: (steps: ProgressStep[]) => void = () => {},
+    url: string, signal?: AbortSignal, sourceKey?: string,
+    {onPlan = () => {}, onPreview = () => {}}: {onPlan?: (steps: ProgressStep[]) => void, onPreview?: (preview: LinkPreviewRead) => void} = {},
 ): Promise<ResolvedLinkRead> {
     const response = await fetch(`${apiUrl()}/resolve`, {
         method: 'POST',
@@ -1059,7 +1063,7 @@ export async function resolveLink(
         body: JSON.stringify(sourceKey ? {url, sourceKey} : {url}),
         signal,
     })
-    const result = await readLookup(response, {onPlan})
+    const result = await readLookup(response, {onPlan, onPreview: (preview) => onPreview(LinkPreviewReadSchema.parse(preview))})
     return ResolvedLinkReadSchema.parse(result.link)
 }
 

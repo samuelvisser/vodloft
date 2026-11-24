@@ -1,3 +1,5 @@
+import threading
+
 from fastapi import APIRouter, HTTPException, Query
 
 from backend.api.models.source import (
@@ -27,7 +29,7 @@ from config.settings.site_settings import SiteSettingGroup
 from .service import (
     LinkNotRecognisedError, SourceFeatureMissingError, UnknownSiteError, api_key_notes, get_api_status, put_off_api_key_note, get_program_status,
     list_source_problems, list_source_sites,
-    link_question, list_sources, lookup_show_details, sources_in_use, resolve_link, search_source, set_site_preference, source_with,
+    link_preview, link_question, list_sources, lookup_show_details, sources_in_use, resolve_link, search_source, set_site_preference, source_with,
     update_source_program,
 )
 from backend.security.access import Access, Area, Level
@@ -154,13 +156,29 @@ def resolve(body: ResolveAPIRequest, access: Access = signed_in()):
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     def look_up(send) -> dict:
+        # A quick first look, such as YouTube's title and thumbnail, is sent beside the plan when it comes before the
+        # full lookup is done; never after it, which ends the answer.
+        lock = threading.Lock()
+        done = False
+
+        def first_look() -> None:
+            preview = link_preview(question)
+            with lock:
+                if preview is not None and not done:
+                    send(preview=preview.model_dump(mode="json", by_alias=True))
+
+        threading.Thread(target=first_look, name="link-preview", daemon=True).start()
         plan = PlanTracker(sink=plan_lines(send))
-        with db_session() as s:
-            try:
-                link = resolve_link(s, access, question, plan)
-            except LinkNotRecognisedError as exc:
-                return {"error": str(exc)}
-        return {"link": link.model_dump(mode="json", by_alias=True)}
+        try:
+            with db_session() as s:
+                try:
+                    link = resolve_link(s, access, question, plan)
+                except LinkNotRecognisedError as exc:
+                    return {"error": str(exc)}
+            return {"link": link.model_dump(mode="json", by_alias=True)}
+        finally:
+            with lock:
+                done = True
 
     return stream_steps(look_up, "Could not look up this link")
 

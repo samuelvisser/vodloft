@@ -288,6 +288,19 @@ def link_question(s: Session, access: Access, url: str, source_key: str | None =
     return LinkQuestion(url, asked, allowed, source_key is not None)
 
 
+def link_preview(question: LinkQuestion) -> ResolvedLinkPreviewAPIRead | None:
+    """A first look at the link from the first Source asked, such as YouTube's title and thumbnail in well under a
+    second, to show while the full lookup runs. None when that Source has no faster way, or it failed: the full
+    lookup reports problems."""
+    source = question.asked[0]
+    try:
+        preview = source.preview(question.url)
+    except Exception:  # noqa: BLE001 - a preview is a nicety.
+        logger.debug("No quick preview from %s for %s", source.id, question.url, exc_info=True)
+        return None
+    return ResolvedLinkPreviewAPIRead.model_validate(preview) if preview is not None else None
+
+
 def resolve_link(s: Session, access: Access, question: LinkQuestion, plan: PlanTracker | None = None) -> ResolvedLinkAPIRead:
     """Ask each Source of the question in turn until one recognises the link. Each Source reports what it asks its
     Site as steps of ``plan``."""

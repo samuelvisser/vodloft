@@ -17,6 +17,7 @@ import {ClearInputButton} from '../components/common/ClearInputButton'
 import AddEmptyCollectionDialog from '../components/AddEmptyCollection/AddEmptyCollectionDialog'
 import LookupSteps from './creator/LookupSteps'
 import type {ProgressStep} from '../types/progress'
+import type {LinkPreviewRead} from '../types/schemas/source'
 import './creator/CreatorPages.css'
 
 type AddMediaPageProps = {
@@ -46,6 +47,8 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
     const [resolving, setResolving] = useState(false)
     // What the lookup is doing, step by step, while it runs.
     const [steps, setSteps] = useState<ProgressStep[]>([])
+    // A quick first look at the link, such as a YouTube video's title and thumbnail, while the full lookup runs.
+    const [firstLook, setFirstLook] = useState<LinkPreviewRead | null>(null)
     // The Sources that can handle the link's site, kept while another one is tried.
     const [candidates, setCandidates] = useState<SourceRead[]>([])
     const [askedSource, setAskedSource] = useState<string | null>(null)
@@ -64,9 +67,11 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
         setError(null)
         setLink(null)
         setSteps([])
+        setFirstLook(null)
         try {
-            const resolved = await resolveLink(trimmed, controller.signal, sourceKey, (plan) => {
-                if (!controller.signal.aborted) setSteps(plan)
+            const resolved = await resolveLink(trimmed, controller.signal, sourceKey, {
+                onPlan: (plan) => { if (!controller.signal.aborted) setSteps(plan) },
+                onPreview: (preview) => { if (!controller.signal.aborted) setFirstLook(preview) },
             })
             if (!controller.signal.aborted) {
                 setLink(resolved)
@@ -180,6 +185,7 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
     }
 
     const image = toImageUrl(link?.preview.imageUrl)
+    const firstLookImage = toImageUrl(firstLook?.imageUrl)
     const actionLabel = (() => {
         if (!target) return null
         if (target.kind === 'video') return localVideo ? 'Open video' : addingVideo ? 'Adding video…' : 'Add this video'
@@ -252,14 +258,24 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
 
             {resolving && (
                 <article className="add-media-preview add-media-preview--loading creator-skeleton" aria-label="Looking up the link" aria-busy="true">
-                    <span className="add-media-preview-art skeleton-block" aria-hidden="true"/>
-                    <div className="add-media-preview-copy">
-                        <LookupSteps steps={steps} first="Finding the service the link comes from"/>
-                        <div className="creator-skeleton-copy" aria-hidden="true">
-                            <span className="skeleton-block creator-skeleton-line creator-skeleton-line--kind"/>
-                            <span className="skeleton-block creator-skeleton-line creator-skeleton-line--title-small"/>
-                            <span className="skeleton-block creator-skeleton-line"/>
+                    {firstLookImage ? (
+                        <div className="add-media-preview-art">
+                            <img src={firstLookImage} alt="" decoding="async"/>
                         </div>
+                    ) : <span className="add-media-preview-art skeleton-block" aria-hidden="true"/>}
+                    <div className="add-media-preview-copy">
+                        {firstLook ? (
+                            <div className="add-media-preview-first-look">
+                                {firstLook.authorName && <p>{firstLook.authorName}</p>}
+                                <h2>{firstLook.title}</h2>
+                            </div>
+                        ) : (
+                            <div className="creator-skeleton-copy" aria-hidden="true">
+                                <span className="skeleton-block creator-skeleton-line creator-skeleton-line--kind"/>
+                                <span className="skeleton-block creator-skeleton-line creator-skeleton-line--title-small"/>
+                            </div>
+                        )}
+                        <LookupSteps steps={steps} first="Finding the service the link comes from"/>
                     </div>
                 </article>
             )}

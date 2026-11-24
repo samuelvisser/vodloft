@@ -353,3 +353,31 @@ def test_a_source_with_search_is_searched_by_name(client, monkeypatch):
             "linkLabel": None, "linkPath": None,
         },
     }
+
+
+def test_a_quick_first_look_comes_before_the_link(client, monkeypatch):
+    import threading
+    import time
+
+    from sources.contract import LinkPreview
+
+    stub = registry.get_source("stub")
+    previewed = threading.Event()
+
+    def preview(url):
+        previewed.set()
+        return LinkPreview(title="Quick title", image_url="https://img/quick.jpg", author_name="Maker")
+
+    def resolve(url, plan=None):
+        # The full lookup takes longer than the first look.
+        previewed.wait(5)
+        time.sleep(0.3)
+        return ResolvedLink(kind=LinkKind.MOVIE, slug="clip-1", url=url, title="Full title")
+
+    monkeypatch.setattr(stub, "preview", preview)
+    monkeypatch.setattr(stub, "resolve", resolve)
+    lines = [json.loads(line) for line in client.post("/api/resolve", json={"url": "https://stub.example/watch/clip-1"}).text.splitlines()]
+    first_look = next(line["preview"] for line in lines if "preview" in line)
+    assert first_look == {"title": "Quick title", "description": None, "imageUrl": "https://img/quick.jpg", "authorName": "Maker"}
+    assert lines.index({"preview": first_look}) < len(lines) - 1
+    assert lines[-1]["link"]["preview"]["title"] == "Full title"
