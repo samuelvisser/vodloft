@@ -26,7 +26,7 @@ import OpaqueOutputTemplateCode from './OpaqueOutputTemplateCode'
 import OutputTemplateStartFields, {FilenameModeField} from './OutputTemplateStartFields'
 import CollectionRootNote from './CollectionRootNote'
 import {JINJA_FILTERS, TEMPLATE_FUNCTIONS} from './outputTemplateFunctions'
-import TemplateReference, {type ReferenceEntry} from './TemplateReference'
+import TemplateReference, {SHEET_QUERY, type ReferenceEntry} from './TemplateReference'
 import {useSetExampleEpisode} from './ExampleEpisodeContext'
 import {useProfileFit} from './ProfileFit'
 import {outputTemplateSyntaxExtensions} from './outputTemplateCodeMirror'
@@ -55,7 +55,6 @@ type Props = {
     form: UseFormReturn<any>
     mode: LocalMediaProfileMode
     placeholder: string
-    help: ReactNode
     /** Shows a saved profile's template and its examples without letting it be changed here. */
     readOnly?: boolean
     /** A new profile, which starts with the presets open. */
@@ -629,11 +628,13 @@ function describeTypedCharacter(char: string): string {
 }
 
 function referenceEntry(variable: OutputTemplateVariable): ReferenceEntry {
-    const code = `{{ ${variable.name} }}`
-    return {code, insert: code, description: variable.description, readMore: variable.readMore}
+    return {
+        code: variable.name, insert: `{{ ${variable.name} }}`,
+        description: variable.description, short: variable.short, readMore: variable.readMore,
+    }
 }
 
-export default function OutputTemplateEditor({form, mode, placeholder, help, readOnly = false, isCreating = false, onCollectionRoot, headerActions}: Props) {
+export default function OutputTemplateEditor({form, mode, placeholder, readOnly = false, isCreating = false, onCollectionRoot, headerActions}: Props) {
     const {control, formState: {errors}} = form
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
     const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
@@ -714,7 +715,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
         [variables],
     )
     const customIndexEntries: ReferenceEntry[] = (indexingValues as IndexingValueEntry[]).map(({key, name, keepNumbers}) => ({
-        code: `{{ '${key}' | custom_index }}`,
+        code: `'${key}' | custom_index`,
         insert: `{{ '${key}' | custom_index }}`,
         description: keepNumbers ? `${name}. Keeps the numbers it gave out.` : name,
     }))
@@ -738,7 +739,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
             view.dispatch(view.state.replaceSelection(text), {scrollIntoView: true})
         }
         // On a phone the reference covers the editor, so close it to show where the text went.
-        if (window.matchMedia('(max-width: 1099px)').matches) setReferenceOpen(false)
+        if (window.matchMedia(SHEET_QUERY).matches) setReferenceOpen(false)
         else view.focus()
     }, [])
     const [usedVariableNames, setUsedVariableNames] = useState<string[]>([])
@@ -1146,7 +1147,6 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
                         builtInIndexes={mode === 'collection' ? builtInIndexEntries : []}
                         customIndexes={customIndexEntries}
                         metadata={metadataEntries}
-                        guidance={help}
                         onInsert={readOnly ? undefined : insertIntoTemplate}
                         onClose={closeReference}
                     />
