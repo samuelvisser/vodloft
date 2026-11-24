@@ -2,6 +2,7 @@ import {useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactP
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {faIcon} from '../../icons/faIcon'
 import {createPortal} from 'react-dom'
+import OpaqueOutputTemplateCode from './OpaqueOutputTemplateCode'
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
 import type {OutputTemplateVariable} from './outputTemplateVariables'
 import {JINJA_FILTERS, TEMPLATE_FUNCTIONS, type TemplateFunction} from './outputTemplateFunctions'
@@ -114,7 +115,13 @@ function FunctionRow({fn, open, onToggle, onInsert}: {
             {open && (
                 <div className="template-reference__function-body" id={bodyId}>
                     <p>{fn.description}</p>
-                    <code className="template-reference__usage">{fn.usage}</code>
+                    <OpaqueOutputTemplateCode
+                        source={`{{ ${fn.usage.includes('|') ? '' : 'value | '}${fn.usage} }}`}
+                        sourceMode="compact"
+                        renderMode="compact"
+                        label={`How to use ${fn.name}`}
+                        className="template-reference__code template-reference__usage"
+                    />
                     {fn.arguments.length > 0 && (
                         <table className="template-reference__arguments">
                             <tbody>
@@ -130,7 +137,13 @@ function FunctionRow({fn, open, onToggle, onInsert}: {
                     )}
                     {fn.example && (
                         <div className="template-reference__example">
-                            <code>{fn.example.code}</code>
+                            <OpaqueOutputTemplateCode
+                                source={fn.example.code}
+                                sourceMode="compact"
+                                renderMode="compact"
+                                label={`Example of ${fn.name}`}
+                                className="template-reference__code"
+                            />
                             <span className="template-reference__arrow" aria-hidden="true">→</span>
                             <b className="template-reference__result">{fn.example.result}</b>
                             {onInsert && (
