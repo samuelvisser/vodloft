@@ -237,3 +237,37 @@ def test_only_links_on_a_site_vodloft_knows_are_media_links(session):
     session.add(SiteRecord(key="generic:example.com", name="example.com", domains=["example.com"]))
     session.flush()
     assert media_links(session, Access.full(), links) == [*links[:2], "https://www.example.com/clip.mp4"]
+
+
+@pytest.mark.parametrize(("list_type", "name"), [
+    ("album", "album"), ("playlist", "playlist"),
+    # A set VODLoft hasn't looked up is either.
+    (None, "album or playlist"),
+])
+def test_a_soundcloud_set_is_named_by_its_type_of_list(list_type, name):
+    from backend.db.models import Collection
+    from backend.services.sites import collection_names
+
+    collection = Collection(
+        sharing_url="https://soundcloud.com/flume/sets/palaces", source_key="ytdlp", kind="list", list_type=list_type,
+    )
+
+    assert collection_names(collection).singular == name
+
+
+def test_a_new_collection_of_a_set_keeps_only_a_type_of_list_its_site_has():
+    from backend.db.models import Collection
+    from backend.services.collections import set_kind
+    from backend.services.errors import ServiceError
+
+    album = Collection(sharing_url="https://soundcloud.com/flume/sets/palaces", source_key="ytdlp", list_type="album")
+    set_kind(album)
+    assert album.list_type == "album"
+
+    # A channel is no list.
+    account = Collection(sharing_url="https://soundcloud.com/flume", source_key="ytdlp", type="music", list_type="album")
+    set_kind(account)
+    assert account.list_type is None
+
+    with pytest.raises(ServiceError):
+        set_kind(Collection(sharing_url="https://soundcloud.com/flume/sets/palaces", source_key="ytdlp", list_type="tracks"))

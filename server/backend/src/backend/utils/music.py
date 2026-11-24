@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Iterable, Mapping
 
 from sqlalchemy import func, inspect, select
 
@@ -28,11 +28,39 @@ def collection_artist(collection) -> str:
     return (creator.title if creator is not None else None) or collection.author_name or collection.title
 
 
-def music_track(episode: "Episode") -> MusicTrack:
+@dataclass(frozen=True)
+class AlbumPlace:
+    """Where an episode sits among its season's episodes, which are an album's tracks."""
+    position: int
+    """Its place in index order, counted from 1."""
+    track_count: int
+
+
+def album_places(session, season_ids: Iterable[int]) -> dict[int, AlbumPlace]:
+    """Every episode of the seasons by id, with its place on its album, in one query for all of them."""
+    from backend.db.models import Episode
+
+    season_ids = set(season_ids)
+    if not season_ids:
+        return {}
+    by_season = {"partition_by": Episode.season_id}
+    rows = session.execute(select(
+        Episode.id,
+        func.count(Episode.id).over(**by_season, order_by=Episode.index),
+        func.count(Episode.id).over(**by_season),
+    ).where(Episode.season_id.in_(season_ids)))
+    return {id_: AlbumPlace(position, count) for id_, position, count in rows}
+
+
+def music_track(episode: "Episode", places: Mapping[int, AlbumPlace] | None = None) -> MusicTrack:
+    """The episode as a track. ``places`` are the album places of its collection's episodes, from ``album_places``,
+    for whoever makes the tracks of many episodes; without them the episode's own season is looked up."""
     published = episode.published_date
+    place = _album_place(episode, places)
     return MusicTrack(
-        artist=collection_artist(episode.collection), album=_album(episode), track_number=_track_number(episode),
-        year=str(published.year) if published else "", track_count=_track_count(episode),
+        artist=collection_artist(episode.collection), album=_album(episode),
+        track_number=_track_number(episode, place), year=str(published.year) if published else "",
+        track_count=place.track_count if place is not None else None,
     )
 
 
@@ -45,28 +73,21 @@ def _album(episode: "Episode") -> str:
     return collection.title if season.name == season.slug and season.slug.isdigit() else season.name
 
 
-def _track_number(episode: "Episode") -> int | None:
+def _album_place(episode: "Episode", places: Mapping[int, AlbumPlace] | None) -> AlbumPlace | None:
+    if episode.season is None:
+        return None
+    if places is None:
+        state = inspect(episode, raiseerr=False)
+        session = state.session if state is not None else None
+        if session is None:
+            return None
+        places = album_places(session, (episode.season_id,))
+    return places.get(episode.id)
+
+
+def _track_number(episode: "Episode", place: AlbumPlace | None) -> int | None:
     """The episode's number in its season, or else its place among the season's episodes."""
     info = EpisodeIdentifierInfo.from_identifier(episode.episode_identifier)
     if (episode.episode_identifier or "").startswith("ep.S") and (info.episode_number or "").isdigit():
         return int(info.episode_number)
-    state = inspect(episode, raiseerr=False)
-    session = state.session if state is not None else None
-    if episode.season is None or session is None or episode.index is None:
-        return None
-    from backend.db.models import Episode
-
-    return session.scalar(
-        select(func.count(Episode.id)).where(Episode.season_id == episode.season_id, Episode.index <= episode.index)
-    ) or None
-
-
-def _track_count(episode: "Episode") -> int | None:
-    """How many episodes the episode's season has, which is the album's number of tracks."""
-    state = inspect(episode, raiseerr=False)
-    session = state.session if state is not None else None
-    if episode.season is None or session is None:
-        return None
-    from backend.db.models import Episode
-
-    return session.scalar(select(func.count(Episode.id)).where(Episode.season_id == episode.season_id)) or None
+    return place.position if place is not None else None

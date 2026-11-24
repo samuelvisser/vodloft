@@ -1,10 +1,11 @@
 """Adding a Collection to the Library, the same way wherever it comes from."""
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Collection
+from backend.db.mixins.HasTaskResourcesMixin import delete_task_rows
+from backend.db.models import Collection, Episode, MediaDownloadBase, MediaItemBase, Metadata
 from backend.operations.collections import CollectionIndexOperation, CollectionSyncOperation
 from backend.services.errors import ServiceError
 from backend.services.new_lists import album_kinds, list_kinds
@@ -15,7 +16,7 @@ from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.link_season_types import CollectionKind, LinkSeasons, OutsideVideos, RepeatVideos
 from backend.utils.helpers import generate_uuid, slugify
-from sources import Feature, UnknownSourceError, all_sources, get_source, source_site
+from sources import Feature, SectionKind, UnknownSourceError, all_sources, get_source, source_site
 from task_manager.events.transactional import queue_event
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import queue_operation_target_dispatch
@@ -62,7 +63,9 @@ def set_kind(collection: Collection) -> None:
     starts with only the kinds of list that are albums, where its Site tells them apart."""
     collection.kind = collection_kind(collection.sharing_url, collection.source_key).value
     if collection.kind != CollectionKind.CHANNEL.value:
+        _check_list_type(collection)
         return
+    collection.list_type = None
     site = source_site(collection.sharing_url, collection.source_key)
     # The defaults are about the channel's lists, which only a Site whose lists can be seasons has.
     if not site.link_seasons:
@@ -77,6 +80,18 @@ def set_kind(collection: Collection) -> None:
             collection.outside_videos = OutsideVideos.ADD.value
     if site.whole_lists and collection.repeat_videos is None:
         collection.repeat_videos = RepeatVideos.EACH_SEASON.value
+
+
+def _check_list_type(collection: Collection) -> None:
+    """A collection of one list names the type of list its link is only by one its Site has."""
+    if collection.list_type is None:
+        return
+    if collection.sharing_url is None:
+        collection.list_type = None
+        return
+    site = source_site(collection.sharing_url, collection.source_key)
+    if collection.list_type not in {type_.key for type_ in site.types_of(SectionKind.LIST)}:
+        raise ServiceError(f"{site.name} has no type of list {collection.list_type!r}", field="list_type")
 
 
 def reindex_collection(s: Session, collection: Collection) -> None:
@@ -122,3 +137,30 @@ def add_links_only_collection(
     s.flush()
     queue_event(s, "collection.added", CollectionAdded(collection))
     return collection
+
+
+def delete_episodes_of(s: Session, collection: Collection) -> None:
+    """Delete every episode of the collection with its downloads, a few statements for the whole collection.
+
+    Deleting the collection on its own would load each episode and each of its downloads to delete them one by
+    one, which takes many seconds for a channel with thousands of videos. The files on disk stay.
+    """
+    episode_ids = set(s.scalars(select(Episode.id).where(Episode.collection_id == collection.id)))
+    if not episode_ids:
+        return
+    episodes = select(Episode.id).where(Episode.collection_id == collection.id).scalar_subquery()
+    download_ids = set(s.scalars(select(MediaDownloadBase.id).where(MediaDownloadBase.media_item_id.in_(episodes))))
+    delete_task_rows(s, {"episode": episode_ids, "media_download": download_ids})
+
+    downloads = select(MediaDownloadBase.id).where(MediaDownloadBase.media_item_id.in_(episodes)).scalar_subquery()
+    for statement in (
+        delete(Metadata).where(Metadata.parent_table == MediaDownloadBase.__metadata_parent_table__,
+                               Metadata.parent_id.in_(downloads)),
+        delete(Metadata).where(Metadata.parent_table == Episode.__tablename__, Metadata.parent_id.in_(episodes)),
+        # Each download's own rows, its assets and its history follow through their foreign keys.
+        delete(MediaDownloadBase).where(MediaDownloadBase.media_item_id.in_(episodes)),
+        # The episode rows follow their media items through their foreign key.
+        delete(MediaItemBase).where(MediaItemBase.id.in_(episodes)),
+    ):
+        s.execute(statement, execution_options={"synchronize_session": False})
+    s.expire(collection, ["episodes", "seasons"])

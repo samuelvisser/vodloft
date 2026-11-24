@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from backend.utils.helpers import name_in_text
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -19,7 +20,7 @@ from backend.services.new_lists import checked_new_link_seasons
 from backend.services.link_seasons import (
     collection_list_kinds, collection_new_lists,
     LinkListing, channel_feeds, holds_only_link_seasons, is_in, leaving_outside, section_list_names,
-    lists_playlists, loose_season_name, offers_link_seasons, outside_only_in, place_in_link_seasons, save_lists,
+    lists_playlists, loose_season_name, made_from_list, offers_link_seasons, outside_only_in, place_in_link_seasons, save_lists,
     active_lists, let_go_of_seasons, rehome_removed, season_removable, seasons_with_parts,
 )
 from backend.services.sites import collection_creator_names, collection_site, collection_words, preferred_sources, site_record
@@ -31,6 +32,7 @@ from backend.services.source_requests import asking_source
 from config.network import is_no_internet_error
 from backend.types.collection_contracts import collection_contract
 from backend.types.season_types import SeasonType
+from backend.types.resource_names import OWN_LINK_NAMES
 from backend.types.link_season_types import (
     ChannelSeason, CollectionKind, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos, RepeatVideos,
 )
@@ -92,6 +94,7 @@ class _View:
     outside_with_files: int
     has_own_link: bool
     lists_playlists: bool
+    made_from_list: bool
     links_only_offered: bool
     only_leaving_count: int
     only_leaving_with_files: int
@@ -178,12 +181,16 @@ def seasons_view(s: Session, collection_slug: str) -> CollectionSeasonsAPIRead:
         ],
         link_seasons_offered=offers_link_seasons(collection),
         list_types=collection_site(collection).types_of(SectionKind.LIST), section_list_names=lists,
-        creator_list_names=_creator_lists(collection_creator_names(collection), lists),
+        # A collection without a link of its own has no creator's lists, only the links the user gave it.
+        creator_list_names=(
+            OWN_LINK_NAMES if collection.sharing_url is None else _creator_lists(collection_creator_names(collection), lists)
+        ),
         loose_season=loose_season_name(collection), site_order=contract.site_order, words=collection_words(collection),
         creator_names=collection_creator_names(collection), media_names=contract.media_names_on(collection_site(collection)),
         playlists=[_Playlist(playlist, firsts.get(playlist.id), *leaving.get(playlist.id, (0, 0))) for playlist in playlists],
         outside_count=len(outside), outside_with_files=len(with_files),
         has_own_link=collection.sharing_url is not None, lists_playlists=lists_playlists(collection),
+        made_from_list=made_from_list(collection),
         links_only_offered=get_source(collection.source_key).has(Feature.LINK_COLLECTIONS),
         only_leaving_count=len(only_leaving), only_leaving_with_files=len(only_with_files),
         new_lists=collection_new_lists(collection),
@@ -225,10 +232,13 @@ def _left_by_only(s: Session, collection: Collection) -> list[int]:
     ]
 
 
-def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIUpdate) -> CollectionSeasonsAPIRead:
+def update_seasons(
+    s: Session, collection_slug: str, body: CollectionSeasonsAPIUpdate, added: Sequence[AddedLink] = (),
+) -> CollectionSeasonsAPIRead:
     """Rename and order the collection's seasons, and set which feeds of its channel it takes and how the channel's
     playlists are seasons. Videos without files
-    move to where they belong now; the playlists are listed again when that changed.
+    move to where they belong now; the playlists are listed again when that changed. ``added`` are the links the user
+    adds, looked up before the transaction (see ``look_up_added_link``).
 
     ``s`` is a write transaction's session."""
     collection = _collection(s, collection_slug)
@@ -236,6 +246,15 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
     if sorted(change.id for change in body.seasons) != sorted(seasons):
         season = collection_contract(collection.type).words.season
         raise ServiceError(f"The {season.plural} must name each {season.singular} of the collection exactly once", field="seasons")
+    if added and body.outside_videos != OutsideVideos.ONLY:
+        raise ServiceError(
+            f"Only a collection that holds only what its {section_list_names(collection).plural} have can take links you add",
+            field="outside_videos",
+        )
+    for link in added:
+        _add_link(s, collection, link)
+    if added:
+        s.flush()
     playlists = {playlist.id: playlist for playlist in collection.lists}
     lists = section_list_names(collection)
     unknown = [change.id for change in [*body.playlists] if change.id not in playlists]
@@ -290,6 +309,14 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
             f"{playlists[stray.id].title} can only join {collection_contract(collection.type).words.season.a} "
             "that holds one of the collection's lists", field="playlists",
         )
+    defaults = [change for change in body.playlists if change.is_default]
+    if defaults and collection.sharing_url is not None:
+        raise ServiceError(
+            f"{name_in_text(collection.title)} has a link of its own, so none of its {lists.plural} is its default",
+            field="playlists",
+        )
+    if len(defaults) > 1:
+        raise ServiceError(f"Choose one {lists.singular} as the default", field="playlists")
     removed = set(body.removed_seasons)
     with_parts = seasons_with_parts(s, collection)
     fixed = next((
@@ -347,6 +374,9 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
         playlists[change.id].enabled = change.enabled
         playlists[change.id].status = ListStatus.KNOWN.value
         playlists[change.id].as_season = change.as_season
+        playlists[change.id].is_default = change.is_default
+    # Choosing another default, or removing it, leaves one default: the first link that stays, if the user chose none.
+    collection.keep_a_default_link(playlists.values())
     removed_slugs = let_go_of_seasons(collection, removed) if removed else {}
     s.flush()
     s.expire(collection, ["lists"])
@@ -374,7 +404,8 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
     )) - leaving if leaves else set()
     # A collection that only holds its playlists from now on lists them again first, so they say what they have now
     # before a video leaves for not being in them.
-    relisting = relist and body.link_seasons != LinkSeasons.OFF
+    # A link the user added lists its videos, which then get its season.
+    relisting = (relist or bool(added)) and body.link_seasons != LinkSeasons.OFF
     place_in_link_seasons(
         s, collection, with_files=moving, drop=not (only and not was_only), by_user=True, left=frozenset(regrouped | removed),
     )
@@ -484,10 +515,9 @@ class AddedLink:
 def link_to_add(s: Session, collection_slug: str, url: str) -> _AddLookup:
     """What looking up a link the user adds needs, read before the slow lookup."""
     collection = _collection(s, collection_slug)
-    if not holds_only_link_seasons(collection):
-        raise ServiceError(
-            f"Only a collection that holds only what its {section_list_names(collection).plural} have can take links you add", field="url",
-        )
+    # The collection may hold only what its lists have from this save on; saving checks that it does.
+    if not get_source(collection.source_key).has(Feature.LINK_COLLECTIONS):
+        raise ServiceError(f"{name_in_text(collection.title)} can't take links you add", field="url")
     url = url.strip()
     # The Source the user asks first for the link's Site reads it, which may be another one than the collection's.
     source = next((source for source in sources_for(url, preferred_sources(s)) if source.has(Feature.EPISODE_LISTS)), None)
@@ -516,14 +546,22 @@ def look_up_added_link(lookup: _AddLookup) -> AddedLink:
     return AddedLink(video.slug, video.url or lookup.url, video.title, video.image_url, source.id)
 
 
-def save_added_link(s: Session, collection_slug: str, link: AddedLink) -> CollectionSeasonsAPIRead:
-    """Make a link the user added one of the collection's link seasons, and list what it has.
+def _known_link(collection: Collection, link: AddedLink) -> CollectionList | None:
+    return next((known for known in collection.lists if known.ref == link.ref or known.url == link.url), None)
 
-    ``s`` is a write transaction's session."""
+
+def check_added_link(s: Session, collection_slug: str, link: AddedLink) -> AddedLink:
+    """A link the user adds, unless the collection has it already."""
     collection = _collection(s, collection_slug)
-    same = next((known for known in collection.lists if known.ref == link.ref or known.url == link.url), None)
-    if same is not None:
+    if (same := _known_link(collection, link)) is not None:
         raise ServiceError(f"{name_in_text(collection.title)} has {name_in_text(same.title)} already", field="url")
+    return link
+
+
+def _add_link(s: Session, collection: Collection, link: AddedLink) -> None:
+    """Make a link the user added one of the collection's link seasons. A link it has already stays as it is."""
+    if _known_link(collection, link) is not None:
+        return
     site = get_source(link.source_key).site_for(link.url)
     collection.lists.append(CollectionList(
         ref=link.ref, url=link.url, title=link.title, image_path=link.image_url, added_by_user=True, enabled=True,
@@ -531,14 +569,11 @@ def save_added_link(s: Session, collection_slug: str, link: AddedLink) -> Collec
         site_key=site_record(s, site).key if site is not None else None,
         site_position=max((known.site_position for known in collection.lists), default=-1) + 1,
     ))
-    s.flush()
-    reindex_collection(s, collection)
-    s.refresh(collection)
-    return seasons_view(s, collection_slug)
+    collection.keep_a_default_link()
 
 
 __all__ = [
     "moved_view",
     "AddedLink", "CollectionNotFoundError", "link_to_add", "look_up_added_link", "look_up_links", "links_lookup",
-    "save_added_link", "save_listed_links", "seasons_view", "update_seasons",
+    "check_added_link", "save_listed_links", "seasons_view", "update_seasons",
 ]

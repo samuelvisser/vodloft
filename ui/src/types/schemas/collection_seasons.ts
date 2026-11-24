@@ -55,6 +55,9 @@ export const CollectionListReadSchema = z.object({
     leavingWithFiles: z.number(),
     /** A link the user added, which they can remove again, rather than one of the playlists of the creator. */
     addedByUser: z.boolean().default(false),
+    /** For a collection without a link of its own: its default link, such as the one its picture comes from. Such a
+     * collection always has one: its first link, until the user picks another. */
+    isDefault: z.boolean().default(false),
 })
 export type CollectionListRead = z.infer<typeof CollectionListReadSchema>
 
@@ -68,8 +71,10 @@ export const CollectionSeasonsReadSchema = z.object({
     listsPlaylists: z.boolean().default(false),
     /** The collection can hold only what its playlists have, with links you add from any site. */
     linksOnlyOffered: z.boolean().default(false),
-    /** What the collection's own link is: a channel, or one list. */
-    kind: z.enum(['channel', 'list']),
+    /** What the collection's own link is: a channel, one list, or none, for a custom collection. */
+    kind: z.enum(['channel', 'list', 'custom']),
+    /** The collection is made from one list: the list is its one season, or its videos go in a season per year. */
+    madeFromList: z.boolean().default(false),
     /** For a channel collection: the feeds of its channel, and whether it takes each. */
     feeds: z.array(z.object({ref: z.string(), names: NamesSchema, on: z.boolean()})),
     /** What the season of the channel's own videos holds: everything, or only the videos in no list. */
@@ -101,7 +106,8 @@ export const CollectionSeasonsReadSchema = z.object({
     /** Those types of list named together, such as albums and playlists. */
     sectionListNames: NamesSchema,
     /** The same lists as the creator's, such as creator playlists or artist albums, so they read apart from the
-     * collection's own seasons, which a YouTube channel collection also calls playlists. */
+     * collection's own seasons, which a YouTube channel collection also calls playlists. A collection without a link
+     * of its own calls them links: the ones the user gave it. */
     creatorListNames: NamesSchema,
     /** The season of the videos in none of the lists, such as Videos, Singles or Tracks. */
     looseSeason: z.string(),
@@ -136,9 +142,14 @@ export const CollectionSeasonsFormSchema = z.object({
     repeatVideos: z.enum(RepeatVideosValues).default('one_season'),
     outsideVideos: z.enum(OutsideVideosValues).default('leave_out'),
     /** Each list, whether it is a season, and the season it is in: its own, or another list's that it shares. */
-    playlists: z.array(z.object({id: z.number(), enabled: z.boolean(), asSeason: z.boolean().default(true), seasonId: z.number().nullable()})).default([]),
+    playlists: z.array(z.object({
+        id: z.number(), enabled: z.boolean(), asSeason: z.boolean().default(true), seasonId: z.number().nullable(),
+        isDefault: z.boolean().default(false),
+    })).default([]),
     /** Links you added that go when you save. */
     removedLinks: z.array(z.number()).default([]),
+    /** Links you add, which are saved, and listed, when you save. */
+    addedLinks: z.array(z.object({url: z.string(), title: z.string(), imageUrl: z.string().nullable()})).default([]),
     /** Seasons that are deleted when you save. */
     removedSeasons: z.array(z.number()).default([]),
 })
@@ -147,6 +158,9 @@ export const CollectionSeasonsFormSchema = z.object({
 export const LinkSeasonAddFormSchema = z.object({
     url: z.string().trim().min(1, 'Paste a link').regex(/^https?:\/\//, 'Paste a link starting with https://').default(''),
 })
+/** A link you add, as VODLoft found it; nothing is saved until the Seasons dialog is. */
+export const AddedLinkReadSchema = z.object({url: z.string(), title: z.string(), imageUrl: z.string().nullable()})
+export type AddedLinkRead = z.infer<typeof AddedLinkReadSchema>
 export type LinkSeasonAddFormIn = z.input<typeof LinkSeasonAddFormSchema>
 export type LinkSeasonAddFormOut = z.output<typeof LinkSeasonAddFormSchema>
 export type CollectionSeasonsFormIn = z.input<typeof CollectionSeasonsFormSchema>
@@ -165,8 +179,12 @@ export function seasonsFormValues(view: CollectionSeasonsRead): CollectionSeason
         looseVideos: view.looseVideos,
         repeatVideos: view.repeatVideos,
         outsideVideos: view.outsideVideos,
-        playlists: view.playlists.map((playlist) => ({id: playlist.id, enabled: playlist.enabled, asSeason: playlist.asSeason, seasonId: playlist.seasonId})),
+        playlists: view.playlists.map((playlist) => ({
+            id: playlist.id, enabled: playlist.enabled, asSeason: playlist.asSeason, seasonId: playlist.seasonId,
+            isDefault: playlist.isDefault,
+        })),
         removedLinks: [],
+        addedLinks: [],
         removedSeasons: [],
     }
 }

@@ -18,9 +18,10 @@ import NewListSettings from '../common/NewListSettings'
 import {capitalized, type ListKind} from '../../types/creator'
 import type {Names} from '../../types/schemas/source'
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
+import {useDismissOnEscape} from '../Modal/useDismissOnEscape'
 import {BulkBar} from '../ProfileBulkEdit/BulkEditControls'
 import {
-    CollectionSeasonsFormSchema, CollectionSeasonsReadSchema, LinkSeasonAddFormSchema, SeasonsPreviewReadSchema, seasonsFormValues, type SeasonsPreviewRead,
+    AddedLinkReadSchema, type AddedLinkRead, CollectionSeasonsFormSchema, CollectionSeasonsReadSchema, LinkSeasonAddFormSchema, SeasonsPreviewReadSchema, seasonsFormValues, type SeasonsPreviewRead,
     type CollectionListRead, type CollectionSeasonsFormIn, type CollectionSeasonsFormOut, type CollectionSeasonsRead,
     type LinkSeasonAddFormIn, type LinkSeasonAddFormOut, type NewLinkSeason, type ChannelSeason, type CollectionSeasonRead,
 } from '../../types/schemas/collection_seasons'
@@ -102,6 +103,17 @@ function registries(names: ListNames, words: Words, view: CollectionSeasonsRead)
             season_each: {label: `${capitalized(words.season.a)} per ${names.singular}`, help: `Each ${names.singular} is ${words.season.a} in VODLoft, or shares one with the ${names.plural} you put together below.`},
             by_year: {label: `Together in ${words.season.plural} by year`, help: `The ${names.plural} still decide which ${words.videos} are in, but every ${words.video} goes to the ${words.season.singular} of its year, as do the ${words.videos} in no ${names.singular}. When you save, VODLoft offers to move the downloaded ones, files and all.`},
         }),
+        // A collection made from one list: the list's one season, or a season per upload year.
+        listSeasons: createSelectRegistry(`ListSeasons-${words.season.singular}-${words.videos}`, {
+            one_season: {
+                label: `One ${words.season.singular}`,
+                help: `Every ${words.video} is ${words.inSeason} one ${words.season.singular}, named after the collection, in the order of the collection's link.`,
+            },
+            by_year: {
+                label: `${capitalized(words.season.a)} per year`,
+                help: `Every ${words.video} goes to the ${words.season.singular} of its upload year. When you save, VODLoft offers to move the downloaded ones, files and all.`,
+            },
+        }),
         loose: createSelectRegistry(`LooseVideos-${names.looseSeason}`, {
             one_season: {label: `One ${words.season.singular}, ${names.looseSeason}`, help: `They share one ${words.season.singular}, shown before the ${names.plural}.`},
             by_year: {label: `${capitalized(words.season.a)} per year`, help: `They get ${words.season.a} per upload year, with the ${names.plural} between them by date.`},
@@ -165,14 +177,30 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
             return
         }
         if (!view || loadedFor.current === view) return
+        const first = loadedFor.current === null
         loadedFor.current = view
-        reset(seasonsFormValues(view))
+        // A fresh answer while the dialog is open, such as the seasons a link got once VODLoft listed its videos,
+        // keeps what the user changed already.
+        if (first || !isDirty) reset(seasonsFormValues(view))
+        else keepChoices(view)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, view, reset])
 
     /** Show what the server answered without resetting the form to it, which would undo the user's unsaved changes.
      * The cache keeps its own copy of the answer, so that copy is the one the form counts as loaded. */
     const keepLoaded = (fresh: CollectionSeasonsRead) => {
         loadedFor.current = queryClient.setQueryData<CollectionSeasonsRead>(queryKey, fresh) ?? fresh
+    }
+    /** Take the lists and seasons of a fresh answer into the form, keeping what the user changed in the dialog. */
+    const keepChoices = (fresh: CollectionSeasonsRead) => {
+        const choices = new Map((form.getValues('playlists') ?? []).map((choice) => [choice.id, choice]))
+        setValue('playlists', fresh.playlists.map((playlist) => ({
+            id: playlist.id, enabled: choices.get(playlist.id)?.enabled ?? playlist.enabled,
+            asSeason: choices.get(playlist.id)?.asSeason ?? playlist.asSeason,
+            seasonId: choices.has(playlist.id) ? choices.get(playlist.id)!.seasonId : playlist.seasonId,
+            isDefault: choices.get(playlist.id)?.isDefault ?? playlist.isDefault,
+        })))
+        setValue('seasons', fresh.seasons.map((season) => form.getValues('seasons')?.find((x) => x.id === season.id) ?? {id: season.id, name: season.name}))
     }
 
     // What the Site calls its lists, such as playlists on YouTube, also in a Music collection, whose seasons are albums.
@@ -193,6 +221,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     const customOrder = watch('customSeasonOrder') ?? false
     const repeatVideos = watch('repeatVideos') ?? 'one_season'
     const removedLinks = watch('removedLinks') ?? []
+    const newLinks = watch('addedLinks') ?? []
     const removedSeasons = watch('removedSeasons') ?? []
     // The channel season is called Channel while it holds the whole channel, as the form is set now, so the names
     // follow the form before it is saved.
@@ -253,6 +282,8 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         outsideVideos: data.outsideVideos,
         playlists: data.playlists,
         removedLinks: data.removedLinks,
+        // Links you add are kept only while the collection holds only what its lists have.
+        addedLinks: data.outsideVideos === 'only' ? data.addedLinks.map((link) => link.url) : [],
         removedSeasons: data.removedSeasons,
     })
 
@@ -344,6 +375,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                 id: playlist.id, enabled: choices.get(playlist.id)?.enabled ?? playlist.enabled,
                 asSeason: choices.get(playlist.id)?.asSeason ?? playlist.asSeason,
                 seasonId: choices.has(playlist.id) ? choices.get(playlist.id)!.seasonId : playlist.seasonId,
+                isDefault: choices.get(playlist.id)?.isDefault ?? playlist.isDefault,
             })), {shouldDirty: true})
         } catch (exc) {
             toast.error(exc instanceof Error ? exc.message : String(exc))
@@ -371,30 +403,30 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         resolver: zodResolver(LinkSeasonAddFormSchema),
         defaultValues: LinkSeasonAddFormSchema.parse({}),
     })
-    const addLink = buildServerAwareSubmit<LinkSeasonAddFormIn, LinkSeasonAddFormOut, CollectionSeasonsRead>(linkForm, (data) => fetch(`${endpoint}/added-links`, {
+    const addLink = buildServerAwareSubmit<LinkSeasonAddFormIn, LinkSeasonAddFormOut, AddedLinkRead>(linkForm, (data) => fetch(`${endpoint}/added-links`, {
         method: 'POST',
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({url: data.url}),
     }), {
-        parseSuccess: readSeasons,
+        parseSuccess: async (response) => AddedLinkReadSchema.parse(await response.json()),
         fallbackField: 'url',
         genericMessage: 'Could not add the link',
-        onSuccess: (fresh) => {
-            const choices = new Map((form.getValues('playlists') ?? []).map((choice) => [choice.id, choice]))
-            keepLoaded(fresh)
-            // The new link is saved already; what the user changed in the dialog stays.
-            setValue('playlists', fresh.playlists.map((playlist) => ({
-                id: playlist.id, enabled: choices.get(playlist.id)?.enabled ?? playlist.enabled,
-                asSeason: choices.get(playlist.id)?.asSeason ?? playlist.asSeason,
-                seasonId: choices.has(playlist.id) ? choices.get(playlist.id)!.seasonId : playlist.seasonId,
-            })))
-            setValue('seasons', fresh.seasons.map((season) => form.getValues('seasons')?.find((x) => x.id === season.id) ?? {id: season.id, name: season.name}))
+        onSuccess: (found) => {
+            // VODLoft only looked the link up: it is saved, and listed, with the rest of the dialog.
+            const pending = form.getValues('addedLinks') ?? []
+            if (pending.some((link) => link.url === found.url)) {
+                linkForm.setError('url', {message: `You added ${found.title} already`})
+                return
+            }
+            setValue('addedLinks', [...pending, found], {shouldDirty: true})
             linkForm.reset({url: ''})
-            toast.success(`Link added. VODLoft is listing its ${fresh.mediaNames.plural}.`)
         },
     })
     const addingLink = linkForm.formState.isSubmitting
+
+    // Escape does what Cancel does, also with unsaved changes, and nothing while saving, when Cancel is off too.
+    useDismissOnEscape(onDismiss, !isSubmitting, open)
 
     if (!open) return null
     const seasonsById = new Map((view?.seasons ?? []).map((season) => [season.id, season]))
@@ -493,6 +525,15 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         'playlists', playlistChoices.map((choice) => chosen.has(choice.id) ? {...choice, ...change} : choice), {shouldDirty: true},
     )
     const addedLinks = (view?.playlists ?? []).filter((playlist) => playlist.addedByUser)
+    // A collection without a link of its own always has one default link. When the user removes it, the first link
+    // that stays takes over, as the backend does on saving.
+    const defaultLinkId = view && !view.hasOwnLink
+        ? playlistChoices.find((choice) => choice.isDefault && !removedLinks.includes(choice.id))?.id
+            ?? addedLinks.find((link) => !removedLinks.includes(link.id))?.id
+        : undefined
+    const chooseDefault = (id: number) => setValue(
+        'playlists', playlistChoices.map((choice) => ({...choice, isDefault: choice.id === id})), {shouldDirty: true},
+    )
     const toggleRemoved = (id: number) => setValue(
         'removedLinks', removedLinks.includes(id) ? removedLinks.filter((x) => x !== id) : [...removedLinks, id], {shouldDirty: true},
     )
@@ -751,7 +792,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                     )}
 
                                                     <div className="form-row">
-                                                        <label htmlFor="seasons-layout">{capitalized(names.plural)}</label>
+                                                        <label htmlFor="seasons-layout">Where the {names.plural} go</label>
                                                         <SimpleSelect
                                                             menuPortalTarget={document.body} menuPlacement="auto"
                                                             styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
@@ -796,7 +837,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                     {only && (
                                                         <div className="form-row">
                                                             <label htmlFor="seasons-add-link">Your links</label>
-                                                            {addedLinks.length > 0 && (
+                                                            {(addedLinks.length > 0 || newLinks.length > 0) && (
                                                                 <ul className="seasons-dialog-links">
                                                                     {addedLinks.map((link) => {
                                                                         const removed = removedLinks.includes(link.id)
@@ -805,7 +846,27 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                                                 <span className="seasons-dialog-link-copy">
                                                                                     <b>{link.title}</b>
                                                                                     <span>{removed ? 'Removed when you save' : link.url}</span>
+                                                                                    {!removed && link.enabled && (
+                                                                                        <span>
+                                                                                            {link.seasonName
+                                                                                                ? `In ${link.seasonName}`
+                                                                                                : `No ${words.season.singular} yet: it gets one once VODLoft has listed its ${words.videos}`}
+                                                                                        </span>
+                                                                                    )}
                                                                                 </span>
+                                                                                {!removed && !view.hasOwnLink && (
+                                                                                    defaultLinkId === link.id
+                                                                                        ? <span className="seasons-dialog-default">Default</span>
+                                                                                        : (
+                                                                                            <button
+                                                                                                type="button" className="btn btn-small"
+                                                                                                aria-label={`Use ${link.title} as default`}
+                                                                                                onClick={() => chooseDefault(link.id)}
+                                                                                            >
+                                                                                                Use as default
+                                                                                            </button>
+                                                                                        )
+                                                                                )}
                                                                                 <button
                                                                                     type="button" className="btn btn-small"
                                                                                     aria-label={`${removed ? 'Keep' : 'Remove'} ${link.title}`}
@@ -816,34 +877,45 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                                             </li>
                                                                         )
                                                                     })}
+                                                                    {newLinks.map((link) => (
+                                                                        <li key={link.url} className="seasons-dialog-added">
+                                                                            <span className="seasons-dialog-link-copy">
+                                                                                <b>{link.title}</b>
+                                                                                <span>{link.url}</span>
+                                                                                <span>Added when you save; VODLoft then lists its {words.videos}</span>
+                                                                            </span>
+                                                                            <button
+                                                                                type="button" className="btn btn-small" aria-label={`Remove ${link.title}`}
+                                                                                onClick={() => setValue('addedLinks', newLinks.filter((x) => x.url !== link.url), {shouldDirty: true})}
+                                                                            >
+                                                                                Remove
+                                                                            </button>
+                                                                        </li>
+                                                                    ))}
                                                                 </ul>
                                                             )}
-                                                            {view.outsideVideos === 'only' ? (
-                                                                <div className="seasons-dialog-add-link">
-                                                                    <input
-                                                                        id="seasons-add-link" className="input" type="url" inputMode="url"
-                                                                        placeholder="https://…"
-                                                                        aria-invalid={!!linkForm.formState.errors.url}
-                                                                        {...linkForm.register('url')}
-                                                                        onKeyDown={(event) => {
-                                                                            if (event.key === 'Enter') {
-                                                                                event.preventDefault()
-                                                                                void addLink()
-                                                                            }
-                                                                        }}
-                                                                    />
-                                                                    <button type="button" className="btn btn-small" onClick={() => void addLink()} disabled={addingLink}>
-                                                                        <FontAwesomeIcon icon={faIcon('fass', 'plus')} aria-hidden="true"/>
-                                                                        <span>{addingLink ? 'Adding…' : 'Add'}</span>
-                                                                    </button>
-                                                                </div>
-                                                            ) : (
-                                                                <p className="seasons-dialog-muted">Save first, then add links of your own here.</p>
-                                                            )}
+                                                            <div className="seasons-dialog-add-link">
+                                                                <input
+                                                                    id="seasons-add-link" className="input" type="url" inputMode="url"
+                                                                    placeholder="https://…"
+                                                                    aria-invalid={!!linkForm.formState.errors.url}
+                                                                    {...linkForm.register('url')}
+                                                                    onKeyDown={(event) => {
+                                                                        if (event.key === 'Enter') {
+                                                                            event.preventDefault()
+                                                                            void addLink()
+                                                                        }
+                                                                    }}
+                                                                />
+                                                                <button type="button" className="btn btn-small" onClick={() => void addLink()} disabled={addingLink}>
+                                                                    <FontAwesomeIcon icon={faIcon('fass', 'plus')} aria-hidden="true"/>
+                                                                    <span>{addingLink ? 'Adding…' : 'Add'}</span>
+                                                                </button>
+                                                            </div>
                                                             {linkForm.formState.errors.url && <div className="error" role="alert">{linkForm.formState.errors.url.message}</div>}
                                                             <div className="help">
-                                                                Each link becomes {words.season.a} of its own, from any site VODLoft can read. A link is added
-                                                                right away; VODLoft then lists its {words.videos}.
+                                                                Each link becomes {words.season.a} of its own, from any site VODLoft can read. A link is saved
+                                                                when you save; VODLoft then lists its {words.videos}.
                                                             </div>
                                                         </div>
                                                     )}
@@ -869,6 +941,19 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                 </button>
                                             )}
                                         </div>
+                                        {regs && view.madeFromList && (
+                                            <div className="form-row">
+                                                <label htmlFor="seasons-list-seasons">How VODLoft groups the {words.videos}</label>
+                                                <SimpleSelect
+                                                    menuPortalTarget={document.body} menuPlacement="auto"
+                                                    styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
+                                                    inputId="seasons-list-seasons" registry={regs.listSeasons} value={looseVideos}
+                                                    onChange={(value) => setValue('looseVideos', value as CollectionSeasonsFormIn['looseVideos'], {shouldDirty: true})}
+                                                />
+                                                <div className="help">{regs.listSeasons.getHelp(looseVideos)}</div>
+                                                {errors.looseVideos && <div className="error" role="alert">{errors.looseVideos.message}</div>}
+                                            </div>
+                                        )}
                                         {regs && (
                                             <div className="form-row">
                                                 <label htmlFor="seasons-repeat">
@@ -902,12 +987,23 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                         {' '}{listed(comingBack.map((removed) => afterSave(removed.id)?.name ?? removed.name))}. When you save,
                                                         {comingBack.length === 1 ? ' it comes' : ' they come'} back here.
                                                     </p>
-                                                    {yearsComingBack && (
+                                                    {/* Only where the setting decides the seasons: a collection made from one list, or one whose lists are seasons. */}
+                                                    {yearsComingBack && (view.madeFromList || linkSeasonsOn || only) && (
                                                         <button type="button" className="btn btn-small" onClick={oneSeason}>
                                                             Put them in one {season.singular} instead
                                                         </button>
                                                     )}
                                                 </div>
+                                            </div>
+                                        )}
+                                        {only && newLinks.length > 0 && (
+                                            <div className="seasons-dialog-warning" role="status">
+                                                <FontAwesomeIcon icon={faIcon('fass', 'circle-info')} aria-hidden="true"/>
+                                                <p>
+                                                    When you save, {listed(newLinks.map((link) => link.title))}
+                                                    {newLinks.length === 1 ? ` becomes ${season.a}` : ` each become ${season.a}`} here, once VODLoft
+                                                    has listed {newLinks.length === 1 ? 'its' : 'their'} {words.videos}.
+                                                </p>
                                             </div>
                                         )}
                                         <ol className="seasons-dialog-seasons">

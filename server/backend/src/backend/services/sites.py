@@ -22,6 +22,7 @@ from backend.security.access import Access
 from backend.types.download_profile_types import EpIdType
 from backend.types.collection_contracts import DEFAULT_WORDS, CollectionWords, collection_contract
 from backend.types.link_season_types import CollectionKind, OutsideVideos
+from backend.types.resource_names import CUSTOM_COLLECTION_NAMES
 from backend.services.errors import ServiceError
 from backend.services.local_media_profile_sites import add_upcoming_site
 from sources import EpisodeTag, Names, Site as SourceSite, collection_on_site, get_source, has_site_contract, site_for, source_site, sources_for
@@ -76,10 +77,10 @@ def place_collection(s: Session, collection: Collection) -> None:
 
 def collection_kind(url: str | None, source_key: str) -> CollectionKind:
     """What a collection's link is: a channel, a creator's page of all their uploads or one of its feeds, or one
-    list. A collection without a link, and every collection on a Site without creators, is a list: it holds what its
-    link lists, and takes no lists of a channel."""
+    list. Every collection on a Site without creators is a list: it holds what its link lists, and takes no lists of a
+    channel. A collection without a link is a custom collection."""
     if url is None:
-        return CollectionKind.LIST
+        return CollectionKind.CUSTOM
     source = get_source(source_key)
     if not _site_of(url, source_key).creators or source.is_list(url):
         return CollectionKind.LIST
@@ -112,23 +113,29 @@ def collection_words(collection: Collection, *, audio: bool | None = None) -> Co
     which a profile for Music that downloads audio only keeps as sound."""
     site = collection_site(collection)
     words = collection_contract(collection.type).words_for(site.audio_only if audio is None else audio)
-    seasons = site_season_names(site, collection.type, collection.kind, has_link=collection.sharing_url is not None)
+    seasons = site_season_names(site, collection.type, collection.kind)
     return replace(words, season=seasons) if seasons is not None else words
 
 
-def site_season_names(site: SourceSite, collection_type: str, kind: str | None, *, has_link: bool) -> Names | None:
-    """What the Site calls the seasons of a collection of its kind, such as playlists in a YouTube channel collection,
-    or None where the collection type's own word stands: in a collection of links of any Site, and in a type that
-    names its seasons itself, such as an artist's albums."""
-    if not has_link or collection_contract(collection_type).words.season != DEFAULT_WORDS.season:
+def site_season_names(site: SourceSite, collection_type: str, kind: str | None) -> Names | None:
+    """What the Site calls the seasons of a collection of its kind, such as playlists in a YouTube channel collection
+    or lists in a custom collection, or None where the collection type's own word stands: in a type that names its
+    seasons itself, such as an artist's albums. A custom collection is on the Site of its first list, or on none."""
+    if kind is None or collection_contract(collection_type).words.season != DEFAULT_WORDS.season:
         return None
+    if kind == CollectionKind.CUSTOM.value:
+        return site.custom_season_names
     return site.channel_season_names if kind == CollectionKind.CHANNEL.value else site.list_season_names
 
 
 def collection_names(collection: Collection) -> Names:
     """What the collection's Site calls a collection of its kind, such as a channel or a playlist on YouTube."""
+    if collection.kind == CollectionKind.CUSTOM.value:
+        return CUSTOM_COLLECTION_NAMES
     site = collection_site(collection)
-    return site.channel_collection_names if collection.kind == CollectionKind.CHANNEL.value else site.list_collection_names
+    if collection.kind == CollectionKind.CHANNEL.value:
+        return site.channel_collection_names
+    return site.list_collection_names_of(collection.list_type)
 
 
 def collection_episode_tags(collection: Collection) -> tuple[EpisodeTag, ...]:

@@ -7,16 +7,16 @@ import {z} from 'zod'
 
 import {faIcon} from '../../icons/faIcon'
 import {apiUrl} from '../../lib/api'
-import {collectionWords} from '../../lib/collectionWords'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import SimpleSelect from '../common/SimpleSelect'
+import Modal from '../Modal/Modal'
 import './AddEmptyCollectionDialog.css'
 
-/** The kinds of collection that can start empty and be filled with links. */
+/** The types of custom collection, which starts empty and is filled with links. */
 const EmptyCollectionTypeReg = createSelectRegistry('EmptyCollectionType', {
-    series: {label: 'Series', help: 'Videos, with a season for each link you add'},
+    series: {label: 'Series', help: 'Videos, with a list for each link you add'},
     music: {label: 'Music', help: 'Tracks, with an album for each link you add'},
 })
 
@@ -31,7 +31,7 @@ type Props = {
     onDismiss: () => void
 }
 
-/** Start a collection without a link of its own; it holds only what the links the user adds to it have. */
+/** Start a custom collection: it has no link of its own, and holds only what the links the user adds to it have. */
 export default function AddEmptyCollectionDialog({onDismiss}: Props) {
     const navigate = useNavigate()
     const queryClient = useQueryClient()
@@ -39,7 +39,7 @@ export default function AddEmptyCollectionDialog({onDismiss}: Props) {
         resolver: zodResolver(EmptyCollectionSchema),
         defaultValues: getZodDefaults(EmptyCollectionSchema),
     })
-    const {register, control, watch, formState: {errors, isSubmitting}} = form
+    const {register, control, formState: {errors, isSubmitting}} = form
     const onSubmit = buildServerAwareSubmit<EmptyCollectionValues, EmptyCollectionValues, CreatedCollection>(
         form,
         async (data) => fetch(`${apiUrl()}/collections/links-only`, {
@@ -62,40 +62,38 @@ export default function AddEmptyCollectionDialog({onDismiss}: Props) {
     )
 
     return (
-        <div className="modal-overlay" role="presentation">
-            <form className="modal" role="dialog" aria-modal="true" aria-labelledby="empty-collection-title"
-                  onSubmit={onSubmit} noValidate>
-                <div className="modal-header">
-                    <div className="modal-icon" aria-hidden><FontAwesomeIcon icon={faIcon('fass', 'folder-plus')}/></div>
-                    <h2 id="empty-collection-title" className="modal-title">Add empty collection</h2>
+        <Modal onDismiss={onDismiss} dismissOnEscape={!isSubmitting} dismissOnOverlayClick={false}
+               labelledBy="empty-collection-title" onSubmit={onSubmit}>
+            <div className="modal-header">
+                <div className="modal-icon" aria-hidden><FontAwesomeIcon icon={faIcon('fass', 'folder-plus')}/></div>
+                <h2 id="empty-collection-title" className="modal-title">Add custom collection</h2>
+            </div>
+            <p className="modal-text">
+                The collection starts without videos. Next, add the playlists, channels or videos it should hold,
+                from any site.
+            </p>
+            <div className="empty-collection-fields">
+                <div className="form-row">
+                    <label htmlFor="empty-collection-name">Name</label>
+                    <input id="empty-collection-name" className="input" type="text" autoFocus
+                           aria-invalid={Boolean(errors.title)} {...register('title')}/>
+                    {errors.title && <div className="error" role="alert">{String(errors.title.message)}</div>}
                 </div>
-                <p className="modal-text">
-                    The collection starts without videos. Next, add the playlists, channels or videos it should hold,
-                    from any site. Each link becomes {collectionWords(watch('type')).season.a}.
-                </p>
-                <div className="empty-collection-fields">
-                    <div className="form-row">
-                        <label htmlFor="empty-collection-name">Name</label>
-                        <input id="empty-collection-name" className="input" type="text" autoFocus
-                               aria-invalid={Boolean(errors.title)} {...register('title')}/>
-                        {errors.title && <div className="error" role="alert">{String(errors.title.message)}</div>}
-                    </div>
-                    <div className="form-row">
-                        <label htmlFor="empty-collection-type">Type</label>
-                        <Controller control={control} name="type" render={({field}) => (
-                            <SimpleSelect inputId="empty-collection-type" registry={EmptyCollectionTypeReg}
-                                          value={field.value} onChange={field.onChange}/>
-                        )}/>
-                        {errors.type && <div className="error" role="alert">{String(errors.type.message)}</div>}
-                    </div>
+                <div className="form-row">
+                    <label htmlFor="empty-collection-type">Type</label>
+                    <Controller control={control} name="type" render={({field}) => (
+                        <SimpleSelect inputId="empty-collection-type" registry={EmptyCollectionTypeReg}
+                                      value={field.value} onChange={field.onChange}/>
+                    )}/>
+                    {errors.type && <div className="error" role="alert">{String(errors.type.message)}</div>}
                 </div>
-                <div className="modal-actions">
-                    <button type="button" className="btn" onClick={onDismiss} disabled={isSubmitting}>Cancel</button>
-                    <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-                        {isSubmitting ? 'Adding…' : 'Add and choose links'}
-                    </button>
-                </div>
-            </form>
-        </div>
+            </div>
+            <div className="modal-actions">
+                <button type="button" className="btn" onClick={onDismiss} disabled={isSubmitting}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+                    {isSubmitting ? 'Adding…' : 'Add and choose links'}
+                </button>
+            </div>
+        </Modal>
     )
 }

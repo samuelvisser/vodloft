@@ -1,7 +1,7 @@
 """The creators API: the Library's creators, their pages, and grouping collections under them."""
 from __future__ import annotations
 
-from backend.utils.helpers import name_in_text
+from backend.utils.helpers import name_in_text, year_range
 import logging
 import threading
 import time
@@ -248,9 +248,10 @@ class _CollectionRead:
 
     @property
     def years(self) -> str:
-        if self.first_published_date is None or self.last_published_date is None:
-            return ""
-        return f"{self.first_published_date.year}-{self.last_published_date.year}"
+        return year_range(
+            self.first_published_date.year if self.first_published_date else None,
+            self.last_published_date.year if self.last_published_date else None,
+        )
 
     @property
     def loose_season(self) -> str | None:
@@ -550,10 +551,12 @@ class CollectionLink:
 
 
 def collection_link(s: Session, collection_slug: str) -> CollectionLink:
-    """What looking up the creator behind a channel collection needs, read before the slow lookup."""
+    """What looking up the creator behind a collection's link needs, read before the slow lookup: a channel's own
+    creator, or the channel that made a playlist."""
     collection = _collection(s, collection_slug)
     if collection.creator_id is not None:
         raise ServiceError(f"{name_in_text(collection.title)} is already in {name_in_text(collection.creator.title)}")
+    creators.check_has_link(collection)
     creators.check_joins(collection)
     return CollectionLink(collection.source_key, collection.title, collection.sharing_url)
 

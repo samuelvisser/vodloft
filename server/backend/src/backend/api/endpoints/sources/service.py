@@ -14,10 +14,10 @@ from backend.db.models import Collection, CreatorAccount, Episode, MediaItemBase
 from backend.security.access import Access
 from backend.types.collection_types import CollectionType
 from backend.services.collections import set_kind
+from backend.services.creators import takes_creators
 from backend.services.link_seasons import seasons_plan
 from backend.services.media_access import access_locked, link_access
 from backend.services.sites import collection_kind, preferred_sources, site_record
-from backend.types.link_season_types import CollectionKind
 from backend.services.source_requests import asking_source
 from config.network import is_no_internet_error
 from backend.services.users import settings_row
@@ -98,6 +98,7 @@ def lookup_show_details(access: Access, source: Source, url: str) -> CollectionD
         seasons=details.seasons,
         audio_only=source_site(details.url, source.id).audio_only,
         kind=collection_kind(details.url, source.id),
+        list_type=details.list_type,
         seasons_plans={type_.value: _seasons_plan(source, details.url, type_) for type_ in CollectionType},
     )
 
@@ -224,6 +225,7 @@ def _to_read(s: Session, source: Source, link: ResolvedLink, candidates: list[So
             collection_slug, collection_url = local_collection.slug, local_collection.sharing_url
     found = link_access(source.id, link.url, link.access)
     kind = collection_kind(link.url, source.id) if link.kind is LinkKind.COLLECTION else None
+    site = source_site(link.url, source.id) if kind is not None else None
     return ResolvedLinkAPIRead(
         source=SourceAPIRead.model_validate(source),
         kind=link.kind,
@@ -239,7 +241,7 @@ def _to_read(s: Session, source: Source, link: ResolvedLink, candidates: list[So
         access_locked=access_locked(source.id, link.access, None),
         preview=ResolvedLinkPreviewAPIRead.model_validate(link),
         collection_kind=kind,
-        creator_names=source_site(link.url, source.id).creator_names if kind is CollectionKind.CHANNEL else None,
+        creator_names=site.creator_names if site is not None and takes_creators(source.id, site) else None,
         candidates=[SourceAPIRead.model_validate(candidate) for candidate in candidates],
     )
 

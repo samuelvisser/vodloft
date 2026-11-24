@@ -75,10 +75,13 @@ class RepeatVideos(StrEnum):
 
 
 class CollectionKind(StrEnum):
-    """What a collection's own link is, set when the collection is added."""
+    """What a collection's own link is, set when the collection is added and whenever its link changes."""
 
     CHANNEL = "channel"
     """A creator's own page of all their uploads, such as a YouTube channel or a Daily Wire show: its feeds are its
     videos, and its lists can be its seasons. Only a channel collection can be in a creator."""
     LIST = "list"
-    """One list, such as a playlist or an album, or no link at all: a collection of the links the user gave it."""
+    """One list, such as a playlist or an album."""
+    CUSTOM = "custom"
+    """No link of its own: a custom collection, which gets all it holds from the lists the user gives it. Given a link
+    of its own, it becomes a channel or a list collection, by what the link is."""

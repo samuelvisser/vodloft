@@ -1,0 +1,462 @@
+.template-reference,
+.template-reference-toggle {
+    --reference-bg: #ffffff;
+    --reference-soft: #f1f5f9;
+    --reference-border: rgba(100, 116, 139, 0.24);
+    --reference-chip: #e2e8f0;
+    --reference-accent: #2563eb;
+    --reference-accent-soft: #dbeafe;
+}
+
+@media (prefers-color-scheme: dark) {
+    .template-reference,
+    .template-reference-toggle {
+        --reference-bg: #0f1828;
+        --reference-soft: #172235;
+        --reference-border: #2a3850;
+        --reference-chip: #1e2b42;
+        --reference-accent: #60a5fa;
+        --reference-accent-soft: #1e3a5f;
+    }
+}
+
+.template-reference {
+    position: fixed;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: 14px;
+    background: var(--reference-bg);
+    color: var(--text);
+    border: 1px solid var(--reference-border);
+    font-size: 14px;
+}
+
+/* Wide screens: docked on the right, beside the page, which makes room for it. */
+@media (min-width: 1100px) {
+    .template-reference {
+        top: 16px;
+        right: 16px;
+        bottom: 16px;
+        width: 400px;
+        border-radius: 12px;
+    }
+
+    .template-reference__grip,
+    .template-reference-backdrop {
+        display: none;
+    }
+
+    body.has-template-reference .content {
+        padding-right: 440px;
+    }
+
+    body.has-template-reference .template-workbench {
+        max-width: calc(100vw - 308px - 416px);
+    }
+
+    /* In a page's own place for it, such as under the collection card in the Add Collection wizard:
+       that column grows while the reference is open, and the reference fills it to the bottom of the window. */
+    .template-reference.is-in-slot {
+        position: static;
+        flex: 1;
+        width: auto;
+    }
+
+    body.has-template-reference-slot .wizard-sticky-region {
+        grid-template-columns: minmax(450px, 1fr) minmax(0, 540px);
+    }
+
+    body.has-template-reference-slot .wizard-aside {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        height: calc(100vh - 16px);
+    }
+
+    body.has-template-reference-slot .wizard-aside > :first-child {
+        flex: 0 0 auto;
+        align-self: flex-end;
+        width: 100%;
+        max-width: 400px;
+        box-sizing: border-box;
+    }
+
+    .template-reference-slot {
+        display: contents;
+    }
+}
+
+/* Narrow screens: a sheet that slides up over the page and is dragged down to close. */
+@media (max-width: 1099px) {
+    .template-reference {
+        left: 0;
+        right: 0;
+        bottom: 0;
+        top: 56px;
+        padding: 10px 16px 14px;
+        border-width: 1px 0 0;
+        border-radius: 16px 16px 0 0;
+        box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.35);
+        transition: transform 180ms ease;
+        animation: template-reference-up 220ms ease-out;
+    }
+
+    .template-reference.is-dragging {
+        transition: none;
+    }
+
+    .template-reference__handle {
+        touch-action: none;
+        user-select: none;
+        cursor: grab;
+    }
+
+    .template-reference-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 59;
+        background: rgba(2, 6, 23, 0.45);
+        animation: template-reference-fade 220ms ease-out;
+    }
+
+    body.has-template-reference,
+    body.has-template-reference-slot {
+        overflow: hidden;
+    }
+}
+
+@keyframes template-reference-up {
+    from { transform: translateY(100%); }
+}
+
+@keyframes template-reference-fade {
+    from { opacity: 0; }
+}
+
+.template-reference__grip {
+    width: 40px;
+    height: 4px;
+    margin: 0 auto 10px;
+    border-radius: 2px;
+    background: var(--reference-chip);
+}
+
+.template-reference__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.template-reference__top h3 {
+    margin: 0;
+    font-size: 16px;
+}
+
+.template-reference__button,
+.template-reference-toggle.btn {
+    padding: 6px 11px;
+    border: 1px solid var(--reference-border);
+    border-radius: 8px;
+    background: var(--reference-chip);
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.template-reference-toggle.btn.is-active {
+    border-color: var(--reference-accent);
+    background: var(--reference-accent-soft);
+}
+
+.template-reference__search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding: 8px 11px;
+    border: 1px solid var(--reference-border);
+    border-radius: 10px;
+    background: var(--reference-bg);
+    color: var(--muted);
+}
+
+.template-reference__search:focus-within {
+    border-color: var(--reference-accent);
+}
+
+.template-reference__search input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: none;
+    color: var(--text);
+    font: inherit;
+}
+
+.template-reference__tabs {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 12px;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--reference-border);
+    scrollbar-width: none;
+}
+
+.template-reference__tab {
+    flex: 0 0 auto;
+    padding: 7px 10px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.template-reference__tab.is-active {
+    color: var(--text);
+    border-bottom-color: var(--reference-accent);
+}
+
+.template-reference__content {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.template-reference code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12.5px;
+    overflow-wrap: anywhere;
+}
+
+.template-reference__note {
+    margin: 0 6px 10px;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.template-reference__group {
+    margin-bottom: 12px;
+}
+
+.template-reference__group h4 {
+    margin: 12px 0 4px;
+    color: var(--muted);
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.template-reference__group:first-child h4 {
+    margin-top: 0;
+}
+
+.template-reference__entries {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.template-reference__entries li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+    padding: 2px;
+    border-radius: 6px;
+}
+
+.template-reference__entry-head {
+    display: flex;
+    flex: 1;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+    padding: 3px 4px;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.template-reference__entry-head code {
+    flex: 0 0 auto;
+    max-width: 60%;
+    padding: 1px 6px;
+    border-radius: 5px;
+    background: var(--reference-soft);
+}
+
+.template-reference__entry-text {
+    flex: 1;
+    min-width: 0;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.template-reference__entries li:hover,
+.template-reference__entries li.is-open {
+    background: var(--reference-soft);
+}
+
+.template-reference__entries li:hover .template-reference__entry-head code,
+.template-reference__entries li.is-open .template-reference__entry-head code {
+    background: var(--reference-accent-soft);
+}
+
+.template-reference__more {
+    flex: 1 1 100%;
+    padding: 0 6px 4px;
+    color: var(--muted);
+    font-size: 12.5px;
+}
+
+.template-reference__more p {
+    margin: 0 0 4px;
+}
+
+.template-reference .template-reference__insert {
+    flex: 0 0 auto;
+    margin: 0 4px 0 auto;
+    padding: 3px 9px;
+    font-size: 12px;
+}
+
+/* Room between the explanation above the functions and the first of them. */
+.template-reference__note + .template-reference__function {
+    margin-top: 10px;
+}
+
+.template-reference__function {
+    margin-bottom: 7px;
+    overflow: hidden;
+    border: 1px solid var(--reference-border);
+    border-radius: 10px;
+}
+
+.template-reference__function-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 9px 11px;
+    border: 0;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.template-reference__function-head code {
+    flex: 0 0 auto;
+    font-weight: 600;
+}
+
+.template-reference__chevron {
+    flex: 0 0 10px;
+    color: var(--muted);
+}
+
+.template-reference__summary {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.template-reference__function-body {
+    padding: 0 12px 12px;
+    border-top: 1px solid var(--reference-border);
+    background: var(--reference-soft);
+}
+
+.template-reference__function-body p {
+    margin: 10px 0 4px;
+}
+
+.template-reference__usage {
+    margin: 10px 0 6px;
+}
+
+/* Code in the reference shows in the editor's colours, on the reference's own background. */
+.template-reference .template-reference__code {
+    min-width: 0;
+}
+
+.template-reference .template-reference__code .cm-content {
+    padding: 0;
+}
+
+.template-reference .template-reference__code .cm-line {
+    padding: 0;
+}
+
+/* The panel is narrow: let long code wrap inside an expression too, rather than cut it off. */
+.template-reference .template-reference__code .cm-jinja-expression {
+    white-space: normal;
+}
+
+.template-reference__example .template-reference__code {
+    flex: 1 1 100%;
+}
+
+.template-reference__arguments {
+    width: 100%;
+    margin: 4px 0 10px;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.template-reference__arguments td {
+    padding: 6px;
+    border-bottom: 1px solid var(--reference-border);
+    vertical-align: top;
+}
+
+.template-reference__arguments td:first-child,
+.template-reference__default {
+    width: 1%;
+    white-space: nowrap;
+}
+
+.template-reference__default {
+    color: var(--muted);
+}
+
+.template-reference__example {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--reference-border);
+    border-radius: 8px;
+    background: var(--reference-bg);
+}
+
+.template-reference__arrow {
+    color: var(--muted);
+}
+
+.template-reference__result {
+    font-weight: 600;
+}

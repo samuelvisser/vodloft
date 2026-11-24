@@ -316,8 +316,9 @@ export default function EditCollectionPage() {
           {urlError && <div className="error" role="alert">{urlError}</div>}
           {linkOptional && (
             <div className="help" id="collection-url-help">
-              Optional. This collection holds only what its links have. A channel link here offers that channel's
-              playlists in the {words.season.Plural} window and finds new ones.
+              {collection?.kind === 'custom'
+                ? 'Optional. A link of its own turns this custom collection into a channel or a list collection, by what the link is.'
+                : `Optional. This collection holds only what its ${words.season.plural} have. A channel link here offers that channel's playlists in the ${words.season.Plural} window and finds new ones.`}
             </div>
           )}
         </div>

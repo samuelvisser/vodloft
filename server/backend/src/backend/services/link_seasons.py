@@ -92,9 +92,14 @@ def holds_only_link_seasons(collection: Collection) -> bool:
 
 
 def made_from_list(collection: Collection) -> bool:
-    """Whether the collection is made from one list, such as a playlist or an album: the list is its one season, with
-    its videos in the list's order."""
+    """Whether the collection is made from one list, such as a playlist or an album, with its videos in the list's
+    order: the list is its one season, or its videos go in a season per upload year, as the collection is set."""
     return collection.kind == CollectionKind.LIST.value and collection.sharing_url is not None and not holds_only_link_seasons(collection)
+
+
+def list_in_one_season(collection: Collection) -> bool:
+    """Whether the collection made from one list has the list as its one season, rather than a season per year."""
+    return made_from_list(collection) and collection.loose_videos == LooseVideos.ONE_SEASON.value
 
 
 def lists_own_link(collection: Collection) -> bool:
@@ -236,7 +241,7 @@ def seasons_plan(collection: Collection) -> str:
     a season, what goes in the channel season, or a season per upload year."""
     words = collection_words(collection)
     season, episodes = words.season, words.episode.plural
-    if made_from_list(collection):
+    if list_in_one_season(collection):
         return f"The {collection_names(collection).singular} is one {season.singular} in VODLoft, its {episodes} in its order."
     if not lists_playlists(collection) or collection.link_seasons == LinkSeasons.OFF.value:
         return f"VODLoft puts the {episodes} of each upload year in their own {season.singular}."
@@ -442,6 +447,14 @@ class SeasonNumbers:
         return number
 
 
+def _found_list_season(collection: Collection) -> Season | None:
+    """The one season of a collection made from one list, when it has it: its first season that is not a year's."""
+    return next((
+        season for season in sorted(collection.seasons, key=lambda season: season.index)
+        if season.season_type == SeasonType.NORMAL.value and season_year(season) is None
+    ), None)
+
+
 class SeasonFinder:
     """Finds the collection's seasons per year and playlist seasons, makes them when it has none yet, and moves
     episodes between them."""
@@ -453,7 +466,8 @@ class SeasonFinder:
         self._by_year = {season_year(season): season for season in collection.seasons if season_year(season) is not None}
         self.numbers = SeasonNumbers(s)
         self._loose_one = link_seasons_on(collection) and loose_in_one_season(collection)
-        self._one_list = made_from_list(collection)
+        self._from_list = made_from_list(collection)
+        self._one_list = list_in_one_season(collection)
 
     def create(self, *, slug: str, name: str, number: int, origin: SeasonOrigin) -> Season:
         collection = self._collection
@@ -484,7 +498,10 @@ class SeasonFinder:
 
     def loose_season(self) -> Season:
         """The one season of the videos in none of the playlists that are seasons, named as their Site calls it, such
-        as Videos, or Singles for an artist."""
+        as Videos, or Singles for an artist. A collection made from one list has no playlists: its one season is the
+        list's own."""
+        if self._from_list:
+            return self.list_own_season()
         season = next((season for season in self._collection.seasons if season.loose), None)
         if season is None:
             name = loose_season_name(self._collection)
@@ -495,10 +512,7 @@ class SeasonFinder:
 
     def list_own_season(self) -> Season:
         """The one season of a collection made from one list, named after it, as the collection is."""
-        season = next((
-            season for season in sorted(self._collection.seasons, key=lambda season: season.index)
-            if season.season_type == SeasonType.NORMAL.value and season_year(season) is None
-        ), None)
+        season = _found_list_season(self._collection)
         if season is None:
             title = self._collection.title
             season = self.create(slug=slugify(title) or "1", name=title, number=1, origin=SeasonOrigin.LIST)
@@ -604,16 +618,25 @@ class _Places:
         self.loose_ids = {season.id for season in collection.seasons if season.loose}
         self.channel = _ChannelSeat(self.loose_ids) if self.loose_one and holds_whole_channel(collection) else None
         year_ids = {season.id for season in collection.seasons if season_year(season) is not None}
+        # A collection made from one list has no playlists: its videos are in the list's one season, or in a season
+        # per upload year, as it is set.
+        self.from_list = made_from_list(collection)
+        if self.from_list:
+            own = _found_list_season(collection)
+            self.loose_ids = {own.id} if own is not None else set()
+            self.loose_one = list_in_one_season(collection)
+            self.channel = None
         # A season that its lists just left, for another list's season, empties too.
         self.movable = playlist_ids | self.loose_ids | year_ids | left
-        self.anything = on or bool(playlist_ids) or bool(self.loose_ids)
+        self.anything = on or bool(playlist_ids) or bool(self.loose_ids) or self.from_list
         self.extras: set[int] = set()
         """The ids of the episodes a video has beyond one for each season it belongs in."""
         self.missing: dict[str, list[_Seat]] = {}
         """The places whose season has no episode of a video yet, by the video's slug."""
         self._planned: dict[int, _Seat | None] = {}
         self._feed_slugs: set[str] = set()
-        if self.anything:
+        if self.anything and not self.from_list:
+            # A collection made from one list has one place for each video, so nothing to plan.
             self._plan(s, collection)
 
     def seats(self, slug: str) -> list[_Seat]:

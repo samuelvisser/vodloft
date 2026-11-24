@@ -249,6 +249,9 @@ class CollectionDetailsAPIRead(ResponseBase):
     kind: CollectionKind
     """What the link is: a channel, or one list, such as a playlist or an album, which is the collection's one
     season, its episodes in the list's order."""
+    list_type: Optional[str] = None
+    """Which of its Site's types of list the link is, such as an album or a playlist on SoundCloud, where its link
+    doesn't tell."""
     seasons_plans: dict[str, str] = Field(default_factory=dict)
     """What the collection's seasons will be once it is added as each type, in words, as its Site's defaults make
     them: each list a season, what goes in the channel season, or a season per upload year."""
@@ -512,9 +515,10 @@ class ResolvedLinkAPIRead(ResponseBase):
     """VODLoft does not have that access, so it cannot download the video."""
     preview: ResolvedLinkPreviewAPIRead
     collection_kind: Optional[CollectionKind] = None
-    """For a collection: whether it is a channel, which can be in a creator, or one list."""
+    """For a collection: whether it is a channel or one list."""
     creator_names: Optional[NamesAPIRead] = None
-    """For a channel: what its Site calls the creator behind it, such as host on The Daily Wire."""
+    """For a collection on a Site with creators, which can be in one: what its Site calls the creator behind it, such
+    as host on The Daily Wire."""
     # Every Source that claims the link's domain, preferred first, to look the link up with another one.
     candidates: list[SourceAPIRead] = Field(default_factory=list)
 

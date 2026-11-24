@@ -3,7 +3,7 @@ playlists are seasons."""
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Annotated, Optional
 
 from pydantic import AliasChoices, AliasPath, Field
 
@@ -58,6 +58,9 @@ class CollectionListAPIRead(ResponseBase):
     added_by_user: bool = False
     """A link the user added, which they can remove again, rather than one of the playlists of the collection's
     channel."""
+    is_default: bool = False
+    """For a collection without a link of its own: its default link, such as the one its picture comes from. Such a
+    collection always has one."""
 
 
 class CollectionFeedAPIRead(ResponseBase):
@@ -90,6 +93,8 @@ class CollectionSeasonsAPIRead(ResponseBase):
     Source."""
     kind: CollectionKind
     """What the collection's own link is: a channel, or one list."""
+    made_from_list: bool
+    """The collection is made from one list: the list is its one season, or its videos go in a season per year."""
     feeds: list[CollectionFeedAPIRead]
     """For a channel collection: the feeds of its channel, and whether it takes each."""
     channel_season: ChannelSeason
@@ -123,7 +128,8 @@ class CollectionSeasonsAPIRead(ResponseBase):
     """Those types of list named together, such as albums and playlists."""
     creator_list_names: NamesAPIRead
     """The same lists as the creator's, such as creator playlists or artist albums, so they read apart from the
-    collection's own seasons, which a YouTube channel collection also calls playlists."""
+    collection's own seasons, which a YouTube channel collection also calls playlists. A collection without a link of
+    its own calls them links: the ones the user gave it."""
     loose_season: str
     """The name of the season of the videos in none of the lists, such as Videos, Singles or Tracks."""
     site_order: bool = False
@@ -161,6 +167,9 @@ class CollectionListChangeAPIIn(RequestBase):
     season_id: Optional[int] = None
     """The season the list is in: its own, or that of another of the collection's lists, which it then shares. None
     gives it a season of its own."""
+    is_default: bool = False
+    """For a collection without a link of its own: the user's default link. One link at most; without one, the first
+    link that stays is the default."""
 
 
 class CollectionSeasonsAPIUpdate(RequestBase):
@@ -185,6 +194,10 @@ class CollectionSeasonsAPIUpdate(RequestBase):
     playlists: list[CollectionListChangeAPIIn] = Field(default_factory=list, max_length=5000)
     removed_links: list[int] = Field(default_factory=list, max_length=5000)
     """Links the user added that they remove again, by id."""
+    added_links: list[Annotated[str, Field(min_length=1, max_length=2000, pattern=r"^https?://")]] = Field(
+        default_factory=list, max_length=200,
+    )
+    """Links the user adds to a collection that holds only what its links have, saved with the rest."""
     removed_seasons: list[int] = Field(default_factory=list, max_length=2000)
     """Seasons the user removes, by id. Their videos go where the settings put them, which can be a season like it."""
 
@@ -193,3 +206,11 @@ class CollectionListAddAPIIn(RequestBase):
     """A link the user adds to a collection that holds only its link seasons: a playlist, channel or video."""
 
     url: str = Field(min_length=1, max_length=2000, pattern=r"^https?://")
+
+
+class AddedLinkAPIRead(ResponseBase):
+    """A link the user adds, as VODLoft found it. Nothing is saved until the Seasons dialog is."""
+
+    url: str
+    title: str
+    image_url: Optional[str] = None

@@ -161,9 +161,10 @@ export const ResolvedLinkReadSchema = z.object({
         imageUrl: z.string().nullable(),
         authorName: z.string().nullable(),
     }),
-    /** For a collection: whether it is a channel, which can be in a creator, or one list. */
+    /** For a collection: whether it is a channel or one list. */
     collectionKind: z.enum(['channel', 'list']).nullable().optional().default(null),
-    /** For a channel: what its Site calls the creator behind it, such as host on The Daily Wire. */
+    /** For a collection on a Site with creators, which can be in one: what its Site calls the creator behind it, such
+     *  as host on The Daily Wire. */
     creatorNames: NamesSchema.nullable().optional().default(null),
     /** Every Source that claims the link's site, preferred first. */
     candidates: z.array(SourceReadSchema),
@@ -388,6 +389,8 @@ export const CollectionDetailsReadSchema = z.object({
     audioOnly: z.boolean().default(false),
     /** What the link is: a channel, or one list, such as a playlist or an album, which is the collection's one season. */
     kind: z.enum(['channel', 'list']),
+    /** Which of its Site's types of list the link is, such as an album or a playlist on SoundCloud, where its link doesn't tell. */
+    listType: z.string().nullable().default(null),
     /** What the collection's seasons will be once added, by collection type, as its Site's defaults make them. */
     seasonsPlans: z.record(z.string(), z.string()).default({}),
 })

@@ -170,15 +170,16 @@ What comes along:
   number and name; a video that is in more than one season stays in the one that comes first.
 - A **TV Show Collection** made only of playlists becomes a collection of only those playlists (see
   [[Collections-and-Library#collections-of-only-playlists]]), so the channel's other videos are not added.
-- **Add the collections** in the preview chooses how they arrive. *As creators*, the default, adds each collection to
-  the creator behind its links, such as the maker of a YouTube channel, and adds the creator when they are not in your
-  Library yet. *As collections* adds each one on its own; you can still add it to its creator later. Pinchflat imports always
-  arrive as collections.
-- A **Bandcamp** or **SoundCloud Discography** subscription adds the artist. All of the artist's albums go
-  into one Music collection, each album a season, with a Music Local Media Profile that keeps ytdl-sub's folder per
-  artist and per album. A SoundCloud artist's playlists stay on the artist's page, as ytdl-sub only took their
-  albums. New albums are added as seasons when they come out, as ytdl-sub did. The genre you give with `= Lofi` becomes
-  the artist's genre, which new albums get too.
+- Every subscription becomes a collection of its own. You can add a collection to its creator later from its
+  Actions menu.
+- A subscription with links on more than one site becomes a collection per site, all in one creator named after
+  the subscription: three YouTube playlists and two SoundCloud sets become a YouTube collection and a SoundCloud
+  collection, such as *Mixed (YouTube)* and *Mixed (SoundCloud)*. Each one adopts the files of its own site.
+- A **Bandcamp** or **SoundCloud Discography** subscription becomes one Music collection of the artist's page, as
+  **Add collection** adds it: each album a season, with a Music Local Media Profile that keeps ytdl-sub's folder per
+  artist and per album. A SoundCloud artist's playlists are left out, as ytdl-sub only took their albums. New albums
+  are added as seasons when they come out, as ytdl-sub did. The genre you give with `= Lofi` becomes the collection's
+  genre.
 - A **YouTube Full Albums** subscription becomes a Music collection that splits videos by chapter: each video is an
   album and each chapter a track, as in ytdl-sub. The tracks ytdl-sub already saved are adopted one by one.
 - A **Music Videos** subscription (for Plex, Jellyfin, Emby or Kodi) becomes a Music collection with a Collection
@@ -187,9 +188,10 @@ What comes along:
   Concerts, becomes one collection with each link a season named after its category.
 - Every artist keeps the name ytdl-sub gave them, also when their site calls them something else, so new files go
   into the same artist folder as the ones you already have.
-- An artist with both albums and music videos in ytdl-sub becomes one artist with two collections,
+- An artist with both albums and music videos in ytdl-sub becomes one creator with two collections,
   named after the artist, such as *Emily Hopkins albums* and *Emily Hopkins music videos* (see [[Collections-and-Library#music-videos]]), also when the
-  music videos are on another site or their label's channel. When both download the same link, they share one
+  music videos are on another site, their label's channel or a playlist. Albums and music videos stay two collections: a
+  playlist doesn't become a season of the albums. When both download the same link, they share one
   collection that keeps both profiles.
 - ytdl-sub's **best** audio keeps what the site sends: VODLoft saves it as Opus, or as MP3 on Bandcamp. **FLAC**
   stays FLAC for music.

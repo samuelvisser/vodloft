@@ -754,6 +754,9 @@ class CollectionDetails:
     seasons: tuple[SeasonRef, ...] = ()
     """The collection's own seasons, for a Source that has them, so they can be picked
     before the episodes are indexed."""
+    list_type: str | None = None
+    """The key of the Site's type of list the link is, such as an album or a playlist on SoundCloud, for a Site whose
+    lists come in several types that their links don't tell apart."""
 
 
 MIN_NEWEST_EPISODES = 5
@@ -1039,6 +1042,9 @@ class Site:
     list_season_names: Names | None = None
     """What the Site calls the seasons of a list collection, such as groups on SoundCloud. Left out, they are named as
     the collection's type names its seasons."""
+    custom_season_names: Names = Names("list", "lists")
+    """What VODLoft calls the seasons of a custom collection on the Site, whose seasons are the lists the user gave
+    it, unless the collection's type names its seasons itself. A custom collection is on the Site of its first list."""
     channel_season: ChannelSeason | None = None
     """What a new channel collection's channel season holds. Left out, the whole channel, or on a Site that is
     ``audio_only`` only what is in none of its lists, such as an artist's singles."""
@@ -1128,6 +1134,11 @@ class Site:
         """The Site's section types of these kinds named together, or VODLoft's word for the first kind."""
         types = self.types_of(*kinds)
         return Names.joined([type_.names for type_ in types]) if types else SECTION_KIND_NAMES[kinds[0]]
+
+    def list_collection_names_of(self, list_type: str | None) -> Names:
+        """What the Site calls a collection of one of its lists of this type, such as an album on SoundCloud, or its
+        ``list_collection_names`` while the type is not known."""
+        return self.section_type(list_type).names if list_type else self.list_collection_names
 
     def section_type(self, key: str) -> SectionType:
         """The Site's section type by its key. A section of a type the Site does not have is a mistake in its Source,

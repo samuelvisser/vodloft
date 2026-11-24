@@ -7,7 +7,7 @@ import {faIcon} from '../icons/faIcon'
 import {toImageUrl} from '../components/Episode/EpisodeCard'
 import MediaTypeTabs, {MediaType} from '../components/MediaTypeTabs/MediaTypeTabs'
 import SourceBadge from '../components/Source/SourceBadge'
-import CollectionTile from '../components/CollectionTile/CollectionTile'
+import CollectionTile, {TileStats} from '../components/CollectionTile/CollectionTile'
 import {DrmBadge} from '../components/common/DrmProtected'
 import {AccessBadge} from '../components/common/AccessLocked'
 import FilterBar, {ChipFilter} from '../components/common/FilterBar'
@@ -35,6 +35,7 @@ import {wordsOf} from '../lib/collectionWords'
 import {useSelection} from '../components/ProfileBulkEdit/useBulkSelection'
 import {BulkEditToggle, BulkTileCheck, SelectAll} from '../components/ProfileBulkEdit/BulkEditControls'
 import LibraryBulkEdit, {bulkKey, type BulkKey} from './library/LibraryBulkEdit'
+import CreatorTileArt from './library/CreatorTileArt'
 
 const LIBRARY_COLLECTION_TYPE_FILTER_STORAGE_KEY = 'libraryCollectionTypeFilter'
 const LIBRARY_SITE_FILTER_STORAGE_KEY = 'librarySiteFilter'
@@ -120,11 +121,6 @@ function DownloadStateBadge({download}: {download?: MediaDownloadViewRead}) {
         return <span className="movie-state is-error" aria-label="Download failed"><FontAwesomeIcon icon={faIcon('fass', 'triangle-exclamation')}/></span>
     }
     return null
-}
-
-function sameName(a: string, b: string) {
-    const plain = (name: string) => name.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
-    return plain(a) === plain(b)
 }
 
 /** Lower case without accents, so "beyonce" finds "Beyoncé". */
@@ -495,11 +491,8 @@ export default function LibraryPage() {
                                 return (
                                     <CollectionTile
                                         key={collection.slug} collection={collection}
-                                        // What it is on its Site, as a creator's card says, and its author unless that is its own name.
-                                        subtitle={[
-                                            collection.kindName,
-                                            collection.authorName && !sameName(collection.authorName, collection.title) ? collection.authorName : null,
-                                        ].filter(Boolean).join(' · ') || null}
+                                        // What it is on its Site, as a creator's card says. The card leaves its author out.
+                                        subtitle={collection.kindName ?? null}
                                         selection={selection.active ? {
                                             chosen: selection.selected.has(bulkKey('collection', collection.id)),
                                             onToggle: () => selection.toggle(bulkKey('collection', collection.id)),
@@ -514,20 +507,18 @@ export default function LibraryPage() {
                             const chosen = selection.selected.has(key)
                             const content = (
                                 <>
-                                    <span className="library-tile-art" style={banner ? {backgroundImage: `url("${banner}")`} : undefined}>
-                                        {avatar
-                                            ? <img className="library-creator-avatar" src={avatar} alt="" loading="lazy" decoding="async"/>
-                                            : <span className="library-creator-avatar library-creator-avatar--empty" aria-hidden="true">{creator.title.slice(0, 2).toUpperCase()}</span>}
+                                    <CreatorTileArt banner={banner} avatar={avatar} initials={creator.title.slice(0, 2).toUpperCase()}>
                                         {creator.accounts.length === 1 && <SourceBadge sourceKey={creator.accounts[0].sourceKey} className="library-tile-source"/>}
                                         {selection.active && <BulkTileCheck title={creator.title} chosen={chosen} onToggle={() => selection.toggle(key)}/>}
-                                    </span>
+                                    </CreatorTileArt>
                                     <span className="library-tile-copy">
                                         <span className="library-tile-title">{creator.title}</span>
                                         <span className="library-tile-author">{creatorKindText(creator)}</span>
-                                        <span className="library-tile-meta">
-                                            <span>{creator.collectionCount} {creator.collectionCount === 1 ? 'collection' : 'collections'}</span>
-                                            <span>{wordsOf(creator.words).count(creator.episodeCount)}</span>
-                                        </span>
+                                        {/* Its collections come first: when the line is too narrow, the number of episodes is left out. */}
+                                        <TileStats parts={[
+                                            `${creator.collectionCount} ${creator.collectionCount === 1 ? 'collection' : 'collections'}`,
+                                            wordsOf(creator.words).count(creator.episodeCount),
+                                        ]}/>
                                     </span>
                                 </>
                             )

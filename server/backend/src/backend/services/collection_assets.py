@@ -253,7 +253,8 @@ def get_collection_asset_root_preview(
 
 def collection_asset_sources(collection: Collection) -> tuple[CollectionAssetSource, ...]:
     choices = (
-        ("poster", (collection.thumbnail_portrait_path, collection.thumbnail_square_path), None),
+        # A collection of links has no picture of its own: its first link's stands in.
+        ("poster", (collection.thumbnail_portrait_path, collection.thumbnail_square_path, collection.link_image_path), None),
         ("fanart", (collection.background_image_path, collection.thumbnail_landscape_path), None),
         ("square", (collection.thumbnail_square_path,), None),
         ("clearlogo", (collection.logo_image_path,), "png"),

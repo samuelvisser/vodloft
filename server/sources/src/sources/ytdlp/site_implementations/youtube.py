@@ -44,15 +44,18 @@ def channel_root(url: str) -> str | None:
     return urlunsplit(("https", "www.youtube.com", f"/{match.group(1)}", "", ""))
 
 
-def picture(info: dict) -> str | None:
-    """The picture yt-dlp names for a video or playlist, as it names it."""
-    if info.get("thumbnail"):
-        return info["thumbnail"]
-    candidates = [
-        t for t in info.get("thumbnails") or []
+def pictures(info: dict) -> list[str]:
+    """The pictures yt-dlp names for a video or playlist, the one it prefers first."""
+    named = [
+        t["url"] for t in reversed(info.get("thumbnails") or [])
         if isinstance(t, dict) and t.get("url") and not _UNSIGNED_PLAYLIST_PICTURE.match(t["url"])
     ]
-    return candidates[-1]["url"] if candidates else None
+    return [info["thumbnail"], *named] if info.get("thumbnail") else named
+
+
+def picture(info: dict) -> str | None:
+    """The picture yt-dlp names for a video or playlist, as it names it."""
+    return next(iter(pictures(info)), None)
 
 
 def _count(number: int) -> str:

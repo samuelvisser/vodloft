@@ -48,8 +48,11 @@
     aspect-ratio: 1;
     border-radius: 50%;
     object-fit: cover;
-    box-shadow: 0 0 0 3px var(--bg), 0 6px 18px rgba(15, 23, 42, 0.25);
+    box-shadow: 0 0 0 3px var(--creator-ring, var(--bg)), 0 6px 18px rgba(15, 23, 42, 0.25);
 }
+/* Set from the banner around the picture: an off-white ring on a dark banner, a dark one on a light banner. */
+.library-creator-avatar[data-ring="light"] { --creator-ring: #e2e8f0; }
+.library-creator-avatar[data-ring="dark"] { --creator-ring: #0f172a; }
 .library-creator-avatar--empty {
     display: grid;
     place-items: center;

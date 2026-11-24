@@ -1,0 +1,52 @@
+/* A long profile name or path wraps inside its card instead of running past it. */
+.local-media-profile-card {
+  min-width: 0;
+}
+
+.local-media-profile-card .card-title {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.local-media-profile-card__path {
+  width: 100%;
+  min-width: 0;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.local-media-profile-card__path .cm-editor,
+.local-media-profile-card__path .cm-scroller,
+.local-media-profile-card__path .cm-content,
+.local-media-profile-card__path .cm-line {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.local-media-profile-card__path .cm-content,
+.local-media-profile-card__path .cm-line {
+  padding: 0;
+}
+
+.local-media-profile-card__path .cm-scroller {
+  overflow: hidden !important;
+}
+
+/* The path flows on and stops after two lines with an ellipsis, so the cards stay small. */
+.local-media-profile-card .local-media-profile-card__path .cm-content {
+  white-space: normal;
+}
+
+.local-media-profile-card .local-media-profile-card__path .cm-line {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.local-media-profile-card .local-media-profile-card__path .cm-path-section {
+  display: inline;
+  white-space: normal;
+}

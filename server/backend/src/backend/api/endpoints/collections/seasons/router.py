@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException
 
 from backend.app import db_session
 from backend.api.models.collection_seasons import (
-    CollectionSeasonsAPIRead, CollectionSeasonsAPIUpdate, CollectionListAddAPIIn, MovedEpisodesAPIRead,
+    AddedLinkAPIRead, CollectionSeasonsAPIRead, CollectionSeasonsAPIUpdate, CollectionListAddAPIIn, MovedEpisodesAPIRead,
     SeasonsPreviewAPIRead,
 )
 from backend.db.core import run_write_transaction
@@ -15,7 +15,7 @@ from backend.security.deps import requires
 
 from .service import (
     CollectionNotFoundError, link_to_add, look_up_added_link, look_up_links, links_lookup, moved_view, preview_seasons,
-    save_added_link,
+    check_added_link,
     save_listed_links, seasons_view, update_seasons,
 )
 
@@ -57,8 +57,16 @@ def collection_moved_episodes_get(collection_slug: str):
     response_model=CollectionSeasonsAPIRead,
 )
 def collection_seasons_put(collection_slug: str, body: CollectionSeasonsAPIUpdate):
-    """Rename and order the collection's seasons, choose its channel's feeds, and set how the channel's playlists are seasons."""
-    return _found(lambda: run_write_transaction(lambda s: update_seasons(s, collection_slug, body)))
+    """Rename and order the collection's seasons, choose its channel's feeds, and set how the channel's playlists are
+    seasons. The links the user adds are looked up first, outside the write."""
+    added = [_look_up(collection_slug, url) for url in body.added_links]
+    return _found(lambda: run_write_transaction(lambda s: update_seasons(s, collection_slug, body, added)))
+
+
+def _look_up(collection_slug: str, url: str):
+    with db_session() as s:
+        lookup = _found(lambda: link_to_add(s, collection_slug, url))
+    return look_up_added_link(lookup)
 
 
 @router.post(
@@ -84,11 +92,14 @@ def link_seasons_refresh(collection_slug: str):
 
 @router.post(
     "/{collection_slug}/season-settings/added-links", dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
-    response_model=CollectionSeasonsAPIRead,
+    response_model=AddedLinkAPIRead,
 )
 def link_season_add(collection_slug: str, body: CollectionListAddAPIIn):
-    """Add a playlist, channel or video as a link season of a collection that holds only what those have."""
+    """Look up a playlist, channel or video the user adds as a link season of a collection that holds only what those
+    have. Nothing is saved: the Seasons dialog saves it with the rest."""
+    link = _look_up(collection_slug, body.url)
     with db_session() as s:
-        lookup = _found(lambda: link_to_add(s, collection_slug, body.url))
-    link = look_up_added_link(lookup)
-    return _found(lambda: run_write_transaction(lambda s: save_added_link(s, collection_slug, link)))
+        try:
+            return AddedLinkAPIRead.model_validate(_found(lambda: check_added_link(s, collection_slug, link)))
+        finally:
+            s.rollback()

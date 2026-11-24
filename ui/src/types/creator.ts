@@ -22,7 +22,8 @@ export function joinedNames(names: Names[]): Names {
 /** What a creator is, for a label: "YouTube creator" on one Site, "Creator on YouTube and The Daily Wire" on several. */
 export function creatorKindText(creator: {kind: string, accounts: {site: {name: string}}[]}): string {
     const names = [...new Set(creator.accounts.map((account) => account.site.name))]
-    if (names.length < 2) return creator.kind
+    // Without one Site before it, the kind starts the label, such as "Artist" for one on several Sites.
+    if (names.length < 2) return capitalized(creator.kind)
     return `${capitalized(creator.kind)} on ${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
 }
 
