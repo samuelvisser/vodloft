@@ -1,8 +1,8 @@
-"""Count the downloads of each collection that wait to be moved.
+"""Check the health of each collection.
 
-Collections now store that count, which Home and the Library read; this counts it once for the collections that were
-there before. From then on every placement of a collection's videos keeps it up to date, and a nightly check finds
-what drifted.
+Collections now store their health, which Home and the Library read; this runs the collection health check once on
+each collection that was there before, such as to count the downloads that wait to be moved. From then on VODLoft keeps
+it up to date as it works on a collection, and the nightly health check finds what drifted.
 
 Revision ID: 8f1a7033bae0
 Revises: 9c25f5b4d4d1
@@ -16,13 +16,13 @@ from sqlalchemy import select
 
 from backend.db.core import get_session
 from backend.db.models import Collection
-from backend.services.reconcile import check_moves_waiting
+from backend.services.collection_health import check_collection_health
 
 revision = "8f1a7033bae0"
 down_revision = "9c25f5b4d4d1"
-title = "Count the downloads of each collection that wait to be moved"
+title = "Check the health of each collection"
 
-_TITLE = "Counting the downloads that wait to be moved"
+_TITLE = "Checking the health of each collection"
 
 
 def _collection_ids() -> list[int]:
@@ -42,5 +42,5 @@ async def migrate(context) -> None:
     context.update_progress(0, total, _TITLE)
     for done, collection_id in enumerate(ids, start=1):
         context.raise_if_canceled()
-        await asyncio.to_thread(check_moves_waiting, collection_id)
+        await asyncio.to_thread(check_collection_health, collection_id)
         context.update_progress(done, total, _TITLE)

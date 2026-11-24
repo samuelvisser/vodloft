@@ -3,6 +3,7 @@ from __future__ import annotations
 
 def test_settings_cron_operations_target_the_scheduled_workers():
     from backend.operations.settings import (
+        CollectionHealthCronOperation,
         FileWatcherCronOperation,
         FindEpisodesCronOperation,
         FullRescanCronOperation,
@@ -16,6 +17,7 @@ def test_settings_cron_operations_target_the_scheduled_workers():
         (FullRescanCronOperation(), "rescan_quick_checked_collections", "collection", None),
         (VerifyDownloadsCronOperation(), "download_profile_worker", "download_profile", 0),
         (FileWatcherCronOperation(), "file_watcher", "collection", 0),
+        (CollectionHealthCronOperation(), "check_collection_health", "system", 0),
     )
 
     for operation, task_key, resource_type, resource_id in cases:
@@ -29,6 +31,7 @@ def test_settings_cron_operations_target_the_scheduled_workers():
 
 def test_settings_cron_operations_have_distinct_system_kinds():
     from backend.operations.settings import (
+        CollectionHealthCronOperation,
         FileWatcherCronOperation,
         FindEpisodesCronOperation,
         FullRescanCronOperation,
@@ -42,6 +45,7 @@ def test_settings_cron_operations_have_distinct_system_kinds():
         FullRescanCronOperation(),
         VerifyDownloadsCronOperation(),
         FileWatcherCronOperation(),
+        CollectionHealthCronOperation(),
     )
 
     assert {operation.kind for operation in operations} == {
@@ -50,4 +54,5 @@ def test_settings_cron_operations_have_distinct_system_kinds():
         "system.cron.full_rescan",
         "system.cron.verify_downloads",
         "system.cron.file_watcher",
+        "system.cron.collection_health",
     }

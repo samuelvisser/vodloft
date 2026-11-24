@@ -16,7 +16,7 @@ import {
     useCollections,
     useKeepQuestions,
     useSourceProblems,
-    useMovesWaiting,
+    useCollectionHealth,
 } from '../lib/queries'
 import {
     DEFAULT_DOWNLOAD_STATUS_FILTER,
@@ -27,7 +27,7 @@ import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {movieExtraTypeLabel} from '../utils/movieExtras'
 import {formatBytes} from '../utils/formatting'
 import {wordsOf} from '../lib/collectionWords'
-import type {MovesWaiting} from '../types/schemas/reconcile'
+import type {HealthIssue, UnhealthyCollection} from '../types/schemas/collection_health'
 
 const IN_PROGRESS = ['preparing', 'waiting', 'canceling', 'downloading', 'local_processing'] as const
 const QUEUED = ['pending'] as const
@@ -51,11 +51,27 @@ function mediaContext(download: MediaDownloadViewRead) {
     return download.movieTitle ? 'Movie' : download.collectionTitle || 'Episode'
 }
 
-/** Why a collection's episodes wait, in its own words: what its seasons settings make its seasons now. */
-function movesDetail(item: MovesWaiting) {
-    const {season, count} = wordsOf(item.words)
-    return `${count(item.moved)} ${item.moved === 1 ? 'belongs' : 'belong'} in another ${season.singular} now. `
-        + item.seasonsPlan
+/** What one health issue of a collection needs from the user, as a line of Needs attention. */
+function HealthIssueAlert({collection, issue}: {collection: UnhealthyCollection, issue: HealthIssue}) {
+    switch (issue.kind) {
+        case 'moves': {
+            // Why its downloads wait, in its own words: what its seasons settings make its seasons now.
+            const {season, count} = wordsOf(collection.words)
+            return (
+                <Link className="operation-alert" to={`/collection/${collection.slug}?move=1`}>
+                    <FontAwesomeIcon icon={faIcon('fass', 'arrow-right-arrow-left')}/>
+                    <span>
+                        <strong>{collection.title}</strong>
+                        <small>
+                            {`${count(issue.count)} ${issue.count === 1 ? 'belongs' : 'belong'} in another ${season.singular} now. `}
+                            {issue.seasonsPlan}
+                        </small>
+                    </span>
+                    <span>Move</span>
+                </Link>
+            )
+        }
+    }
 }
 
 export default function HomePage() {
@@ -98,15 +114,15 @@ export default function HomePage() {
     const problems = problemsQuery.data
     const metadataProblems = movies?.filter((movie) => movie.releaseDateLookupStatus === 'error') || []
     const sourceProblems = sourceProblemsQuery.data ?? []
-    // Downloaded episodes whose lists put them elsewhere wait for their Move action, files and all.
-    // Worked out from every collection's episodes when asked, which can take a while: until then, nothing is all clear.
+    // What collections need the user for, such as downloads that wait for their Move action, as each stored its health.
     const mayViewLibrary = can('library', 'view')
-    const movesWaitingQuery = useMovesWaiting(mayViewLibrary)
-    const movesWaiting = movesWaitingQuery.data ?? []
+    const healthQuery = useCollectionHealth(mayViewLibrary)
+    const unhealthy = healthQuery.data ?? []
+    const healthIssues = unhealthy.flatMap((collection) => collection.issues.map((issue) => ({collection, issue})))
     // Pending, not loading: a fetch a remount cancelled leaves it pending and idle until the next one answers.
-    const checkingMoves = mayViewLibrary && movesWaitingQuery.isPending
-    const episodesWaiting = movesWaiting.reduce((sum, item) => sum + item.moved, 0)
-    const hasAttention = problemsQuery.total > 0 || metadataProblems.length > 0 || profiles?.length === 0 || sourceProblems.length > 0 || episodesWaiting > 0
+    const checkingHealth = mayViewLibrary && healthQuery.isPending
+    const episodesWaiting = healthIssues.reduce((sum, {issue}) => sum + (issue.kind === 'moves' ? issue.count : 0), 0)
+    const hasAttention = problemsQuery.total > 0 || metadataProblems.length > 0 || profiles?.length === 0 || sourceProblems.length > 0 || healthIssues.length > 0
     // The keep question has its own card above, so it does not fill Needs attention.
     const needsAnAnswer = hasAttention || keepQuestionEpisodes > 0
     const downloadError = (
@@ -116,7 +132,7 @@ export default function HomePage() {
     )
     const activeSectionIsEmpty = active.length === 0
     const attentionSectionIsEmpty = !problemsQuery.isPending
-        && !checkingMoves
+        && !checkingHealth
         && movies !== undefined
         && profiles !== undefined
         && !hasAttention
@@ -176,7 +192,7 @@ export default function HomePage() {
                     <strong>{needsAnAnswer ? 'VODLoft needs attention' : 'VODLoft is running normally'}</strong>
                     <small>
                         {needsAnAnswer ? attentionSummary
-                            : checkingMoves ? 'Checking for downloads to move…'
+                            : checkingHealth ? 'Checking the health of your collections…'
                                 : 'No download, metadata, profile or Source problems detected'}
                     </small>
                 </div>
@@ -227,15 +243,8 @@ export default function HomePage() {
                             <FontAwesomeIcon icon={faIcon('fass', 'triangle-exclamation')}/><span><strong>{problem.title}</strong><small>{problem.detail}</small></span><span>Fix</span>
                         </Link>
                     ))}
-                    {movesWaiting.slice(0, HOME_SECTION_LIMIT).map((item) => (
-                        <Link className="operation-alert" key={`moves-${item.slug}`} to={`/collection/${item.slug}?move=1`}>
-                            <FontAwesomeIcon icon={faIcon('fass', 'arrow-right-arrow-left')}/>
-                            <span>
-                                <strong>{item.title}</strong>
-                                <small>{movesDetail(item)}</small>
-                            </span>
-                            <span>Move</span>
-                        </Link>
+                    {healthIssues.slice(0, HOME_SECTION_LIMIT).map(({collection, issue}) => (
+                        <HealthIssueAlert key={`health-${collection.slug}-${issue.kind}`} collection={collection} issue={issue}/>
                     ))}
                     {metadataProblems.slice(0, HOME_SECTION_LIMIT).map((movie) => (
                         <Link className="operation-alert" key={`movie-metadata-${movie.id}`} to={`/movie/${movie.slug}`}>
@@ -247,18 +256,13 @@ export default function HomePage() {
                             <FontAwesomeIcon icon={faIcon('fass', 'triangle-exclamation')}/><span><strong>{mediaTitle(download)}</strong><small>{download.errorMessage || `Download is ${download.downloadStatus}`}</small></span><span>View</span>
                         </Link>
                     ))}
-                    {checkingMoves && (
-                        <div className="operation-empty" role="status">
-                            <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin/><span>Checking for downloads to move…</span>
-                        </div>
-                    )}
-                    {movesWaitingQuery.isError && (
+                    {healthQuery.isError && (
                         <div className="operation-alert" role="alert">
                             <FontAwesomeIcon icon={faIcon('fass', 'triangle-exclamation')}/>
-                            <span><strong>Downloads to move</strong><small>VODLoft could not check for downloads to move: {movesWaitingQuery.error.message}</small></span>
+                            <span><strong>Collection health</strong><small>VODLoft could not read what your collections need: {healthQuery.error.message}</small></span>
                         </div>
                     )}
-                    {!hasAttention && !checkingMoves && !movesWaitingQuery.isError && <div className="operation-empty"><FontAwesomeIcon icon={faIcon('fass', 'circle-check')}/><span>Nothing needs attention</span></div>}
+                    {!hasAttention && !checkingHealth && !healthQuery.isError && <div className="operation-empty"><FontAwesomeIcon icon={faIcon('fass', 'circle-check')}/><span>Nothing needs attention</span></div>}
                 </section>
             </div>
 

@@ -345,7 +345,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
             await Promise.all([
                 queryClient.invalidateQueries({queryKey: ['collection', collectionSlug, 'movedEpisodes']}),
                 // The collection stored how many wait, which Home and the Library show.
-                queryClient.invalidateQueries({queryKey: ['movesWaiting']}),
+                queryClient.invalidateQueries({queryKey: ['collectionHealth']}),
                 queryClient.invalidateQueries({queryKey: ['collections']}),
             ])
             onDismiss()

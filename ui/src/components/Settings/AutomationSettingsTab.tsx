@@ -183,6 +183,41 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
             </SettingsSection>
 
             <SettingsSection
+                title="Collection health"
+                description="Makes sure every collection is healthy, so Home and the Library show what needs you."
+            >
+                <CronEditor
+                    id="settings-collection-health-cron"
+                    label="Check collection health"
+                    runNow={{
+                        definition: frontendOperationDefinitions['system.cron.collection_health'],
+                        job: 'collection-health',
+                        ledger: {definitionKey: 'check_collection_health', resourceType: 'system', resourceId: 0},
+                    }}
+                    value={draft.collectionHealth.checkCron}
+                    enabled={draft.collectionHealth.checkCronEnabled}
+                    error={errorFor('collectionHealth.checkCron')}
+                    environmentVariable={environmentVariableFor('collectionHealth.checkCron')}
+                    enabledEnvironmentVariable={environmentVariableFor('collectionHealth.checkCronEnabled')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.collectionHealth.checkCron = value
+                    })}
+                    onEnabledChange={(enabled) => updateDraft((next) => {
+                        next.collectionHealth.checkCronEnabled = enabled
+                    })}
+                    help={
+                        <ReadMore summary={<span>Checks every collection once a night by default, and sets right what drifted.</span>}>
+                            <p>
+                                VODLoft keeps track of what each collection needs from you as it works, such as downloads that
+                                wait to be moved to another season. This check works it out again for every collection, in
+                                case something was missed, and marks the collections that need you.
+                            </p>
+                        </ReadMore>
+                    }
+                />
+            </SettingsSection>
+
+            <SettingsSection
                 title="Per-Site scheduling"
                 description="How each Site's new uploads are looked up again, and how its upcoming and live videos are followed."
             >

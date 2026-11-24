@@ -412,6 +412,18 @@ function invalidateFileWatcherCron(
   invalidateTaskLedgerDefinition('file_watcher', invalidations)
 }
 
+function invalidateCollectionHealthCron(
+  _operation: TaskOperationRead,
+  invalidations: InvalidationCollector,
+) {
+  invalidations.push(
+    ['collectionHealth'],
+    ['collections'],
+    ['collectionsView'],
+  )
+  invalidateTaskLedgerDefinition('check_collection_health', invalidations)
+}
+
 export const frontendOperationDefinitions = {
   'system.cron.find_episodes': {
     kind: 'system.cron.find_episodes',
@@ -442,6 +454,12 @@ export const frontendOperationDefinitions = {
     resourceType: 'system',
     label: 'File watcher',
     invalidate: invalidateFileWatcherCron,
+  },
+  'system.cron.collection_health': {
+    kind: 'system.cron.collection_health',
+    resourceType: 'system',
+    label: 'Check collection health',
+    invalidate: invalidateCollectionHealthCron,
   },
   'collection.index': {
     kind: 'collection.index',

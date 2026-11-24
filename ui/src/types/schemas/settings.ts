@@ -142,6 +142,11 @@ const YouTubeApiSettingsSchema = z.object({
     usageLogMaxLines: z.number(),
 })
 
+const CollectionHealthSettingsSchema = z.object({
+    checkCronEnabled: z.boolean(),
+    checkCron: z.string(),
+})
+
 const FileWatcherSettingsSchema = z.object({
     enabled: z.boolean(),
     scanCronEnabled: z.boolean(),
@@ -241,6 +246,7 @@ export const SettingsValuesSchema = z.object({
     downloadSettings: DownloadSettingsSchema,
     youtubeApi: YouTubeApiSettingsSchema,
     fileWatcher: FileWatcherSettingsSchema,
+    collectionHealth: CollectionHealthSettingsSchema,
     quickDownload: QuickDownloadSettingsSchema,
 })
 export type SettingsValues = z.infer<typeof SettingsValuesSchema>
@@ -371,6 +377,9 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
     fileWatcher: FileWatcherSettingsSchema.extend({
         scanCron: cronExpression,
     }),
+    collectionHealth: CollectionHealthSettingsSchema.extend({
+        checkCron: cronExpression,
+    }),
     quickDownload: QuickDownloadSettingsSchema.extend({
         keepDownloadedMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
         keepUnclaimedHours: requiredNumber().int().min(1, 'Must be at least 1 hour.'),
@@ -395,6 +404,7 @@ export const SettingsServerErrors = createServerErrorMapper({
     'values.newEpisodeSchedule.fullRescanCron': CRON_SERVER_ERRORS,
     'values.downloadSettings.verifyDownloadsCron': CRON_SERVER_ERRORS,
     'values.fileWatcher.scanCron': CRON_SERVER_ERRORS,
+    'values.collectionHealth.checkCron': CRON_SERVER_ERRORS,
 })
 
 export const SETTINGS_FIELD_PATHS = [
@@ -482,6 +492,8 @@ export const SETTINGS_FIELD_PATHS = [
     'fileWatcher.scanCronEnabled',
     'fileWatcher.scanCron',
     'fileWatcher.verifyFileSize',
+    'collectionHealth.checkCronEnabled',
+    'collectionHealth.checkCron',
     'quickDownload.defaultKind',
     'quickDownload.defaultQuality',
     'quickDownload.defaultContainer',

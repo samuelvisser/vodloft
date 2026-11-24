@@ -220,6 +220,15 @@ A quick check looks only at a collection's newest videos and looks up the ones V
 
 Metadata intervals accept positive values using `s`, `m`, `h`, or `d`, separated by commas and ordered from shortest to longest.
 
+### Collection health
+
+| Setting | Environment variable | Default | What it does |
+| --- | --- | --- | --- |
+| `collectionHealth.checkCronEnabled` | `VL_COLLECTION_HEALTH__CHECK_CRON_ENABLED` | `true` | Enables the collection health check. |
+| `collectionHealth.checkCron` | `VL_COLLECTION_HEALTH__CHECK_CRON` | `0 4 * * *` | Checks every collection once a night, and marks the ones that need you. |
+
+VODLoft keeps track of what each collection needs from you as it works, such as downloaded videos that wait to be moved to another season. Home lists those collections under **Needs attention**, and the Library marks them with a badge. The health check works this out again for every collection, in case something was missed, and sets it right. **Run now** runs it at once.
+
 ### Per-Site scheduling
 
 Each Site follows the settings above unless you give it settings of its own under **Settings → Automation → Per-Site

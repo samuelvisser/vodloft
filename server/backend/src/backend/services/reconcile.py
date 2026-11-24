@@ -13,9 +13,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from sqlalchemy.orm.attributes import flag_modified
 
-from backend.db.core import write_when_changed
 from backend.db.models import Collection, Episode, EpisodeMediaDownload
 from backend.services.episode_identification import (
     IdentificationChange, ProfileFilesChange, collection_busy, plan_identification, profile_file_changes,
@@ -23,7 +21,7 @@ from backend.services.episode_identification import (
 )
 from backend.services.errors import ServiceError
 from backend.services.link_seasons import (
-    _holders, belongs_elsewhere, lists_in, moved_episodes, note_moves_waiting, place_in_link_seasons, seasons_plan,
+    _holders, belongs_elsewhere, lists_in, moved_episodes, place_in_link_seasons, seasons_plan,
 )
 from backend.services.season_order import match_seasons_of_downloaded
 from backend.services.sites import collection_words
@@ -62,48 +60,6 @@ def _moved(s: Session, scope: ReconcileScope) -> list[Episode]:
 def waiting(s: Session, scope: ReconcileScope) -> int:
     """How many of the scope's videos wait to be moved. Reading only."""
     return len(_moved(s, scope))
-
-
-@dataclass(frozen=True)
-class WaitingIn:
-    """A collection with videos that wait to be moved."""
-
-    slug: str
-    title: str
-    moved: int
-    words: CollectionWords
-    """What it calls its seasons and episodes."""
-    seasons_plan: str
-    """Why they move: what the collection's settings make its seasons now, in words."""
-
-
-def waiting_in_library(s: Session) -> list[WaitingIn]:
-    """Every collection whose videos wait to be moved, by title, as each collection stored it. Reading only."""
-    return [
-        WaitingIn(collection.slug, collection.title, collection.moves_waiting, collection_words(collection), seasons_plan(collection))
-        for collection in s.scalars(select(Collection).where(Collection.moves_waiting > 0).order_by(Collection.title))
-    ]
-
-
-def check_moves_waiting(collection_id: int) -> tuple[int, int] | None:
-    """Count the collection's videos that wait to be moved again, and store the count when it was off. Returns what
-    it had stored and what it stores now; None when the collection is gone.
-
-    For the nightly health check: the count follows every placement of a collection's videos, and this finds what a
-    deleted download or anything else left behind."""
-
-    def work(s: Session) -> tuple[int, int] | None:
-        collection = s.get(Collection, collection_id)
-        if collection is None:
-            return None
-        stored = collection.moves_waiting
-        now = note_moves_waiting(s, collection)
-        if now != stored:
-            # Counting does not change the collection, so it keeps its last update time.
-            flag_modified(collection, "updated_at")
-        return stored, now
-
-    return write_when_changed(work)
 
 
 @dataclass(frozen=True)
@@ -262,6 +218,5 @@ def reconcile(s: Session, scope: ReconcileScope, *, renumber: Mapping[str, bool]
 
 
 __all__ = [
-    "MovePreview", "ReconcileScope", "WaitingIn", "check_moves_waiting", "preview_reconcile", "reconcile", "waiting",
-    "waiting_in_library",
+    "MovePreview", "ReconcileScope", "preview_reconcile", "reconcile", "waiting",
 ]

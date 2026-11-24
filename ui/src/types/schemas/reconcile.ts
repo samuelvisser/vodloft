@@ -1,5 +1,4 @@
 import {z} from 'zod'
-import {CollectionWordsSchema} from './collection_contract'
 import {NamesSchema} from './source'
 
 /** The videos of one list that move to another season of their collection. */
@@ -40,15 +39,3 @@ export const ReconcileResultSchema = z.object({
     collectionSlug: z.string().nullable().optional(),
 })
 export type ReconcileResult = z.infer<typeof ReconcileResultSchema>
-
-/** A collection whose Moved episodes wait for its Move action. */
-export const MovesWaitingSchema = z.object({
-    slug: z.string(),
-    title: z.string(),
-    moved: z.number(),
-    /** What it calls its seasons and episodes. */
-    words: CollectionWordsSchema,
-    /** Why they move: what the collection's settings make its seasons now, in words. */
-    seasonsPlan: z.string(),
-})
-export type MovesWaiting = z.infer<typeof MovesWaitingSchema>

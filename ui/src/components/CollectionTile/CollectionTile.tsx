@@ -8,6 +8,7 @@ import {wordsFor} from '../../lib/collectionWords'
 import {useActiveOperation} from '../OperationNotifier/OperationNotifier'
 import CollectionIndexingProgress from '../CollectionIndexingProgress/CollectionIndexingProgress'
 import {BulkTileCheck} from '../ProfileBulkEdit/BulkEditControls'
+import type {HealthIssueKind} from '../../types/schemas/collection_health'
 
 type CollectionTileProps = {
     collection: {
@@ -26,8 +27,8 @@ type CollectionTileProps = {
         linkImagePath?: string | null
         logoImagePath?: string | null
         authorHeadshotPath?: string | null
-        /** How many of its downloads wait for its Move action. */
-        movesWaiting?: number
+        /** What it needs the user for, by kind of issue, as it stored its health. */
+        healthIssues?: Partial<Record<HealthIssueKind, number>>
     }
     /** The line under the title, such as the collection's author. */
     subtitle?: string | null
@@ -57,7 +58,7 @@ export default function CollectionTile({collection, subtitle, showSource = true,
     )
     const indexing = !!useActiveOperation('collection.index', 'collection', collection.id ?? null)
     const words = wordsFor(collection)
-    const moves = collection.movesWaiting ?? 0
+    const moves = collection.healthIssues?.moves ?? 0
     const content = (
         <>
             <span className="library-tile-art">

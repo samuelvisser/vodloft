@@ -662,6 +662,20 @@ class LogFileSettings(SubmodelBase):
     kept_files: int = Field(default=5, ge=1, description="Earlier parts of the log file that are kept")
 
 
+class CollectionHealthSettings(SubmodelBase):
+    """The collection health check, which makes sure every collection is healthy and sets right what drifted."""
+
+    check_cron_enabled: bool = Field(
+        default=True,
+        description="Enable the cron schedule for the collection health check",
+    )
+    check_cron: str = Field(
+        default="0 4 * * *",
+        min_length=1,
+        description="Cron schedule for the collection health check",
+    )
+
+
 class FileWatcherSettings(SubmodelBase):
     enabled: bool = Field(..., description="Enable the file watcher that keeps downloaded episode files in sync with the database")
     scan_cron_enabled: bool = Field(

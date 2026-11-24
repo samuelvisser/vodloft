@@ -30,7 +30,8 @@ import {
     CreatorEpisodePageReadSchema, CreatorOfferingsSchema, CreatorPageReadSchema, CreatorReadSchema, type CreatorPageRead, type CreatorRead,
     CollectionCreatorMatchSchema, type CollectionCreatorMatch,
 } from '../types/schemas/creator'
-import {MovePreviewSchema, type MovePreview, ReconcileResultSchema, type ReconcileResult, MovesWaitingSchema} from '../types/schemas/reconcile'
+import {MovePreviewSchema, type MovePreview, ReconcileResultSchema, type ReconcileResult} from '../types/schemas/reconcile'
+import {UnhealthyCollectionSchema} from '../types/schemas/collection_health'
 import {downloadStatusesForApi} from './downloadStatusFilters'
 import {
     episodeQueryKeys,
@@ -974,12 +975,12 @@ export async function reconcile(path: string, renumber: Record<string, boolean>)
     return ReconcileResultSchema.parse(await response.json())
 }
 
-/** The collections whose Moved episodes wait to be moved. */
-export function useMovesWaiting(enabled = true) {
+/** The collections that need the user, with what for, as each stored its health. */
+export function useCollectionHealth(enabled = true) {
     return useQuery({
-        queryKey: ['movesWaiting'],
+        queryKey: ['collectionHealth'],
         enabled,
-        queryFn: ({signal}) => apiJson('/collections/moves-waiting', (data) => z.array(MovesWaitingSchema).parse(data), {signal}),
+        queryFn: ({signal}) => apiJson('/collections/health', (data) => z.array(UnhealthyCollectionSchema).parse(data), {signal}),
     })
 }
 

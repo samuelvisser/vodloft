@@ -37,6 +37,7 @@ from backend.services.seasons import create_season_record
 from backend.services.new_lists import ListKind, NewListSetting, list_kinds, new_link_seasons_settings
 from backend.services.sites import collection_creator_names, collection_names, collection_site, collection_words
 from backend.types.collection_contracts import collection_contract
+from backend.types.collection_health_types import HealthIssueKind
 from backend.types.collection_types import EpisodeIdentifier
 from backend.types.season_types import SeasonOrigin, SeasonType
 from backend.types.link_season_types import (
@@ -773,13 +774,12 @@ def place_in_link_seasons(
 
 
 def note_moves_waiting(s: Session, collection: Collection) -> int:
-    """Store how many of the collection's downloads wait to be moved, so Home and the Library read it instead of
-    working it out for every collection. Returns it. Only writes when it changed.
+    """Store on the collection's health how many of its downloads wait to be moved, so Home and the Library read it
+    instead of working it out for every collection. Returns it. Only writes when it changed.
 
     ``s`` is a write transaction's session, or a read session that ``write_when_changed`` checks."""
     waiting = len(moved_episodes(s, collection))
-    if collection.moves_waiting != waiting:
-        collection.moves_waiting = waiting
+    collection.note_health(HealthIssueKind.MOVES, waiting)
     return waiting
 
 

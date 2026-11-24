@@ -1,4 +1,5 @@
 import {z} from "zod";
+import {HealthIssueKindSchema} from './collection_health'
 import {EpisodeIdentifierReg, EpisodeOrderReg, CollectionTypeReg} from "../collection";
 import {DwMembershipLevelReg} from "../dailywire_user_info";
 import {ApiDateTimeSchema} from "./datetime";
@@ -151,8 +152,10 @@ export const CollectionReadSchema = z.looseObject({
     updatedAt: ApiDateTimeSchema,
     /** Who added it, with user accounts on. */
     addedBy: z.string().nullable().optional(),
-    /** How many of its downloads wait for its Move action. */
-    movesWaiting: z.int().default(0),
+    /** Whether it needs nothing from the user, as it stored its health. */
+    healthy: z.boolean().default(true),
+    /** What it needs the user for, by kind of issue, with how many things each concerns. */
+    healthIssues: z.partialRecord(HealthIssueKindSchema, z.int()).default({}),
 })
 export type CollectionRead = z.infer<typeof CollectionReadSchema>;
 

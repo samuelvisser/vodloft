@@ -63,7 +63,8 @@ from ...models.collection import CollectionBulkChangesIn
 from ...models.profile_bulk import BulkChangeIn, BulkResultRead, BulkSelectionIn, BulkSummaryRead
 from backend.api.endpoints.creators import lookups as creator_lookups
 from backend.api.endpoints.reconcile import collection_scope, move, preview_move
-from backend.api.models.reconcile import MovePreviewAPIRead, MovesWaitingAPIRead, ReconcileAPIIn, ReconcileAPIRead
+from backend.api.models.collection_health import UnhealthyCollectionAPIRead
+from backend.api.models.reconcile import MovePreviewAPIRead, ReconcileAPIIn, ReconcileAPIRead
 from backend.api.steps import STEPS_RESPONSE, plan_lines, stream_steps
 from backend.app import db_session
 from backend.types.collection_types import EpisodeIdentifier
@@ -78,14 +79,14 @@ router.include_router(collection_as_bundle_router)
 router.include_router(existing_files_router)
 router.include_router(collection_seasons_router)
 
-@router.get("/moves-waiting", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[MovesWaitingAPIRead])
-def collections_moves_waiting():
-    """Every collection whose Moved episodes wait to be moved."""
-    from backend.services.reconcile import waiting_in_library
+@router.get("/health", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[UnhealthyCollectionAPIRead])
+def collections_health():
+    """Every collection that needs the user, with what for, as each stored its health."""
+    from backend.services.collection_health import unhealthy_collections
 
     with db_session() as s:
         try:
-            return [MovesWaitingAPIRead.model_validate(item) for item in waiting_in_library(s)]
+            return [UnhealthyCollectionAPIRead.model_validate(item) for item in unhealthy_collections(s)]
         finally:
             s.rollback()
 
