@@ -4,6 +4,7 @@ from .as_bundle import collection_as_bundle_router
 from .as_view import collection_view_router
 from .existing_files.router import router as existing_files_router
 from .seasons.router import router as collection_seasons_router
+from .health import router as collection_health_router
 from .sync_log import collection_scans
 from .bulk import change_collections, delete_collections, summarize_collections, sync_collections
 from backend.api.endpoints.creators.service import (
@@ -63,7 +64,6 @@ from ...models.collection import CollectionBulkChangesIn
 from ...models.profile_bulk import BulkChangeIn, BulkResultRead, BulkSelectionIn, BulkSummaryRead
 from backend.api.endpoints.creators import lookups as creator_lookups
 from backend.api.endpoints.reconcile import collection_scope, move, preview_move
-from backend.api.models.collection_health import UnhealthyCollectionAPIRead
 from backend.api.models.reconcile import MovePreviewAPIRead, ReconcileAPIIn, ReconcileAPIRead
 from backend.api.steps import STEPS_RESPONSE, plan_lines, stream_steps
 from backend.app import db_session
@@ -74,22 +74,11 @@ from backend.db.core import run_write_transaction
 
 router = APIRouter(prefix="/collections", tags=["Collections"])
 
+router.include_router(collection_health_router)
 router.include_router(collection_view_router)
 router.include_router(collection_as_bundle_router)
 router.include_router(existing_files_router)
 router.include_router(collection_seasons_router)
-
-@router.get("/health", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[UnhealthyCollectionAPIRead])
-def collections_health():
-    """Every collection that needs the user, with what for, as each stored its health."""
-    from backend.services.collection_health import unhealthy_collections
-
-    with db_session() as s:
-        try:
-            return [UnhealthyCollectionAPIRead.model_validate(item) for item in unhealthy_collections(s)]
-        finally:
-            s.rollback()
-
 
 @router.get("", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[CollectionAPIRead])
 def collection_list():

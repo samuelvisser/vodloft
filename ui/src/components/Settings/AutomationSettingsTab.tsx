@@ -1,5 +1,6 @@
 import type {SettingsTabProps} from './SettingsTabTypes'
 import CronEditor from './CronEditor'
+import CollectionHealthChecks from './CollectionHealthChecks'
 import SiteSettingsCard from './SiteSettingsCard'
 import {
     DurationField,
@@ -184,7 +185,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
 
             <SettingsSection
                 title="Collection health"
-                description="Makes sure every collection is healthy, so Home and the Library show what needs you."
+                description="Makes sure every collection is healthy, so Home and the Library show what needs you. The checks below are saved as soon as you change them."
             >
                 <CronEditor
                     id="settings-collection-health-cron"
@@ -215,6 +216,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                         </ReadMore>
                     }
                 />
+                <CollectionHealthChecks/>
             </SettingsSection>
 
             <SettingsSection

@@ -255,6 +255,8 @@ In the Add Collection wizard, a channel or playlist link on a site with creators
 
 A collection that is already in your Library can join later: choose **Add to creator** in its **Actions** menu. VODLoft finds the creator behind the collection's link, which for a playlist is the channel that made it, or you pick another one in your Library, for example for an artist's music videos on their label's channel. A collection of only playlists has no link of its own, so you always pick its creator in your Library. **Remove from creator** in the same menu makes it a plain collection again. Neither changes anything in the collection: it keeps its episodes, numbers, profiles, files, genre and content rating.
 
+When three or more of your collections are by one creator and in no creator yet, the Home page suggests grouping them, found by the nightly health check (see [[Settings#collection-health]]).
+
 The creator's name becomes the author of their collections, and output templates can use `creator_title`, `creator_handle` and `creator_kind`, and `section_title` and `section_kind` for the playlist or feed an episode came from. See [Local Media Profiles](Local-Media-Profiles#collection-template-variable-reference).
 
 ### The creator's page

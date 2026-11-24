@@ -121,6 +121,14 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
                 "downloads that wait for its Move action. Kept up to date as VODLoft works on it, and set right by the "
                 "nightly collection health check",
     )
+    site_creator_ref: Mapped[Optional[str]] = mapped_column(
+        index=True,
+        comment="The Site's id of the creator behind its link, as the collection health check found it, for suggesting "
+                "to group a creator's collections; null when none was found or it has not been looked up",
+    )
+    site_creator_url: Mapped[Optional[str]] = mapped_column(
+        comment="The link that site_creator_ref was looked up for: a link it no longer has is looked up again",
+    )
     split_chapters: Mapped[bool] = mapped_column(
         default=False, server_default="0",
         comment="Each new video with chapters becomes a season of its own, with an episode per chapter",

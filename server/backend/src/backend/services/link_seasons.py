@@ -37,7 +37,6 @@ from backend.services.seasons import create_season_record
 from backend.services.new_lists import ListKind, NewListSetting, list_kinds, new_link_seasons_settings
 from backend.services.sites import collection_creator_names, collection_names, collection_site, collection_words
 from backend.types.collection_contracts import collection_contract
-from backend.types.collection_health_types import HealthIssueKind
 from backend.types.collection_types import EpisodeIdentifier
 from backend.types.season_types import SeasonOrigin, SeasonType
 from backend.types.link_season_types import (
@@ -736,7 +735,7 @@ def place_in_link_seasons(
         # A season the lists just left is one its videos leave too, also the extra episodes there.
         _drop_outside(s, collection, by_user=by_user, extras=places.extras)
     if not places.anything:
-        note_moves_waiting(s, collection)
+        _note_health(s, collection)
         s.flush()
         return 0
     kept = set() if with_files is True else _with_files(s, collection) - (with_files or set())
@@ -768,19 +767,16 @@ def place_in_link_seasons(
         _add_placements(s, collection, finder, places.missing)
     _drop_emptied(s, collection, left)
     arrange_seasons(s, collection)
-    note_moves_waiting(s, collection)
+    _note_health(s, collection)
     s.flush()
     return moved
 
 
-def note_moves_waiting(s: Session, collection: Collection) -> int:
-    """Store on the collection's health how many of its downloads wait to be moved, so Home and the Library read it
-    instead of working it out for every collection. Returns it. Only writes when it changed.
+def _note_health(s: Session, collection: Collection) -> None:
+    # The collection's health keeps what its placement leaves for the user, such as downloads to move.
+    from backend.services.collection_health import note_collection_health
 
-    ``s`` is a write transaction's session, or a read session that ``write_when_changed`` checks."""
-    waiting = len(moved_episodes(s, collection))
-    collection.note_health(HealthIssueKind.MOVES, waiting)
-    return waiting
+    note_collection_health(s, collection)
 
 
 # What an episode of a video in another season has of its own, rather than of the video.
