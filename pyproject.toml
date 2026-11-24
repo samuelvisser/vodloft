@@ -38,6 +38,11 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]
 addopts = ["--strict-markers", "--disable-socket", "--allow-unix-socket"]
+# A query that names a table it does not join reads every row of it for every other row.
+filterwarnings = [
+    "error:SELECT statement has a cartesian product:sqlalchemy.exc.SAWarning",
+    "error:Did not locate an expression in selectable:sqlalchemy.exc.SAWarning",
+]
 markers = [
     "sqlite_only: tests of SQLite itself or of SQLite-only migrations, skipped when VL_TEST_POSTGRESQL_URL is set",
 ]
