@@ -1,6 +1,7 @@
-import {useEffect, useId, useMemo, useState, type ReactNode} from 'react'
+import {useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode} from 'react'
+import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
+import {faIcon} from '../../icons/faIcon'
 import {createPortal} from 'react-dom'
-import ReadMore from '../../utils/ReadMore'
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
 import type {OutputTemplateVariable} from './outputTemplateVariables'
 import {JINJA_FILTERS, TEMPLATE_FUNCTIONS, type TemplateFunction} from './outputTemplateFunctions'
@@ -12,6 +13,8 @@ export type ReferenceEntry = {
     /** What Insert puts in the template. */
     insert: string
     description: string
+    /** A few words for the row; the description shows when it is pointed at or tapped. */
+    short?: string
     readMore?: OutputTemplateVariable['readMore']
 }
 
@@ -23,12 +26,13 @@ type Props = {
     builtInIndexes: readonly ReferenceEntry[]
     customIndexes: readonly ReferenceEntry[]
     metadata: readonly ReferenceEntry[]
-    /** How templates work, at the top of the Variables tab. */
-    guidance: ReactNode
     /** Puts text at the editor's cursor; left out when the template is read only. */
     onInsert?: (text: string) => void
     onClose: () => void
 }
+
+/** Below this width the reference is a sheet over the page instead of docked beside it. */
+export const SHEET_QUERY = '(max-width: 1099px)'
 
 const DATE_PARTS = new Set([
     'date', 'time', 'datetime', 'year', 'month', 'day', 'hour', 'minute', 'second', 'day_of_year', 'day_of_year_reversed',
@@ -46,8 +50,10 @@ function variableGroup(name: string, mode: LocalMediaProfileMode): string {
 }
 
 function variableEntry(variable: OutputTemplateVariable): ReferenceEntry {
-    const code = `{{ ${variable.name} }}`
-    return {code, insert: code, description: variable.description, readMore: variable.readMore}
+    return {
+        code: variable.name, insert: `{{ ${variable.name} }}`,
+        description: variable.description, short: variable.short, readMore: variable.readMore,
+    }
 }
 
 function matches(query: string, ...texts: string[]): boolean {
@@ -57,25 +63,31 @@ function matches(query: string, ...texts: string[]): boolean {
 function EntryList({entries, onInsert}: {entries: readonly ReferenceEntry[], onInsert?: (text: string) => void}) {
     return (
         <ul className="template-reference__entries">
-            {entries.map((entry) => (
-                <li key={entry.code}>
-                    <code>{entry.code}</code>
-                    <div className="template-reference__entry-text">
-                        {entry.readMore ? (
-                            <ReadMore summary={entry.readMore.summary ?? entry.description}>
-                                {entry.readMore.paragraphs.map((paragraph) => (
+            {entries.map((entry) => {
+                const more = [
+                    ...(entry.short ? [entry.description] : []),
+                    ...(entry.readMore?.paragraphs ?? []),
+                ]
+                return (
+                    // A row takes focus when tapped, which shows its explanation and Insert on a phone.
+                    <li key={entry.code} tabIndex={onInsert || more.length > 0 ? 0 : undefined}>
+                        <code>{entry.code}</code>
+                        <span className="template-reference__entry-text">{entry.short ?? entry.description}</span>
+                        {onInsert && (
+                            <button type="button" className="template-reference__button template-reference__insert" onClick={() => onInsert(entry.insert)}>
+                                Insert
+                            </button>
+                        )}
+                        {more.length > 0 && (
+                            <div className="template-reference__more">
+                                {more.map((paragraph) => (
                                     <p key={paragraph} dangerouslySetInnerHTML={{__html: paragraph}}/>
                                 ))}
-                            </ReadMore>
-                        ) : entry.description}
-                    </div>
-                    {onInsert && (
-                        <button type="button" className="btn btn-small template-reference__insert" onClick={() => onInsert(entry.insert)}>
-                            Insert
-                        </button>
-                    )}
-                </li>
-            ))}
+                            </div>
+                        )}
+                    </li>
+                )
+            })}
         </ul>
     )
 }
@@ -87,7 +99,7 @@ function FunctionRow({fn, open, onToggle, onInsert}: {
     return (
         <div className={`template-reference__function${open ? ' is-open' : ''}`}>
             <button type="button" className="template-reference__function-head" aria-expanded={open} aria-controls={bodyId} onClick={onToggle}>
-                <span className="template-reference__chevron" aria-hidden="true">›</span>
+                <span className="template-reference__chevron" aria-hidden="true">{open ? '⌄' : '›'}</span>
                 <code>{fn.name}</code>
                 <span className="template-reference__summary">{fn.summary}</span>
             </button>
@@ -111,9 +123,10 @@ function FunctionRow({fn, open, onToggle, onInsert}: {
                     {fn.example && (
                         <div className="template-reference__example">
                             <code>{fn.example.code}</code>
-                            <span className="template-reference__result"><span aria-hidden="true">→ </span>{fn.example.result}</span>
+                            <span className="template-reference__arrow" aria-hidden="true">→</span>
+                            <b className="template-reference__result">{fn.example.result}</b>
                             {onInsert && (
-                                <button type="button" className="btn btn-small template-reference__insert" onClick={() => onInsert(fn.example!.code)}>
+                                <button type="button" className="template-reference__button template-reference__insert" onClick={() => onInsert(fn.example!.code)}>
                                     Insert
                                 </button>
                             )}
@@ -129,7 +142,7 @@ function FunctionRow({fn, open, onToggle, onInsert}: {
  * Every variable, Indexing value and function a template can use. It docks beside the page on a wide screen,
  * so the editor and its example output stay in view, and slides up as a sheet on a phone.
  */
-export default function TemplateReference({mode, variables, builtInIndexes, customIndexes, metadata, guidance, onInsert, onClose}: Props) {
+export default function TemplateReference({mode, variables, builtInIndexes, customIndexes, metadata, onInsert, onClose}: Props) {
     const [tab, setTab] = useState<TabKey>('variables')
     const [query, setQuery] = useState('')
     const [openFunction, setOpenFunction] = useState<string | null>(null)
@@ -173,13 +186,13 @@ export default function TemplateReference({mode, variables, builtInIndexes, cust
 
     const search = query.trim().toLowerCase()
     const found = search ? {
-        variables: variables.map(variableEntry).filter((entry) => matches(search, entry.code, entry.description)),
-        indexes: [...builtInIndexes, ...customIndexes].filter((entry) => matches(search, entry.code, entry.description)),
-        metadata: metadata.filter((entry) => matches(search, entry.code, entry.description)),
+        variables: variables.map(variableEntry).filter((entry) => matches(search, entry.code, entry.description, entry.short ?? '')),
+        indexes: [...builtInIndexes, ...customIndexes].filter((entry) => matches(search, entry.code, entry.description, entry.short ?? '')),
+        metadata: metadata.filter((entry) => matches(search, entry.code, entry.description, entry.short ?? '')),
         functions: functions.filter((fn) => matches(
             search, fn.name, fn.summary, fn.description, ...fn.arguments.map((argument) => argument.description),
         )),
-        jinja: jinjaEntries.filter((entry) => matches(search, entry.code, entry.description)),
+        jinja: jinjaEntries.filter((entry) => matches(search, entry.code, entry.description, entry.short ?? '')),
     } : null
 
     const functionRows = (list: readonly TemplateFunction[]) => list.map((fn) => (
@@ -213,7 +226,6 @@ export default function TemplateReference({mode, variables, builtInIndexes, cust
     } else if (shownTab === 'variables') {
         content = (
             <>
-                <div className="template-reference__note">{guidance}</div>
                 {variableGroups.map(([group, entries]) => (
                     <section key={group} className="template-reference__group">
                         <h4>{group}</h4>
@@ -259,25 +271,58 @@ export default function TemplateReference({mode, variables, builtInIndexes, cust
         )
     }
 
+    // On a phone the reference is a sheet: drag its handle down to close it.
+    const [dragY, setDragY] = useState(0)
+    const dragStart = useRef<number | null>(null)
+    const startDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+        if (!window.matchMedia(SHEET_QUERY).matches || (event.target as HTMLElement).closest('button')) return
+        dragStart.current = event.clientY
+        event.currentTarget.setPointerCapture(event.pointerId)
+    }
+    const drag = (event: ReactPointerEvent<HTMLDivElement>) => {
+        if (dragStart.current !== null) setDragY(Math.max(0, event.clientY - dragStart.current))
+    }
+    const endDrag = () => {
+        if (dragStart.current === null) return
+        dragStart.current = null
+        if (dragY > 90) onClose()
+        else setDragY(0)
+    }
+
     return createPortal(
         <>
             <div className="template-reference-backdrop" onClick={onClose} aria-hidden="true"/>
-            <aside className="template-reference" aria-label="Template reference">
-                <div className="template-reference__top">
-                    <h3>Template reference</h3>
-                    <button type="button" className="btn btn-small" onClick={onClose}>Close</button>
+            <aside
+                className={`template-reference${dragY > 0 ? ' is-dragging' : ''}`}
+                aria-label="Template reference"
+                style={dragY > 0 ? {transform: `translateY(${dragY}px)`} : undefined}
+            >
+                <div
+                    className="template-reference__handle"
+                    onPointerDown={startDrag}
+                    onPointerMove={drag}
+                    onPointerUp={endDrag}
+                    onPointerCancel={endDrag}
+                >
+                    <div className="template-reference__grip" aria-hidden="true"/>
+                    <div className="template-reference__top">
+                        <h3>Template reference</h3>
+                        <button type="button" className="template-reference__button" onClick={onClose}>Close</button>
+                    </div>
                 </div>
-                <input
-                    type="search"
-                    className="input template-reference__search"
-                    placeholder="Find a variable or function"
-                    aria-label="Find a variable or function"
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                />
+                <label className="template-reference__search">
+                    <FontAwesomeIcon icon={faIcon('fass', 'magnifying-glass')} aria-hidden="true"/>
+                    <input
+                        type="search"
+                        placeholder="Find a variable or function"
+                        aria-label="Find a variable or function"
+                        value={query}
+                        onChange={(event) => setQuery(event.target.value)}
+                    />
+                </label>
                 {!search && (
                     <div className="template-reference__tabs" role="tablist">
-                        {tabs.map(({key, label, count}) => (
+                        {tabs.map(({key, label}) => (
                             <button
                                 key={key}
                                 type="button"
@@ -286,7 +331,7 @@ export default function TemplateReference({mode, variables, builtInIndexes, cust
                                 className={`template-reference__tab${shownTab === key ? ' is-active' : ''}`}
                                 onClick={() => setTab(key)}
                             >
-                                {label}<span className="template-reference__count">{count}</span>
+                                {label}
                             </button>
                         ))}
                     </div>

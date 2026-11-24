@@ -1,23 +1,16 @@
-.template-reference {
+.template-reference,
+.template-reference-toggle {
     --reference-bg: #ffffff;
     --reference-soft: #f1f5f9;
-    --reference-border: #d8e1ee;
+    --reference-border: rgba(100, 116, 139, 0.24);
     --reference-chip: #e2e8f0;
     --reference-accent: #2563eb;
     --reference-accent-soft: #dbeafe;
-    position: fixed;
-    z-index: 60;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    padding: 14px 16px;
-    background: var(--reference-bg);
-    color: var(--text);
-    border: 1px solid var(--reference-border);
 }
 
 @media (prefers-color-scheme: dark) {
-    .template-reference {
+    .template-reference,
+    .template-reference-toggle {
         --reference-bg: #0f1828;
         --reference-soft: #172235;
         --reference-border: #2a3850;
@@ -27,6 +20,19 @@
     }
 }
 
+.template-reference {
+    position: fixed;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: 14px;
+    background: var(--reference-bg);
+    color: var(--text);
+    border: 1px solid var(--reference-border);
+    font-size: 14px;
+}
+
 /* Wide screens: docked on the right, beside the page, which makes room for it. */
 @media (min-width: 1100px) {
     .template-reference {
@@ -34,10 +40,10 @@
         right: 16px;
         bottom: 16px;
         width: 400px;
-        border-radius: 14px;
-        box-shadow: var(--select-menu-shadow);
+        border-radius: 12px;
     }
 
+    .template-reference__grip,
     .template-reference-backdrop {
         display: none;
     }
@@ -51,15 +57,29 @@
     }
 }
 
-/* Narrow screens: a sheet over the page. */
+/* Narrow screens: a sheet that slides up over the page and is dragged down to close. */
 @media (max-width: 1099px) {
     .template-reference {
         left: 0;
         right: 0;
         bottom: 0;
         top: 56px;
+        padding: 10px 16px 14px;
+        border-width: 1px 0 0;
         border-radius: 16px 16px 0 0;
-        box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.35);
+        transition: transform 180ms ease;
+        animation: template-reference-up 220ms ease-out;
+    }
+
+    .template-reference.is-dragging {
+        transition: none;
+    }
+
+    .template-reference__handle {
+        touch-action: none;
+        user-select: none;
+        cursor: grab;
     }
 
     .template-reference-backdrop {
@@ -67,11 +87,28 @@
         inset: 0;
         z-index: 59;
         background: rgba(2, 6, 23, 0.45);
+        animation: template-reference-fade 220ms ease-out;
     }
 
     body.has-template-reference {
         overflow: hidden;
     }
+}
+
+@keyframes template-reference-up {
+    from { transform: translateY(100%); }
+}
+
+@keyframes template-reference-fade {
+    from { opacity: 0; }
+}
+
+.template-reference__grip {
+    width: 40px;
+    height: 4px;
+    margin: 0 auto 10px;
+    border-radius: 2px;
+    background: var(--reference-chip);
 }
 
 .template-reference__top {
@@ -87,15 +124,55 @@
     font-size: 16px;
 }
 
+.template-reference__button,
+.template-reference-toggle.btn {
+    padding: 6px 11px;
+    border: 1px solid var(--reference-border);
+    border-radius: 8px;
+    background: var(--reference-chip);
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.template-reference-toggle.btn.is-active {
+    border-color: var(--reference-accent);
+    background: var(--reference-accent-soft);
+}
+
 .template-reference__search {
-    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     margin-bottom: 8px;
+    padding: 8px 11px;
+    border: 1px solid var(--reference-border);
+    border-radius: 10px;
+    background: var(--reference-bg);
+    color: var(--muted);
+}
+
+.template-reference__search:focus-within {
+    border-color: var(--reference-accent);
+}
+
+.template-reference__search input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: none;
+    color: var(--text);
+    font: inherit;
 }
 
 .template-reference__tabs {
     display: flex;
     gap: 2px;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
     overflow-x: auto;
     border-bottom: 1px solid var(--reference-border);
     scrollbar-width: none;
@@ -103,7 +180,7 @@
 
 .template-reference__tab {
     flex: 0 0 auto;
-    padding: 7px 7px;
+    padding: 7px 10px;
     border: 0;
     border-bottom: 2px solid transparent;
     background: none;
@@ -117,15 +194,6 @@
 .template-reference__tab.is-active {
     color: var(--text);
     border-bottom-color: var(--reference-accent);
-}
-
-.template-reference__count {
-    margin-left: 4px;
-    padding: 0 5px;
-    border-radius: 9px;
-    background: var(--reference-chip);
-    color: var(--muted);
-    font-size: 11px;
 }
 
 .template-reference__content {
@@ -142,13 +210,9 @@
 }
 
 .template-reference__note {
-    margin: 0 0 10px;
+    margin: 0 6px 10px;
     color: var(--muted);
     font-size: 13px;
-}
-
-.template-reference__note p {
-    margin: 0 0 8px;
 }
 
 .template-reference__group {
@@ -156,11 +220,15 @@
 }
 
 .template-reference__group h4 {
-    margin: 0 0 4px;
+    margin: 12px 0 4px;
     color: var(--muted);
-    font-size: 11.5px;
+    font-size: 12px;
     letter-spacing: 0.05em;
     text-transform: uppercase;
+}
+
+.template-reference__group:first-child h4 {
+    margin-top: 0;
 }
 
 .template-reference__entries {
@@ -173,68 +241,69 @@
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
-    gap: 2px 8px;
+    gap: 10px;
     padding: 5px 6px;
     border-radius: 6px;
-}
-
-.template-reference__entries li:hover,
-.template-reference__entries li:focus-within {
-    background: var(--reference-soft);
+    outline: none;
 }
 
 .template-reference__entries li > code {
+    flex: 0 0 auto;
+    max-width: 60%;
     padding: 1px 6px;
     border-radius: 5px;
     background: var(--reference-soft);
 }
 
-.template-reference__entries li:hover > code {
-    background: var(--reference-accent-soft);
-}
-
 .template-reference__entry-text {
-    flex: 1 1 150px;
+    flex: 1;
     min-width: 0;
     color: var(--muted);
     font-size: 13px;
 }
 
-.template-reference__entry-text p {
-    margin: 4px 0 0;
+.template-reference__more {
+    display: none;
+    flex: 1 1 100%;
+    color: var(--muted);
+    font-size: 12.5px;
+}
+
+.template-reference__more p {
+    margin: 0 0 4px;
+}
+
+.template-reference__entries li:hover .template-reference__more,
+.template-reference__entries li:focus-within .template-reference__more {
+    display: block;
+}
+
+/* The row you point at, or tap on a phone, lights up and offers Insert. */
+.template-reference__entries li:hover,
+.template-reference__entries li:focus-within {
+    background: var(--reference-soft);
+}
+
+.template-reference__entries li:hover > code,
+.template-reference__entries li:focus-within > code {
+    background: var(--reference-accent-soft);
+}
+
+.template-reference__entries .template-reference__insert {
+    display: none;
+    flex: 0 0 auto;
+    align-self: center;
+}
+
+.template-reference__entries li:hover .template-reference__insert,
+.template-reference__entries li:focus-within .template-reference__insert {
+    display: inline-block;
 }
 
 .template-reference .template-reference__insert {
-    padding: 2px 8px;
+    margin-left: auto;
+    padding: 3px 9px;
     font-size: 12px;
-}
-
-/* Insert sits at the right of its row: always on a touch screen, on the row you point at otherwise. */
-.template-reference__entries li {
-    position: relative;
-    padding-right: 64px;
-}
-
-.template-reference__entries li .template-reference__insert {
-    position: absolute;
-    top: 4px;
-    right: 6px;
-}
-
-@media (hover: hover) {
-    .template-reference__entries li {
-        padding-right: 6px;
-    }
-
-    .template-reference__entries li .template-reference__insert {
-        visibility: hidden;
-        box-shadow: -12px 0 10px var(--reference-soft);
-    }
-
-    .template-reference__entries li:hover .template-reference__insert,
-    .template-reference__entries li:focus-within .template-reference__insert {
-        visibility: visible;
-    }
 }
 
 .template-reference__function {
@@ -260,17 +329,12 @@
 
 .template-reference__function-head code {
     flex: 0 0 auto;
-    font-weight: 700;
+    font-weight: 600;
 }
 
 .template-reference__chevron {
     flex: 0 0 10px;
     color: var(--muted);
-    transition: transform 120ms ease;
-}
-
-.template-reference__function.is-open .template-reference__chevron {
-    transform: rotate(90deg);
 }
 
 .template-reference__summary {
@@ -284,21 +348,25 @@
 }
 
 .template-reference__function-body {
-    display: grid;
-    gap: 8px;
-    padding: 10px 12px 12px;
+    padding: 0 12px 12px;
     border-top: 1px solid var(--reference-border);
     background: var(--reference-soft);
-    font-size: 13px;
 }
 
 .template-reference__function-body p {
-    margin: 0;
+    margin: 10px 0 4px;
+}
+
+.template-reference__usage {
+    display: block;
+    margin: 10px 0 6px;
 }
 
 .template-reference__arguments {
     width: 100%;
+    margin: 4px 0 10px;
     border-collapse: collapse;
+    font-size: 13px;
 }
 
 .template-reference__arguments td {
@@ -321,18 +389,17 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 6px 10px;
+    gap: 8px;
     padding: 8px 10px;
     border: 1px solid var(--reference-border);
     border-radius: 8px;
     background: var(--reference-bg);
 }
 
-.template-reference__example code {
-    flex: 1 1 100%;
+.template-reference__arrow {
+    color: var(--muted);
 }
 
 .template-reference__result {
-    flex: 1;
     font-weight: 600;
 }
