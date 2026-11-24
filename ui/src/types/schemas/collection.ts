@@ -151,6 +151,8 @@ export const CollectionReadSchema = z.looseObject({
     updatedAt: ApiDateTimeSchema,
     /** Who added it, with user accounts on. */
     addedBy: z.string().nullable().optional(),
+    /** How many of its downloads wait for its Move action. */
+    movesWaiting: z.int().default(0),
 })
 export type CollectionRead = z.infer<typeof CollectionReadSchema>;
 

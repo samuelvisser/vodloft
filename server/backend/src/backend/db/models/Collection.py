@@ -110,6 +110,11 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
         default=False, server_default="0",
         comment="The user put the seasons in their own order, so a new season goes last instead of where its date puts it",
     )
+    moves_waiting: Mapped[int] = mapped_column(
+        default=0, server_default="0",
+        comment="How many of its downloads its season settings put in another season, which wait for its Move action; "
+                "kept up to date whenever its videos are placed, and checked every night",
+    )
     split_chapters: Mapped[bool] = mapped_column(
         default=False, server_default="0",
         comment="Each new video with chapters becomes a season of its own, with an episode per chapter",

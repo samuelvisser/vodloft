@@ -735,6 +735,8 @@ def place_in_link_seasons(
         # A season the lists just left is one its videos leave too, also the extra episodes there.
         _drop_outside(s, collection, by_user=by_user, extras=places.extras)
     if not places.anything:
+        note_moves_waiting(s, collection)
+        s.flush()
         return 0
     kept = set() if with_files is True else _with_files(s, collection) - (with_files or set())
     finder = SeasonFinder(s, collection, now)
@@ -765,7 +767,20 @@ def place_in_link_seasons(
         _add_placements(s, collection, finder, places.missing)
     _drop_emptied(s, collection, left)
     arrange_seasons(s, collection)
+    note_moves_waiting(s, collection)
+    s.flush()
     return moved
+
+
+def note_moves_waiting(s: Session, collection: Collection) -> int:
+    """Store how many of the collection's downloads wait to be moved, so Home and the Library read it instead of
+    working it out for every collection. Returns it. Only writes when it changed.
+
+    ``s`` is a write transaction's session, or a read session that ``write_when_changed`` checks."""
+    waiting = len(moved_episodes(s, collection))
+    if collection.moves_waiting != waiting:
+        collection.moves_waiting = waiting
+    return waiting
 
 
 # What an episode of a video in another season has of its own, rather than of the video.

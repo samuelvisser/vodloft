@@ -102,7 +102,7 @@ def _collection(source_key: str):
         membership_level="ALL_ACCESS", type=CollectionType.PODCAST.value,
         episode_identifier=EpisodeIdentifier.NUMBERED.value, author_name="Host", author_slug="host",
         source_key=source_key, ytdlp_options="", cookies_mode="automatic", split_chapters=False, check_frequency="default",
-        episode_order="newest_first",
+        episode_order="newest_first", moves_waiting=0,
         created_at=now, updated_at=now,
     )
 

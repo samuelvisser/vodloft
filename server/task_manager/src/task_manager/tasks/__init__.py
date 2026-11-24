@@ -42,6 +42,7 @@ _WORKER_EXPORTS = {
     "quick_download": ".workers.quick_download",
     "upgrade_check": ".workers.upgrade_check",
     "check_locked_media": ".workers.check_locked_media",
+    "check_moves_waiting": ".workers.check_moves_waiting",
     "rescan_quick_checked_collections": ".workers.quick_check_new_videos",
 }
 

@@ -325,6 +325,8 @@ class CollectionAPIRead(_CollectionAPIBaseOut):
     updated_at: datetime
     added_by: Optional[str] = None
     """Who added it, with user accounts on."""
+    moves_waiting: int = 0
+    """How many of its downloads wait for its Move action, as it stored it."""
 
 
 class CollectionAPIReadView(CollectionAPIRead):

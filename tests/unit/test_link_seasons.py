@@ -185,6 +185,8 @@ def test_a_video_with_files_stays_until_it_is_moved_to_where_it_belongs(source, 
     # Home's Needs attention says why: what the collection's settings make its seasons now.
     from backend.services.link_seasons import seasons_plan
     from backend.services.reconcile import waiting_in_library
+    # The collection stored the count when the check placed its videos; Home reads it from there.
+    assert collection.moves_waiting == 1
     [waiting] = waiting_in_library(session)
     assert waiting.moved == 1 and waiting.seasons_plan == seasons_plan(collection)
     assert "playlist" in waiting.seasons_plan
@@ -198,6 +200,41 @@ def test_a_video_with_files_stays_until_it_is_moved_to_where_it_belongs(source, 
     assert session.scalar(select(Episode.episode_identifier).where(Episode.source_slug == "b")).startswith("ep.S01E")
     assert belongs_elsewhere(session, session.scalar(select(Episode).where(Episode.source_slug == "b"))) is None
     assert moved_episodes(session, session.get(type(collection), collection.id)) == []
+    # Moving it counted again: nothing waits any more.
+    assert session.get(type(collection), collection.id).moves_waiting == 0
+    assert waiting_in_library(session) == []
+
+
+def test_the_nightly_check_corrects_a_count_that_drifted(source, session):
+    from backend.services.reconcile import check_moves_waiting, waiting_in_library
+
+    source.videos = [_video("a", 2024), _video("b", 2025)]
+    source.lists = [_list("PLone", "One")]
+    source.items = {"PLone": ("a",)}
+    collection = _collection(session, identifier="seasonal")
+    _index(session, collection, source)
+    _give_files(session, "b")
+    source.items = {"PLone": ("a", "b")}
+    _index(session, collection, source)
+    session.expire_all()
+    assert session.get(type(collection), collection.id).moves_waiting == 1
+    updated_at = session.get(type(collection), collection.id).updated_at
+
+    # Something VODLoft missed left the count off.
+    session.get(type(collection), collection.id).moves_waiting = 0
+    session.commit()
+    assert waiting_in_library(session) == []
+
+    assert check_moves_waiting(collection.id) == (0, 1)
+    session.expire_all()
+    found = session.get(type(collection), collection.id)
+    assert found.moves_waiting == 1
+    # Counting is no change to the collection itself.
+    assert found.updated_at == updated_at
+    assert [item.moved for item in waiting_in_library(session)] == [1]
+    # A count that is right is left alone.
+    assert check_moves_waiting(collection.id) == (1, 1)
+    session.rollback()
 
 
 def test_a_new_playlist_waits_for_the_users_choice_when_only_selected_ones_are_seasons(source, session):
