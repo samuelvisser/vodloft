@@ -200,6 +200,44 @@ def test_a_video_with_files_stays_until_it_is_moved_to_where_it_belongs(source, 
     assert moved_episodes(session, session.get(type(collection), collection.id)) == []
 
 
+def test_moving_a_video_after_the_seasons_were_put_in_another_order_skips_numbers_downloaded_episodes_keep(source, session):
+    from backend.api.endpoints.collections.seasons.service import seasons_view, update_seasons
+    from backend.api.models.collection_seasons import CollectionSeasonsAPIUpdate
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Collection, Episode
+    from backend.services.link_seasons import moved_episodes
+    from backend.services.reconcile import ReconcileScope, reconcile
+
+    source.videos = [_video("a", 2023), _video("b", 2023, 6), _video("c", 2024), _video("d", 2024, 6)]
+    source.lists = [_list("PLone", "One"), _list("PLtwo", "Two")]
+    source.items = {"PLone": ("a", "c"), "PLtwo": ("c", "d")}
+    collection = _collection(session, mode="selected")
+    _index(session, collection, source)
+    _give_files(session, "a", "b", "c")
+    assert _seasons(session) == [("Videos", 1, ["b"]), ("One", 2, ["a", "c"]), ("Two", 3, ["d"])]
+
+    # The user puts the seasons in the other order: Two first, so the video in both lists belongs there now.
+    view = seasons_view(session, "creator")
+    session.rollback()
+    body = CollectionSeasonsAPIUpdate(
+        seasons=[{"id": x.id, "name": x.name} for x in reversed(view.seasons)], custom_season_order=True,
+        link_seasons="selected", loose_videos="one_season",
+        playlists=[{"id": p.id, "enabled": True, "season_id": p.season_id} for p in view.playlists],
+    )
+    run_write_transaction(lambda s: update_seasons(s, "creator", body))
+    session.expire_all()
+    # The downloaded episode of the season that was first keeps its number from before.
+    assert session.scalar(select(Episode.episode_identifier).where(Episode.source_slug == "b")).startswith("ep.S01E")
+    assert [e.source_slug for e in moved_episodes(session, session.get(Collection, collection.id))] == ["c"]
+    session.rollback()
+
+    run_write_transaction(lambda w: reconcile(w, ReconcileScope.of_collection(w.get(Collection, collection.id)), renumber={}))
+
+    assert _seasons(session) == [("Two", 1, ["c", "d"]), ("One", 2, ["a"]), ("Videos", 3, ["b"])]
+    identifiers = session.scalars(select(Episode.episode_identifier)).all()
+    assert len(identifiers) == len(set(identifiers))
+
+
 def test_a_new_playlist_waits_for_the_users_choice_when_only_selected_ones_are_seasons(source, session):
     from backend.db.models import CollectionList, NotificationEvent
 
