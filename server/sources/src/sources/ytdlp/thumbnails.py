@@ -29,6 +29,8 @@ _STILL = re.compile(
     r"^(?P<base>https?://i\d?\.ytimg\.com/vi(?P<webp>_webp)?/[\w-]{11}/)(?:hq|sd|mq)?default\.(?:jpg|webp)(?:\?.*)?$"
 )
 _ANY_STILL = re.compile(r"^https?://i\d?\.ytimg\.com/vi(?:_webp)?/[\w-]{11}/")
+# A playlist's own picture, which the playlist's owner uploaded.
+_PLAYLIST_PICTURE = re.compile(r"^https?://i\d?\.ytimg\.com/s_p/")
 _TIMEOUT_SECONDS = 5
 # A 720p stream is sharp enough for a card, and its first seconds are small.
 _FRAME_FORMAT = "bv*[height<=720]/b[height<=720]/wv*/w"
@@ -66,6 +68,26 @@ def widest_stills(urls: Sequence[str | None]) -> list[str | None]:
     if sum(1 for url in urls if _STILL.match(url or "")) < 2:
         return [widest_still(url) for url in urls]
     return list(_checks.map(widest_still, urls))
+
+
+def served(url: str | None) -> bool:
+    """Whether YouTube serves a playlist's own picture at this link. YouTube lists sizes of it that it never made, such
+    as maxresdefault, and answers those, like a link without its signature, with a grey placeholder and HTTP 404.
+    Any other picture is taken as it is."""
+    if not url:
+        return False
+    if _PLAYLIST_PICTURE.match(url) is None:
+        return True
+    try:
+        response = _head(url)
+    except requests.RequestException:
+        return True
+    return response.status_code != 404
+
+
+def first_served(urls: Sequence[str | None]) -> str | None:
+    """The first of these pictures YouTube serves, or None."""
+    return next((url for url in urls if url and served(url)), None)
 
 
 def still_missing(url: str | None) -> bool:

@@ -103,11 +103,13 @@ def duration(value: str | None) -> float | None:
     return float(((days * 24 + hours) * 60 + minutes) * 60 + seconds) or None
 
 
+def pictures(thumbnails: dict | None) -> list[str]:
+    """The sizes of a picture YouTube lists, the largest first."""
+    return [thumbnails[size]["url"] for size in _THUMBNAIL_SIZES if (thumbnails or {}).get(size, {}).get("url")]
+
+
 def thumbnail(thumbnails: dict | None) -> str | None:
-    for size in _THUMBNAIL_SIZES:
-        if (thumbnails or {}).get(size, {}).get("url"):
-            return thumbnails[size]["url"]
-    return None
+    return next(iter(pictures(thumbnails)), None)
 
 
 def is_pending(item: dict) -> bool:
