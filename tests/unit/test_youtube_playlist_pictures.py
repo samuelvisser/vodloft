@@ -1,4 +1,4 @@
-"""A YouTube playlist's own picture stops working within a day, so a playlist takes its first video's still."""
+"""YouTube lists a playlist's own picture in sizes it never made, so a playlist takes one YouTube serves."""
 from __future__ import annotations
 
 import asyncio
@@ -11,21 +11,47 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-MIGRATION = "backend.db.background_migrations.versions.7aaaa88fe96d_lasting_link_pictures"
+MIGRATION = "backend.db.background_migrations.versions.9c25f5b4d4d1_served_link_pictures"
 SIGNED = "https://i9.ytimg.com/s_p/PLseven/landscape_sddefault.jpg?sqp=CMiPk9gG&rs=AOn4"
 UNSIGNED = "https://i9.ytimg.com/s_p/PLseven/maxresdefault.jpg"
 STILL = "https://i.ytimg.com/vi/nrU8Kh6Mf7o/hqdefault.jpg?sqp=-oay"
 
 
-def test_a_playlist_takes_its_first_videos_still_over_its_own_picture():
-    from sources.ytdlp.site_implementations.youtube import picture
+MAXRES = "https://i9.ytimg.com/s_p/PLseven/landscape_maxresdefault.jpg?sqp=CPyfk9gG&rs=AOn4"
 
-    playlist = {"thumbnails": [{"url": UNSIGNED}, {"url": SIGNED}], "entries": [{"thumbnails": [{"url": STILL}]}]}
-    assert picture(playlist) == STILL
-    # Without its videos, its own picture is all there is.
-    assert picture({"thumbnails": [{"url": UNSIGNED}, {"url": SIGNED}]}) == SIGNED
-    assert picture({"thumbnails": [{"url": UNSIGNED}]}) is None
-    assert picture({"thumbnail": STILL}) == STILL
+
+def _serves(monkeypatch, *missing):
+    """YouTube answers these pictures with its grey placeholder and HTTP 404."""
+    from sources.ytdlp import thumbnails
+
+    monkeypatch.setattr(thumbnails, "served", lambda url: bool(url) and url not in missing)
+    monkeypatch.setattr(thumbnails, "widest_still", lambda url: url)
+
+
+def test_a_playlist_takes_the_largest_of_its_own_pictures_youtube_serves(monkeypatch):
+    from sources.ytdlp.source import _thumbnail
+
+    _serves(monkeypatch, MAXRES)
+    entries = [{"thumbnails": [{"url": STILL}]}]
+    assert _thumbnail({"thumbnails": [{"url": UNSIGNED}, {"url": SIGNED}, {"url": MAXRES}], "entries": entries}) == SIGNED
+    # With none it serves, the playlist's first video's still.
+    _serves(monkeypatch, MAXRES, SIGNED)
+    assert _thumbnail({"thumbnails": [{"url": SIGNED}, {"url": MAXRES}], "entries": entries}) == STILL
+    assert _thumbnail({"thumbnails": [{"url": UNSIGNED}]}) is None
+
+
+def test_a_playlist_from_the_youtube_api_takes_a_size_youtube_serves(monkeypatch):
+    from sources.ytdlp.youtube_api import catalogue as catalogue_module
+    from sources.ytdlp.youtube_api.mapping import YouTubeRef
+
+    monkeypatch.setattr(catalogue_module, "first_served", lambda urls: next(url for url in urls if url != MAXRES))
+    item = {"id": "PLseven", "snippet": {"title": "Season 7", "thumbnails": {
+        "maxres": {"url": MAXRES}, "standard": {"url": SIGNED}, "default": {"url": STILL},
+    }}}
+    catalogue = catalogue_module.Catalogue.__new__(catalogue_module.Catalogue)
+    monkeypatch.setattr(catalogue, "playlist", lambda ref: item, raising=False)
+    details = catalogue.collection(YouTubeRef("playlist", "PLseven"), "https://www.youtube.com/playlist?list=PLseven")
+    assert details.image_url == SIGNED
 
 
 class _Context:

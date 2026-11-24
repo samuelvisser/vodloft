@@ -27,7 +27,7 @@ from .. import pacing, site_api_keys, ytdlp_runner as runner
 from . import sites, thumbnails, youtube_rss
 from .site_contracts import CONTRACTS
 from .site_implementations import IMPLEMENTATIONS, OtherSitesImplementation
-from .site_implementations.youtube import collection_url, picture
+from .site_implementations.youtube import collection_url, picture, pictures
 from .youtube_api import ApiKeyError, Share, YouTubeApiClient, YouTubeApiError, key as api_key, mapping, quota
 from .youtube_api.catalogue import Catalogue
 from .youtube_api.client import MAX_RESULTS
@@ -355,7 +355,13 @@ def _lookup(*args: str) -> dict:
 
 
 def _thumbnail(info: dict) -> str | None:
-    return thumbnails.widest_still(picture(info))
+    # A playlist's own picture is listed in sizes YouTube never made; one without any it serves gets the still of its
+    # first video.
+    served = thumbnails.first_served(pictures(info))
+    if served is None:
+        first = next((entry for entry in info.get("entries") or [] if isinstance(entry, dict)), None)
+        served = picture(first) if first is not None else None
+    return thumbnails.widest_still(served)
 
 
 # What yt-dlp says when a video needs someone signed in: a bot check, an age check, members-only videos.

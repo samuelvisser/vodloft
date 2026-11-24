@@ -1,10 +1,10 @@
-"""Give links with a YouTube playlist's own picture a picture that keeps working.
+"""Give links whose YouTube playlist picture YouTube does not serve one that it does.
 
-YouTube serves a playlist's own picture only under a signed link that stops working within a day, after which it
-shows a grey placeholder. A link now takes the still of its playlist's first video instead; this looks up the links
-that kept the playlist's own picture. A link that can't be looked up now keeps the picture it has.
+YouTube lists a playlist's own picture in sizes it never made, such as maxresdefault, and answers those with a grey
+placeholder. A link now gets the largest size YouTube serves, or the still of its playlist's first video; this looks
+up again the links with a playlist's own picture. A link that can't be looked up now keeps the picture it has.
 
-Revision ID: 7aaaa88fe96d
+Revision ID: 9c25f5b4d4d1
 Revises: 7c2e91d4a6f0
 """
 
@@ -21,9 +21,9 @@ from sources import get_source
 
 logger = logging.getLogger(__name__)
 
-revision = "7aaaa88fe96d"
+revision = "9c25f5b4d4d1"
 down_revision = "7c2e91d4a6f0"
-title = "Give links with a YouTube playlist picture one that keeps working"
+title = "Give links a YouTube playlist picture that YouTube serves"
 
 _TITLE = "Looking up the pictures of YouTube playlists"
 _PLAYLIST_PICTURE = "%ytimg.com/s_p/%"
