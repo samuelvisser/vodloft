@@ -195,6 +195,7 @@ export default function LocalMediaProfileStep({
                 {collection ? (
                     <aside className="wizard-aside" aria-label="Selected collection details">
                         <ChosenCollectionCard collection={collection}/>
+                        <div className="template-reference-slot"/>
                     </aside>
                 ) : null}
             </div>
