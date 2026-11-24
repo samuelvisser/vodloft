@@ -4,6 +4,7 @@ import {
     type InfiniteData,
     keepPreviousData,
     QueryClient,
+    queryOptions,
     useInfiniteQuery,
     useMutation,
     useQueries,
@@ -852,8 +853,10 @@ export function useMediaLinks(urls: string[]) {
 }
 
 /** A collection to add, at a Source that lists its episodes. */
-export function useListedCollectionDetails(sourceId: string | undefined, url: string | undefined) {
-    return useQuery<CollectionDetailsRead, Error, CollectionDetailsRead, readonly ['listedCollection', string | undefined, string | undefined]>({
+/** The query of a collection as a Source lists it, as the first page of Add collection asks for it. Add media
+ * starts it as soon as it knows the collection, so that page has it ready, or nearly so, when it opens. */
+export function listedCollectionQuery(sourceId: string | undefined, url: string | undefined) {
+    return queryOptions<CollectionDetailsRead, Error, CollectionDetailsRead, readonly ['listedCollection', string | undefined, string | undefined]>({
         queryKey: ['listedCollection', sourceId, url] as const,
         enabled: !!sourceId && !!url,
         queryFn: async ({signal}) => {
@@ -868,6 +871,10 @@ export function useListedCollectionDetails(sourceId: string | undefined, url: st
         staleTime: 5 * 60 * 1000,
         retry: false,
     })
+}
+
+export function useListedCollectionDetails(sourceId: string | undefined, url: string | undefined) {
+    return useQuery(listedCollectionQuery(sourceId, url))
 }
 
 /** Reads a lookup's answer, such as a creator's or a link's, sent a line of JSON at a time: tells ``onPlan`` the steps of the lookup's plan each

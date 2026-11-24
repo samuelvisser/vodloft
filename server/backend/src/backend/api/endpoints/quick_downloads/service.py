@@ -162,7 +162,8 @@ def quick_download_preview(s: Session, access: Access, body: QuickDownloadOption
         except Exception:  # noqa: BLE001 - a preview is a nicety; the full lookup reports problems.
             logger.debug("No quick preview from %s for %s", source.id, url, exc_info=True)
             return None
-        if preview is not None:
+        # A collection's link, such as a channel's, can say what it is without a title; nothing to show for it here.
+        if preview is not None and preview.title is not None:
             return QuickDownloadPreviewAPIRead(
                 source_key=source.id, title=preview.title, image_url=preview.image_url,
                 author_name=preview.author_name, site=preview.site,

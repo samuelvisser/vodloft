@@ -499,6 +499,9 @@ class YtDlpSource(Source):
             raise
         with self._cache_lock:
             self._cache[key] = (now, info)
+            # The link yt-dlp found it at is the same lookup, such as the one Add collection asks with next.
+            if isinstance(info.get("webpage_url"), str):
+                self._cache.setdefault(_lookup_key(info["webpage_url"]), (now, info))
             del self._running[key]
         ours.set_result(info)
         return info
@@ -574,7 +577,13 @@ class YtDlpSource(Source):
         elif ref is not None and ref.kind == "playlist":
             kind, slug, link = LinkKind.COLLECTION, ref.value, collection_url(url)
         else:
-            return None
+            implementation = self._implementation(url)
+            link = implementation.collection_link(url)
+            if not (implementation.is_creator_page(link) or implementation.is_list(link)):
+                return None
+            # A channel or an artist's page, as its link alone says. There is no quick title for it; the full lookup
+            # gives that, and the id the collection is known by.
+            return LinkPreview(title=None, site=implementation.site.name, kind=LinkKind.COLLECTION, url=link)
         try:
             response = requests.get(
                 _OEMBED_URL, params={"url": url, "format": "json"}, timeout=_OEMBED_TIMEOUT_SECONDS,

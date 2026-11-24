@@ -220,6 +220,7 @@ class ResolvedLinkPreviewAPIRead(ResponseBase):
 class LinkFirstLookAPIRead(ResolvedLinkPreviewAPIRead):
     """A quick first look at a link while the full lookup runs, with what the link is when the Source can already
     tell, so the user can go on with it."""
+    title: Optional[str] = None
     source: SourceAPIRead
     kind: Optional[Literal["collection", "movie", "episode", "video", "creator"]] = None
     slug: Optional[str] = None

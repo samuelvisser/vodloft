@@ -55,9 +55,10 @@ def test_other_links_and_failures_have_no_preview(monkeypatch):
     source = _ytdlp()
     assert source.preview("https://youtu.be/dQw4w9WgXcQ") is None
     assert source.preview("https://vimeo.com/1") is None
-    # A channel has no oEmbed, and a playlist's failed like the video's.
-    assert source.preview("https://www.youtube.com/@channel") is None
+    # A playlist's oEmbed failed like the video's. A channel has none, but its link says it is a collection.
     assert source.preview("https://www.youtube.com/playlist?list=PL1") is None
+    channel = source.preview("https://www.youtube.com/@channel")
+    assert (channel.title, channel.kind, channel.url) == (None, LinkKind.COLLECTION, "https://www.youtube.com/@channel/videos")
 
 
 def test_a_link_already_looked_up_previews_from_that_lookup(monkeypatch):

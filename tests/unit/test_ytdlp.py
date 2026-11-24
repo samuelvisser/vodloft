@@ -130,9 +130,25 @@ def test_a_youtube_link_says_what_it_is_from_the_link_alone(monkeypatch):
     playlist = source.preview("https://www.youtube.com/playlist?list=PL123")
     assert (playlist.kind, playlist.slug) == (LinkKind.COLLECTION, "PL123")
 
-    # A channel has no oEmbed.
-    assert source.preview("https://www.youtube.com/@a-channel") is None
+    # A channel has no oEmbed, but its link says it is a collection, at its Videos tab.
+    channel = source.preview("https://www.youtube.com/@a-channel")
+    assert (channel.kind, channel.slug, channel.url, channel.title) == (
+        LinkKind.COLLECTION, None, "https://www.youtube.com/@a-channel/videos", None,
+    )
     assert len(asked) == 2
+
+
+def test_a_lookup_is_kept_by_the_link_yt_dlp_found_it_at_too(lookups):
+    answers, calls = lookups
+    answers["https://www.youtube.com/@a-channel/videos"] = {
+        "_type": "playlist", "id": "UC1", "channel_id": "UC1", "channel": "A Channel", "title": "A Channel - Videos",
+        "webpage_url": "https://www.youtube.com/channel/UC1/videos", "entries": [],
+    }
+    source = YtDlpSource()
+    link = source.resolve("https://www.youtube.com/@a-channel")
+    # Add collection asks for the collection by the link the lookup found.
+    assert source.collection_details(link.url).slug == "UC1"
+    assert len(calls) == 1
 
 
 def test_other_sites_are_prefixed_and_unknown_pages_are_best_effort(lookups):

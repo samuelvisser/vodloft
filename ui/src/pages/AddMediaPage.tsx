@@ -7,7 +7,7 @@ import {faIcon} from '../icons/faIcon'
 import {toImageUrl} from '../components/Episode/EpisodeCard'
 import SourceBadge from '../components/Source/SourceBadge'
 import {useQueryClient} from '@tanstack/react-query'
-import {addVideo, resolveLink, useMovies, useCollections, useSources, useVideos} from '../lib/queries'
+import {addVideo, listedCollectionQuery, resolveLink, useMovies, useCollections, useSources, useVideos} from '../lib/queries'
 import {linkTarget, type MediaLinkTarget} from '../lib/sourceControls'
 import {ResolvedLinkRead, SearchSiteRead, SourceFeature, SourceRead, kindNames, sourceHas} from '../types/schemas/source'
 import {capitalized} from '../types/creator'
@@ -55,6 +55,16 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
     const requestRef = useRef<AbortController | null>(null)
     const inputRef = useRef<HTMLInputElement>(null)
 
+    // Add collection looks the collection up again on its first page. Hand it this lookup, and start its own on the
+    // collection's content now, while the user reads the card, so the page is ready, or nearly so, when it opens.
+    const getCollectionReady = (resolved: ResolvedLinkRead) => {
+        if (resolved.kind !== 'collection' || !sourceHas(resolved.source, SourceFeature.COLLECTIONS)) return
+        queryClient.setQueryData(['resolvedLink', resolved.url], resolved)
+        if (sourceHas(resolved.source, SourceFeature.EPISODE_LISTS)) {
+            void queryClient.prefetchQuery(listedCollectionQuery(resolved.source.id, resolved.url))
+        }
+    }
+
     const lookUp = async (value: string, sourceKey?: string) => {
         const trimmed = value.trim()
         if (!trimmed) return
@@ -75,6 +85,7 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
             })
             if (!controller.signal.aborted) {
                 setLink(resolved)
+                getCollectionReady(resolved)
                 if (resolved.candidates.length) setCandidates(resolved.candidates)
             }
         } catch (exc) {
@@ -109,10 +120,13 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
     }
 
     // What the link is: the full lookup's answer, or until it comes, what the first look could already tell from the
-    // link alone, such as a YouTube video. The user can go on with it while the rest loads.
-    const known = link ?? (firstLook?.kind && firstLook.slug && firstLook.url ? {
-        source: firstLook.source, kind: firstLook.kind, slug: firstLook.slug, url: firstLook.url, preview: firstLook,
-        drmProtected: false, accessLocked: false,
+    // link alone, such as a YouTube video, or that a channel's link is a collection. The user can go on with it while
+    // the rest loads. A collection known only by its link, without its id yet, opens Add collection, which needs no
+    // more; picking one for onboarding needs the id.
+    const firstLookSlug = firstLook?.slug ?? (firstLook?.kind === 'collection' && !onCollection ? '' : null)
+    const known = link ?? (firstLook?.kind && firstLookSlug !== null && firstLook.url ? {
+        source: firstLook.source, kind: firstLook.kind, slug: firstLookSlug, url: firstLook.url,
+        preview: {...firstLook, title: firstLook.title ?? ''}, drmProtected: false, accessLocked: false,
     } : null)
     // A collection link from a Source that cannot add collections yet, such as a playlist at a video site.
     const collectionsUnsupported = !!known && (known.kind === 'collection' || known.kind === 'episode') && !sourceHas(known.source, SourceFeature.COLLECTIONS)
@@ -286,7 +300,7 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                         </div>
                     ) : <span className="add-media-preview-art skeleton-block" aria-hidden="true"/>}
                     <div className="add-media-preview-copy">
-                        {firstLook ? (
+                        {firstLook?.title ? (
                             <div className="add-media-preview-first-look">
                                 {firstLook.authorName && <p>{firstLook.authorName}</p>}
                                 <h2>{firstLook.title}</h2>
