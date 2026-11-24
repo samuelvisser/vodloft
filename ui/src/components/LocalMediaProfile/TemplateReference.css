@@ -199,6 +199,8 @@
     background: none;
     color: var(--text);
     font: inherit;
+    /* 16px or more, so Safari on a phone does not zoom in when the field is tapped. */
+    font-size: 16px;
 }
 
 .template-reference__tabs {
