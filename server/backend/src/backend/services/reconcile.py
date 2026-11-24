@@ -20,7 +20,9 @@ from backend.services.episode_identification import (
     queue_renumber, renumber_changes,
 )
 from backend.services.errors import ServiceError
-from backend.services.link_seasons import _holders, belongs_elsewhere, lists_in, moved_episodes, place_in_link_seasons
+from backend.services.link_seasons import (
+    _holders, belongs_elsewhere, lists_in, moved_episodes, place_in_link_seasons, seasons_plan,
+)
 from backend.services.season_order import match_seasons_of_downloaded
 from backend.services.sites import collection_words
 from backend.types.collection_contracts import CollectionWords
@@ -69,6 +71,8 @@ class WaitingIn:
     moved: int
     words: CollectionWords
     """What it calls its seasons and episodes."""
+    seasons_plan: str
+    """Why they move: what the collection's settings make its seasons now, in words."""
 
 
 def waiting_in_library(s: Session) -> list[WaitingIn]:
@@ -77,7 +81,9 @@ def waiting_in_library(s: Session) -> list[WaitingIn]:
     for collection in s.scalars(select(Collection).order_by(Collection.title)):
         moved = waiting(s, ReconcileScope.of_collection(collection))
         if moved:
-            found.append(WaitingIn(collection.slug, collection.title, moved, collection_words(collection)))
+            found.append(WaitingIn(
+                collection.slug, collection.title, moved, collection_words(collection), seasons_plan(collection),
+            ))
     return found
 
 
@@ -166,6 +172,8 @@ class MovePreview:
     type: str
     episode_identifier: EpisodeIdentifier
     parts: list[MovedPart]
+    seasons_plan: str
+    """Why they move: what the collection's settings make its seasons now, in words."""
     renumber_offered: bool
     """Whether it can number its episodes again: not when it numbers them by date."""
     changes: list[IdentificationChange]
@@ -187,6 +195,7 @@ def preview_reconcile(s: Session, scope: ReconcileScope) -> MovePreview:
     ``s`` is a write transaction's session; it is rolled back."""
     collection = scope.collection
     slug, title, type_ = collection.slug, collection.title, collection.type
+    plan = seasons_plan(collection)
     before = {
         episode.id: (episode.title, episode.published_date)
         for episode in s.scalars(select(Episode).where(Episode.collection_id == collection.id))
@@ -208,7 +217,7 @@ def preview_reconcile(s: Session, scope: ReconcileScope) -> MovePreview:
     changes, changed_ids = renumber_changes(s, collection) if offered else ([], set())
     follow = bool(done.renamed)
     preview = MovePreview(
-        slug=slug, title=title, type=type_, episode_identifier=identification, parts=parts,
+        slug=slug, title=title, type=type_, episode_identifier=identification, parts=parts, seasons_plan=plan,
         renumber_offered=offered and bool(changes), changes=changes,
         profiles=profile_file_changes(s, collection, changed_ids) if follow or changes else [], files_follow=follow,
     )
