@@ -32,6 +32,7 @@ from .service import run_fetch_new_episodes
     allowed_resource_types=("collection",),
     default_max_retries=5,
     tracks_progress=False,
+    findings=("episodes_found",),
 )
 async def fetch_new_episodes(
     *,

@@ -44,6 +44,7 @@ class TaskMeta:
     executor_alias: TaskLane = TaskLane.DEFAULT
     terminal_callback: Optional[TerminalCallback] = None
     recovery_dispatcher: Optional[RecoveryDispatcher] = None
+    findings: tuple[str, ...] = ()
     triggers: List[TriggerMeta] = field(default_factory=list)
 
 
@@ -69,6 +70,7 @@ def task(
     executor_alias: TaskLane = TaskLane.DEFAULT,
     terminal_callback: Optional[TerminalCallback] = None,
     recovery_dispatcher: Optional[RecoveryDispatcher] = None,
+    findings: tuple[str, ...] = (),
 ):
     """Decorator to register an async task callable.
 
@@ -99,6 +101,11 @@ def task(
     such a queue rather than immediately. Generic TaskOperation recovery leaves
     those targets QUEUED and invokes each dispatcher once after durable recovery
     state has been restored, preserving the queue's own concurrency policy.
+
+    ``findings`` names what a run of the task can find, as paths into its
+    ``TaskResult.data`` (``"refresh.updated"`` for a nested one). Each holds a
+    count, a list or a flag. A run that succeeded with every one of them 0, empty or
+    missing found nothing, and a task log can hide it.
     """
 
     def decorator(fn: TaskCallable):
@@ -114,6 +121,7 @@ def task(
             executor_alias=executor_alias,
             terminal_callback=terminal_callback,
             recovery_dispatcher=recovery_dispatcher,
+            findings=tuple(findings),
         )
         _REGISTRY[key] = (meta, fn)
 

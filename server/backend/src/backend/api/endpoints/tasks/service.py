@@ -22,6 +22,7 @@ from backend.db.core import get_session, run_write_transaction
 from backend.services.media_download_collection import stored_sort_text
 from task_manager.scheduler.db import TaskDefinition, TaskRun, TaskSchedule
 from task_manager.scheduler.executor import trigger_now as exec_trigger_now
+from task_manager.scheduler.findings import finds_things, found_nothing
 from task_manager.scheduler.scheduler import remove_job, schedule_job
 from task_manager.scheduler.types import ResourceType, TaskStatus
 
@@ -238,6 +239,7 @@ def query_ledger(
     include_unscoped: bool = False,
     statuses: list[str] | None = None,
     started_after: datetime | None = None,
+    hide_empty: bool = False,
     order_by: TaskLedgerOrder = "started_at",
     order: Literal["asc", "desc"] = "desc",
     cursor: str | None = None,
@@ -261,6 +263,10 @@ def query_ledger(
         filters.append(TaskRun.status.in_([TaskStatus(status) for status in statuses]))
     if started_after is not None:
         filters.append(TaskRun.started_at >= started_after)
+    can_hide_empty = definition_key is not None and finds_things(definition_key)
+    hide_empty = hide_empty and can_hide_empty
+    if hide_empty:
+        filters.append(~found_nothing(definition_key))
 
     cursor_scope = {
         "definition_key": definition_key,
@@ -269,6 +275,7 @@ def query_ledger(
         "include_unscoped": include_unscoped,
         "statuses": sorted(statuses or []),
         "started_after": started_after.isoformat() if started_after is not None else None,
+        "hide_empty": hide_empty,
     }
 
     workflow = order_by == "workflow"
@@ -387,6 +394,7 @@ def query_ledger(
         limit=limit,
         next_cursor=next_cursor,
         revision=revision,
+        can_hide_empty=can_hide_empty,
     )
 
 
@@ -398,6 +406,7 @@ def list_ledger(
     include_unscoped: bool = False,
     statuses: list[str] | None = None,
     started_after: datetime | None = None,
+    hide_empty: bool = False,
     order_by: TaskLedgerOrder = "started_at",
     order: Literal["asc", "desc"] = "desc",
     cursor: str | None = None,
@@ -413,6 +422,7 @@ def list_ledger(
             include_unscoped=include_unscoped,
             statuses=statuses,
             started_after=started_after,
+            hide_empty=hide_empty,
             order_by=order_by,
             order=order,
             cursor=cursor,

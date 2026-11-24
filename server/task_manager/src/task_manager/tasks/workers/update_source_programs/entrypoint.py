@@ -22,6 +22,7 @@ from .service import run_update_source_programs
     allowed_resource_types=("system",),
     default_max_retries=3,
     tracks_progress=False,
+    findings=("updated",),
 )
 async def update_source_programs(*, resource_id: int | None = None, progress=None):
     return run_update_source_programs()

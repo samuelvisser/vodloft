@@ -31,6 +31,7 @@ from ..fetch_new_episodes.service import run_fetch_new_episodes
     allowed_resource_types=("system",),
     default_max_retries=0,
     tracks_progress=False,
+    findings=("found", "failed"),
 )
 async def quick_check_new_videos(*, resource_id: int | None = None, progress=None) -> TaskResult:
     with db_session() as s:
@@ -64,6 +65,7 @@ async def quick_check_new_videos(*, resource_id: int | None = None, progress=Non
     allowed_resource_types=("collection",),
     default_max_retries=3,
     tracks_progress=False,
+    findings=("episodes_found", "refresh.updated", "refresh.removed", "refresh.returned", "refresh.failed"),
 )
 async def rescan_quick_checked_collections(*, resource_id: int | None = None, progress=None) -> TaskResult:
     with db_session() as s:

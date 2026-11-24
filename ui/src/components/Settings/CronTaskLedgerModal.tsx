@@ -1,10 +1,12 @@
+import {useEffect, useState} from 'react'
+
 import {faIcon} from '../../icons/faIcon'
-import LedgerModal, {formatLedgerDate} from '../common/LedgerModal'
+import LedgerModal, {formatLedgerDate, useLedgerHideEmpty} from '../common/LedgerModal'
 
 import ProgressButton from '../common/ProgressButton'
 import type {FrontendOperationDefinition} from '../../lib/operationDefinitions'
 import {useTaskLedgerInfinite, type TaskLedgerCollectionQuery} from '../../lib/taskLedger'
-import type {TaskLedgerEntryRead} from '../../types/schemas/task'
+import type {TaskLedgerEntryRead, TaskLedgerPageRead} from '../../types/schemas/task'
 
 type Props = {
     open: boolean
@@ -82,13 +84,23 @@ export default function CronTaskLedgerModal({
     onRunNow,
     onCancel,
 }: Props) {
+    const [hideEmpty, setHideEmpty] = useLedgerHideEmpty()
+    // Each page from the backend says whether the task names what its runs find; remember it while a stand-in page shows.
+    const [canHideEmpty, setCanHideEmpty] = useState(false)
     const ledger = useTaskLedgerInfinite({
         ...query,
+        // A task that names nothing its runs find lists every run, whatever this asks.
+        hideEmpty,
         orderBy: query.orderBy ?? 'created_at',
         order: query.order ?? 'desc',
         limit: PAGE_SIZE,
         enabled: open,
     })
+    const firstPage = ledger.isPlaceholderData ? undefined : ledger.data?.pages[0] as TaskLedgerPageRead | undefined
+    const reportedCanHideEmpty = firstPage?.canHideEmpty
+    useEffect(() => {
+        if (reportedCanHideEmpty !== undefined) setCanHideEmpty(reportedCanHideEmpty)
+    }, [reportedCanHideEmpty])
 
     return (
         <LedgerModal<TaskLedgerEntryRead>
@@ -117,6 +129,11 @@ export default function CronTaskLedgerModal({
                 },
                 {header: 'Duration', cell: (entry) => formatDuration(entry.runtimeMs), wideOnly: true},
             ]}
+            hideEmpty={canHideEmpty ? {
+                checked: hideEmpty,
+                onChange: setHideEmpty,
+                label: 'Only runs that found something',
+            } : undefined}
             onClose={onClose}
             actions={
                 <ProgressButton
