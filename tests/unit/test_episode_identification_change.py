@@ -59,7 +59,7 @@ def _episode(s, collection, index, identifier, *, number=None, season=None, titl
         season=season or collection.seasons[0], index=index, episode_identifier=identifier, slug=f"ep-{index}",
         title=title or f"Episode {index}", description="", duration=600.0, publish_status="published_final",
         sharing_url=f"https://example.test/{index}", published_date=START + timedelta(days=index),
-        dw_episode_number=number,
+        source_number=number,
     )
     s.add(episode)
     s.flush()

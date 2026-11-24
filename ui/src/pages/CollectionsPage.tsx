@@ -1,5 +1,6 @@
 import {useRef} from 'react'
 import {Link} from 'react-router-dom'
+import {useQueryClient} from '@tanstack/react-query'
 import {useCollections} from '../lib/queries'
 import {CollectionRead} from '../types/schemas/collection'
 import DataTable, {Column} from '../components/DataTable/DataTable'
@@ -7,10 +8,12 @@ import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../components/Confirm
 import {episodeIdentifierRegFor, CollectionTypeReg} from "../types/collection";
 import {faIcon} from '../icons/faIcon'
 import {apiUrl} from '../lib/api'
+import {forgetDeletedCollection} from '../lib/deletedCollection'
 
 export default function CollectionsPage() {
 
     const {data: collections, isLoading, error} = useCollections()
+    const queryClient = useQueryClient()
 
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
 
@@ -87,7 +90,7 @@ export default function CollectionsPage() {
                 title="Delete collection"
                 subjectProp={(s) => s.title}
                 deleteRequest={(s) => fetch(`${apiUrl()}/collections/${encodeURIComponent(s.slug)}`, {method: 'DELETE', credentials: 'include'})}
-                invalidateQueries={[['collections']]}
+                onDeleted={(s) => forgetDeletedCollection(queryClient, s.slug)}
                 inUseMessage="This collection is in use, it cannot be deleted"
             />
         </section>

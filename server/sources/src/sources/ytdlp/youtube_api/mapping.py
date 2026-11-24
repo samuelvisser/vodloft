@@ -47,9 +47,16 @@ class YouTubeRef:
     def feed_playlists(self, channel_id: str, feeds: frozenset[str] | None) -> list[str]:
         """The playlists that list the collection's videos: all its uploads, or for a channel that takes only some of
         its feeds, by their tabs, the playlist of each."""
-        if feeds is None or self.kind == "playlist" or self.tab != "videos":
+        if self._all_uploads(feeds):
             return [self.uploads_playlist(channel_id)]
         return [prefix + channel_id.removeprefix("UC") for tab, prefix in _FEED_PLAYLIST_PREFIXES.items() if tab in feeds]
+
+    def feed_playlist_count(self, feeds: frozenset[str] | None) -> int:
+        """How many playlists ``feed_playlists`` reads, each a call to the API."""
+        return 1 if self._all_uploads(feeds) else sum(tab in feeds for tab in _FEED_PLAYLIST_PREFIXES)
+
+    def _all_uploads(self, feeds: frozenset[str] | None) -> bool:
+        return feeds is None or self.kind == "playlist" or self.tab != "videos"
 
 
 def youtube_ref(url: str) -> YouTubeRef | None:
@@ -96,11 +103,13 @@ def duration(value: str | None) -> float | None:
     return float(((days * 24 + hours) * 60 + minutes) * 60 + seconds) or None
 
 
+def pictures(thumbnails: dict | None) -> list[str]:
+    """The sizes of a picture YouTube lists, the largest first."""
+    return [thumbnails[size]["url"] for size in _THUMBNAIL_SIZES if (thumbnails or {}).get(size, {}).get("url")]
+
+
 def thumbnail(thumbnails: dict | None) -> str | None:
-    for size in _THUMBNAIL_SIZES:
-        if (thumbnails or {}).get(size, {}).get("url"):
-            return thumbnails[size]["url"]
-    return None
+    return next(iter(pictures(thumbnails)), None)
 
 
 def is_pending(item: dict) -> bool:

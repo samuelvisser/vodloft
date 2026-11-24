@@ -1,13 +1,13 @@
 import DownloadStatusBadge from '../DownloadProgress/DownloadStatusBadge'
 import React from 'react'
-import {useNavigate} from 'react-router-dom'
+import {useLocation, useNavigate} from 'react-router-dom'
 import {linkAreaHandlers} from '../../lib/linkClicks'
 import {EpisodeReadView} from '../../types/schemas/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import {DrmBadge} from '../common/DrmProtected'
 import {AccessBadge} from '../common/AccessLocked'
 import {RemovedBadge} from '../common/RemovedFromSource'
-import {MovedBadge, ReassignedBadge} from './SeasonPlaceNote'
+import {MovedBadge} from './SeasonPlaceNote'
 import {apiUrl} from '../../lib/api'
 import DurationPill from '../common/DurationPill'
 import EpisodeTypePill from './EpisodeTypePill'
@@ -89,6 +89,7 @@ function DownloadStatusIcons({downloads}: { downloads: MediaDownloadViewRead[] }
     )
 }
 
+const SEASON_LABEL = /^S\d+E\d+$/
 const DATE_LABEL = /^(\d{4})-(\d{2})-(\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/
 
 /** "#12" for a numbered episode; a short date such as "18 Jan 2013" for one a Source numbers by its publish date. */
@@ -106,10 +107,10 @@ type Props = {
     downloads?: MediaDownloadViewRead[]
     /** Belongs in another season now, and waits for the user to move it there. */
     moved?: boolean
-    /** The collection its creator places the downloaded episode in now, when that is another one. */
-    reassignedTo?: string
     /** The title of the episode's collection, for a list of episodes from several collections. */
     collectionTitle?: string
+    /** The name of the episode's season, for a list of the episodes of several seasons. */
+    seasonName?: string
     /** What the collection calls its seasons and episodes, such as albums and tracks. */
     words: CollectionWords
     /** The collection's own yt-dlp options allow unplayable formats, so its media protected by DRM can still be tried. */
@@ -117,7 +118,7 @@ type Props = {
 }
 
 /** The episode thumbnail card used on a show's episode list. */
-export default function EpisodeCard({ep, collectionSlug, downloads, moved = false, reassignedTo, collectionTitle, words, unplayableAllowed = false}: Props) {
+export default function EpisodeCard({ep, collectionSlug, downloads, moved = false, collectionTitle, seasonName, words, unplayableAllowed = false}: Props) {
     const initials = ep.title
         .split(' ')
         .map((w) => w[0])
@@ -136,15 +137,25 @@ export default function EpisodeCard({ep, collectionSlug, downloads, moved = fals
     // Identifier semantics are parsed once by the backend. The card only decides
     // how those semantics should be presented: the number of a numbered episode,
     // then its release date, unless the number already is that date.
-    const numberText = ep.episodeType === 'ep' && ep.episodeLabel ? episodeBadgeText(ep.episodeLabel) : undefined
+    // An album's track goes by its number on the album alone, such as Track 3, rather than S01E03.
+    const numberText = ep.episodeType === 'ep' && ep.episodeLabel
+        ? (words.numberedInSeason && SEASON_LABEL.test(ep.episodeLabel) && ep.episodeNumber
+            ? `${words.episode.Singular} ${ep.episodeNumber}`
+            : episodeBadgeText(ep.episodeLabel))
+        : undefined
     // An episode extra is labelled by its own number, such as #2542.10, in the extras' colour.
     const extraNumber = ep.episodeType === 'ep-extra' && ep.episodeLabel ? episodeBadgeText(ep.episodeLabel) : undefined
     const dateText = ep.publishedDate && !DATE_LABEL.test(ep.episodeLabel)
         ? ep.publishedDate.toLocaleDateString(undefined, {day: 'numeric', month: 'short', year: 'numeric'})
         : undefined
-    const metaText = [collectionTitle, numberText, dateText].filter(Boolean).join(' · ')
+    const metaText = [collectionTitle, seasonName, numberText, dateText].filter(Boolean).join(' · ')
 
-    const navigate = useNavigate()
+    const routerNavigate = useNavigate()
+    const location = useLocation()
+    // Opened from its collection's page, the episode's breadcrumb leads back to that page as it was, such as with
+    // the season the user picked.
+    const fromCollection = location.pathname === `/collection/${collectionSlug}` ? location.pathname + location.search : undefined
+    const navigate = (to: string) => routerNavigate(to, {state: fromCollection ? {fromCollection} : undefined})
     const episodeHref = `/collection/${collectionSlug}/episode/${ep.slug}`
     const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -161,7 +172,6 @@ export default function EpisodeCard({ep, collectionSlug, downloads, moved = fals
                     // Media the account may watch only shows its open lock on its own page.
                     : ep.access && !ep.accessGranted ? <AccessBadge label={ep.accessLabel} description={ep.accessDescription} onCover/>
                     : ep.removedFromSource && !ep.removedByRetention ? <RemovedBadge onCover/>
-                    : reassignedTo ? <ReassignedBadge collectionTitle={reassignedTo} onCover/>
                     : moved && <MovedBadge onCover words={words}/>}
                 {isLive && (
                     <span style={LIVE_BADGE_STYLE} aria-label={`${words.episode.Singular} is live`}>

@@ -14,7 +14,8 @@ type Props = {
 export default function EpisodeTypePill({sourceKey, type, asText = false}: Props) {
     const {data: tags} = useEpisodeTags(sourceKey)
     const mainTag = tags?.find((tag) => tag.main)?.key ?? 'ep'
-    if (!type || type === mainTag) return null
+    // A type the Site does not tell apart, such as a yt-dlp video's second episode of one date, is a main one there.
+    if (!type || type === mainTag || (tags && !tags.some((tag) => tag.key === type))) return null
     if (asText) {
         return (
             <span className="episode-summary-item episode-summary-label episode-type-label">

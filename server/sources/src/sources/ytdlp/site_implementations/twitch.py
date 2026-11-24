@@ -5,11 +5,12 @@ from __future__ import annotations
 import html
 import logging
 import re
-from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qs, urlsplit
 
 import requests
+
+from progress_plan import PlanTracker, StageSpec
 
 from ...contract import LIST_TYPE, MAIN_TAG, ApiKeyRejected, CreatorDetails, SearchNotice, SearchResults, SectionRef
 from ... import site_api_keys
@@ -81,12 +82,14 @@ class TwitchImplementation(OtherSitesImplementation):
         rest = _parts(url)[1:]
         return (rest[0].lower() if rest else "") if len(rest) <= 1 else None
 
-    def creator_page(self, url: str) -> str | None:
-        return self.creator_root(url) if self._page(url) in _CHANNEL_PAGES else None
-
     def is_creator_page(self, url: str) -> bool:
         """The channel's Videos page of all its videos, which a collection of the channel lists."""
         return self._page(url) == "videos" and parse_qs(urlsplit(url).query).get("filter", ["all"])[0] == "all"
+
+    def is_list(self, url: str) -> bool:
+        """One of Twitch's collections of a channel's videos."""
+        parts = _parts(url)
+        return (urlsplit(url).hostname or "").lower() in _HOSTS and len(parts) == 2 and parts[0].lower() == "collections"
 
     def collection_link(self, url: str) -> str:
         """The channel's own page shows its stream; the collection of the channel lists all its videos."""
@@ -98,17 +101,21 @@ class TwitchImplementation(OtherSitesImplementation):
         """A clip, as yt-dlp's extractor of clips says; every other video is a video."""
         return CLIP_TAG if info.get("extractor_key") == "TwitchClips" or "/clip/" in url else MAIN_TAG
 
-    def creator_details(self, ref: str, progress: Callable[[str], None]) -> CreatorDetails:
+    def creator_details(self, ref: str, plan: PlanTracker) -> CreatorDetails:
         """A channel: its name and picture from its page, the feeds it has, and its collections, all looked up at
         once."""
         root = self.creator_root(ref)
         if root is None:
             raise runner.YtDlpError("This link is not a Twitch channel")
-        progress("Reading the channel, its videos and its collections")
         with ThreadPoolExecutor(max_workers=len(self.feed_types) + 2, thread_name_prefix="channel-lookup", **keep_call_options()) as pool:
-            listings = self.read_feeds(root, pool)
-            playlists = pool.submit(self.playlists, root)
-            page = pool.submit(self.page_facts, root)
+            listings = self.read_feeds(root, pool, plan)
+            # The collections take longest, so their step comes last.
+            plan.add(
+                StageSpec(id="page", code="read_page", label="Reading the channel's page"),
+                StageSpec(id="collections", code="read_lists", label=f"Reading the {self.site.section_list_names.plural}"),
+            )
+            playlists = plan.follow("collections", pool.submit(self.playlists, root))
+            page = plan.follow("page", pool.submit(self.page_facts, root))
             sections = self.feed_sections(root, listings) + playlists.result()
             name, avatar = page.result()
         login = root.rsplit("/", 1)[-1]

@@ -111,6 +111,7 @@ export default function StreamProfilesPage() {
                 />
             ),
             align: 'center',
+            sticky: 'right',
         },
     ]
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from backend.utils.helpers import name_in_text
 from datetime import datetime, time, timedelta, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -22,7 +23,9 @@ from backend.services.unplayable_formats import collection_allows_unplayable_for
 from backend.services.access_checks import ask_for_check, refused_media
 from backend.services.media_access import locked_clause
 from backend.services.local_media_profile_sites import profile_offered_for_site
-from backend.services.sites import collection_episode_tags, collection_site_key, collection_words, place_collection
+from backend.services.sites import (
+    collection_episode_tags, collection_kind, collection_site, collection_site_key, collection_words, place_collection,
+)
 from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope
 from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import CollectionType, EpisodeIdentifier, EpisodeOrder
@@ -48,7 +51,10 @@ from task_manager.scheduler.types import OperationSource
 from backend.api.models.operations import CollectionMetadataRewriteOperationAccepted, TaskOperationAccepted
 from backend.services.episode_identification import preview_identification, request_identification_change
 from backend.services.metadata_rewrite import request_metadata_rewrite
-from backend.services.collections import add_collection, add_links_only_collection, index_new_collection
+from backend.services.collections import (
+    add_collection, add_links_only_collection, delete_episodes_of, index_new_collection, set_kind,
+)
+from backend.types.link_season_types import CollectionKind, LinkSeasons, OutsideVideos
 from backend.services.link_seasons import holds_only_link_seasons, lists_playlists
 from backend.operations.collections import (
     CollectionDeleteDownloadsOperation,
@@ -290,7 +296,7 @@ def update_collection(s: Session, collection_slug: str, body: CollectionAPIUpdat
 
     if collection.creator is not None and body.author_name != collection.author_name:
         raise ServiceError(
-            f"The author of a collection of {collection.creator.title} is their name: change it on their Edit page",
+            f"The author of a collection of {name_in_text(collection.creator.title)} is their name: change it on their Edit page",
             field="authorName",
         )
     if body.type is not None and body.type != collection.type:
@@ -312,6 +318,24 @@ def update_collection(s: Session, collection_slug: str, body: CollectionAPIUpdat
     update_database_fields(collection, body, exclude_fields=(left_out | {"sharing_url"}))
     if moved:
         collection.sharing_url = link
+        # The type of list was the old link's.
+        collection.list_type = None
+        if collection_kind(link, collection.source_key) is CollectionKind.LIST and holds_only_link_seasons(collection):
+            # A custom collection given the link of one list becomes a collection of that list, which has no other
+            # lists, so one that has lists already would lose their videos.
+            if collection.lists:
+                names = collection_site(collection).list_collection_names
+                raise ServiceError(
+                    f"A custom collection with {collection_words(collection).season.plural} can only take a channel's "
+                    f"link. Add the {names.singular} as one more of its {collection_words(collection).season.plural} "
+                    "instead",
+                    field="sharing_url",
+                )
+            collection.outside_videos = OutsideVideos.LEAVE_OUT.value
+            collection.link_seasons = LinkSeasons.OFF.value
+        # A custom collection given a link becomes a channel or a list collection, and one whose link is taken away
+        # becomes a custom collection.
+        set_kind(collection)
         # The link of a collection that holds only its playlists is there to offer a channel's playlists.
         if link is not None and holds_only_link_seasons(collection) and not lists_playlists(collection):
             raise ServiceError(
@@ -341,7 +365,7 @@ def _check_profiles_suit_type(collection: Collection, collection_type: Collectio
     if unsuited:
         names = ", ".join(sorted(set(unsuited)))
         raise ServiceError(
-            f"{collection.title} has Download Profiles that use {names}, which is not offered for "
+            f"{name_in_text(collection.title)} has Download Profiles that use {names}, which is not offered for "
             f"{collection_type.value} collections. Remove those Download Profiles first.",
             field="type",
         )
@@ -371,6 +395,11 @@ def delete_collection(s: Session, collection_slug: str) -> CollectionAPIRead:
         "slug": collection.slug,
     })
 
+    from backend.services.imports import let_go_of_collection
+
+    # An import that waited to adopt its files stops waiting for it.
+    let_go_of_collection(s, collection.id)
+    delete_episodes_of(s, collection)
     s.delete(collection)
     s.flush()
 
@@ -406,7 +435,7 @@ def request_collection_metadata_refresh(
     if not refreshes_metadata(collection.source_key):
         raise HTTPException(
             status_code=409,
-            detail=f"The episodes of {collection.title} are kept up to date by the daily catalogue refresh",
+            detail=f"The episodes of {name_in_text(collection.title)} are kept up to date by the daily catalogue refresh",
         )
 
     episodes = (
@@ -423,7 +452,7 @@ def request_collection_metadata_refresh(
         complete_operation(
             s,
             operation.id,
-            summary=f"No episodes to refresh in {collection.title}",
+            summary=f"No episodes to refresh in {name_in_text(collection.title)}",
             data={"episodes_refreshed": 0, "episodes_requested": 0},
         )
     else:
@@ -548,7 +577,7 @@ def request_collection_download_all(
         complete_operation(
             s,
             operation.id,
-            summary=f"No new episodes to download for {collection.title}",
+            summary=f"No new episodes to download for {name_in_text(collection.title)}",
             data={"downloads_completed": 0},
         )
 
@@ -765,7 +794,7 @@ def request_collection_file_rename(
         complete_operation(
             s,
             operation.id,
-            summary=f"No existing files to rename in {collection.title}",
+            summary=f"No existing files to rename in {name_in_text(collection.title)}",
             data={
                 "files_renamed": 0,
                 "files_unchanged": 0,

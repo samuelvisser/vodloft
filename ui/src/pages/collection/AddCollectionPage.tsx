@@ -9,12 +9,13 @@ export type AddCollectionPageProps = {
 export default function AddCollectionPage({ onCancel, onCreated }: AddCollectionPageProps) {
   const [params] = useSearchParams()
   const initialUrl = params.get('url') || undefined
+  const initialCreator = params.get('creator') || undefined
   return (
     <section className="view" aria-labelledby="add-collection-title">
       <div className="view-header">
         <h1 id="add-collection-title">Add collection</h1>
       </div>
-      <AddCollectionPageImpl onCancel={onCancel} onCreated={onCreated} initialUrl={initialUrl} />
+      <AddCollectionPageImpl onCancel={onCancel} onCreated={onCreated} initialUrl={initialUrl} initialCreator={initialCreator} />
     </section>
   )
 }

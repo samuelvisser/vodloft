@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from math import isfinite
-from typing import Any, Iterable, Iterator, Sequence
+from typing import Any, Iterable, Sequence
 from uuid import uuid4
 
-from sqlalchemy import event, exists, func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.db.core import get_session
@@ -28,7 +27,7 @@ from task_manager.scheduler.operation_control import (
 )
 from task_manager.scheduler.registry import task_tracks_progress
 from task_manager.scheduler.requester import current_requester
-from task_manager.scheduler.transactional import QUEUED_TASKS_KEY, queue_task_after_commit
+from task_manager.scheduler.transactional import queue_task_after_commit
 from task_manager.scheduler.types import (
     OperationDependencyCancelPolicy,
     OperationSource,
@@ -1201,7 +1200,7 @@ _RUN_STATES = {
 
 
 def _parts_plan(operation: TaskOperation, effective_runs: Sequence[TaskRun | None]) -> dict[str, Any]:
-    """The plan of an operation made of parts, such as a creator's move: a step for each task it runs itself and each
+    """The plan of an operation made of parts: a step for each task it runs itself and each
     operation it started, in the same shape as the plan a task reports, so the UI follows both alike. A step is as
     far as its part says, or unmeasured while the part cannot tell."""
     from dataclasses import asdict
@@ -1478,52 +1477,3 @@ def _resource_type_value(value: Any) -> str:
 def _task_status(value: Any) -> TaskStatus:
     return value if isinstance(value, TaskStatus) else TaskStatus(value)
 
-
-@dataclass
-class SpunOffWork:
-    """The work one change started: the operations it created, and the tasks it queued without an operation."""
-
-    operations: list[TaskOperation] = field(default_factory=list)
-    tasks: list[OperationTargetSpec] = field(default_factory=list)
-
-
-@contextmanager
-def spun_off_work(session: Session) -> Iterator[SpunOffWork]:
-    """Gather the work started inside the block, so that one operation can take all of it on as its parts: the
-    operations created in it, other than parts of one of them, and the tasks queued in it without an operation. The
-    tasks leave the queue, to run as targets of the operation that takes them; one that is not taken does not run.
-    The work is there once the block ends."""
-    from task_manager.scheduler.transactional import take_queued_tasks
-
-    created: list[TaskOperation] = []
-
-    def added(_session, instance) -> None:
-        if isinstance(instance, TaskOperation):
-            created.append(instance)
-
-    work = SpunOffWork()
-    queued = len(session.info.get(QUEUED_TASKS_KEY, []))
-    event.listen(session, "transient_to_pending", added)
-    try:
-        yield work
-    finally:
-        event.remove(session, "transient_to_pending", added)
-    session.flush()
-    ids = [operation.id for operation in created]
-    parts = set(session.scalars(select(TaskOperationDependency.child_operation_id).where(
-        TaskOperationDependency.child_operation_id.in_(ids),
-    ))) if ids else set()
-    work.operations = [operation for operation in created if operation.id not in parts]
-    for task in take_queued_tasks(session, since=queued):
-        spec = OperationTargetSpec(
-            task_key=task.def_key, resource_type=task.resource_type, resource_id=task.resource_id,
-            task_kwargs=dict(task.kwargs),
-        )
-        if all(other.resolved_slot_key() != spec.resolved_slot_key() for other in work.tasks):
-            work.tasks.append(spec)
-
-
-def dispatch_operation_targets(session: Session, operation: TaskOperation) -> None:
-    """Queue each of the operation's own tasks to run once the transaction commits."""
-    for target in operation.targets:
-        queue_operation_target_dispatch(session, operation.id, target.slot_key)

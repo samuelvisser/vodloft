@@ -78,7 +78,7 @@ class EpisodeNumbering:
             or (info.type == EpIdType.EP_EXTRA and info.extra_type == EpisodeExtraType.TRAILER)
         )
         published = episode.published_date or episode.went_live_date or episode.scheduled_date or episode.created_at
-        return cls.from_number_text(episode.slug, published, episode.dw_episode_number, trailer=trailer)
+        return cls.from_number_text(episode.slug, published, episode.source_number, trailer=trailer)
 
 # The Daily Wire uses .01-.19 for content attached to an episode. Segment .20
 # and above is collection-level auxiliary content and must use VODLoft's collection-global

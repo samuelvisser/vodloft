@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 
 import requests
 
 from downloader.hls import is_master_playlist, media_playlist_segments, parse_master_playlist
 
+from progress_plan import PlanTracker, StageSpec
+
 from ..contract import (
-    Access, CreatorDetails, CreatorPreset, Names, SectionType, MAIN_TAG, MIN_NEWEST_EPISODES, SectionKind, SectionRef, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback,
+    Access, CreatorDetails, Names, SectionType, MAIN_TAG, MIN_NEWEST_EPISODES, SectionKind, SectionRef, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback,
     DownloadOptions, PublishStatusLabel, ResolvedLink, RssEpisodeType, SeasonRef, Site, SiteSetting, SiteSettings, Source, StreamMethod,
     ReleaseDate, UpgradeChecks, UpgradeImprovement, UpgradeOffer, VideoDetails, publish_status_labels_with,
 )
@@ -86,7 +88,8 @@ class DailyWireSource(Source):
     domains = ("dailywire.com",)
     sites = (Site(
         "dailywire", "The Daily Wire", domains,
-        initials="DW",
+        # A custom icon in VODLoft's Font Awesome Kit: The Daily Wire's DW letters.
+        icon="fak:dailywire", initials="DW",
         # Its own sign-in is how VODLoft signs in; no Source signs in on it with cookies.
         takes_cookies=False,
         stream_methods=frozenset({StreamMethod.FILE, StreamMethod.HLS, StreamMethod.LIVE}),
@@ -115,6 +118,7 @@ class DailyWireSource(Source):
         movies=True,
         pitch="Shows and movies, with your membership",
         creator_names=HOST,
+        channel_collection_names=Names("show", "shows"),
         section_types=(
             SectionType("show", SectionKind.SHOW, Names("show", "shows")),
             SectionType("movie", SectionKind.ITEM, Names("movie", "movies")),
@@ -131,11 +135,11 @@ class DailyWireSource(Source):
             ),
             EpisodeTag("aux", "Auxiliary", "Extra content for the show", Names("auxiliary episode", "auxiliary episodes"), rss_episode_type=RssEpisodeType.BONUS),
         ),
-        creator_presets=(CreatorPreset.PER_LIST, CreatorPreset.PICK),
     ),)
     kind_names = MappingProxyType({LinkKind.COLLECTION: Names("show", "shows"), LinkKind.CREATOR: HOST})
     features = frozenset({
         Feature.COLLECTIONS,
+        Feature.OWN_SEASONS,
         Feature.MOVIES,
         Feature.MOVIE_EXTRAS,
         Feature.BROWSE,
@@ -201,7 +205,7 @@ class DailyWireSource(Source):
         catalog = MiddlewareClient(access_token=_access_token(), request_priority="interactive").get_catalog()
         return next((show.author_slug for show in catalog.collections if show.slug == slug and show.author_slug), None)
 
-    def creator_details(self, ref: str, progress: Callable[[str], None] = lambda step: None) -> CreatorDetails:
+    def creator_details(self, ref: str, plan: PlanTracker | None = None) -> CreatorDetails:
         """A host, by the slug The Daily Wire gives them or by the link to their page, such as
         https://www.dailywire.com/hosts/ben-shapiro: their shows and movies from the Browse page."""
         if ref.startswith("http"):
@@ -209,8 +213,10 @@ class DailyWireSource(Source):
             if parsed is None or parsed[0] is not LinkKind.CREATOR:
                 raise ValueError("This is not a link to a host on The Daily Wire")
             ref = parsed[1]
-        progress("Reading The Daily Wire's shows and movies")
-        catalog = MiddlewareClient(access_token=_access_token(), request_priority="interactive").get_catalog()
+        plan = plan or PlanTracker()
+        plan.add(StageSpec(id="catalog", code="read_catalog", label="Reading The Daily Wire's shows and movies"))
+        with plan.running("catalog"):
+            catalog = MiddlewareClient(access_token=_access_token(), request_priority="interactive").get_catalog()
         shows = [show for show in catalog.collections if show.author_slug == ref]
         movies = [movie for movie in catalog.movies if movie.author_slug == ref]
         if not shows and not movies:

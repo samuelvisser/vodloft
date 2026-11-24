@@ -262,11 +262,6 @@ class YouTubeApiSettings(SubmodelBase):
         ge=0,
         description="Units a day for YouTube searches; 0 makes every search use yt-dlp",
     )
-    min_check_interval_minutes: int = Field(
-        default=10,
-        ge=10,
-        description="Shortest time between two quick checks of the same collection",
-    )
     usage_log_enabled: bool = Field(
         default=False,
         description="Keep a log file of every API call and a summary of each day, which survives restarts",
@@ -653,6 +648,18 @@ class QuickDownloadSettings(SubmodelBase):
         if value not in QUICK_DOWNLOAD_MP3_BITRATES:
             raise ValueError("MP3 bitrate must be 320, 192 or 128 kbps")
         return value
+
+
+class LogFileSettings(SubmodelBase):
+    """A copy of VODLoft's log in ``logs/vodloft.log`` next to config.yml, at the application log level.
+
+    The file starts over in a new part once it reaches ``max_megabytes``, and
+    the oldest of the ``kept_files`` earlier parts is removed.
+    """
+
+    enabled: bool = Field(default=False, description="Write the log to logs/vodloft.log next to config.yml")
+    max_megabytes: int = Field(default=10, ge=1, description="Size at which the log file starts over in a new part")
+    kept_files: int = Field(default=5, ge=1, description="Earlier parts of the log file that are kept")
 
 
 class FileWatcherSettings(SubmodelBase):

@@ -123,8 +123,8 @@ export default function LocalMediaProfilesPage() {
                 </span>
             ),
             width: '1%',
-            headerStyle: {minWidth: 180, maxWidth: '30%', whiteSpace: 'nowrap'},
-            cellStyle: {minWidth: 180, maxWidth: '30%', whiteSpace: 'nowrap', overflow: 'hidden'},
+            headerStyle: {minWidth: 180, maxWidth: 400, whiteSpace: 'nowrap'},
+            cellStyle: {minWidth: 180, maxWidth: 400, whiteSpace: 'nowrap', overflow: 'hidden'},
             mobileHidden: true,
         },
         {

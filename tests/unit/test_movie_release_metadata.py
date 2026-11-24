@@ -272,7 +272,7 @@ def test_collection_date_component_placeholders_use_episode_publish_datetime(tmp
 
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
     episode = SimpleNamespace(
-        collection=SimpleNamespace(slug="collection", title="Collection", author_name="", meta_items=[], creator=None, lists=[], sharing_url=""),
+        collection=SimpleNamespace(slug="collection", title="Collection", author_name="", meta_items=[], creator=None, lists=[], sharing_url="", kind="list"),
         season=SimpleNamespace(slug="season", name="Season", index=1, season_type="normal", season_number=1),
         slug="episode",
         source_slug="episode",
@@ -281,7 +281,7 @@ def test_collection_date_component_placeholders_use_episode_publish_datetime(tmp
         index=1,
         extra_index=None,
         title="Episode",
-        dw_episode_number="1",
+        source_number="1",
         episode_identifier="ep.1",
         published_date=datetime(2026, 8, 30, 12, 34, 56, tzinfo=timezone.utc),
     )

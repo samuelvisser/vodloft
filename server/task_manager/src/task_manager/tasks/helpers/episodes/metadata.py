@@ -69,7 +69,7 @@ def update_episode_from_dailywire(
     for field, value in dw_episode.model_dump(mode="python", by_alias=False).items():
         if field in model_fields and field not in protected_fields:
             setattr(episode, field, value)
-    episode.dw_episode_number = dw_episode.episode_number or None
+    episode.source_number = dw_episode.episode_number or None
     # The membership levels it is for may have changed, or VODLoft added it before it kept them.
     # A record without them says nothing about them.
     if dw_episode.available_for:

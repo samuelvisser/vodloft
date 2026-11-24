@@ -30,9 +30,10 @@
     table-layout: auto;
   }
 
+  /* A long name stops at 400px and ends in an ellipsis; its full name shows on hover. */
   .local-media-profile-name {
     display: block;
-    width: 100%;
+    max-width: 400px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

@@ -202,7 +202,7 @@ does differently on a Site lives in that Site's contract, a `Site` from `sources
   a combined name such as "albums and playlists" is joined from the types where it is shown, never written into a
   contract or hardcoded. What VODLoft calls the season it makes itself of what is in no list is `loose_season`, apart from sections.
 - A section type says what a section is: its kind, and for a feed its `role` (main, short or live). A `SectionRef`
-  carries its `SectionType`, and a stored `CreatorSection` only its type `key`, from which it reads its kind, role and,
+  carries its `SectionType`, and a stored list only its type `key`, from which it reads its kind, role and,
   for a feed, its title. Type keys are unique within a Site only; a key a Site's contract does not have is an error.
 - yt-dlp's feeds are `YtdlpFeedSectionType`s, which add the `path` of the feed's page, such as YouTube's `streams`.
   Adding a feed to a Site is a change to its contract alone.
@@ -218,7 +218,7 @@ subclasses `OtherSitesImplementation`, the generic one, which reads every feed b
   belongs in that Site's implementation, not in a check of the Site in the Source.
 - An implementation answers the contract's types by key: its `feed_types` and `list_keys` together are the keys of
   its Site's `section_types`, which `test_ytdlp_site_contracts.py` checks.
-- Settings that follow a type, such as what a creator does with a new list, are stored by Site and type key.
+- Settings that follow a type, such as what a channel collection does with a new list, are stored by Site and type key.
 
 ### Naming things
 Every contract names things with `Names` from `sources.contract`: `singular`, `plural`, and `a` with its article. The
@@ -226,8 +226,7 @@ API sends it as `{singular, plural, a}` under a `names` field (or a field named 
 `creatorNames`), never flattened. The backend gives every word the UI shows for a Site, a collection or a creator,
 also its fallback; the UI never adds an "s", picks an article, or falls back to a word of its own.
 - Several names shown together are joined in the backend with `Names.joined` ("albums and playlists", "an album or
-  playlist"). A Site offers the usual sets: `section_feed_names`, `section_list_names`, `section_show_names`,
-  `section_item_names`, `section_growing_names`, `section_names` and `names_of(*kinds)`. The
+  playlist"). A Site offers `section_list_names` and `names_of(*kinds)`. The
   UI's `joinedNames` is only for a set the UI picks itself, such as the sections a user ticked.
 - What VODLoft itself calls a kind of link or record lives in `LINK_KIND_NAMES`, `SECTION_KIND_NAMES` and
   `RESOURCE_NAMES` (`backend.types.resource_names`); a Source overrides only its own kinds in `kind_names`, and the
@@ -258,7 +257,7 @@ which never imports VODLoft code. Downloads report their attempt this way, and s
   `task_manager.tasks.helpers.progress`. Work that reports its own percentage, such as renaming files, gets a `PlanStep`.
 - A step that cannot measure itself, such as one long write, reports no fraction: the task then shows no percentage,
   but its weight still counts toward how far the whole plan is, and toward any action the task is a part of.
-- An action made of several operations, such as a creator's move, counts its parts by their `work_weight`, which
+- An action made of several operations, such as moving a collection's episodes, counts its parts by their `work_weight`, which
   each part's definition sets from its own plan. Its parts are the steps of its plan in the UI.
 - Do not invent a percentage for a step that cannot measure itself, and do not leave a step without a weight.
 
@@ -302,6 +301,9 @@ VODLoft uses Font Awesome for both its public Free icon packs and its paid kit. 
 Do not replace or remove an intended Pro icon merely because the paid kit is unavailable in your environment. Application code must reference icons through `ui/src/icons/faIcon.ts`; do not import Font Awesome icon packs directly or register icon families in feature code. The Vite compiler in `ui/scripts/font-awesome-compiler.mjs` scans those references, validates them, and bundles only the icon definitions VODLoft uses.
 
 Keep both `faIcon()` arguments statically analyzable: use literal strings or conditional expressions whose branches are literal strings. When a Pro icon has no automatic Font Awesome Free equivalent, add a prefix-qualified mapping to `ui/src/icons/freeIconFallbacks.json`.
+
+Custom icons uploaded to the Kit (prefix `fak`), such as the logos of Sites Font Awesome has no brand icon for, keep
+their source SVG in `ui/src/icons/custom/`, named as the icon is in the Kit. Each needs a Free fallback mapping too.
 
 ## Releasing a new version
 Whenever we are about to release a new version, keep the following in mind.

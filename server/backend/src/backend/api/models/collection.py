@@ -1,17 +1,19 @@
 from __future__ import annotations
 
-from typing import Literal, Optional, Union
+from typing import ClassVar, Literal, Optional, Union
 from datetime import date, datetime
 
 from pydantic import AliasChoices, AliasPath, computed_field, Field, ValidationInfo, field_validator, model_validator
 
 from backend.api.models.base import RequestBase, ResponseBase, response_model_config
 from backend.api.models.custom_metadata import CustomMetadataResponseBase
+from backend.api.models.profile_bulk import BulkChangesIn
 from backend.api.models.source import NamesAPIRead, SiteAPIRead, SourcedResponse
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import CheckFrequency, CollectionType, CookiesMode, EpisodeIdentifier, EpisodeOrder
-from backend.types.link_season_types import OutsideVideos
+from backend.types.link_season_types import CollectionKind, OutsideVideos
+from backend.types.resource_names import CUSTOM_COLLECTION_NAMES
 from config.settings.cron_validation import CronExpressionError, validate_cron_expression
 from backend.types.download_profile_types import EpisodeTagKey
 from backend.utils.helpers import generate_uuid
@@ -49,6 +51,8 @@ class CollectionAPICreate(_CollectionAPIBaseIn):
     type: CollectionType
     episode_identifier: EpisodeIdentifier
     author_slug: str
+    list_type: Optional[str] = None
+    """Which of its Site's types of list the link is, as looking the link up told."""
 
     @computed_field(return_type=str)
     @property
@@ -216,6 +220,13 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     """None for a collection that only holds what its link seasons have, and has no link of its own."""
     outside_videos: Optional[OutsideVideos] = None
     """Whether the collection adds videos from its link seasons that its own link lacks, or holds only those."""
+    kind: Optional[CollectionKind] = None
+    """What its own link is: a channel, which takes the channel's lists and can be in a creator, one list, or none, for
+    a custom collection. None for a collection that is not in the Library yet, such as one that is looked up to be
+    added."""
+    list_type: Optional[str] = None
+    """For a collection of one list, the key of its Site's type of list it is, such as album or playlist on
+    SoundCloud, where its link doesn't tell; None where the Site has one type of list or it is not known."""
     site: Optional[SiteAPIRead] = None
     """The website the collection is on; None until the background migration finds it for an older collection."""
     author_name: str
@@ -225,6 +236,9 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     thumbnail_landscape_path: Optional[str] = None
     thumbnail_portrait_path: Optional[str] = None
     thumbnail_square_path: Optional[str] = None
+    link_image_path: Optional[str] = None
+    """For a collection without a link of its own, the picture of its first link season that has one."""
+    link_site_keys: list[Optional[str]] = Field(default_factory=list, exclude=True)
     ytdlp_options: str = ""
     genre: Optional[str] = None
     content_rating: Optional[str] = None
@@ -259,6 +273,50 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     def allows_unplayable_formats(self) -> bool:
         """Its own yt-dlp options allow unplayable formats, so its media protected by DRM can still be tried."""
         return options_allow_unplayable_formats(self.source_key, self.ytdlp_options)
+
+    @computed_field
+    @property
+    def can_join_creator(self) -> bool:
+        """Whether Add to creator is offered: a collection with a link on a Site with creators, a channel or a list,
+        or one without a link of its own, which joins a creator in the Library by hand."""
+        from backend.services.creators import site_takes_creators
+
+        if self.sharing_url is None:
+            return True
+        return self.site is not None and site_takes_creators(self.source_key, self.site.key)
+
+    @computed_field
+    @property
+    def season_names(self) -> Optional[NamesAPIRead]:
+        """What the collection's Site calls its seasons, such as playlists in a YouTube channel collection; None where
+        its type's own word stands, as the collection contracts give it."""
+        from backend.services.sites import NO_SITE, site_season_names
+
+        if self.site is None and self.kind != CollectionKind.CUSTOM:
+            return None
+        names = site_season_names(site_of(self.site.key) if self.site is not None else NO_SITE, self.type, self.kind)
+        return NamesAPIRead.model_validate(names) if names is not None else None
+
+
+    @computed_field
+    @property
+    def kind_name(self) -> Optional[str]:
+        """What the collection is on its Site, in the Site's words, as a creator is named: "YouTube channel",
+        "YouTube playlist" or "The Daily Wire show". A custom collection is named for its lists: "YouTube playlists"
+        when they are on one Site, "Custom collection" otherwise. None while its kind is not known yet, and while the
+        Site of a collection with a link is not."""
+        if self.kind == CollectionKind.CUSTOM:
+            # A custom collection is what its lists are when they share a Site: "YouTube playlists".
+            keys = set(self.link_site_keys)
+            if len(keys) == 1 and (key := keys.pop()) is not None:
+                site = site_of(key)
+                return f"{site.name} {site.list_collection_names.plural}"
+            return CUSTOM_COLLECTION_NAMES.singular.capitalize()
+        if self.site is None or self.kind is None:
+            return None
+        site = site_of(self.site.key)
+        names = site.channel_collection_names if self.kind == CollectionKind.CHANNEL.value else site.list_collection_names_of(self.list_type)
+        return f"{site.name} {names.singular}"
 
 
 class CollectionAPIRead(_CollectionAPIBaseOut):
@@ -347,3 +405,30 @@ class CollectionMetadataRewriteAPIRequest(RequestBase):
     """Select one Local Media Profile, or every profile with downloaded files that keeps metadata."""
 
     local_media_profile_id: Optional[int] = Field(default=None, gt=0)
+
+
+class CollectionBulkChangesIn(BulkChangesIn):
+    """The settings the Library's bulk edit gives every chosen Collection; the others keep their own."""
+
+    check_frequency: Optional[CheckFrequency] = None
+    episode_order: Optional[EpisodeOrder] = None
+    split_chapters: Optional[bool] = None
+    cookies_mode: Optional[CookiesMode] = None
+    genre: Optional[str] = Field(default=None, max_length=200)
+    """Empty removes the genre."""
+    content_rating: Optional[str] = Field(default=None, max_length=50)
+    """Empty removes the content rating."""
+
+    nullable: ClassVar[frozenset[str]] = frozenset({"genre", "content_rating"})
+
+    @field_validator("check_frequency")
+    @classmethod
+    def _not_own(cls, value: Optional[CheckFrequency]) -> Optional[CheckFrequency]:
+        if value == CheckFrequency.OWN:
+            raise ValueError("Give a Collection its own schedule on its Edit page")
+        return value
+
+    @field_validator("genre", "content_rating")
+    @classmethod
+    def _strip_metadata(cls, value: Optional[str]) -> Optional[str]:
+        return (value or "").strip() or None

@@ -14,6 +14,7 @@ import './ChangeIdentificationDialog.css'
 import {collectionWords, CollectionWords} from '../../lib/collectionWords'
 
 import type {IdentificationChange} from './ChangeSteps'
+import {nameInText} from '../../lib/nameInText'
 
 type Preview = {
     episodeIdentifier: EpisodeIdentifierValue
@@ -100,7 +101,7 @@ export default function ChangeIdentificationDialog({
                     episodeOrder: offerOrder && switchOrder ? suggestedOrder : null,
                 }),
             })
-            toast.success(`Numbering the ${episode.plural} of ${collectionTitle} ${how(target, words)}`)
+            toast.success(`Numbering the ${episode.plural} of ${nameInText(collectionTitle)} ${how(target, words)}`)
             onStarted()
         } catch (caught) {
             setError(caught instanceof OperationStartError ? caught.message : `Could not change the ${episode.singular} identification`)
@@ -145,7 +146,7 @@ export default function ChangeIdentificationDialog({
                         <span className="change-identification-arrow" aria-label="to">→</span>
                         <span className="change-identification-chip is-target">{episodeIdentifierRegFor(collectionType).getLabelLoose(target)}</span>
                     </p>
-                    {preview.episodesRenumbered === 0 && <p>The {episode.plural} of {collectionTitle} keep their numbers.</p>}
+                    {preview.episodesRenumbered === 0 && <p>The {episode.plural} of {nameInText(collectionTitle)} keep their numbers.</p>}
                     <ul className="change-identification-steps">
                         {preview.episodesRenumbered > 0 && (
                             <Step

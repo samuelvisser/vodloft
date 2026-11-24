@@ -5,14 +5,12 @@ from .as_view import collection_view_router
 from .existing_files.router import router as existing_files_router
 from .seasons.router import router as collection_seasons_router
 from .sync_log import collection_scans
+from .bulk import change_collections, delete_collections, summarize_collections, sync_collections
 from backend.api.endpoints.creators.service import (
-    CollectionNotFoundError, add_collection_to_creator, collection_creator_leave, collection_creator_match, collection_link, join_collection_creator,
-    leave_collection_creator, look_up_collection_creator, preview_collection_join,
+    CollectionNotFoundError, LookupPlan, add_collection_to_creator, collection_creator_match, collection_link,
+    join_collection_creator, leave_collection_creator, look_up_collection_creator,
 )
-from backend.api.models.creator import (
-    CollectionCreatorJoinAPIIn, CollectionCreatorJoinPreviewAPIIn, CollectionCreatorLeaveAPIRead,
-    CreatorSectionMovesPreviewAPIRead,
-)
+from backend.api.models.creator import CollectionCreatorJoinAPIIn
 from .service import (
     get_collections_list,
     create_collection,
@@ -61,10 +59,12 @@ from ...models.collection import (
     CollectionRedownloadEpisodesAPIRequest,
 )
 from ...models.source import EpisodeTagAPIRead
+from ...models.collection import CollectionBulkChangesIn
+from ...models.profile_bulk import BulkChangeIn, BulkResultRead, BulkSelectionIn, BulkSummaryRead
 from backend.api.endpoints.creators import lookups as creator_lookups
 from backend.api.endpoints.reconcile import collection_scope, move, preview_move
-from backend.api.models.creator import CreatorSectionMovesPreviewAPIRead, MovesWaitingAPIRead, ReconcileAPIIn, ReconcileAPIRead
-from backend.api.steps import STEPS_RESPONSE, stream_steps
+from backend.api.models.reconcile import MovePreviewAPIRead, MovesWaitingAPIRead, ReconcileAPIIn, ReconcileAPIRead
+from backend.api.steps import STEPS_RESPONSE, plan_lines, stream_steps
 from backend.app import db_session
 from backend.types.collection_types import EpisodeIdentifier
 from backend.security.access import Access, Area, Level
@@ -80,7 +80,7 @@ router.include_router(collection_seasons_router)
 
 @router.get("/moves-waiting", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[MovesWaitingAPIRead])
 def collections_moves_waiting():
-    """Every creator, and every collection without one, whose Reassigned or Moved episodes wait to be moved."""
+    """Every collection whose Moved episodes wait to be moved."""
     from backend.services.reconcile import waiting_in_library
 
     with db_session() as s:
@@ -99,6 +99,31 @@ def collection_list():
     """
     with db_session() as s:
         return get_collections_list(s)
+
+
+@router.post("/bulk/summary", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=BulkSummaryRead)
+def collections_bulk_summary(body: BulkSelectionIn):
+    """What the chosen Collections are set to now, for the Library's bulk edit."""
+    with db_session() as s:
+        return summarize_collections(s, body)
+
+
+@router.post("/bulk/change", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=BulkResultRead)
+def collections_bulk_change(body: BulkChangeIn[CollectionBulkChangesIn]):
+    """Give the chosen Collections the same settings; a setting a Collection's Site doesn't have is left alone."""
+    return run_write_transaction(lambda s: change_collections(s, body))
+
+
+@router.post("/bulk/sync", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=BulkResultRead)
+def collections_bulk_sync(body: BulkSelectionIn):
+    """Look for new episodes of the chosen Collections now."""
+    return run_write_transaction(lambda s: sync_collections(s, body))
+
+
+@router.post("/bulk/delete", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=BulkResultRead)
+def collections_bulk_delete(body: BulkSelectionIn):
+    """Delete the chosen Collections, as deleting each on its Edit page does."""
+    return run_write_transaction(lambda s: delete_collections(s, body))
 
 
 @router.post("", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=CollectionAPIRead, status_code=status.HTTP_201_CREATED)
@@ -193,10 +218,10 @@ def collection_rename_files(collection_slug: str, body: CollectionFileRenameAPIR
 
 @router.post(
     "/{collection_slug}/reconcile/preview", dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
-    response_model=CreatorSectionMovesPreviewAPIRead,
+    response_model=MovePreviewAPIRead,
 )
 def collection_reconcile_preview(collection_slug: str):
-    """What moving the collection's Reassigned and Moved episodes to where they belong now does. Changes nothing."""
+    """What moving the collection's Moved episodes to the seasons they belong in now does. Changes nothing."""
     return run_write_transaction(lambda s: preview_move(s, collection_scope(collection_slug)))
 
 
@@ -204,7 +229,7 @@ def collection_reconcile_preview(collection_slug: str):
     "/{collection_slug}/reconcile", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=ReconcileAPIRead,
 )
 def collection_reconcile(collection_slug: str, body: ReconcileAPIIn):
-    """Move the collection's Reassigned and Moved episodes, with their files, to where they belong now."""
+    """Move the collection's Moved episodes, with their files, to the seasons they belong in now."""
     return run_write_transaction(lambda s: move(s, collection_scope(collection_slug), body))
 
 
@@ -406,45 +431,24 @@ def _collection_found(work):
     "/{collection_slug}/creator/match", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], responses=STEPS_RESPONSE,
 )
 def collection_creator_match_get(collection_slug: str):
-    """Find the creator behind the collection's link, and which of its sections the collection is.
+    """Find the creator behind the channel collection's link, and whether they are in the Library already.
 
-    Asking the Site takes a while, so the answer is a line of JSON per step, ``{"step": "..."}``, then
-    ``{"match": CollectionCreatorMatchAPIRead}`` or ``{"error": "..."}``.
+    Asking the Site takes a while, so the answer is sent as it goes, a line of JSON each: ``{"plan": ...}`` each time
+    the plan of looking the creator up changes, then ``{"match": CollectionCreatorMatchAPIRead}`` or
+    ``{"error": "..."}``.
     """
     with db_session() as s:
         link = _collection_found(lambda: collection_link(s, collection_slug))
 
     def match(send) -> dict:
-        details = look_up_collection_creator(link, lambda step: send(step=step))
-        send(step="Checking what is in your library already")
-        with db_session() as s:
-            found = collection_creator_match(s, collection_slug, link.source_key, details)
+        plan = LookupPlan(plan_lines(send))
+        details = look_up_collection_creator(link, plan)
+        with db_session() as s, plan.step("check_library", "Checking what is in your library already"):
+            found = collection_creator_match(s, link.source_key, details)
         found.lookup_id = creator_lookups.keep(("collection", collection_slug, link.source_key, link.url), details)
         return {"match": found.model_dump(mode="json", by_alias=True)}
 
     return stream_steps(match, "Could not look up the creator")
-
-
-def _collection_details(collection_slug: str, lookup_id: str | None):
-    """The collection's Source and the creator behind its link: what its match found, or looked up again."""
-    with db_session() as s:
-        link = _collection_found(lambda: collection_link(s, collection_slug))
-    details = creator_lookups.found(lookup_id, ("collection", collection_slug, link.source_key, link.url))
-    return link.source_key, details if details is not None else look_up_collection_creator(link)
-
-
-@router.post(
-    "/{collection_slug}/creator/preview",
-    dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
-    response_model=CreatorSectionMovesPreviewAPIRead,
-)
-def collection_creator_join_preview(collection_slug: str, body: CollectionCreatorJoinPreviewAPIIn | None = None):
-    """What adding the collection to the creator behind its link does to the creator's collections: the videos that
-    move between them, their files and their new numbers. Changes nothing; no collections when nothing moves."""
-    source_key, details = _collection_details(collection_slug, body.lookup_id if body is not None else None)
-    return _collection_found(lambda: run_write_transaction(
-        lambda s: preview_collection_join(s, collection_slug, source_key, details)
-    ))
 
 
 @router.post(
@@ -455,33 +459,21 @@ def collection_creator_join_preview(collection_slug: str, body: CollectionCreato
 def collection_creator_join(
     collection_slug: str, body: CollectionCreatorJoinAPIIn | None = None, access: Access = signed_in(),
 ):
-    """Add the collection to the creator behind its links, adding the creator when it is not in the Library. Each of
-    the creator's videos stays in one collection: what the collection takes from the creator's other collections, or
-    leaves to them, moves with its files, and ``renumber`` says which collections keep their numbers. With
-    ``creator_slug``, it joins that creator in the Library instead, whatever its link is."""
+    """Group the channel collection under the creator behind its link, adding the creator when they are not in the
+    Library, or with ``creator_slug`` under that creator in the Library. Nothing the collection holds changes."""
     if body is not None and body.creator_slug:
         creator_slug = body.creator_slug
         return _collection_found(lambda: run_write_transaction(
             lambda s: add_collection_to_creator(s, collection_slug, creator_slug)
         ))
-    source_key, details = _collection_details(collection_slug, body.lookup_id if body is not None else None)
-    renumber = dict(body.renumber) if body is not None else {}
-    return _collection_found(lambda: run_write_transaction(
-        lambda s: join_collection_creator(
-            s, collection_slug, source_key, details, added_by_id=access.user_id, renumber=renumber,
-        )
-    ))
-
-
-@router.get(
-    "/{collection_slug}/creator/leave",
-    dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
-    response_model=CollectionCreatorLeaveAPIRead,
-)
-def collection_creator_leave_get(collection_slug: str):
-    """What removing the collection from its creator changes."""
     with db_session() as s:
-        return _collection_found(lambda: collection_creator_leave(s, collection_slug))
+        link = _collection_found(lambda: collection_link(s, collection_slug))
+    details = creator_lookups.found(
+        body.lookup_id if body is not None else None, ("collection", collection_slug, link.source_key, link.url),
+    ) or look_up_collection_creator(link)
+    return _collection_found(lambda: run_write_transaction(
+        lambda s: join_collection_creator(s, collection_slug, link.source_key, details, added_by_id=access.user_id)
+    ))
 
 
 @router.delete(
@@ -490,5 +482,5 @@ def collection_creator_leave_get(collection_slug: str):
     response_model=CollectionAPIRead,
 )
 def collection_creator_remove(collection_slug: str):
-    """Make the collection a plain one again. It keeps its episodes, files and settings."""
+    """Take the collection out of its creator. Nothing it holds changes."""
     return _collection_found(lambda: run_write_transaction(lambda s: leave_collection_creator(s, collection_slug)))

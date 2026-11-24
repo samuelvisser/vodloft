@@ -62,6 +62,10 @@ export function enableRunDownloadProfiles(key: string, id: number): Promise<Impo
     return request(`/${key}/runs/${id}/enable-download-profiles`, (data) => ImportRunSchema.parse(data), {method: 'POST'})
 }
 
+export function cancelRun(key: string, id: number): Promise<ImportRun> {
+    return request(`/${key}/runs/${id}/cancel`, (data) => ImportRunSchema.parse(data), {method: 'POST'})
+}
+
 export function previewImport(key: string, options: ImportOptions): Promise<ImportPreview> {
     return request(`/${key}/preview`, (data) => ImportPreviewSchema.parse(data), json(options))
 }

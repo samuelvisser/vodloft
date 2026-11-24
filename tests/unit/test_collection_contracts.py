@@ -91,4 +91,4 @@ def test_a_music_collection_keeps_its_albums_in_the_artists_order_and_names_its_
     assert music.media_names_on(bandcamp) == Names("track", "tracks")
     assert series.media_names_on(youtube) == Names("video", "videos")
     assert (music.loose_season_on(bandcamp), series.loose_season_on(bandcamp), series.loose_season_on(youtube)) == (
-        "Singles", "Tracks", "Videos")
+        "Singles", "Singles", "Videos")

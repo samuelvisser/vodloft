@@ -17,6 +17,7 @@ names and get their new metadata.
 """
 from __future__ import annotations
 
+from backend.utils.helpers import name_in_text
 from collections import defaultdict
 from collections.abc import Container, Sequence
 from dataclasses import dataclass, field
@@ -34,6 +35,7 @@ from backend.services.episode_filters import (
     EpisodeSelection, evaluate, filter_leaving_out, retention_downloads, retention_removes,
 )
 from backend.services.errors import ServiceError
+from backend.services.link_seasons import made_from_list
 from backend.services.season_order import number_in_link_order
 from backend.services.sites import collection_words
 from backend.types import work_weights
@@ -161,7 +163,7 @@ def plan_identification(s: Session, collection: Collection, identification: Epis
     """The identifiers the collection's episodes get under ``identification``. Only reads."""
     episodes = _episodes(s, collection)
     if counts_own_numbers(collection):
-        identifiers, counters = _plan_counted(episodes, identification), {}
+        identifiers, counters = _plan_counted(episodes, identification, in_list_order=made_from_list(collection)), {}
     else:
         identifiers, counters = _plan_source_numbered(episodes, identification)
     return IdentificationPlan(
@@ -174,9 +176,10 @@ def plan_identification(s: Session, collection: Collection, identification: Epis
     )
 
 
-def _plan_counted(episodes: list[Episode], identification: EpisodeIdentifier) -> dict[int, str]:
+def _plan_counted(episodes: list[Episode], identification: EpisodeIdentifier, *, in_list_order: bool) -> dict[int, str]:
     """Count the main episodes again, as indexing counts the videos of a Source without episode numbers. Other tags,
-    and the parts of a split video, keep theirs."""
+    and the parts of a split video, keep theirs. ``in_list_order`` numbers them in the order they were added, which is
+    their list's order for a collection made from one list, rather than by date."""
     main = [
         episode for episode in episodes
         if episode.part_of is None and _tag(episode.episode_identifier) in {EpIdType.EP.value, EpIdType.AUX.value}
@@ -193,7 +196,9 @@ def _plan_counted(episodes: list[Episode], identification: EpisodeIdentifier) ->
                 taken.add(identifier)
                 identifiers[episode.id] = identifier
         case EpisodeIdentifier.NUMBERED:
-            for episode in sorted(main, key=lambda episode: (_published(episode), episode.index, episode.id)):
+            for episode in sorted(main, key=lambda episode: (
+                (episode.index, episode.id) if in_list_order else (_published(episode), episode.index, episode.id)
+            )):
                 identifier = next_identifier(taken, EpIdType.EP)
                 taken.add(identifier)
                 identifiers[episode.id] = identifier
@@ -296,7 +301,7 @@ def collection_busy(s: Session, collection: Collection, doing: str) -> str | Non
     )
     if downloads is not None:
         return (
-            f"Episodes of {collection.title} are downloading or waiting to download. "
+            f"Episodes of {name_in_text(collection.title)} are downloading or waiting to download. "
             f"Let them finish, or cancel them, before {doing}."
         )
     work = s.scalar(
@@ -308,7 +313,7 @@ def collection_busy(s: Session, collection: Collection, doing: str) -> str | Non
         ).limit(1)
     )
     if work is not None:
-        return f"VODLoft is still working on {collection.title}. Try again once that is done."
+        return f"VODLoft is still working on {name_in_text(collection.title)}. Try again once that is done."
     return None
 
 
@@ -484,16 +489,15 @@ def renumber_changes(s: Session, collection: Collection) -> tuple[list[Identific
     ], set(plan.identifiers)
 
 
-def queue_renumber(s: Session, collection: Collection, *, renumber: bool, sections: Sequence[str] = ()) -> TaskOperation:
+def queue_renumber(s: Session, collection: Collection, *, renumber: bool) -> TaskOperation:
     """Number the collection's episodes again the way it numbers them, unless ``renumber`` is False, then rename its
-    files and rewrite their metadata, as after episodes moved in or out of it. Runs as the task that changes a
-    collection's identification, so the collection page shows its progress, and the creator's Edit page on the rows of
-    ``sections``, the feeds and lists that moved.
+    files and rewrite their metadata, as after episodes moved within it. Runs as the task that changes a collection's
+    identification, so the collection page shows its progress.
 
     ``s`` is a write transaction's session."""
     weight = sum(step.weight for step in identification_steps(s, collection, renumbering=renumber))
     operation = create_operation(s, CollectionRenumberOperation(
-        collection, renumber=renumber, sections=sections, work_weight=weight,
+        collection, renumber=renumber, work_weight=weight,
     ))
     queue_operation_target_dispatch(s, operation.id, operation.targets[0].slot_key)
     s.flush()
@@ -570,7 +574,7 @@ def request_identification_change(
     """Start numbering the collection's episodes another way, as an operation whose progress the collection page
     shows. Refuses what would go wrong before anything changes. ``s`` is a write transaction's session."""
     if EpisodeIdentifier(collection.episode_identifier) is identification:
-        raise ServiceError(f"{collection.title} already numbers its episodes this way", field=_FIELD)
+        raise ServiceError(f"{name_in_text(collection.title)} already numbers its episodes this way", field=_FIELD)
     busy = _busy(s, collection)
     if busy is not None:
         raise ServiceError(busy, field=_FIELD)

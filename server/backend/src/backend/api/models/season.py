@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from backend.api.models.base import RequestBase, ResponseBase
+from backend.types.season_types import SeasonOrigin
 
 
 # ---------- Strict input (create/update) ----------
@@ -40,6 +41,8 @@ class _SeasonAPIBaseOut(ResponseBase):
     slug: str
     season_type: str
     season_number: int
+    origin: SeasonOrigin
+    """Where the season came from: the Site's own, one of its lists, or made by VODLoft."""
 
 
 class SeasonAPIRead(_SeasonAPIBaseOut):
@@ -48,6 +51,8 @@ class SeasonAPIRead(_SeasonAPIBaseOut):
     updated_at: datetime
     newest_published_at: datetime | None = None
     """When its newest episode came out, in the list of a collection's seasons."""
+    whole_channel: bool = False
+    """The channel season while it holds the whole channel, such as Channel on YouTube: a collection page opens on it."""
 
 
 

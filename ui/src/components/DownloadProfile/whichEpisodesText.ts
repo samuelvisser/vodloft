@@ -118,14 +118,15 @@ export function filterSentence(
     today: Date = new Date(),
     /** What the collection calls its seasons: albums in a Music collection. */
     season: Pick<Noun, 'singular' | 'plural'> = collectionWords(null).season,
+    /** The slugs of every season of the collection, oldest first, when they are known. */
+    allSeasonSlugs?: readonly string[],
 ): Part[] {
     if (isDateLine(filter)) return dateLineSentence(filter, deleteOlder, today)
     const lead = {text: `${ACTION_WORDS[filter.action] ?? ACTION_WORDS.skip} `}
-    if (filter.field === 'types' || filter.field === 'seasons') {
-        const labels = filter.field === 'types'
-            ? (filter.episodeTypes ?? []).map(typeLabel)
-            : [...(filter.seasonSlugs ?? []).map(seasonLabel), ...(filter.includeUpcoming ? [`upcoming ${season.plural}`] : [])]
-        const parts: Part[] = [lead, {text: filter.field === 'types' ? 'episode type' : season.singular, strong: true}]
+    if (filter.field === 'seasons') return [lead, {text: season.singular, strong: true}, ...seasonsList(filter, seasonLabel, season, allSeasonSlugs)]
+    if (filter.field === 'types') {
+        const labels = (filter.episodeTypes ?? []).map(typeLabel)
+        const parts: Part[] = [lead, {text: 'episode type', strong: true}]
         if (!labels.length) return [...parts, {text: ' is …'}]
         return [...parts, {text: ' is '}, ...strongList(labels).flatMap((part) => (
             part.text === ' and ' ? [{text: ' or '}] : [part]
@@ -148,6 +149,39 @@ export function filterSentence(
     if (ignoreCase && described) parts.push({text: ', in any capitalisation'})
     parts.push({text: pattern, code: true})
     return parts
+}
+
+/** The most seasons a sentence names; the others are counted. */
+const SEASONS_NAMED = 3
+
+/**
+ * What a seasons line picks: "is any of all albums or upcoming ones" when it picks every season, or else at most three
+ * of them, newest first, then how many more: "is A, B, C, 4 more albums or upcoming albums".
+ */
+function seasonsList(
+    filter: FilterLike,
+    seasonLabel: (slug: string) => string,
+    season: Pick<Noun, 'singular' | 'plural'>,
+    allSeasonSlugs: readonly string[] | undefined,
+): Part[] {
+    const picked = filter.seasonSlugs ?? []
+    const upcoming = !!filter.includeUpcoming
+    if (allSeasonSlugs?.length && allSeasonSlugs.every((slug) => picked.includes(slug))) {
+        const parts: Part[] = [{text: ' is any of '}, {text: `all ${season.plural}`, strong: true}]
+        return upcoming ? [...parts, {text: ' or '}, {text: 'upcoming ones', strong: true}] : parts
+    }
+    if (!picked.length && !upcoming) return [{text: ' is …'}]
+    // Newest first, as the list to pick from shows them; seasons the collection no longer has come last.
+    const order = (slug: string) => {
+        const index = allSeasonSlugs?.indexOf(slug) ?? -1
+        return index < 0 ? Infinity : -index
+    }
+    const ordered = allSeasonSlugs?.length ? [...picked].sort((a, b) => order(a) - order(b)) : [...picked]
+    const labels = ordered.slice(0, SEASONS_NAMED).map(seasonLabel)
+    const more = ordered.length - labels.length
+    if (more > 0) labels.push(`${more} more ${more === 1 ? season.singular : season.plural}`)
+    if (upcoming) labels.push(`upcoming ${season.plural}`)
+    return [{text: ' is '}, ...strongList(labels).map((part) => (part.text === ' and ' ? {text: ' or '} : part))]
 }
 
 export function plainText(parts: Part[]): string {

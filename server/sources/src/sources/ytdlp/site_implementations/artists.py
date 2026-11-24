@@ -7,6 +7,7 @@ import json
 import logging
 import re
 from collections import Counter
+from dataclasses import replace
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import ClassVar
@@ -14,7 +15,9 @@ from urllib.parse import urlsplit, urlunsplit
 
 import requests
 
-from ...contract import CreatorDetails, SearchResults, SectionKind, SectionRef
+from progress_plan import PlanTracker, StageSpec
+
+from ...contract import CollectionDetails, CreatorDetails, SearchResults, SectionKind, SectionRef
 from ... import ytdlp_runner as runner
 from .. import sites, soundcloud_search, thumbnails
 from ..site_contracts.soundcloud import ALBUM_LIST, PLAYLIST_LIST
@@ -29,6 +32,8 @@ _PAGE_TIMEOUT_SECONDS = 15
 _BROWSER = "Mozilla/5.0"
 # SoundCloud's own pages.
 _HOSTS = frozenset({"soundcloud.com", "www.soundcloud.com", "m.soundcloud.com"})
+# What yt-dlp adds to the name of a SoundCloud account's page, such as " (All)" or " (Tracks)".
+_PAGE_SUFFIX = re.compile(r" \((?:All|Tracks|Albums|Playlists|Reposts|Likes|Spotlight)\)$")
 _OG_IMAGE = re.compile(r'<meta[^>]+property="og:image"[^>]+content="([^"]+)"')
 # What SoundCloud's page knows about the account, for its own script.
 _HYDRATION = re.compile(r"window\.__sc_hydration\s*=\s*(\[.*?\]);\s*</script>", re.S)
@@ -39,8 +44,6 @@ class ArtistImplementation(OtherSitesImplementation):
 
     music_pages: ClassVar[frozenset[str]]
     """The artist's pages of all their music."""
-    artist_pages: ClassVar[frozenset[str]] = frozenset({"", "music", "albums", "sets", "tracks", "popular-tracks"})
-    """The artist's pages that list their music, which make adding the artist the obvious choice."""
     single_key: ClassVar[str] = "single"
 
     def page(self, url: str) -> str | None:
@@ -52,19 +55,20 @@ class ArtistImplementation(OtherSitesImplementation):
         rest = _parts(url)[len(_parts(root)):]
         return (rest[0] if rest else "") if len(rest) <= 1 else None
 
-    def creator_page(self, url: str) -> str | None:
-        return self.creator_root(url) if self.page(url) in self.artist_pages else None
-
     def is_creator_page(self, url: str) -> bool:
         """The artist's page of all their music."""
         return self.page(url) in self.music_pages
+
+    def is_list(self, url: str) -> bool:
+        """One of the artist's albums or sets, rather than one of their pages."""
+        return self.creator_root(url) is not None and self.page(url) is None
 
     def season_lists(self, url: str) -> list[SectionRef]:
         """The artist's albums, or a SoundCloud account's albums and playlists, newest first."""
         root = self.creator_root(url)
         if root is None:
             raise runner.YtDlpError(f"This link is not an artist on {self.site.name}")
-        return [section for section in self.creator_details(root, lambda step: None).sections if section.kind is SectionKind.LIST]
+        return [section for section in self.creator_details(root, PlanTracker()).sections if section.kind is SectionKind.LIST]
 
     def all_music(self, url: str, newest_albums: int | None = None) -> list[dict] | None:
         return self.tracks(self.creator_root(url), newest_albums) if self.is_creator_page(url) else None
@@ -83,26 +87,37 @@ class ArtistImplementation(OtherSitesImplementation):
         """Which of the Site's types of list each album link is."""
         raise NotImplementedError
 
-    def creator_details(self, root: str, progress: Callable[[str], None]) -> CreatorDetails:
+    def creator_details(self, root: str, plan: PlanTracker) -> CreatorDetails:
         root = self.creator_root(root) or root
         cookies = sites.cookies_for(root)
-        progress("Listing the albums")
-        links = self.release_links(root)
+        # Named by what the Site calls its lists, such as "albums and playlists" on SoundCloud.
+        lists = self.site.section_list_names.plural
         found: dict[str, dict] = {}
         with ThreadPoolExecutor(max_workers=_LOOKUPS_AT_ONCE, **keep_call_options()) as pool:
+            # The artist's feeds and pictures are read beside their lists. The feeds are quick, so their steps come
+            # first and the lists, which take longest, last.
+            listings = self.read_feeds(root, pool, plan)
             pictures = pool.submit(self.pictures, root)
-            lookups = {pool.submit(self.look_up, url, cookies): url for url in links}
-            for done, lookup in enumerate(as_completed(lookups), start=1):
-                progress(f"Reading the albums: {done} of {len(links)}")
-                try:
-                    found[lookups[lookup]] = lookup.result()
-                except runner.YtDlpError as exc:
-                    logger.info("Leaving out %s: %s", lookups[lookup], exc)
-            key_of = self.list_key(root, cookies)
+            plan.add(
+                StageSpec(id="list", code="list_lists", label=f"Listing the {lists}"),
+                StageSpec(id="read", code="read_lists", label=f"Reading the {lists}"),
+            )
+            with plan.running("list"):
+                links = self.release_links(root)
+                key_of = self.list_key(root, cookies)
+            with plan.running("read"):
+                plan.progress("read", 0.0, done=0, total=len(links))
+                lookups = {pool.submit(self.look_up, url, cookies): url for url in links}
+                for done, lookup in enumerate(as_completed(lookups), start=1):
+                    plan.progress("read", done / len(links), done=done, total=len(links))
+                    try:
+                        found[lookups[lookup]] = lookup.result()
+                    except runner.YtDlpError as exc:
+                        logger.info("Leaving out %s: %s", lookups[lookup], exc)
             releases = [self._release(url, info, key_of(url)) for url, info in found.items()]
             releases.sort(key=lambda release: release[0], reverse=True)
             sections = [section for _date, section in releases]
-            sections += self.feed_sections(root, self.read_feeds(root, pool))
+            sections += self.feed_sections(root, listings)
         name = next(filter(None, (_artist_name(info) for info in found.values())), None)
         handle = self.handle(root)
         # How many of each type of list the artist has, in the Site's words, such as "2 albums" and "1 playlist".
@@ -123,6 +138,13 @@ class ArtistImplementation(OtherSitesImplementation):
     def pictures(self, root: str) -> tuple[str | None, str | None]:
         """The artist's picture and banner, where the Site shows ones that yt-dlp does not give."""
         return None, None
+
+    def complete_collection(self, details: CollectionDetails, url: str) -> CollectionDetails:
+        """A collection of all the artist's music is pictured by the artist's picture, which yt-dlp leaves out."""
+        root = self.creator_root(url)
+        if details.image_url is None and root and self.is_creator_page(url):
+            return replace(details, image_url=self.pictures(root)[0])
+        return details
 
     def music(self, sections: list[SectionRef]) -> dict:
         """Whether the creator is a music artist, and how sure the Site is."""
@@ -239,6 +261,22 @@ class SoundCloudImplementation(ArtistImplementation):
 
     def avatar(self, root: str) -> str | None:
         return self.pictures(root)[0]
+
+    def complete_collection(self, details: CollectionDetails, url: str) -> CollectionDetails:
+        """yt-dlp names an account's page after the account and the page, such as "Flume (All)" or "Flume (Tracks)";
+        the collection is the account's, so it takes the account's own name."""
+        details = super().complete_collection(details, url)
+        if not self.is_creator_page(url):
+            return details
+        name = _PAGE_SUFFIX.sub("", details.title)
+        return replace(details, title=name, author_name=details.author_name or name)
+
+    def list_type(self, info: dict, url: str) -> str | None:
+        """A set is an album when SoundCloud gives it a type of release, such as an album, an EP or a single, which
+        yt-dlp calls its album type; a playlist has none, which yt-dlp calls a playlist."""
+        if not self.is_list(url):
+            return None
+        return PLAYLIST_LIST if info.get("album_type") in (None, "", "playlist") else ALBUM_LIST
 
     def pictures(self, root: str) -> tuple[str | None, str | None]:
         """The account's profile picture and banner, which yt-dlp leaves out. Its page shares the picture as its

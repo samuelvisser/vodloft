@@ -65,8 +65,9 @@ export default function DownloadProfilePage() {
     const typeLabel = (key: string) => tags?.find((tag) => tag.key === key)?.label ?? key
     const season = collectionWords(profile.collectionType).season
     const seasonLabel = (slug: string) => seasons?.find((season) => season.slug === slug)?.name ?? slug
+    const seasonSlugs = seasons ? [...seasons].sort((a, b) => a.index - b.index).map((season) => season.slug) : undefined
     const sentence = (filter: DownloadProfileRead['filters'][number]) => plainText(
-        filterSentence(filter, typeLabel, seasonLabel, profile.deleteOlderEpisodes, undefined, season),
+        filterSentence(filter, typeLabel, seasonLabel, profile.deleteOlderEpisodes, undefined, season, seasonSlugs),
     )
     const filterText = (index: number) => leftOutByText(profile.filters[index], typeLabel, seasonLabel, profile.deleteOlderEpisodes, season)
     const outside = statistics ? statistics.outOfScope + statistics.outOfScopeKept : 0

@@ -20,7 +20,7 @@ from backend.db.models.user import User
 from backend.services import users
 from backend.services.episode_filters import filters_allow_new_episode
 from backend.services.errors import NotFoundError, ServiceError
-from backend.services.sites import collection_site
+from backend.services.sites import collection_site, with_main_type
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.episode_types import EpisodePublishStatus
@@ -283,7 +283,7 @@ def _episode_type_prefix(episode: Episode) -> str:
 
 
 def _profile_allows_episode(profile: StreamProfileBase, episode: Episode) -> bool:
-    return _episode_type_prefix(episode) in set(profile.ep_id_type_list or [])
+    return _episode_type_prefix(episode) in with_main_type(profile.collection, profile.ep_id_type_list or [])
 
 
 def _profile_streams_live_hls(profile: StreamProfileBase) -> bool:
@@ -414,7 +414,7 @@ def get_stream_items(
         Episode.went_live_date,
         Episode.created_at,
     )
-    allowed_types = set(profile.ep_id_type_list or [])
+    allowed_types = with_main_type(profile.collection, profile.ep_id_type_list or [])
     if not allowed_types:
         return []
 
@@ -581,7 +581,7 @@ def _offered_episode(
         episode_slug: str,
 ) -> Episode:
     """The episode under this slug, if it is of a type the profile offers; whether it has media is not checked."""
-    allowed_types = set(profile.ep_id_type_list or [])
+    allowed_types = with_main_type(profile.collection, profile.ep_id_type_list or [])
     if not allowed_types:
         raise _not_offered()
 

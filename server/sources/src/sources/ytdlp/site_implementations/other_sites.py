@@ -13,6 +13,8 @@ from concurrent.futures import Executor, Future
 from typing import ClassVar
 from urllib.parse import urljoin
 
+from progress_plan import PlanTracker, StageSpec
+
 from ...contract import MAIN_TAG, CollectionDetails, CreatorDetails, SearchResults, SectionRef, SectionRole, Site, link_host
 import requests
 
@@ -85,9 +87,14 @@ class OtherSitesImplementation:
         when the link belongs to no creator VODLoft knows on the Site."""
         return None
 
-    def creator_page(self, url: str) -> str | None:
-        """The creator whose own page the link is, so that it can be added as the creator instead; None for one of
-        their lists or videos."""
+    def complete_collection(self, details: CollectionDetails, url: str) -> CollectionDetails:
+        """The collection of the link as yt-dlp describes it, with what yt-dlp leaves out or names its own way filled
+        in, such as an artist account's name and picture."""
+        return details
+
+    def list_type(self, info: dict, url: str) -> str | None:
+        """Which of the Site's types of list the link is, as yt-dlp describes it, for a Site whose lists come in
+        several types that their links don't tell apart."""
         return None
 
     def is_creator_page(self, url: str) -> bool:
@@ -95,7 +102,12 @@ class OtherSitesImplementation:
         lists its seasons."""
         return False
 
-    def creator_details(self, ref: str, progress: Callable[[str], None]) -> CreatorDetails:
+    def is_list(self, url: str) -> bool:
+        """Whether the link is one of the Site's lists, rather than a creator's page or one of its feeds."""
+        return False
+
+    def creator_details(self, ref: str, plan: PlanTracker) -> CreatorDetails:
+        """The creator, looked up by steps the implementation adds to ``plan`` and runs."""
         raise runner.YtDlpError(f"VODLoft can't add creators from {self.site.name}")
 
     def season_lists(self, url: str) -> list[SectionRef]:
@@ -106,9 +118,20 @@ class OtherSitesImplementation:
     def feed_types(self) -> tuple[YtdlpFeedSectionType, ...]:
         return tuple(type_ for type_ in self.site.section_types if isinstance(type_, YtdlpFeedSectionType))
 
-    def read_feeds(self, root: str, pool: Executor) -> dict[str, Future]:
-        """Starts looking up each of the Site's feeds on the creator's page, all at once."""
-        return {type_.key: pool.submit(self.read, f"{root}/{type_.path}") for type_ in self.feed_types}
+    def read_feeds(self, root: str, pool: Executor, plan: PlanTracker) -> dict[str, Future]:
+        """Starts looking up each of the Site's feeds on the creator's page, all at once, each a step of ``plan``. A
+        feed besides the main one that is not there, such as a creator without Shorts, is skipped."""
+        plan.add(*(
+            StageSpec(id=f"feed_{type_.key}", code="read_feed", label=f"Reading the {type_.names.plural}")
+            for type_ in self.feed_types
+        ))
+        return {
+            type_.key: plan.follow(
+                f"feed_{type_.key}", pool.submit(self.read, f"{root}/{type_.path}"),
+                failed="failed" if type_.role is SectionRole.MAIN else "skipped",
+            )
+            for type_ in self.feed_types
+        }
 
     def feed_sections(self, root: str, listings: Mapping[str, Future]) -> list[SectionRef]:
         """The creator's feeds, from ``read_feeds``: each one the creator has. A feed besides the main one, such as

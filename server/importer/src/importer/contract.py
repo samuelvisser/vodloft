@@ -123,12 +123,15 @@ class CollectionPlan:
     loose_season: PlaylistSeasonPlan | None = None
     """With ``link_seasons``: the season of the channel's videos in none of them, as the other program named and
     numbered it; None lets VODLoft name it."""
-    creator: bool = False
-    """``url`` is a creator's own page, such as a Bandcamp artist: VODLoft adds the creator, with
-    everything on the page in this one collection."""
+    artist_page: bool = False
+    """``url`` is an artist's own page, such as a Bandcamp artist: VODLoft adds it as Add Collection does, with every
+    album on the page a season of it, the ones to come too."""
     artist: str | None = None
-    """For music: the artist it is by, as the other program names them. The import gives the artist this name, and
-    the collections of one artist, such as their albums and their music videos, join the same artist."""
+    """For music: the artist it is by, as the other program names them."""
+    creator: str | None = None
+    """The creator the Collection joins with the other collections of its group, named as the other program names
+    them: an artist's albums and music videos, such as albums on Bandcamp and music videos on YouTube, or the
+    collections one subscription with links on several Sites becomes, one per Site."""
     links_only: bool = False
     """The Collection holds only what its ``link_seasons`` have and has no link of its own: the other program kept
     only these playlists, of no one channel. ``url`` is the first of them."""
@@ -226,9 +229,6 @@ class ImportPlan:
     """The other program's database version."""
     download_folder: str = "/downloads"
     """The other program's own download folder, which the path map pairs with a VODLoft folder."""
-    creators: bool = False
-    """The other program's collections can join the creators behind their links, as the person chooses. An importer
-    of a program that has nothing like creators leaves it off."""
     probes: tuple[str, ...] = ()
     """Files the importer reads in the download folders, as the other program names them. They find the path
     map before the plan can list any files, such as ytdl-sub's download archives that list them."""

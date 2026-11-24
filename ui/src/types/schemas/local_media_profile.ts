@@ -29,7 +29,7 @@ const DATE_OUTPUT_TEMPLATE_FIELDS = [
 
 export const COLLECTION_OUTPUT_TEMPLATE_FIELDS = [
     'collection', 'collection_title', 'season', 'season_name', 'season_index', 'season_type', 'season_number',
-    'episode', 'episode_title', 'title', 'dw_episode_number', 'episode_type', 'episode_extra_type',
+    'episode', 'episode_title', 'title', 'source_number', 'episode_type', 'episode_extra_type',
     'episode_number', 'episode_sub_number', 'episode_label', 'episode_identifier', 'episode_published_date',
     'episode_published_time', 'episode_published_datetime', 'episode_index',
     'collection_author', 'collection_site_id', 'episode_site_id', 'episode_uploader', 'duration_seconds',

@@ -10,8 +10,9 @@ from pydantic_core import PydanticCustomError
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.services.media_access import access_granted, access_locked, site_access
 from backend.types.collection_types import CollectionType
+from backend.types.link_season_types import CollectionKind
 from config.settings.site_settings import UpgradeRepeat
-from sources import Feature, ReleaseDate, SiteSetting, StreamMethod, UnknownSourceError, UpgradeImprovement, get_source, site_of
+from sources import Feature, ProfileSeasons, ReleaseDate, SiteSetting, StreamMethod, UnknownSourceError, UpgradeImprovement, get_source, site_of
 from sources.ytdlp_options import MAX_OPTIONS_LENGTH, OptionsRefused, ytdlp_option_arguments
 
 
@@ -244,6 +245,17 @@ class CollectionDetailsAPIRead(ResponseBase):
     """Why the collection was taken for music, when it was."""
     # The collection's own seasons, oldest first; empty for a Source that has none.
     seasons: list[CollectionDetailsSeasonAPIRead] = Field(default_factory=list)
+    audio_only: bool = False
+    """The collection's Site has sound only, such as SoundCloud: a Music collection there holds tracks."""
+    kind: CollectionKind
+    """What the link is: a channel, or one list, such as a playlist or an album, which is the collection's one
+    season, its episodes in the list's order."""
+    list_type: Optional[str] = None
+    """Which of its Site's types of list the link is, such as an album or a playlist on SoundCloud, where its link
+    doesn't tell."""
+    seasons_plans: dict[str, str] = Field(default_factory=dict)
+    """What the collection's seasons will be once it is added as each type, in words, as its Site's defaults make
+    them: each list a season, what goes in the channel season, or a season per upload year."""
 
 
 class CookiesStatusAPIRead(ResponseBase):
@@ -395,6 +407,8 @@ class SiteOptionsAPIRead(ResponseBase):
     """The download profile settings the site shows, such as auto-generated subtitles or downloading with the countdown."""
     profile_defaults: DownloadProfileDefaultsAPIRead
     """What a new Download Profile for the collection starts with."""
+    profile_seasons: ProfileSeasons
+    """Which seasons a new Download Profile of a seasonal collection picks, beside the upcoming ones."""
     upgrade_checks: UpgradeChecksAPIRead
     stream_methods: list[StreamMethod] = []
     """How RSS feeds can stream the collection's episodes without downloading them first; none for downloads only."""
@@ -437,6 +451,12 @@ class ApiQuotaShareAPIRead(ResponseBase):
     limit: int
 
 
+class QuickCheckCostAPIRead(ResponseBase):
+    units: int
+    least_minutes: int
+    feeds: int
+
+
 class ApiKeyNoteAPIRead(ResponseBase):
     """A Source whose API key would speed up collections or creators in the Library, while it has none."""
 
@@ -463,6 +483,8 @@ class ApiStatusAPIRead(ResponseBase):
     # so the settings can say how often each collection gets checked.
     collection_count: int
     rescan_units: int
+    # What one quick check of each of those collections costs, so the settings can say how often each is checked.
+    check_costs: list[QuickCheckCostAPIRead]
 
 
 class ApiKeyAPIUpdate(RequestBase):
@@ -499,12 +521,11 @@ class ResolvedLinkAPIRead(ResponseBase):
     access_locked: bool = False
     """VODLoft does not have that access, so it cannot download the video."""
     preview: ResolvedLinkPreviewAPIRead
-    creator_url: Optional[str] = None
-    """The creator this link is, on a Site with creators, so it can be added as a creator instead."""
+    collection_kind: Optional[CollectionKind] = None
+    """For a collection: whether it is a channel or one list."""
     creator_names: Optional[NamesAPIRead] = None
-    """What the Site calls that creator, such as creator or artist."""
-    creator_sections: Optional[NamesAPIRead] = None
-    """Every type of section that creator has on the Site, named together, such as "albums and singles"."""
+    """For a collection on a Site with creators, which can be in one: what its Site calls the creator behind it, such
+    as host on The Daily Wire."""
     # Every Source that claims the link's domain, preferred first, to look the link up with another one.
     candidates: list[SourceAPIRead] = Field(default_factory=list)
 
@@ -524,9 +545,6 @@ class SearchResultAPIRead(ResponseBase):
     access: Optional[str] = None
     access_label: Optional[str] = None
     """What the result's Site calls the access it needs, such as Members only."""
-    creator_names: Optional[NamesAPIRead] = None
-    """What the Site calls a creator, when the result is a creator's own page, such as a YouTube channel, that can be
-    added as a creator."""
 
 
 class SearchNoticeAPIRead(ResponseBase):
@@ -552,14 +570,12 @@ class SectionTypeAPIRead(ResponseBase):
 
 
 class ListKindAPIRead(ResponseBase):
-    """One kind of list a creator's Sites have, such as a SoundCloud artist's albums or their playlists, with its own
+    """One kind of list a Site's channels have, such as a SoundCloud account's albums or its playlists, with its own
     setting for what happens with a new one."""
 
     key: str = Field(validation_alias=AliasPath("kind", "key"))
     names: NamesAPIRead = Field(validation_alias=AliasPath("kind", "names"))
     """What the Sites call the lists, such as album and albums."""
-    seasons: bool = Field(validation_alias=AliasPath("kind", "seasons"))
-    """The lists can be seasons of the creator's own collection."""
     albums: bool = Field(default=False, validation_alias=AliasPath("kind", "albums"))
     """The kind best describes an artist's albums."""
 
@@ -644,14 +660,20 @@ class SiteAPIRead(ResponseBase):
 
     @computed_field
     @property
-    def section_growing_names(self) -> NamesAPIRead:
-        """What the Site calls the lists and shows its creators add, such as playlists or shows."""
-        return NamesAPIRead.model_validate(site_of(self.key).section_growing_names)
+    def channel_collection_names(self) -> NamesAPIRead:
+        """What the Site calls a collection of a channel's uploads, such as a YouTube channel."""
+        return NamesAPIRead.model_validate(site_of(self.key).channel_collection_names)
+
+    @computed_field
+    @property
+    def list_collection_names(self) -> NamesAPIRead:
+        """What the Site calls a collection of one list, such as a YouTube playlist."""
+        return NamesAPIRead.model_validate(site_of(self.key).list_collection_names)
 
     @computed_field
     @property
     def link_seasons(self) -> bool:
-        """A creator's playlists or albums at the Site can be seasons of the creator's collection."""
+        """A channel's playlists or albums at the Site can be seasons of its collection."""
         return site_of(self.key).link_seasons
 
 

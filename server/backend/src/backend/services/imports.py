@@ -27,12 +27,11 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from backend.services.new_lists import list_kinds, skipped_kinds
 from backend.services.site_settings import download_profile_defaults, local_media_profile_defaults
-from backend.services.sites import CollectionAlreadyAddedError, collection_site
+from backend.services.sites import CollectionAlreadyAddedError, collection_site, site_record
 
 import importer.pinchflat  # noqa: F401  (registers the importer)
 import importer.wireloft  # noqa: F401  (registers the importer)
@@ -74,11 +73,13 @@ from backend.utils.output_template import (
 )
 from task_manager.events.transactional import queue_event
 
-from .import_uploads import UploadError, remove_secrets, uploaded_at, work_location
+from .import_uploads import remove_secrets, uploaded_at, work_location
 
 logger = logging.getLogger(__name__)
 
 RUNNING, WAITING, FINISHED, FAILED = "running", "waiting", "finished", "failed"
+STOPPED = "The import stopped before it finished"
+CANCELLED = "Cancelled"
 STEP_WAITING, STEP_DONE, STEP_FAILED = "waiting", "done", "failed"
 _SAMPLES = 40
 _PROFILE_FIELDS = (
@@ -134,8 +135,6 @@ class ImportOptions:
     """Output templates the person edited, by profile external id."""
     feed_base_url: str | None = None
     """VODLoft's own address, from the request that started the run: imported feeds get their URL on it."""
-    as_creators: bool = True
-    """Add each new Collection to the creator behind its links, adding the creator when it is not in the Library."""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -148,7 +147,6 @@ class ImportOptions:
             "merge_profiles": self.merge_profiles,
             "templates": dict(self.templates),
             "feed_base_url": self.feed_base_url,
-            "as_creators": self.as_creators,
         }
 
     @classmethod
@@ -167,7 +165,6 @@ class ImportOptions:
             merge_profiles=bool(data.get("merge_profiles", False)) if data else None,
             templates=dict(data.get("templates") or {}),
             feed_base_url=data.get("feed_base_url"),
-            as_creators=bool(data.get("as_creators", True)),
         )
 
 
@@ -616,8 +613,6 @@ class ImportPreview:
     last_run: ImportRun | None
     merge_profiles: bool
     counts: ImportCounts
-    creators: bool = False
-    """Whether the person chooses to add the collections to their creators."""
 
 
 def last_run(session: Session, importer: Importer) -> ImportRun | None:
@@ -707,7 +702,6 @@ def preview(session: Session, importer: Importer, options: ImportOptions) -> Imp
         warnings=plan.warnings,
         records=records,
         last_run=last_run(session, importer),
-        creators=plan.creators,
         merge_profiles=bool(options.merge_profiles),
         counts=ImportCounts(
             collections=len(records["collections"]) if records else len(plan.collections),
@@ -740,11 +734,18 @@ def start_run(session: Session, importer: Importer, options: ImportOptions) -> I
     """Record the run and queue the task that applies it."""
     from backend.operations.imports import ImportRunOperation
 
-    running = session.scalar(select(ImportRun.id).where(
+    for running in session.scalars(select(ImportRun).where(
         ImportRun.importer == importer.key, ImportRun.status == RUNNING,
-    ).limit(1))
-    if running is not None:
-        raise ImportServiceError("An import from this program is already running")
+    )):
+        if _run_operation_ids(session, running.id):
+            raise ImportServiceError("An import from this program is already running")
+        # Its task is gone, as when VODLoft stopped while it ran: it will never finish.
+        _fail(running, STOPPED)
+    for waiting in session.scalars(select(ImportRun).where(
+        ImportRun.importer == importer.key, ImportRun.status == WAITING,
+    )):
+        # One whose collections are all done or gone is finished.
+        _finish_run_if_done(session, waiting.id)
     stamp = uploaded_at(importer)
     if stamp is None:
         raise ImportServiceError(f"Upload {importer.name}'s config folder first")
@@ -1049,63 +1050,67 @@ def _settle_field_keys(session: Session, plan: ImportPlan, links, library: Mappi
     return replace(plan, profiles=profiles, collections=tuple(collections))
 
 
-def _create_collection(
-    session: Session, plan: CollectionPlan, as_creators: bool = True, artists: dict[str, Creator] | None = None,
-) -> Collection:
-    """A new yt-dlp Collection for the plan, looked up the way Add Collection does. ``artists`` are the artists this
-    import has already put in the library, by the name the other program gives them."""
+def _create_collection(session: Session, plan: CollectionPlan, creators: dict[str, Creator]) -> Collection:
+    """A new yt-dlp Collection for the plan, looked up the way Add Collection does. ``creators`` are the creators this
+    import has already put another collection of a group in, by the name the other program gives the group, such as
+    an artist's."""
     from backend.services.collections import add_collection, index_new_collection
     from backend.types.collection_types import CollectionType, EpisodeIdentifier
+    from backend.types.link_season_types import ChannelSeason, LinkSeasons, RepeatVideos
     from backend.utils.helpers import generate_uuid, slugify
     from sources import get_source
 
     source = get_source("ytdlp")
-    if plan.creator:
-        return _create_creator_collection(session, plan) if as_creators else _create_artist_collection(session, plan)
     if plan.links_only:
         collection = _create_links_only_collection(session, plan)
-        if as_creators and plan.artist and plan.artist in (artists or {}):
-            from backend.services.creators import add_to_creator
-
-            add_to_creator(session, collection, artists[plan.artist])
+        if plan.creator:
+            _join_group(session, collection, plan, creators)
         return collection
     details = source.collection_details(plan.url)
     # Music is by the artist the other program names, whoever uploaded it.
     author = plan.artist or details.author_name or details.title
     collection = Collection(
         uuid=generate_uuid(), slug=details.slug, source_key=source.id, title=plan.title or details.title,
-        description=details.description, sharing_url=details.url,
+        description=details.description, sharing_url=details.url, list_type=details.list_type,
         membership_level="FREE", type=CollectionType(plan.settings.get("type", "series")).value,
         episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")).value,
         author_name=author, author_slug=slugify(author) or details.slug,
         thumbnail_landscape_path=details.image_url, split_chapters=bool(plan.settings.get("split_chapters", False)),
     )
+    if not plan.artist_page:
+        # A channel keeps what the other program had: its playlists only where the plan names them, the channel's
+        # season of what is in none of them, and a video in one season. A channel collection's own defaults would add
+        # every playlist. An artist's page keeps those defaults: every album a season, the ones to come too.
+        collection.link_seasons = LinkSeasons.OFF.value
+        collection.channel_season = ChannelSeason.UNLISTED.value
+        collection.repeat_videos = RepeatVideos.ONE_SEASON.value
+        # A link to one tab of a channel, such as its Videos, lists only that feed, as the other program did.
+        feeds = plan.settings.get("feeds")
+        collection.feeds = list(feeds) if isinstance(feeds, list) else None
     add_collection(session, collection)
     _add_link_seasons(session, collection, plan)
-    if as_creators:
-        _join_artist(session, collection, plan, artists or {})
+    if plan.creator:
+        _join_group(session, collection, plan, creators)
     index_new_collection(session, collection)
     return collection
 
 
-def _join_artist(session: Session, collection: Collection, plan: CollectionPlan, artists: dict[str, Creator]) -> None:
-    """Make a new Collection one of its creator's. Music joins the artist the import already added for the same
-    artist, such as music videos their albums' artist, also from another Site or a label's playlist. Otherwise it joins
-    the creator behind its link, and a creator the import adds there takes the other program's name for the artist."""
-    from backend.services.creators import add_to_creator, rename_creator
+def _join_group(session: Session, collection: Collection, plan: CollectionPlan, creators: dict[str, Creator]) -> None:
+    """Group a new Collection with the other collections of its group, such as an artist's albums and music videos,
+    or a subscription's links on another Site. It joins the creator the import already put another one of them in,
+    also from another Site. Otherwise it joins the creator behind its link, the channel that made a playlist, or for a
+    collection of only playlists, behind its first one; a creator the import adds there takes the group's name."""
+    from backend.services.creators import can_join, join_creator, rename_creator
 
-    artist = artists.get(plan.artist) if plan.artist else None
-    if artist is None:
-        creator, made = _join_creator(session, collection)
-        if creator is not None and made and plan.artist and creator.title != plan.artist:
-            rename_creator(creator, plan.artist)
+    if not can_join(collection):
         return
-    if collection.sharing_url is not None and any(section.url == collection.sharing_url for section in artist.sections):
-        # A part of the artist's own page, such as one of their playlists, joins through its link.
-        _join_creator(session, collection)
-    else:
-        with session.begin_nested():
-            add_to_creator(session, collection, artist)
+    creator = creators.get(plan.creator) if plan.creator else None
+    if creator is not None:
+        join_creator(session, collection, creator)
+        return
+    creator, made = _join_creator(session, collection, collection.sharing_url or plan.url)
+    if creator is not None and made and plan.creator and creator.title != plan.creator:
+        rename_creator(creator, plan.creator)
 
 
 def _create_links_only_collection(session: Session, plan: CollectionPlan) -> Collection:
@@ -1125,110 +1130,28 @@ def _create_links_only_collection(session: Session, plan: CollectionPlan) -> Col
     return collection
 
 
-def _join_creator(session: Session, collection: Collection) -> tuple[Creator | None, bool]:
-    """Make a new Collection one of the creator behind its link, as Add to creator does, when it has one. Returns the
+def _join_creator(session: Session, collection: Collection, url: str) -> tuple[Creator | None, bool]:
+    """Group a new Collection under the creator behind ``url``, as Add to creator does, when it has one. Returns the
     creator, and whether it was added to the library for it."""
-    from backend.services.creator_joins import join_creator
-    from backend.services.creators import account_in_library, creator_site
+    from backend.services.creators import account_of, join_creator, new_creator
     from sources import Feature, get_source
 
     source = get_source(collection.source_key)
-    if not source.has(Feature.CREATORS) or collection.sharing_url is None:
+    if not source.has(Feature.CREATORS):
         return None, False
     try:
-        ref = source.creator_of(collection.sharing_url)
+        ref = source.creator_of(url)
         if ref is None:
             return None, False
         details = source.creator_details(ref)
         with session.begin_nested():
-            known = account_in_library(session, creator_site(source.id, details.url or collection.sharing_url).key, details.ref)
-            creator = join_creator(session, collection, source_key=source.id, details=details)
-        return creator, known is None
+            account = account_of(session, source.id, details)
+            creator = account.creator if account is not None else new_creator(session, source.id, details, added_by_id=None)
+            join_creator(session, collection, creator)
+        return creator, account is None
     except Exception as exc:  # noqa: BLE001  (a creator that can't be looked up leaves a plain collection)
         logger.info("Imported %s without its creator: %s", collection.title, exc)
         return None, False
-
-
-def _create_artist_collection(session: Session, plan: CollectionPlan) -> Collection:
-    """A plain collection of everything on a creator's page, such as a Bandcamp artist's albums, each album a season
-    of its own, for an import that adds no creators."""
-    from backend.services.collections import add_collection, index_new_collection
-    from backend.types.collection_types import CollectionType, EpisodeIdentifier
-    from backend.types.link_season_types import LinkSeasons, NewLinkSeasonAction
-    from backend.utils.helpers import generate_uuid, slugify
-    from sources import SectionKind, get_source
-
-    source = get_source("ytdlp")
-    details = source.creator_details(plan.url)
-    sections = [section for section in details.sections if section.access is None]
-    if not sections:
-        raise ValueError(f"{details.title} has nothing VODLoft can add")
-    feed = next((section for section in sections if section.kind is SectionKind.FEED), None)
-    collection = Collection(
-        uuid=generate_uuid(), slug=slugify(details.handle or details.title) or details.ref, source_key=source.id,
-        title=plan.title or details.title, description=details.description,
-        sharing_url=feed.url if feed is not None else details.url or plan.url,
-        membership_level="FREE", type=(CollectionType.MUSIC if details.music and details.music_known else CollectionType(plan.settings.get("type", "series"))).value,
-        episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")).value,
-        author_name=plan.artist or details.title, author_slug=slugify(details.handle or details.title) or details.ref,
-        thumbnail_landscape_path=details.avatar_url or next((section.image_url for section in sections if section.image_url), None),
-        link_seasons=LinkSeasons.SELECTED.value,
-    )
-    # Every album is a season, the ones to come too; a kind of list an artist skips, such as a SoundCloud playlist,
-    # is not, as the other program took only albums.
-    kinds = list_kinds([collection_site(collection)])
-    skipped = skipped_kinds(collection_site(collection), collection.type == CollectionType.MUSIC.value)
-    collection.new_lists = {
-        kind.key: (NewLinkSeasonAction.IGNORE if kind.key in skipped else NewLinkSeasonAction.ADD).value for kind in kinds
-    }
-    add_collection(session, collection)
-    index_new_collection(session, collection)
-    return collection
-
-
-def _create_creator_collection(session: Session, plan: CollectionPlan) -> Collection:
-    """The collection of the creator whose page the plan's link is, such as a Bandcamp artist: the creator is added
-    with everything on it in one collection, each list a season of its own, and takes the plan's genre and rating
-    for the collections it makes later."""
-    from backend.services.creators import NewCollectionSettings, SectionPlan, add_creator, rename_creator
-    from backend.types.creator_types import NewSectionAction, SectionTarget
-    from backend.types.collection_types import CollectionType, EpisodeIdentifier
-    from sources import SectionKind, get_source
-
-    from backend.services.creators import account_in_library, creator_site
-
-    source = get_source("ytdlp")
-    details = source.creator_details(plan.url)
-    site = creator_site(source.id, details.url or plan.url)
-    existing = account_in_library(session, site.key, details.ref)
-    if existing is not None and existing.main_collection is not None:
-        # The artist is in the Library already: the import links their collection.
-        raise CollectionAlreadyAddedError(existing.main_collection, existing.site)
-    kind = CollectionType.MUSIC if details.music and details.music_known else CollectionType(plan.settings.get("type", CollectionType.SERIES.value))
-    music = kind is CollectionType.MUSIC
-    # An artist's discography is their albums, not the kinds of list an artist skips, such as the playlists they put
-    # together on SoundCloud.
-    kinds = list_kinds([site])
-    skipped = skipped_kinds(site, music)
-    plans = [SectionPlan(section.ref, SectionTarget.MAIN) for section in details.sections if section.access is None
-             and not (section.kind is SectionKind.LIST and section.type.key in skipped)]
-    creator, _made = add_creator(session, source_key=source.id, details=details, plans=plans, settings=NewCollectionSettings(
-        type=kind, episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")),
-        membership_level="FREE",
-    # The other program downloaded every new album as it came out.
-    ), new_lists={site.key: {
-        kind.key: (NewSectionAction.IGNORE if kind.key in skipped else NewSectionAction.SEASON).value
-        for kind in kinds if kind.seasons
-    }})
-    creator.genre, creator.content_rating = plan.settings.get("genre"), plan.settings.get("content_rating")
-    main = creator.accounts[0].main_collection
-    if main is None:
-        raise ValueError(f"{details.title} has nothing VODLoft can add")
-    if plan.artist and creator.title != plan.artist:
-        rename_creator(creator, plan.artist)
-    if plan.title:
-        main.title = plan.title
-    return main
 
 
 def _add_link_seasons(session: Session, collection: Collection, plan: CollectionPlan) -> int:
@@ -1239,7 +1162,9 @@ def _add_link_seasons(session: Session, collection: Collection, plan: Collection
     from backend.db.models import CollectionList
     from backend.services.seasons import create_season_record
     from backend.types.link_season_types import LinkSeasons, ListStatus, OutsideVideos
+    from backend.types.season_types import SeasonOrigin
     from backend.utils.helpers import slugify
+    from sources import get_source
 
     if not plan.link_seasons:
         return 0
@@ -1247,7 +1172,7 @@ def _add_link_seasons(session: Session, collection: Collection, plan: Collection
     have = {playlist.ref for playlist in collection.lists}
     seasons = {season.season_number: season for season in collection.seasons}
 
-    def season_of(number: int | None, title: str | None):
+    def season_of(number: int | None, title: str | None, origin: SeasonOrigin):
         """The season with the other program's number, made when the Collection has none yet."""
         if number is None:
             return None
@@ -1258,14 +1183,14 @@ def _add_link_seasons(session: Session, collection: Collection, plan: Collection
                 slug = f"{slug}-{number}"
             seasons[number] = create_season_record(
                 session, collection_id=collection.id, index=max((x.index for x in seasons.values()), default=0) + 1,
-                slug=slug, name=name, season_number=number,
+                slug=slug, name=name, season_number=number, origin=origin,
             )
         return seasons[number]
 
     loose = plan.loose_season
     if loose is not None and not any(season.loose for season in seasons.values()):
-        # The creator's videos in none of the playlists keep the season the other program had them in.
-        if (season := season_of(loose.season_number, loose.title)) is not None:
+        # The channel's videos in none of the playlists keep the season the other program had them in.
+        if (season := season_of(loose.season_number, loose.title, SeasonOrigin.VODLOFT)) is not None:
             season.loose = True
     added = 0
     for position, wanted in enumerate(sorted(plan.link_seasons, key=lambda p: (p.season_number is None, p.season_number or 0))):
@@ -1273,16 +1198,22 @@ def _add_link_seasons(session: Session, collection: Collection, plan: Collection
         ref = next(iter(parse_qs(urlsplit(wanted.url).query).get("list") or []), None) or wanted.url
         if ref in have:
             continue
+        site = get_source(collection.source_key).site_for(wanted.url)
         collection.lists.append(CollectionList(
             ref=ref, url=wanted.url, title=wanted.title or ref, site_position=position, enabled=True,
-            status=ListStatus.KNOWN.value, season=season_of(wanted.season_number, wanted.title),
+            # A collection without a link of its own lists no playlists: every link is one the user gave it, which
+            # they see and can remove under their links.
+            added_by_user=collection.sharing_url is None,
+            status=ListStatus.KNOWN.value, season=season_of(wanted.season_number, wanted.title, SeasonOrigin.LIST),
+            source_key=collection.source_key, site_key=site_record(session, site).key if site is not None else None,
         ))
         have.add(ref)
         added += 1
     if added:
+        collection.keep_a_default_link()
         if collection.link_seasons == LinkSeasons.OFF.value:
             collection.link_seasons = LinkSeasons.SELECTED.value
-        # The other program kept every video of these links, also another creator's.
+        # The other program kept every video of these links, also another channel's.
         if collection.outside_videos != OutsideVideos.ONLY.value:
             collection.outside_videos = OutsideVideos.ADD.value
         # The other program's season numbers stay, as its files are named by them.
@@ -1292,8 +1223,8 @@ def _add_link_seasons(session: Session, collection: Collection, plan: Collection
 
 
 def _upsert_collection(
-    session: Session, plan: CollectionPlan, library, links, run: ImportRun, report: _Report, as_creators: bool = True,
-    artists: dict[str, Creator] | None = None,
+    session: Session, plan: CollectionPlan, library, links, run: ImportRun, report: _Report,
+    creators: dict[str, Creator],
 ) -> tuple[Collection | None, bool]:
     """The Collection, and whether it was just created (and so is being indexed)."""
     link = links.get(("collection", plan.external_id))
@@ -1307,7 +1238,7 @@ def _upsert_collection(
     if existing is None:
         try:
             with session.begin_nested():
-                existing = _create_collection(session, plan, as_creators, artists)
+                existing = _create_collection(session, plan, creators)
         except CollectionAlreadyAddedError as exc:
             # The same collection, through another Source or under another link.
             existing = exc.existing
@@ -1322,9 +1253,9 @@ def _upsert_collection(
                 library[_normalise_url(existing.sharing_url)] = existing
             report.add("created", plan.title, "Added to the Library", warnings=[_warning(warning) for warning in plan.warnings])
             report.counts["collections_created"] += 1
-    if artists is not None and plan.artist and existing.creator is not None:
-        # The artist's other music, such as their music videos, joins this artist.
-        artists.setdefault(plan.artist, existing.creator)
+    if plan.creator and existing.creator is not None:
+        # The group's other collections, such as an artist's music videos, join this creator.
+        creators.setdefault(plan.creator, existing.creator)
     if plan.added_at is not None and (existing.created_at is None or plan.added_at < existing.created_at):
         # The Collection has been in your library since the other program added it.
         existing.created_at = plan.added_at
@@ -1443,31 +1374,58 @@ def _apply_run(run_id: int) -> dict[str, int]:
             return {}
         importer = get_importer(run.importer)
         options = ImportOptions.from_dict(run.options or {})
-    try:
-        loaded = load_plan(importer, options)
-    except (UploadError, ValueError, OSError) as exc:
-        error = str(exc)
-
-        def fail(session: Session) -> None:
-            failed = session.get(ImportRun, run_id)
-            if failed is not None:
-                failed.status, failed.error, failed.finished_at = FAILED, error, datetime.now(timezone.utc)
-
-        run_write_transaction(fail)
-        raise
+    loaded = load_plan(importer, options)
     # Applying a setting writes the settings file, and a second run would report it as already there.
     counts, cookies_imported = run_write_transaction(
         lambda session: _apply_loaded_plan(session, run_id, options, loaded), reserve=True,
     )
     if cookies_imported:
         remove_secrets(importer)
+    _picture_links(run_id)
     return counts
+
+
+def _picture_links(run_id: int) -> None:
+    """Look up the picture of each link season the run gave a collection of links, which shows it in the Library
+    and on media servers. The other program keeps none, and the lookups are slow, so they come after the run's
+    write. A link that can't be looked up keeps no picture."""
+    from sources import get_source
+
+    from backend.db.models import CollectionList
+
+    with get_session() as session:
+        links = session.execute(
+            select(CollectionList.id, CollectionList.url, CollectionList.source_key)
+            .join(Collection, Collection.id == CollectionList.collection_id)
+            .join(ImportStep, ImportStep.collection_id == Collection.id)
+            .where(ImportStep.run_id == run_id, Collection.sharing_url.is_(None), CollectionList.image_path.is_(None))
+        ).all()
+    pictures: dict[int, str] = {}
+    for link_id, url, source_key in links:
+        try:
+            image = get_source(source_key).collection_details(url).image_url
+        except Exception as exc:  # noqa: BLE001  (a picture is not worth failing the import for)
+            logger.info("No picture for the imported link %s: %s", url, exc)
+            continue
+        if image:
+            pictures[link_id] = image
+    if not pictures:
+        return
+
+    def store(session: Session) -> None:
+        for link in session.scalars(select(CollectionList).where(CollectionList.id.in_(pictures))):
+            link.image_path = link.image_path or pictures[link.id]
+
+    run_write_transaction(store, concurrent=True)
 
 
 def _apply_loaded_plan(
     session: Session, run_id: int, options: ImportOptions, loaded: LoadedPlan,
 ) -> tuple[dict[str, int], bool]:
     run = session.get(ImportRun, run_id)
+    if run is None or run.status != RUNNING:
+        # Cancelled while it waited for its turn to write.
+        return {}, False
     importer = get_importer(run.importer)
     report = _Report()
     links = _links(session, importer.key)
@@ -1501,13 +1459,14 @@ def _apply_loaded_plan(
         files_by_collection[file.collection_external_id].append(file)
     library = _library_collections(session)
     steps: list[ImportStep] = []
-    artists: dict[str, Creator] = {}
+    # The creators of the groups the import made, by the name the other program gives the group, such as an artist's.
+    creators: dict[str, Creator] = {}
     for collection_plan in selected:
         profile = profiles.get(collection_plan.profile_external_id or "")
         if profile is None:
             continue
         collection, created = _upsert_collection(
-            session, collection_plan, library, links, run, report, plan.creators and options.as_creators, artists,
+            session, collection_plan, library, links, run, report, creators,
         )
         if collection is None:
             continue
@@ -1813,6 +1772,92 @@ def run_step(step_id: int) -> dict[str, int]:
                 problem(file["path"], error)
     folder = _scan_folder(step_id)
     return run_write_transaction(lambda session: _finish_step(session, step_id, counts, problems, folder))
+
+
+def _fail(run: ImportRun, error: str) -> None:
+    run.status, run.error, run.finished_at = FAILED, error, datetime.now(timezone.utc)
+
+
+def fail_run(run_id: int, error: str) -> None:
+    """Record that a run stopped before it applied its plan, so it does not stay running."""
+
+    def fail(session: Session) -> None:
+        run = session.get(ImportRun, run_id)
+        if run is not None and run.status == RUNNING:
+            _fail(run, error)
+
+    run_write_transaction(fail)
+
+
+def _run_operation_ids(session: Session, run_id: int) -> tuple[str, ...]:
+    """The run's operations that are still active."""
+    from task_manager.scheduler.db import TaskOperation
+    from task_manager.scheduler.operation_control import active_operation_ids
+
+    from backend.operations.imports import ImportRunOperation
+
+    operations = session.execute(select(TaskOperation.id, TaskOperation.context).where(
+        TaskOperation.kind == ImportRunOperation.kind,
+    ))
+    return active_operation_ids(session, [
+        operation_id for operation_id, context in operations if (context or {}).get("import_run_id") == run_id
+    ])
+
+
+def _step_operation_ids(session: Session, run_id: int) -> tuple[str, ...]:
+    """The operations still adopting the files of the run's collections."""
+    from task_manager.scheduler.db import TaskOperation
+    from task_manager.scheduler.operation_control import active_operation_ids
+
+    from backend.operations.imports import ImportStepOperation
+
+    step_ids = set(session.scalars(select(ImportStep.id).where(ImportStep.run_id == run_id)))
+    operations = session.execute(select(TaskOperation.id, TaskOperation.context).where(
+        TaskOperation.kind == ImportStepOperation.kind,
+    ))
+    return active_operation_ids(session, [
+        operation_id for operation_id, context in operations if (context or {}).get("import_step_id") in step_ids
+    ])
+
+
+def cancel_run(run_id: int) -> None:
+    """Stop a run that is still starting, or still waiting to adopt the files of its collections. The collections
+    it added stay, as does each one's indexing, which is cancelled in Downloads like any other; the files it did not
+    adopt yet stay where they are, and the Download Profiles it held off stay off."""
+    from task_manager.scheduler.operation_control import cancel_operation
+
+    with get_session() as session:
+        run = session.get(ImportRun, run_id)
+        if run is None or run.status not in (RUNNING, WAITING):
+            raise ImportServiceError("Only an import that has not finished can be cancelled")
+        operation_ids = (*_run_operation_ids(session, run_id), *_step_operation_ids(session, run_id))
+    for operation_id in operation_ids:
+        cancel_operation(operation_id)
+
+    def cancel(session: Session) -> None:
+        cancelled = session.get(ImportRun, run_id)
+        if cancelled is None or cancelled.status not in (RUNNING, WAITING):
+            raise ImportServiceError("The import finished before it could be cancelled")
+        for step in session.scalars(select(ImportStep).where(
+            ImportStep.run_id == run_id, ImportStep.status == STEP_WAITING,
+        )):
+            step.result = {"counts": {}, "problems": [{"path": None, "error": CANCELLED}]}
+            step.status = STEP_FAILED
+        _fail(cancelled, CANCELLED)
+
+    run_write_transaction(cancel)
+
+
+def let_go_of_collection(session: Session, collection_id: int) -> None:
+    """Before a Collection is deleted: the imports that waited to adopt its files stop waiting for it, and finish
+    when it was the last one they waited for.
+
+    ``session`` is a write transaction's session."""
+    run_ids = set(session.scalars(select(ImportStep.run_id).where(ImportStep.collection_id == collection_id)))
+    session.execute(delete(ImportStep).where(ImportStep.collection_id == collection_id))
+    session.flush()
+    for run_id in run_ids:
+        _finish_run_if_done(session, run_id)
 
 
 def fail_step(step_id: int, error: str) -> None:

@@ -8,13 +8,15 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Any, ClassVar
 from urllib.parse import urlsplit
+
+from progress_plan import PlanTracker
 
 from config.settings.site_settings import SITE_SETTINGS, SiteSetting, UpgradeImprovement
 
@@ -47,6 +49,9 @@ class Feature(StrEnum):
     SITE_API = "site_api"
     """A Site's own free API, set up with credentials the user registers there (``Site.site_api``), with
     ``site_api_status``, ``save_site_api``, ``test_site_api`` and ``remove_site_api``."""
+    OWN_SEASONS = "own_seasons"
+    """The Source's collections have seasons of the Site's own, such as a show's seasons, which the user can't remove.
+    The seasons VODLoft makes, such as a season per year, the user can."""
     QUICK_CHECK = "quick_check"
     """Cheaply finding a listed collection's newest items, with ``latest_items`` and
     ``item_details``, between full scans of the collection."""
@@ -196,14 +201,13 @@ class SectionType:
     key: str
     kind: SectionKind
     names: Names
-    """What the Site calls a section of the type. A creator has one section of each type of feed, which is named
+    """What the Site calls a section of the type. A channel has one section of each type of feed, which is named
     after its type, such as Shorts, and holds what it names, such as "12 shorts"."""
     albums: bool = False
-    """The type of list that best describes an artist's albums. A new artist on a Site with such types adds new
-    lists of those types and skips the others; on any other Site, an artist adds every type."""
+    """The type of list that best describes an artist's albums. A new channel collection on a Site with such types
+    adds new lists of those types and skips the others; on any other Site, it adds every type."""
     role: SectionRole = SectionRole.MAIN
-    """What a feed of the type holds, which steers what a new creator adds by default: a channel's main videos, or
-    its Shorts or livestreams."""
+    """What a feed of the type holds: a channel's main videos, or its Shorts or livestreams."""
     episode_tag: str = MAIN_TAG
     """The key of the Site's episode tag that the videos of a feed of the type get, such as YouTube's short, by which
     VODLoft tells a feed's videos apart in a collection that lists several feeds. The main feed's videos get the
@@ -216,23 +220,10 @@ class SectionType:
         return plural[:1].upper() + plural[1:]
 
     @property
-    def grows(self) -> bool:
-        """The creator adds new ones of the type, each with a setting for what happens with it: lists and shows."""
-        return self.kind in (SectionKind.LIST, SectionKind.SHOW)
-
-    @property
-    def kind_names(self) -> Names:
-        """VODLoft's own word for the type's kind, such as feed, which names several types of feed together."""
-        return SECTION_KIND_NAMES[self.kind]
-
-
-def section_type_names(types: Iterable[SectionType]) -> Names:
-    """Several section types named together. Lists, shows and items keep their Site's words, such as "albums and
-    playlists"; several types of feed are named by their kind, "feeds", as each feed is named after its type already."""
-    types = list(dict.fromkeys(types))
-    several_feeds = len([type_ for type_ in types if type_.kind is SectionKind.FEED]) > 1
-    names = [type_.kind_names if several_feeds and type_.kind is SectionKind.FEED else type_.names for type_ in types]
-    return Names.joined(names)
+    def feed_ref(self) -> str:
+        """The ref of the one section of a feed of the type, by which a collection's feeds setting names it: its
+        key, unless its Source names it otherwise."""
+        return self.key
 
 
 @dataclass(frozen=True)
@@ -592,10 +583,6 @@ class ResolvedLink:
     """What the Source calls this kind of result, such as Channel or Playlist for a collection."""
     facts: tuple[str, ...] = ()
     """Short facts for a search result, such as "412 videos" or "19:05"."""
-    creator_url: str | None = None
-    """The creator this link is, on a Site with creators, so it can be added as a creator instead."""
-    creator_names: Names | None = None
-    """What the Site calls that creator, such as creator or artist."""
 
 
 @dataclass(frozen=True)
@@ -767,6 +754,9 @@ class CollectionDetails:
     seasons: tuple[SeasonRef, ...] = ()
     """The collection's own seasons, for a Source that has them, so they can be picked
     before the episodes are indexed."""
+    list_type: str | None = None
+    """The key of the Site's type of list the link is, such as an album or a playlist on SoundCloud, for a Site whose
+    lists come in several types that their links don't tell apart."""
 
 
 MIN_NEWEST_EPISODES = 5
@@ -812,6 +802,30 @@ class ApiQuotaShare:
 
 
 @dataclass(frozen=True)
+class QuickCheckCollection:
+    """A collection that gets quick checks, as a Source needs it to tell what checking it costs."""
+
+    url: str
+    episode_count: int = 0
+    feeds: frozenset[str] | None = None
+    """The feeds of its channel the collection lists, or None for all that its link lists."""
+    lists_only: bool = False
+    """It holds only the seasons of its lists, so each check reads every one of its lists again."""
+    least_minutes: int = 0
+    """How long the collection waits between two checks anyway, such as six hours when it is checked less often."""
+
+
+@dataclass(frozen=True)
+class QuickCheckCost:
+    """What one quick check of a collection costs, and how long the collection waits between checks anyway."""
+
+    units: int
+    least_minutes: int = 0
+    feeds: int = 0
+    """The feeds a check reads, each a call; a collection that follows all of its channel's feeds reads them as one."""
+
+
+@dataclass(frozen=True)
 class ApiStatus:
     """The API key of a Source with ``Feature.API_KEY``, and how much of today's quota it spent."""
 
@@ -828,6 +842,8 @@ class ApiStatus:
     """The collections the key speeds up."""
     rescan_units: int = 0
     """What one full re-scan of those collections costs, so the settings can say how often each gets checked."""
+    check_costs: tuple[QuickCheckCost, ...] = ()
+    """What a quick check of each of those collections costs."""
 
 
 @dataclass(frozen=True)
@@ -917,15 +933,24 @@ class ApiKeyRejected(ValueError):
 ANY_DOMAIN = "*"
 
 
-class CreatorPreset(StrEnum):
-    """A starting point for what to keep of a creator. Each one only fills in where its sections go."""
+class ChannelSeason(StrEnum):
+    """What the one season of a channel collection's own videos holds, beside the seasons of its lists."""
 
-    ONE_SHOW = "one_show"
-    """Its feeds by year and its lists as named seasons, in one collection."""
-    PER_LIST = "per_list"
-    """Each list its own collection, and one for the rest."""
-    PICK = "pick"
-    """Nothing until it is picked."""
+    EVERYTHING = "everything"
+    """Every video of its feeds, also the ones a list has, so the season is the whole channel. It is named after the
+    Site's channel collections, such as Channel on YouTube."""
+    UNLISTED = "unlisted"
+    """Only the videos of its feeds that none of its lists has, named as the Site calls such videos
+    (``Site.loose_season``), such as Videos, or Singles in a Music collection."""
+
+
+class ProfileSeasons(StrEnum):
+    """Which seasons a new Download Profile of a seasonal collection picks, beside the upcoming ones."""
+
+    NEWEST = "newest"
+    """The newest season only, as for a show whose seasons are the Site's own."""
+    ALL = "all"
+    """Every season, as for an artist whose albums VODLoft makes seasons of."""
 
 
 def initials_of(name: str) -> str:
@@ -984,7 +1009,8 @@ class Site:
     domains: tuple[str, ...] = ()
     icon: str | None = None
     """The Font Awesome icon of the Site, as ``prefix:name``, such as ``fab:youtube``: Font Awesome's brand icon of the
-    Site where it has one. VODLoft shows it where the Site's name does not fit, such as a creator's links on a phone.
+    Site where it has one, or a custom icon in VODLoft's Kit (``fak:``, drawn in ``ui/src/icons/custom``) where Font
+    Awesome has none. VODLoft shows it where the Site's name does not fit, such as a creator's links on a phone.
     A Site without one shows a globe with its ``initials``."""
     initials: str = ""
     """The Site's name in at most two letters, such as YT for YouTube, shown beside a globe where the Site has no
@@ -1035,8 +1061,23 @@ class Site:
     creator_names: Names = Names("creator", "creators")
     """What the Site calls a creator, such as host on The Daily Wire or artist on Bandcamp. VODLoft names the Site's
     creators by it everywhere."""
-    creator_presets: tuple[CreatorPreset, ...] = ()
-    """The ways the Site offers to keep a creator, the first one the default."""
+    channel_collection_names: Names = Names("collection", "collections")
+    """What the Site calls a collection of a channel, a creator's page of all their uploads, such as a channel on
+    YouTube or a show on The Daily Wire."""
+    list_collection_names: Names = Names("collection", "collections")
+    """What the Site calls a collection of one of its lists, such as a playlist on YouTube."""
+    channel_season_names: Names | None = None
+    """What the Site calls the seasons of a channel collection, such as playlists on YouTube. Left out, they are
+    named as the collection's type names its seasons."""
+    list_season_names: Names | None = None
+    """What the Site calls the seasons of a list collection, such as groups on SoundCloud. Left out, they are named as
+    the collection's type names its seasons."""
+    custom_season_names: Names = Names("list", "lists")
+    """What VODLoft calls the seasons of a custom collection on the Site, whose seasons are the lists the user gave
+    it, unless the collection's type names its seasons itself. A custom collection is on the Site of its first list."""
+    channel_season: ChannelSeason | None = None
+    """What a new channel collection's channel season holds. Left out, the whole channel, or on a Site that is
+    ``audio_only`` only what is in none of its lists, such as an artist's singles."""
     section_types: tuple[SectionType, ...] = (
         SectionType("videos", SectionKind.FEED, Names("video", "videos")),
         SectionType(LIST_TYPE, SectionKind.LIST, Names("playlist", "playlists")),
@@ -1047,9 +1088,20 @@ class Site:
     link_seasons: bool = False
     """A collection made from a creator's channel can make the channel's lists, such as its playlists, its seasons:
     link seasons, through its Source's ``is_creator_page``, ``season_lists`` and ``list_items``."""
-    loose_season: str = "Videos"
-    """What VODLoft calls the season it makes itself of the videos in none of a collection's link seasons, such as
-    Tracks on Bandcamp. A collection type can name it itself (``CollectionContract.loose_season``)."""
+    every_list_a_season: bool = True
+    """A new channel collection makes every one of the channel's lists a season, as a channel shows all its lists.
+    A Site whose contract says False makes only the lists the user picks seasons."""
+    whole_lists: bool = True
+    """A new channel collection puts a video in every list season that has it, so each list is whole. A Site whose
+    contract says False puts a video in the first of them only, unless the collection's type says otherwise."""
+    profile_seasons: ProfileSeasons | None = None
+    """Which seasons a new Download Profile of a collection on the Site picks, beside the upcoming ones. Left out, it
+    follows where the seasons come from: the newest where they are the Site's own (a Source with
+    ``Feature.OWN_SEASONS``), every season where VODLoft makes them from lists, years or anything else."""
+    loose_season: str | None = None
+    """What VODLoft calls the season it makes itself of the videos in none of a collection's link seasons. Left out,
+    Videos, or on a Site that is ``audio_only`` Singles. A collection type can name it itself
+    (``CollectionContract.loose_season``)."""
     share_hosts: tuple[str, ...] = ()
     """The hosts of the short links the Site's apps share, such as SoundCloud's on.soundcloud.com, which redirect to
     the Site's own pages. Their links are the Site's, and VODLoft follows them to the page they stand for."""
@@ -1093,6 +1145,12 @@ class Site:
             object.__setattr__(self, "downloads", self.downloads.for_audio_only())
         if self.audio_only and self.episode_tags is VIDEO_TAGS:
             object.__setattr__(self, "episode_tags", TRACK_TAGS)
+        if self.loose_season is None:
+            object.__setattr__(self, "loose_season", "Singles" if self.audio_only else "Videos")
+        if self.channel_season is None:
+            object.__setattr__(
+                self, "channel_season", ChannelSeason.UNLISTED if self.audio_only else ChannelSeason.EVERYTHING,
+            )
 
     def episode_title(self, title: str, description: str | None) -> str:
         """What a collection's episode is called: the Site's title for its video, or on a Site with
@@ -1116,47 +1174,20 @@ class Site:
         return tuple(type_ for type_ in self.section_types if type_.kind in kinds)
 
     @property
-    def growing_types(self) -> tuple[SectionType, ...]:
-        """The types the Site's creators add new ones of, each with a setting for what happens with a new one: its
-        lists and shows."""
-        return tuple(type_ for type_ in self.section_types if type_.grows)
-
-    @property
-    def section_feed_names(self) -> Names:
-        """What the Site calls its feeds together: its one type of feed, such as tracks, or "feeds" for several."""
-        return self.names_of(SectionKind.FEED)
-
-    @property
     def section_list_names(self) -> Names:
         """What the Site calls its lists, all its types of list together, such as "albums and playlists" on
         SoundCloud; VODLoft's own word on a Site whose creators have none."""
         return self.names_of(SectionKind.LIST)
 
-    @property
-    def section_show_names(self) -> Names:
-        """What the Site calls its shows, such as The Daily Wire's."""
-        return self.names_of(SectionKind.SHOW)
-
-    @property
-    def section_item_names(self) -> Names:
-        """What the Site calls the single items a creator has, such as The Daily Wire's movies or Bandcamp's singles."""
-        return self.names_of(SectionKind.ITEM)
-
-    @property
-    def section_growing_names(self) -> Names:
-        """What the Site calls the lists and shows its creators add, which VODLoft looks for every day, such as
-        "playlists" on YouTube or "shows" on The Daily Wire."""
-        return self.names_of(SectionKind.LIST, SectionKind.SHOW)
-
-    @property
-    def section_names(self) -> Names:
-        """Every type of section the Site's creators have, named together, such as "albums and singles"."""
-        return section_type_names(self.section_types)
-
     def names_of(self, *kinds: SectionKind) -> Names:
         """The Site's section types of these kinds named together, or VODLoft's word for the first kind."""
         types = self.types_of(*kinds)
-        return section_type_names(types) if types else SECTION_KIND_NAMES[kinds[0]]
+        return Names.joined([type_.names for type_ in types]) if types else SECTION_KIND_NAMES[kinds[0]]
+
+    def list_collection_names_of(self, list_type: str | None) -> Names:
+        """What the Site calls a collection of one of its lists of this type, such as an album on SoundCloud, or its
+        ``list_collection_names`` while the type is not known."""
+        return self.section_type(list_type).names if list_type else self.list_collection_names
 
     def section_type(self, key: str) -> SectionType:
         """The Site's section type by its key. A section of a type the Site does not have is a mistake in its Source,
@@ -1350,12 +1381,13 @@ class Source(ABC):
         """Look up a collection. Only Sources with ``Feature.EPISODE_LISTS`` implement it."""
         raise NotImplementedError(f"{self.name} does not list episodes")
 
-    def creator_details(self, ref: str, progress: Callable[[str], None] = lambda step: None) -> CreatorDetails:
+    def creator_details(self, ref: str, plan: PlanTracker | None = None) -> CreatorDetails:
         """Look up a creator by its link, or by the ``ref`` it had before. Only Sources with ``Feature.CREATORS``
         implement it.
 
-        A lookup can take a while, so it tells ``progress`` what it is doing, as a short sentence such as
-        "Listing the playlists"."""
+        A lookup can take a while, so it reports its progress by ``plan``: each Site adds the steps it takes to look a
+        creator up, such as reading each of its feeds or listing its playlists, labelled in words such as "Reading
+        the playlists", and runs them, counting how many of how many where a step goes through a known number."""
         raise NotImplementedError(f"{self.name} has no creators")
 
     def creator_of(self, url: str) -> str | None:
@@ -1372,6 +1404,11 @@ class Source(ABC):
     def is_creator_page(self, url: str) -> bool:
         """Whether a collection's link is a creator's own page of all their uploads, such as a YouTube channel, whose
         playlists can be its seasons, rather than one playlist. Told without asking the Site. Only Sources with a Site with ``link_seasons`` implement it."""
+        return False
+
+    def is_list(self, url: str) -> bool:
+        """Whether a collection's link is one list, such as a playlist or an album, rather than a channel: a creator's
+        page or one of its feeds. Told without asking the Site."""
         return False
 
     def season_lists(self, url: str) -> list[SectionRef]:
@@ -1430,9 +1467,9 @@ class Source(ABC):
         Only Sources with ``Feature.PENDING_CHECKS`` implement it."""
         raise NotImplementedError(f"{self.name} cannot check pending items")
 
-    def quick_check_minutes(self, collections: Sequence[tuple[str, int]]) -> int:
-        """How often each of these collections, given as link and episode count, can
-        get a quick check. ``Feature.QUICK_CHECK`` only."""
+    def quick_check_minutes(self, collections: Sequence[QuickCheckCollection]) -> int:
+        """How often each of these collections can get a quick check, at most: a collection that waits longer
+        anyway keeps its own wait. ``Feature.QUICK_CHECK`` only."""
         raise NotImplementedError(f"{self.name} has no quick check")
 
     @property
@@ -1533,9 +1570,9 @@ class Source(ABC):
         """What the user should fix about this Source right now."""
         return []
 
-    def api_status(self, collections: Sequence[tuple[str, int]] = ()) -> ApiStatus:
-        """The API key and today's quota. ``collections`` are the link and episode count of
-        each of this Source's collections. Only Sources with ``Feature.API_KEY`` implement it."""
+    def api_status(self, collections: Sequence[QuickCheckCollection] = ()) -> ApiStatus:
+        """The API key and today's quota, and what checking ``collections``, this Source's collections, costs.
+        Only Sources with ``Feature.API_KEY`` implement it."""
         raise NotImplementedError(f"{self.name} takes no API key")
 
     def save_api_key(self, key: str) -> None:

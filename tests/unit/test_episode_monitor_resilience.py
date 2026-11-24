@@ -70,7 +70,7 @@ def test_upsert_existing_episode_stores_raw_source_number_separately():
     )
 
     assert updated.id == episode.id
-    assert updated.dw_episode_number == "101.10"
+    assert updated.source_number == "101.10"
     assert updated.episode_number == "101"
     assert updated.episode_sub_number == "10"
     assert updated.title == "Updated episode"

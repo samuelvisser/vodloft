@@ -107,17 +107,21 @@ export function defaultEpisodeTypes(
 }
 
 /**
- * The filters a new profile starts with: for a seasonal collection its latest season and the
- * upcoming ones, then the Source's default episode types, then the latest 25 episodes.
+ * The filters a new profile starts with: for a seasonal collection the upcoming seasons and the seasons its Site picks
+ * (`profileSeasons`: the newest, or all of them), then the Source's default episode types, then the latest 25
+ * episodes. The seasons come oldest first.
  */
 export function defaultEpisodeFilters(
     episodeIdentifier: EpisodeIdentifierValue | string | undefined,
     tags: readonly EpisodeTagRead[] | undefined,
-    latestSeasonSlug?: string,
+    seasons: readonly {slug: string}[] | undefined,
+    profileSeasons: 'newest' | 'all' | undefined,
 ): EpisodeFilter[] {
     const filters: EpisodeFilter[] = []
     if (episodeIdentifier === EpisodeIdentifierReg.Enum.seasonal) {
-        filters.push({...newEpisodeFilter('seasons'), seasonSlugs: latestSeasonSlug ? [latestSeasonSlug] : [], includeUpcoming: true})
+        const slugs = (seasons ?? []).map((season) => season.slug)
+        const seasonSlugs = profileSeasons === 'all' ? slugs : slugs.slice(-1)
+        filters.push({...newEpisodeFilter('seasons'), seasonSlugs, includeUpcoming: true})
     }
     filters.push({...newEpisodeFilter('types'), episodeTypes: defaultEpisodeTypes(episodeIdentifier, tags)})
     filters.push(newEpisodeFilter('published'))
@@ -258,6 +262,8 @@ export const SiteOptionsSchema = z.object({
         upgradeImprovements: z.array(UpgradeImprovementSchema),
         upgradeLengthMinutes: z.int(),
     }),
+    /** Which seasons a new Download Profile of a seasonal collection picks, beside the upcoming ones. */
+    profileSeasons: z.enum(['newest', 'all']),
     /** What the upgrade check can find on the site; no improvements means no upgrade check. */
     upgradeChecks: z.object({
         improvements: z.array(UpgradeImprovementSchema),

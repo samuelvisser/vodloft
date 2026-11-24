@@ -1,9 +1,9 @@
 from types import SimpleNamespace
 
 
-def _episode(identifier: str, *, dw_episode_number: str | None = None):
+def _episode(identifier: str, *, source_number: str | None = None):
     return SimpleNamespace(
-        collection=SimpleNamespace(slug="chip-chilla", title="Chip Chilla", author_name="Daily Wire", meta_items=[], creator=None, lists=[], sharing_url=""),
+        collection=SimpleNamespace(slug="chip-chilla", title="Chip Chilla", author_name="Daily Wire", meta_items=[], creator=None, lists=[], sharing_url="", kind="list"),
         season=SimpleNamespace(
             slug="season-1",
             name="Season 1",
@@ -17,7 +17,7 @@ def _episode(identifier: str, *, dw_episode_number: str | None = None):
         duration=1290.4,
         title="Chip's Odyssey",
         episode_identifier=identifier,
-        dw_episode_number=dw_episode_number,
+        source_number=source_number,
         published_date=None,
         index=42,
         extra_index=None,
@@ -32,12 +32,12 @@ def test_seasonal_episode_number_renders_as_numeric_episode_number() -> None:
         render_output_template,
     )
 
-    values = episode_output_template_values(_episode("ep.S01E07", dw_episode_number="7.00"))
+    values = episode_output_template_values(_episode("ep.S01E07", source_number="7.00"))
 
     assert values["season_index"] == "4"
     assert values["season_number"] == "1"
     assert values["season_type"] == "normal"
-    assert values["dw_episode_number"] == "7.00"
+    assert values["source_number"] == "7.00"
     assert values["episode_number"] == "7"
     assert values["episode_label"] == "S01E07"
     assert values["episode_identifier"] == "ep.S01E07"
@@ -63,7 +63,7 @@ def test_episode_identifier_semantics_are_exposed_to_templates() -> None:
     values = episode_output_template_values(
         _episode(
             "ep-extra.trailer.S03E12.5",
-            dw_episode_number="12.05",
+            source_number="12.05",
         )
     )
 
@@ -72,11 +72,11 @@ def test_episode_identifier_semantics_are_exposed_to_templates() -> None:
     assert values["episode_number"] == "12"
     assert values["episode_sub_number"] == "5"
     assert values["episode_label"] == "S03E12.5"
-    assert values["dw_episode_number"] == "12.05"
+    assert values["source_number"] == "12.05"
     assert {
         "season_type",
         "season_number",
-        "dw_episode_number",
+        "source_number",
         "episode_extra_type",
         "episode_sub_number",
     }.issubset(COLLECTION_OUTPUT_TEMPLATE_FIELDS)

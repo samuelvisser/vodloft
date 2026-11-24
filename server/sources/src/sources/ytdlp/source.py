@@ -1,22 +1,25 @@
 from __future__ import annotations
 
 import json
+import math
 import logging
 import threading
 import time
 
 import requests
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from urllib.parse import parse_qs, urlsplit
 
 from config import get_settings
 from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 
+from progress_plan import PlanTracker
+
 from ..contract import (
     Chapter,
-    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, combined_tags, CreatorDetails, SectionRef, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, ApiQuotaShare, ApiStatus, DownloadOptions, Feature, LinkKind, LinkPreview, LiveStream, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
+    ANY_DOMAIN, ApiKeyRejected, combined_tags, CreatorDetails, SectionRef, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, ApiQuotaShare, ApiStatus, QuickCheckCollection, QuickCheckCost, DownloadOptions, Feature, LinkKind, LinkPreview, LiveStream, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
     ResolvedLink, SearchResults, CollectionDetails, Site, SiteApiStatus, SiteSetting, Source, SourceProblem, SponsorBlockSegment, StreamMethod, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
     link_host, on_domain,
 )
@@ -24,7 +27,7 @@ from .. import pacing, site_api_keys, ytdlp_runner as runner
 from . import sites, thumbnails, youtube_rss
 from .site_contracts import CONTRACTS
 from .site_implementations import IMPLEMENTATIONS, OtherSitesImplementation
-from .site_implementations.youtube import collection_url, picture
+from .site_implementations.youtube import collection_url, picture, pictures
 from .youtube_api import ApiKeyError, Share, YouTubeApiClient, YouTubeApiError, key as api_key, mapping, quota
 from .youtube_api.catalogue import Catalogue
 from .youtube_api.client import MAX_RESULTS
@@ -36,6 +39,9 @@ _CACHE_SECONDS = 300
 # Pause between per-video lookups while listing a collection, so a large channel
 # does not look like a scraper to the site.
 _LISTING_PAUSE_SECONDS = 1.0
+# How many new videos one yt-dlp run looks up while listing a collection. Starting yt-dlp takes longer than looking
+# up a video, so a batch saves most of the time; the pause comes after each batch.
+_LOOKUP_BATCH = 25
 _UNAVAILABLE_TITLES = {"[Private video]", "[Deleted video]"}
 # yt-dlp reports a livestream that is still live, upcoming or long finished alike.
 # Where a video is in its life, as yt-dlp's live_status says. An upcoming video past its start is delayed.
@@ -336,19 +342,26 @@ def _sponsorblock_segments(video_id: str, categories: Sequence[str]) -> tuple[Sp
 
 def _lookup(*args: str) -> dict:
     """Look up a link, the last argument, signed in on its Site. A video protected by DRM is looked up
-    again for its details alone."""
+    again for its details alone: with its protected formats, or without any where the Site gives none, such as a
+    track on SoundCloud."""
     cookies = sites.cookies_for(args[-1])
     try:
         return runner.run_json(*args, cookies=cookies)
     except runner.YtDlpError as exc:
         if not is_drm_message(str(exc)):
             raise
-    info = runner.run_json("--allow-unplayable-formats", *args, cookies=cookies)
+    info = runner.run_json("--allow-unplayable-formats", "--ignore-no-formats-error", *args, cookies=cookies)
     return {**info, "_has_drm": True}
 
 
 def _thumbnail(info: dict) -> str | None:
-    return thumbnails.widest_still(picture(info))
+    # A playlist's own picture is listed in sizes YouTube never made; one without any it serves gets the still of its
+    # first video.
+    served = thumbnails.first_served(pictures(info))
+    if served is None:
+        first = next((entry for entry in info.get("entries") or [] if isinstance(entry, dict)), None)
+        served = picture(first) if first is not None else None
+    return thumbnails.widest_still(served)
 
 
 # What yt-dlp says when a video needs someone signed in: a bot check, an age check, members-only videos.
@@ -414,6 +427,8 @@ class YtDlpSource(Source):
         self._cache_lock = threading.Lock()
         # A channel's handle never changes its ID, so it is looked up once.
         self._channel_ids: dict[str, str] = {}
+        # The check interval of a quota day, worked out once when that day starts, with the checks share it was for.
+        self._check_interval: tuple[tuple[date, int], int] | None = None
 
     @property
     def download_options(self) -> DownloadOptions:
@@ -532,14 +547,11 @@ class YtDlpSource(Source):
     def resolve(self, url: str) -> ResolvedLink | None:
         implementation = self._implementation(url)
         url = implementation.collection_link(implementation.full_link(url))
-        # A creator's own page can be added as the creator instead.
-        channel = self._implementation(url).creator_page(url)
-        creator_names = sites.site_for(channel).creator_names if channel else None
         if collection := self._api_collection(url):
             return ResolvedLink(
                 kind=LinkKind.COLLECTION, slug=collection.slug, url=collection.url, title=collection.title,
                 description=collection.description, image_url=collection.image_url, author_name=collection.author_name,
-                site="YouTube", creator_url=channel, creator_names=creator_names,
+                site="YouTube",
             )
         try:
             info = self._info(url)
@@ -549,11 +561,12 @@ class YtDlpSource(Source):
             raise
         site = _site(info)
         if info.get("_type") == "playlist":
-            collection = self._collection(info, url)
+            # Named and pictured as Add collection will name and picture it, such as by a SoundCloud artist's own.
+            collection = implementation.complete_collection(self._collection(info, url), url)
             return ResolvedLink(
                 kind=LinkKind.COLLECTION, slug=collection.slug, url=collection.url, title=collection.title,
                 description=collection.description, image_url=collection.image_url, author_name=collection.author_name,
-                site=site, creator_url=channel, creator_names=creator_names,
+                site=site,
             )
         return ResolvedLink(
             kind=LinkKind.VIDEO,
@@ -585,11 +598,11 @@ class YtDlpSource(Source):
         author = self.collection_details(url).author_url
         return implementation.creator_root(author) if author else None
 
-    def creator_details(self, ref: str, progress: Callable[[str], None] = lambda step: None) -> CreatorDetails:
+    def creator_details(self, ref: str, plan: PlanTracker | None = None) -> CreatorDetails:
         """A creator and the sections of their page, as their Site's implementation finds them: a YouTube channel's
-        tabs and playlists, or a Bandcamp or SoundCloud artist's albums. ``ref`` is the creator's link, or a YouTube
-        channel's ID."""
-        return self._implementation(ref).creator_details(ref, progress)
+        tabs and playlists, or a Bandcamp or SoundCloud artist's albums, by the implementation's plan of steps.
+        ``ref`` is the creator's link, or a YouTube channel's ID."""
+        return self._implementation(ref).creator_details(ref, plan or PlanTracker())
 
     def music_reason(self, url: str, details: CollectionDetails) -> str | None:
         """A link on a Site of music, such as Bandcamp, or a link its Site's implementation can tell is music, such as
@@ -600,6 +613,10 @@ class YtDlpSource(Source):
         """A link that stands for all of a creator's uploads: a YouTube channel's own link or its Videos tab, or a
         Bandcamp or SoundCloud artist's page of all their music."""
         return self._implementation(url).is_creator_page(url)
+
+    def is_list(self, url: str) -> bool:
+        """A YouTube playlist, or a Bandcamp or SoundCloud album or set."""
+        return self._implementation(url).is_list(url)
 
     def season_lists(self, url: str) -> list[SectionRef]:
         """A YouTube channel's playlists, or an artist's albums, newest first."""
@@ -698,7 +715,9 @@ class YtDlpSource(Source):
         info = self._info(url)
         if info.get("_type") != "playlist":
             raise runner.YtDlpError("This link is a single video, not a channel or playlist")
-        return self._collection(info, url)
+        implementation = self._implementation(url)
+        details = replace(self._collection(info, url), list_type=implementation.list_type(info, url))
+        return implementation.complete_collection(details, url)
 
     def list_episodes(
         self, url: str, *, known: frozenset[str], feeds: frozenset[str] | None = None,
@@ -740,9 +759,7 @@ class YtDlpSource(Source):
                     for details in self._details_from_api(catalogue, list(entries)):
                         entry = entries.pop(details.slug, {})
                         yield details if details.access else replace(details, access=_access(entry))
-                    for slug, entry in entries.items():
-                        if details := self._from_entry(entry):
-                            yield details
+                    yield from self._from_entries(list(entries.values()))
                 return
         yield from self._list_with_ytdlp(url, known, feeds)
 
@@ -793,13 +810,13 @@ class YtDlpSource(Source):
                 raise
             error = exc
         finally:
-            pacing.pause(_LISTING_PAUSE_SECONDS)
+            pacing.pause(_LISTING_PAUSE_SECONDS, "lookup_spacing")
         try:
             info = runner.run_json("--no-playlist", "--ignore-no-formats-error", url, cookies=sites.cookies_for(url))
         except runner.YtDlpError:
             raise error from None
         finally:
-            pacing.pause(_LISTING_PAUSE_SECONDS)
+            pacing.pause(_LISTING_PAUSE_SECONDS, "lookup_spacing")
         if info.get("live_status") != "is_upcoming":
             raise error
         return info
@@ -822,9 +839,49 @@ class YtDlpSource(Source):
         return ItemRefresh(details=details, removed=frozenset(removed))
 
     def _list_with_ytdlp(self, url: str, known: frozenset[str], feeds: frozenset[str] | None = None) -> Iterator[VideoDetails]:
-        for entry in self._unseen_entries(url, known, feeds).values():
-            if details := self._from_entry(entry):
-                yield details
+        yield from self._from_entries(list(self._unseen_entries(url, known, feeds).values()))
+
+    @staticmethod
+    def _batch_lookup(urls: list[str]) -> dict[str, dict]:
+        """The info of each of the links that one yt-dlp run could look up, by link. What it couldn't is looked up
+        again in one run that also takes videos without playable formats, of which only those protected by DRM
+        (marked as ``_lookup`` marks them) and upcoming ones count, as a lookup on its own would take them."""
+        cookies = sites.cookies_for(urls[0])
+        timeout = runner.LOOKUP_TIMEOUT_SECONDS + 15 * len(urls)
+
+        def run(*options: str, links: list[str]) -> tuple[dict[str, dict], dict[str, str]]:
+            try:
+                infos, errors = runner.run_json_lines(*options, "--no-playlist", *links, cookies=cookies, timeout=timeout)
+            except runner.YtDlpError as exc:
+                logger.info("Looking up %d videos one at a time: %s", len(links), exc)
+                return {}, {}
+            finally:
+                pacing.pause(_LISTING_PAUSE_SECONDS, "lookup_spacing")
+            return {info["original_url"]: info for info in infos if info.get("original_url") in links}, errors
+
+        found, errors = run(links=urls)
+        drm = {video_id for video_id, message in errors.items() if is_drm_message(message)}
+        missing = [url for url in urls if url not in found]
+        if missing and errors:
+            for url, info in run("--allow-unplayable-formats", "--ignore-no-formats-error", links=missing)[0].items():
+                if str(info.get("id")) in drm:
+                    found[url] = {**info, "_has_drm": True}
+                elif info.get("live_status") == "is_upcoming":
+                    found[url] = info
+        return found
+
+    def _from_entries(self, entries: list[dict]) -> Iterator[VideoDetails]:
+        """Listed videos, looked up a batch at a time with one yt-dlp run each, in the listing's order. A video the
+        batch could not look up, such as an upcoming one or one with DRM, is looked up on its own as before."""
+        for start in range(0, len(entries), _LOOKUP_BATCH):
+            batch = [entry for entry in entries[start:start + _LOOKUP_BATCH] if entry.get("url") or entry.get("webpage_url")]
+            urls = [entry.get("url") or entry.get("webpage_url") for entry in batch]
+            found = self._batch_lookup(urls) if len(urls) > 1 else {}
+            for entry, entry_url in zip(batch, urls):
+                if (info := found.get(entry_url)) is not None:
+                    yield self._video(info, entry_url)
+                elif details := self._from_entry(entry):
+                    yield details
 
     def _unseen_entries(self, url: str, known: frozenset[str], feeds: frozenset[str] | None = None) -> dict[str, dict]:
         """The collection's listed videos VODLoft does not know yet, by slug, in the listing's order.
@@ -1169,16 +1226,42 @@ class YtDlpSource(Source):
             self._searches[key] = (now, answer)
         return answer
 
-    def quick_check_minutes(self, collections: Sequence[tuple[str, int]]) -> int:
-        """With a key, as often as the checks share allows after the daily re-scan; RSS needs no quota."""
+    def quick_check_minutes(self, collections: Sequence[QuickCheckCollection]) -> int:
+        """With a key, as often as the checks share allows after the daily re-scan, worked out once a quota day, when
+        Google resets the quota, or when the checks share changes; RSS needs no quota."""
         settings = get_settings().youtube_api
-        counts = [count for url, count in collections if _is_youtube(url)]
         if api_key.load() is None:
-            return settings.min_check_interval_minutes
-        interval = quota.check_interval_minutes(
-            len(counts), quota.rescan_units(counts), settings.checks_quota, settings.min_check_interval_minutes,
-        )
-        return interval or settings.min_check_interval_minutes
+            return quota.MIN_CHECK_MINUTES
+        day = (quota.pacific_day(), settings.checks_quota)
+        if self._check_interval is None or self._check_interval[0] != day:
+            youtube = self._youtube_collections(collections)
+            interval = quota.check_interval_minutes(
+                self._check_costs(youtube), self._rescan_units(youtube), settings.checks_quota,
+            )
+            self._check_interval = (day, interval or quota.MIN_CHECK_MINUTES)
+            logger.info("Quick checks of %d YouTube collections every %d minutes today", len(youtube), self._check_interval[1])
+        return self._check_interval[1]
+
+    @staticmethod
+    def _youtube_collections(collections: Sequence[QuickCheckCollection]) -> list[QuickCheckCollection]:
+        return [collection for collection in collections if mapping.youtube_ref(collection_url(collection.url)) is not None]
+
+    @staticmethod
+    def _rescan_units(collections: Sequence[QuickCheckCollection]) -> int:
+        return quota.rescan_units([collection.episode_count for collection in collections])
+
+    @staticmethod
+    def _check_costs(collections: Sequence[QuickCheckCollection]) -> tuple[QuickCheckCost, ...]:
+        """What a quick check of each YouTube collection costs: a call for each playlist it reads, or for one that
+        holds only its lists, the call that finds them and a page of each 50 of its videos."""
+        costs = []
+        for collection in collections:
+            if collection.lists_only:
+                costs.append(QuickCheckCost(1 + max(math.ceil(collection.episode_count / 50), 1), collection.least_minutes))
+            else:
+                feeds = mapping.youtube_ref(collection_url(collection.url)).feed_playlist_count(collection.feeds)
+                costs.append(QuickCheckCost(feeds, collection.least_minutes, feeds))
+        return tuple(costs)
 
     def video_playback(self, *, slug: str, url: str, use_cookies: bool = True) -> Playback:
         return Playback(url=url, kind=PlaybackKind.YTDLP, command=runner.command(cookies=sites.cookies_for(url, use_cookies), warnings=True))
@@ -1237,9 +1320,9 @@ class YtDlpSource(Source):
             ))
         return problems
 
-    def api_status(self, collections: Sequence[tuple[str, int]] = ()) -> ApiStatus:
+    def api_status(self, collections: Sequence[QuickCheckCollection] = ()) -> ApiStatus:
         key = api_key.load()
-        counts = [count for url, count in collections if on_domain(link_host(url), "youtube.com")]
+        youtube = self._youtube_collections(collections)
         status = quota.status()
         problem = api_key.problem() if key else None
         return ApiStatus(
@@ -1250,8 +1333,9 @@ class YtDlpSource(Source):
             resets_at=status.resets_at,
             problem=problem.message if problem else None,
             problem_fix_url=problem.fix_url if problem else None,
-            collection_count=len(counts),
-            rescan_units=quota.rescan_units(counts),
+            collection_count=len(youtube),
+            rescan_units=self._rescan_units(youtube),
+            check_costs=self._check_costs(youtube),
         )
 
     @staticmethod

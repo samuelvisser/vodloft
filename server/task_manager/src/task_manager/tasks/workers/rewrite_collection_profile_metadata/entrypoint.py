@@ -12,7 +12,7 @@ from .service import run_rewrite_collection_profile_metadata
 
 @task(
     key="rewrite_collection_profile_metadata",
-    title="Rewrite metadata",
+    title="Write metadata into files",
     description="Rewrite the tags and NFO files of one collection's files for one Local Media Profile, "
                 "without downloading them again.",
     allowed_resource_types=("collection",),

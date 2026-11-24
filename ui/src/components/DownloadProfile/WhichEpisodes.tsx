@@ -157,7 +157,8 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
 
     const typeLabel = (key: string) => tags?.find((tag) => tag.key === key)?.label ?? key
     const seasonLabel = (slug: string) => seasons.find((season) => season.slug === slug)?.name ?? slug
-    const sentenceOf = (filter: EpisodeFilter) => filterSentence(filter, typeLabel, seasonLabel, deleteOlder, undefined, season)
+    const seasonSlugs = useMemo(() => seasons.map((season) => season.slug), [seasons])
+    const sentenceOf = (filter: EpisodeFilter) => filterSentence(filter, typeLabel, seasonLabel, deleteOlder, undefined, season, seasonSlugs)
     const tagOptions = createSelectRegistry(
         'WhichEpisodesEpisodeTypes',
         Object.fromEntries((tags ?? []).map((tag) => [tag.key, {label: tag.label}])),

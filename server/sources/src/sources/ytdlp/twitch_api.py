@@ -104,6 +104,5 @@ def search_channels(values: dict[str, str], query: str) -> list[ResolvedLink]:
             title=str(channel.get("display_name") or login), description=channel.get("title") or None,
             image_url=channel.get("thumbnail_url") or None, site="Twitch", kind_label="Channel",
             facts=facts("Live now" if channel.get("is_live") else None, channel.get("game_name") or None),
-            creator_url=root,
         ))
     return results

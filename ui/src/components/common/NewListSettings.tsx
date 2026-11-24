@@ -19,12 +19,10 @@ type Props = {
     idPrefix: string
 }
 
-/** What happens with each kind of list a creator adds later, one row each, next to each other in a column: a Site
+/** What happens with each kind of list a channel adds later, one row each, next to each other in a column: a Site
  * that tells an artist's albums from their playlists has a row for each. */
 export default function NewListSettings({kinds, valueOf, onChange, registryFor, fallback, idPrefix}: Props) {
     const labels = kinds.flatMap((kind) => registryFor(kind).options.map((option) => option.label))
-    // A creator on several Sites has a row for each kind on each Site, named with its Site.
-    const severalSites = new Set(kinds.map((kind) => kind.siteKey)).size > 1
     // A single row is named by the heading above it already, so it shows only what its choice does.
     const single = kinds.length === 1
     return (
@@ -32,12 +30,12 @@ export default function NewListSettings({kinds, valueOf, onChange, registryFor, 
             {kinds.map((kind) => {
                 const registry = registryFor(kind)
                 const value = valueOf(kind) ?? fallback
-                const id = `${idPrefix}-${kind.siteKey ? `${kind.siteKey}-` : ''}${kind.key}`
+                const id = `${idPrefix}-${kind.key}`
                 return (
                     <div key={id} className="new-list-setting" role="listitem">
                         <span className="new-list-setting-art" aria-hidden="true"><FontAwesomeIcon icon={faIcon('fass', 'list')}/></span>
                         <div className="new-list-setting-copy">
-                            <label htmlFor={id} className={single ? 'sr-only' : undefined}><b>New {severalSites ? `${kind.siteName} ` : ''}{kind.names.singular}</b></label>
+                            <label htmlFor={id} className={single ? 'sr-only' : undefined}><b>New {kind.names.singular}</b></label>
                             <span>{registry.getHelp(value)}</span>
                         </div>
                         <div className="new-list-setting-choice">

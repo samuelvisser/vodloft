@@ -4,7 +4,9 @@ import CollectionPreviewCard from "./CollectionPreviewCard";
 import {useDailywireShow, useDailywireUserInfo, useListedCollectionDetails, useResolvedLink} from "../../lib/queries";
 import {DAILYWIRE_SOURCE_KEY, SourceFeature, sourceHas} from "../../types/schemas/source";
 import ReadMore from "../../utils/ReadMore";
-import {collectionWords} from "../../lib/collectionWords";
+import {collectionWords, creatorNamesFor} from "../../lib/collectionWords";
+import {can} from "../../lib/access";
+import CreatorSwitch, {type CreatorChoice} from "./CreatorSwitch";
 import {dailywireShowDefaults, listedCollectionDefaults} from "./collectionDefaults";
 import {Controller, SubmitHandler, useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
@@ -29,9 +31,12 @@ type Props = {
     onSeasonsSubmit: (seasons: SeasonDetachedOut[]) => void;
     onContinue: () => void;
     onCancel: () => void;
+    /** Whether the collection is added to a creator once it is in the Library: only a channel can be. */
+    creator: CreatorChoice;
+    onCreatorChange: (choice: CreatorChoice) => void;
 };
 
-export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmitParent, onSeasonsSubmit, onContinue, onCancel,}: Props) {
+export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmitParent, onSeasonsSubmit, onContinue, onCancel, creator, onCreatorChange}: Props) {
     // --- Form: only user-editable fields are in this schema
     const form = useForm<CollectionCreateFormIn>({
         resolver: zodResolver(CollectionCreateFormSchema),
@@ -57,9 +62,6 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
         return () => subscription.unsubscribe();
     }, [watch, onChange]);
 
-    // What a collection of the chosen type calls its seasons and episodes.
-    const typeWords = collectionWords(watch("type"))
-
     // --- Watch the URL and extract the slug when valid
     const watchedUrl = watch("url");
     const urlParsed = useMemo(() => CollectionCreateFormSchema.shape.url.safeParse(watchedUrl ?? ""), [watchedUrl]);
@@ -75,6 +77,9 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
         ? resolvedCollection.source
         : undefined
     const listed = useListedCollectionDetails(listedSource?.id, listedSource ? resolved.data?.url : undefined);
+    // What a collection of the chosen type calls its seasons and episodes; a Music collection on a Site with sound
+    // only, such as SoundCloud, holds tracks.
+    const typeWords = collectionWords(watch("type"), listed.data?.audioOnly ? 'audio' : 'video')
     const lastListedUrlRef = useRef<string | undefined>(
         value.type && value.episodeIdentifier ? value.url : undefined,
     );
@@ -158,6 +163,7 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                 backgroundImagePath: null,
                 logoImagePath: null,
                 sharingUrl: details.sharingUrl,
+                listType: details.listType,
                 authorName: details.authorName,
                 authorSlug: details.authorSlug,
                 authorHeadshotPath: null,
@@ -211,7 +217,7 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
     const seasonsFromSource = !!listed.data?.seasons.length
     const episodeIdentifierField = (
         <div className="form-row">
-            <label htmlFor="episode-identification">Episode identification</label>
+            <label htmlFor="episode-identification">{typeWords.episode.Singular} identification</label>
             <Controller
                 control={control}
                 name="episodeIdentifier"
@@ -237,22 +243,28 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                 <div className="help form-advice" role="status">{musicIdentificationAdvice(watch("type"), watch("episodeIdentifier"))}</div>
             )}
             <div className="help" id="episode-identification-help">
-                <ReadMore summary={<span>How are episodes in this collection identified?</span>}>
-                    <p>Determines how collection episodes are grouped in the UI, and how they are indexed.</p>
-                    <p><b>Numbered</b> episodes are identified by an episode number. VODLoft will know
-                        when an episode is part of another episode (e.g. a clip) and label it as such.</p>
-                    <p><b>Date-based</b> episodes are identified simply by their publish date.</p>
+                <ReadMore summary={<span>How are {typeWords.episode.plural} in this collection identified?</span>}>
+                    <p>Determines how the collection's {typeWords.episode.plural} are grouped in the UI, and how they are indexed.</p>
+                    <p><b>Numbered</b> {typeWords.episode.plural} are identified by {typeWords.episode.a} number. VODLoft will know
+                        when {typeWords.episode.a} is part of another (e.g. a clip) and label it as such.</p>
+                    <p><b>Date-based</b> {typeWords.episode.plural} are identified simply by their publish date.</p>
                     <p><b>{episodeIdentifierRegFor(watch("type")).getLabel('seasonal')}</b> {typeWords.episode.plural} are identified
                         by {typeWords.season.a} number and {typeWords.episode.a} number, like "S01E01".
                         Auxiliary content like trailers will be identified separately.</p>
                     {listed.data && (seasonsFromSource
-                        ? <p>{resolved.data?.source.name} has its own seasons, which VODLoft keeps, and a Seasonal collection keeps its episode numbers too.</p>
-                        : <p>{resolved.data?.source.name ?? 'This site'} has no seasons, so VODLoft puts the {typeWords.episode.plural} of each upload year in their own {typeWords.season.singular}.</p>)}
+                        ? <p>{resolved.data?.source.name} has its own seasons, which VODLoft keeps, and a Seasonal collection keeps its {typeWords.episode.singular} numbers too.</p>
+                        : listed.data.seasonsPlans[watch("type") ?? ""] && <p>{listed.data.seasonsPlans[watch("type") ?? ""]}</p>)}
                     {!listed.data && <p>VODLoft suggests one from the collection itself. If you're unsure, select "Numbered".</p>}
                 </ReadMore>
             </div>
         </div>
     )
+
+    // A channel or a list, on a Site with creators, can be added to one of them.
+    const siteCreatorNames = resolved.data?.creatorNames ?? null
+    const creatorSwitch = siteCreatorNames && can('library', 'manage') ? (
+        <CreatorSwitch creatorNames={creatorNamesFor(watch("type"), siteCreatorNames)} value={creator} onChange={onCreatorChange}/>
+    ) : null
 
     // --- Render
     return (
@@ -353,6 +365,7 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                         </div>
                     )}
                     {listed.data && episodeIdentifierField}
+                    {listed.data && creatorSwitch}
                 </>
             )}
 
@@ -442,6 +455,7 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                             </div>
 
                             {episodeIdentifierField}
+                            {creatorSwitch}
                         </>
                     )}
                 </>

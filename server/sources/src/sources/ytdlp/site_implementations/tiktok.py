@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlsplit, urlunsplit
+
+from progress_plan import PlanTracker
 
 from ...contract import CreatorDetails
 from ... import ytdlp_runner as runner
@@ -34,21 +35,16 @@ class TikTokImplementation(OtherSitesImplementation):
         found = _HANDLE.match(first)
         return f"https://www.tiktok.com/@{found.group(1)}" if found else None
 
-    def creator_page(self, url: str) -> str | None:
-        root = self.creator_root(url)
-        return root if root is not None and self.is_creator_page(url) else None
-
     def is_creator_page(self, url: str) -> bool:
         """The account's own page, which lists all its videos."""
         return self.creator_root(url) is not None and len([part for part in urlsplit(url).path.split("/") if part]) == 1
 
-    def creator_details(self, ref: str, progress: Callable[[str], None]) -> CreatorDetails:
+    def creator_details(self, ref: str, plan: PlanTracker) -> CreatorDetails:
         root = self.creator_root(ref)
         if root is None:
             raise runner.YtDlpError("This link is not a TikTok account")
-        progress("Reading the account and its videos")
         with ThreadPoolExecutor(max_workers=len(self.feed_types), thread_name_prefix="account-lookup", **keep_call_options()) as pool:
-            listings = self.read_feeds(root, pool)
+            listings = self.read_feeds(root, pool, plan)
             try:
                 info = listings[self.feed_types[0].key].result()
             except runner.YtDlpError as exc:

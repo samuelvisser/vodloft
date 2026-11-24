@@ -278,6 +278,9 @@ class CollectionLocalMediaProfileInput(LocalMediaProfileInput):
     def _music_tracks_or_videos(self):
         if keeps_tracks(self):
             return self
+        if self.collection_scope == CollectionLocalMediaProfileScope.MUSIC and self.preferred_format == PreferredFormat.FORMAT_HLS:
+            # An HLS bundle lets podcast apps switch resolutions; music videos go to media servers as plain video.
+            raise FieldValueError("preferred_format", "Profiles for Music cannot keep an HLS bundle; choose a video resolution or audio only")
         if self.collection_scope == CollectionLocalMediaProfileScope.MUSIC:
             # It keeps a Music collection's videos as video, so it calls them music videos.
             self.episode_nfo = EpisodeNfo.MUSIC_VIDEO

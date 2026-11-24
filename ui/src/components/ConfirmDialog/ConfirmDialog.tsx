@@ -34,6 +34,8 @@ type ConfirmDialogProps = {
     dismissOnOverlayClick?: boolean
     /** Escape cancels, so turn it off while that would throw away what the person filled in. */
     dismissOnEscape?: boolean
+    /** Off for a dialog that must grow past the screen instead of scrolling its content; see ``Modal``. */
+    scrollable?: boolean
     className?: string
 }
 
@@ -50,6 +52,7 @@ export default function ConfirmDialog({
     cancelButton,
     dismissOnOverlayClick = true,
     dismissOnEscape = true,
+    scrollable = true,
     className,
 }: ConfirmDialogProps) {
     const autoId = useId()
@@ -91,6 +94,7 @@ export default function ConfirmDialog({
             onDismiss={dismiss}
             dismissOnOverlayClick={dismissOnOverlayClick}
             dismissOnEscape={dismissOnEscape}
+            scrollable={scrollable}
             className={['modal', className].filter(Boolean).join(' ')}
             labelledBy={titleId}
             describedBy={descriptionId}
@@ -104,7 +108,7 @@ export default function ConfirmDialog({
                 <h2 id={titleId} className="modal-title">{title}</h2>
             </div>
 
-            <div id={descriptionId} className="confirm-dialog-content">
+            <div id={descriptionId} className="confirm-dialog-content modal-body">
                 {children}
             </div>
 

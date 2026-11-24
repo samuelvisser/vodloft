@@ -3,7 +3,7 @@ from __future__ import annotations
 import calendar
 import re
 import unicodedata
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import date, datetime, time
@@ -35,6 +35,7 @@ from config.settings.submodels import FilenameRestrictionMode
 if TYPE_CHECKING:
     from backend.db.models import Episode, Movie, MovieExtra, Video
     from backend.db.models.media_download import MediaDownloadBase
+    from backend.utils.music import AlbumPlace
 
 _DOWNLOADS_PREFIX = "/downloads/"
 _MAX_RENDERED_PATH_LENGTH = 4096
@@ -51,7 +52,7 @@ MOVIE_DATE_OUTPUT_TEMPLATE_FIELDS = frozenset({
 
 COLLECTION_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "collection", "collection_title", "season", "season_name", "season_index", "season_type", "season_number",
-    "episode", "episode_title", "title", "dw_episode_number", "episode_type", "episode_extra_type",
+    "episode", "episode_title", "title", "source_number", "episode_type", "episode_extra_type",
     "episode_number", "episode_sub_number", "episode_label", "episode_identifier", "episode_published_date",
     "episode_published_time", "episode_published_datetime", "episode_index", "extra_index",
     "collection_author", "collection_site_id", "episode_site_id", "episode_uploader", "duration_seconds",
@@ -375,8 +376,14 @@ def movie_template_uses_release_date(output_template: str) -> bool:
     )
 
 
-def episode_output_template_values(episode: "Episode") -> dict[str, str]:
-    """Build the complete Collection-profile context for an episode."""
+def episode_output_template_values(
+    episode: "Episode", *, album_places: "Mapping[int, AlbumPlace] | None" = None,
+) -> dict[str, str]:
+    """Build the complete Collection-profile context for an episode.
+
+    Whoever builds it for many episodes passes their ``album_places`` (from ``backend.utils.music.album_places``),
+    so the track numbers do not take a query per episode.
+    """
     episode_identifier = episode.episode_identifier or ""
     ep_info = EpisodeIdentifierInfo.from_identifier(episode_identifier)
     published_at = episode.published_date
@@ -401,7 +408,7 @@ def episode_output_template_values(episode: "Episode") -> dict[str, str]:
         "duration_seconds": str(round(episode.duration or 0)),
         "episode_title": episode.title,
         "title": episode.title,
-        "dw_episode_number": episode.dw_episode_number or "",
+        "source_number": episode.source_number or "",
         "episode_type": ep_info.type or "",
         "episode_extra_type": ep_info.extra_type or "",
         "episode_number": ep_info.episode_number or "",
@@ -413,7 +420,7 @@ def episode_output_template_values(episode: "Episode") -> dict[str, str]:
         "episode_published_datetime": published_at.strftime("%Y-%m-%d %H:%M:%S") if published_at else "",
         **_date_substitutions(published_at),
         **_creator_values(episode),
-        **_music_values(episode),
+        **_music_values(episode, album_places),
     }
     values.update(custom_metadata_template_values(
         "collection",
@@ -487,8 +494,8 @@ CREATOR_OUTPUT_TEMPLATE_FIELDS = frozenset({"creator_title", "creator_handle", "
 
 
 def creator_output_template_values(creator) -> dict[str, str]:
-    """Who made a collection added through a creator. Empty without a creator, so a template that uses them stays
-    valid for every collection."""
+    """The creator a collection is grouped under. Empty without a creator, so a template that uses them stays valid
+    for every collection."""
     if creator is None:
         return {field: "" for field in CREATOR_OUTPUT_TEMPLATE_FIELDS}
     account = creator.accounts[0] if creator.accounts else None
@@ -500,19 +507,21 @@ def creator_output_template_values(creator) -> dict[str, str]:
 
 
 def _creator_values(episode: "Episode") -> dict[str, str]:
-    """The episode's creator, and which of the creator's sections it is in: the playlist that is its season, or the
-    section the collection is made from."""
+    """The episode's creator, and the section of its channel it is from: the playlist that is its season, the list
+    the collection is made from, or the feed that brought it, such as Shorts."""
+    from backend.services.link_seasons import channel_feeds, episode_tag
+    from backend.types.link_season_types import CollectionKind
+
     collection = episode.collection
     playlist = _episode_list(episode)
     if playlist is not None:
         title, kind = playlist.title, "list"
+    elif collection.kind == CollectionKind.LIST.value:
+        title, kind = collection.title, "list"
     else:
-        creator = collection.creator
-        sections = creator.sections if creator is not None else []
-        section = next((section for section in sections if section.url == collection.sharing_url), None)
-        if section is None and creator is not None and collection.id in creator.main_collection_ids:
-            section = next((section for section in sections if section.kind == "feed" and section.role == "main"), None)
-        title, kind = (section.title, section.kind) if section is not None else ("", "")
+        tag = episode_tag(episode)
+        feed = next((type_ for type_ in channel_feeds(collection) if type_.episode_tag == tag), None)
+        title, kind = (feed.title, "feed") if feed is not None else ("", "")
     return {
         **creator_output_template_values(collection.creator),
         "section_title": title,
@@ -554,11 +563,11 @@ def _episode_list(episode: "Episode"):
     return next((link for link in ordered if link.id in holding), ordered[0])
 
 
-def _music_values(episode: "Episode") -> dict[str, str]:
+def _music_values(episode: "Episode", album_places: "Mapping[int, AlbumPlace] | None") -> dict[str, str]:
     """The episode as a track of an album, for a Music profile."""
     from backend.utils.music import music_track
 
-    track = music_track(episode)
+    track = music_track(episode, album_places)
     number = track.track_number
     return {
         "artist": track.artist,
@@ -694,7 +703,9 @@ def resolve_episode_output_path_with_index_values(
     index_values: dict[str, int],
     filename_mode: FilenameRestrictionMode,
     extension: Optional[str] = None,
+    values: dict[str, str] | None = None,
 ) -> Path:
+    """``values`` are the episode's template values, when the caller already has them."""
     def resolver(key: str, _group: object = ()) -> object:
         if key not in index_definitions:
             return ""
@@ -706,7 +717,7 @@ def resolve_episode_output_path_with_index_values(
 
     return _render_output_path(
         output_template,
-        episode_output_template_values(episode),
+        values if values is not None else episode_output_template_values(episode),
         filename_mode=filename_mode,
         extension=extension,
         allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,

@@ -141,6 +141,7 @@ export default function DownloadProfilesPage() {
                 />
             ),
             align: 'center',
+            sticky: 'right',
         },
     ]
 

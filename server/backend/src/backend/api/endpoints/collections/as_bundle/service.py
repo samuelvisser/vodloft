@@ -26,6 +26,7 @@ from backend.utils.feed_urls import build_rss_feed_url, request_base_url
 from backend.utils.helpers import generate_stream_profile_token
 from task_manager.scheduler.requester import current_requester
 from backend.utils.season_ordering import number_initial_seasons
+from backend.types.season_types import SeasonOrigin
 
 from ...stream_profiles.service import ensure_site_can_stream
 from ...collection_local_media_profiles.service import create_collection_local_media_profile
@@ -64,6 +65,8 @@ def create_collection_bundle(
         season.index = index
         season.season_type = season_type.value
         season.season_number = season_number
+        # The seasons a collection is added with are the ones its Site has, such as a show's.
+        season.origin = SeasonOrigin.SITE.value
         season.collection = collection
         s.add(season)
         seasons.append(season)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -7,6 +9,7 @@ from backend.db.models import CustomIndexState, Episode, Collection, CollectionL
 from backend.db.core import run_write_transaction
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.custom_indexes import (
+    CustomIndexReconciliationResult, apply_custom_index_plan, plan_custom_index_reconciliation,
     profile_collection_scope_filter, reconcile_collection_profile_custom_indexes,
 )
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
@@ -82,25 +85,62 @@ def _queue_profile_rename(session: Session, profile: CollectionLocalMediaProfile
     return True
 
 
+_PLAN_ATTEMPTS = 3
+
+
+def _reconcile(
+    session: Session, *, collection_id: int, local_media_profile_id: int, auto_rename: bool,
+    then: Callable[[Session, CustomIndexReconciliationResult], None] | None = None,
+) -> CustomIndexReconciliationResult:
+    """Work the numbers out on the read session, then store them in a short write transaction.
+
+    Whatever changes a collection's episodes or a profile asks for a new generation, which supersedes a plan made
+    before it; the numbers are then worked out again. Should they keep changing, the last try works them out inside
+    the write transaction, where nothing can supersede them.
+    """
+    def store(work: Callable[[Session], CustomIndexReconciliationResult]) -> CustomIndexReconciliationResult:
+        def transaction(w: Session) -> CustomIndexReconciliationResult:
+            result = work(w)
+            if then is not None and not result.superseded:
+                then(w, result)
+            return result
+        return run_write_transaction(transaction)
+
+    for _ in range(_PLAN_ATTEMPTS):
+        try:
+            plan = plan_custom_index_reconciliation(
+                session, collection_id=collection_id, local_media_profile_id=local_media_profile_id,
+                auto_rename=auto_rename,
+            )
+        finally:
+            session.rollback()
+        if plan is None:
+            return CustomIndexReconciliationResult(collection_id, local_media_profile_id, 0, 0, ())
+        result = store(lambda w: apply_custom_index_plan(w, plan))
+        if not result.superseded:
+            return result
+    return store(lambda w: reconcile_collection_profile_custom_indexes(
+        w, collection_id=collection_id, local_media_profile_id=local_media_profile_id, auto_rename=auto_rename,
+    ))
+
+
 def run_manage_custom_indexes(
     session: Session, *, collection_id: int, local_media_profile_id: int, progress=None,
 ) -> TaskResult:
     update_progress(progress, 5, "Calculating Episode index ranks")
     session.rollback()
 
-    def reconcile(w: Session):
-        result = reconcile_collection_profile_custom_indexes(
-            w, collection_id=collection_id, local_media_profile_id=local_media_profile_id,
-        )
+    def queue_rename(w: Session, result: CustomIndexReconciliationResult) -> None:
         _queue_targeted_rename(
             w, collection_id=collection_id, local_media_profile_id=local_media_profile_id,
             episode_ids=result.synced_episode_ids,
             expected_sources=result.synced_source_paths,
         )
-        return result
 
-    # The write transaction keeps every other writer out, so no newer generation can supersede it.
-    result = run_write_transaction(reconcile)
+    result = _reconcile(
+        session, collection_id=collection_id, local_media_profile_id=local_media_profile_id,
+        auto_rename=True, then=queue_rename,
+    )
     update_progress(progress, 100, "Episode index ranks reconciled")
     return TaskResult(
         summary="Custom indexes reconciled",
@@ -124,11 +164,10 @@ async def run_manage_profile_custom_indexes(
     changed = 0
     for index, collection_id in enumerate(collection_ids, start=1):
         async with custom_index_pair_lock(collection_id, local_media_profile_id):
-            result = run_write_transaction(lambda w: reconcile_collection_profile_custom_indexes(
-                w, collection_id=collection_id,
-                local_media_profile_id=local_media_profile_id,
+            result = _reconcile(
+                session, collection_id=collection_id, local_media_profile_id=local_media_profile_id,
                 auto_rename=False,
-            ))
+            )
         changed += result.assignments_changed
         update_progress(progress, round(index / max(len(states), 1) * 90), f"Indexed {index}/{len(states)} collections")
 

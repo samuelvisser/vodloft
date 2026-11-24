@@ -41,6 +41,9 @@ from config.settings.submodels import (
 
 SettingFieldPath = Literal[
     "logLevel",
+    "logFile.enabled",
+    "logFile.maxMegabytes",
+    "logFile.keptFiles",
     "timezone",
     "crypto.secretKeyFile",
     "crypto.defaultSecretFile",
@@ -115,7 +118,6 @@ SettingFieldPath = Literal[
     "youtubeApi.dailyQuota",
     "youtubeApi.checksQuota",
     "youtubeApi.searchQuota",
-    "youtubeApi.minCheckIntervalMinutes",
     "youtubeApi.usageLogEnabled",
     "youtubeApi.usageLogMaxLines",
     "fileWatcher.enabled",
@@ -149,6 +151,9 @@ SettingFieldPath = Literal[
 
 UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "logLevel",
+    "logFile.enabled",
+    "logFile.maxMegabytes",
+    "logFile.keptFiles",
     "timezone",
     "crypto.secretKeyFile",
     "crypto.defaultSecretFile",
@@ -222,7 +227,6 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "youtubeApi.dailyQuota",
     "youtubeApi.checksQuota",
     "youtubeApi.searchQuota",
-    "youtubeApi.minCheckIntervalMinutes",
     "youtubeApi.usageLogEnabled",
     "youtubeApi.usageLogMaxLines",
     "fileWatcher.enabled",
@@ -423,11 +427,16 @@ class DownloadSettingsValue(_SettingsValueModel):
     )(_validate_non_empty_path)
 
 
+class LogFileSettingsValue(_SettingsValueModel):
+    enabled: bool
+    max_megabytes: int = Field(ge=1)
+    kept_files: int = Field(ge=1)
+
+
 class YouTubeApiSettingsValue(_SettingsValueModel):
     daily_quota: int = Field(ge=1)
     checks_quota: int = Field(ge=0)
     search_quota: int = Field(ge=0)
-    min_check_interval_minutes: int = Field(ge=10)
     usage_log_enabled: bool
     usage_log_max_lines: int = Field(ge=100)
 
@@ -503,6 +512,7 @@ class SettingsValues(_SettingsValueModel):
     """
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+    log_file: LogFileSettingsValue
     timezone: str = Field(min_length=1)
     crypto: CryptoFileSettingsValue
     login_session: SessionSettingsValue
@@ -539,6 +549,7 @@ class SettingsValues(_SettingsValueModel):
         tmdb_token = settings.movie_metadata.tmdb_read_access_token
         return cls(
             log_level=settings.log_level,
+            log_file=LogFileSettingsValue.model_validate(settings.log_file),
             timezone=settings.timezone,
             crypto=CryptoFileSettingsValue.model_validate(settings.crypto),
             login_session=SessionSettingsValue.model_validate(settings.login_session),

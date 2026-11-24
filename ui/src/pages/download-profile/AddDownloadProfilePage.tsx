@@ -2,7 +2,7 @@ import {useCallback, useEffect, useMemo, useRef} from 'react'
 import {Controller, useForm, useWatch} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useNavigate, useSearchParams} from 'react-router-dom'
-import {useDownloadProfilesByCollectionSlug, useLocalMediaProfiles, useCollectionEpisodeTags, useCollectionSeasons, useCollections} from '../../lib/queries'
+import {useDownloadProfilesByCollectionSlug, useLocalMediaProfiles, useCollectionEpisodeTags, useCollectionSeasons, useCollections, useSiteOptions} from '../../lib/queries'
 import DownloadProfileForm from '../../components/DownloadProfile/DownloadProfileForm'
 import {
     DownloadProfileCreateIn, DownloadProfileCreateOut, DownloadProfileCreateSchema, defaultEpisodeFilters,
@@ -18,7 +18,7 @@ import ReadMore from "../../utils/ReadMore";
 import {apiUrl} from '../../lib/api'
 import {PreferredFormatReg} from '../../types/local_media_profile'
 import RequestedField, {RequestedFieldsProvider} from '../../components/common/RequestedField'
-import LocalMediaProfileFitNote, {useLocalMediaProfileFits} from '../../components/DownloadProfile/LocalMediaProfileFitNote'
+import LocalMediaProfileFitNote, {useLocalMediaProfileFits, useLocalMediaProfilesForCollection} from '../../components/DownloadProfile/LocalMediaProfileFitNote'
 import './AddDownloadProfilePage.css'
 
 export default function AddDownloadProfilePage() {
@@ -46,8 +46,19 @@ export default function AddDownloadProfilePage() {
         [collections, collectionId],
     )
     const episodeIdentifier = selectedCollection?.episodeIdentifier
-    // Every Collection profile can be chosen; one that doesn't fit the collection says so under the field.
-    const mediaProfileReg: SelectRegistry = useLocalMediaProfileSelectRegistry(mediaProfiles, 'collection')
+    // Only the profiles available for the collection are offered. A Stream Profile's link marks the ones that
+    // download the format it asks for, and choosing another says so under the field.
+    const offeredProfiles = useLocalMediaProfilesForCollection(mediaProfiles, selectedCollection)
+    const mediaProfileReg: SelectRegistry = useLocalMediaProfileSelectRegistry(offeredProfiles, 'collection')
+
+    // A profile chosen for another collection goes once it isn't offered for this one.
+    const localMediaProfileId = watch('localMediaProfileId')
+    useEffect(() => {
+        if (localMediaProfileId == null || !offeredProfiles) return
+        if (!offeredProfiles.some((profile) => profile.id === localMediaProfileId)) {
+            form.resetField('localMediaProfileId')
+        }
+    }, [offeredProfiles, localMediaProfileId, form])
 
     const selectCollection = useCallback((id: number) => {
         setValue('collectionId', id, {shouldDirty: true, shouldValidate: true})
@@ -109,15 +120,17 @@ export default function AddDownloadProfilePage() {
 
     // The episode tags and seasons to start with answer after the collection is picked.
     const {data: episodeTags} = useCollectionEpisodeTags({collectionId: selectedCollection?.id})
+    // Which seasons a new profile picks follows the collection's Site.
+    const {data: site} = useSiteOptions({collectionId: selectedCollection?.id})
     const seasonal = episodeIdentifier === EpisodeIdentifierReg.Enum.seasonal
     const filtersDefaultedFor = useRef<number | undefined>(undefined)
     useEffect(() => {
-        if (!selectedCollection || !episodeTags || (seasonal && !seasonsData)) return
+        if (!selectedCollection || !episodeTags || (seasonal && (!seasonsData || !site))) return
         if (filtersDefaultedFor.current === selectedCollection.id) return
         filtersDefaultedFor.current = selectedCollection.id
-        const latestSeason = [...(seasonsData ?? [])].sort((a, b) => b.index - a.index)[0]
-        setValue('filters', defaultEpisodeFilters(episodeIdentifier, episodeTags, latestSeason?.slug))
-    }, [selectedCollection, episodeTags, seasonal, seasonsData, episodeIdentifier, setValue])
+        const seasons = [...(seasonsData ?? [])].sort((a, b) => a.index - b.index)
+        setValue('filters', defaultEpisodeFilters(episodeIdentifier, episodeTags, seasons, site?.profileSeasons))
+    }, [selectedCollection, episodeTags, seasonal, seasonsData, site, episodeIdentifier, setValue])
     const filters = useWatch({control: form.control, name: 'filters'})
     // A link from a Stream Profile asks for the episode types and the number of episodes it streams, once the
     // collection's own starting filters are in.
@@ -143,7 +156,7 @@ export default function AddDownloadProfilePage() {
     // The profile this collection can still take that fits it and downloads the format a link asks for.
     const profileFits = useLocalMediaProfileFits(selectedCollection, requestedPreferredFormat)
     const matchingProfile = selectedCollection && requestedPreferredFormat
-        ? mediaProfiles?.find((profile) => profileFits(profile) && !usedLocalMediaProfiles.has(profile.id))
+        ? offeredProfiles?.find((profile) => profileFits(profile) && !usedLocalMediaProfiles.has(profile.id))
         : undefined
     // Where a profile created from here sends the user back to: this form, as the link opened it, for this collection.
     const returnHere = useMemo(() => {
@@ -167,7 +180,6 @@ export default function AddDownloadProfilePage() {
             ? (mediaProfiles ?? []).filter((profile) => profile.preferredFormat === requestedPreferredFormat).map((profile) => profile.id)
             : [],
     ), [mediaProfiles, requestedPreferredFormat])
-    const localMediaProfileId = watch('localMediaProfileId')
 
     return (
         <section className="view" aria-labelledby="add-download-profile-title">
@@ -250,7 +262,7 @@ export default function AddDownloadProfilePage() {
                                     : opt.label}
                                 onBlur={field.onBlur}
                                 isDisabled={mediaProfileReg.options.length === 0}
-                                placeholder={!mediaProfiles ? 'Loading profiles...' : mediaProfileReg.options.length === 0 ? 'No profiles found' : undefined}
+                                placeholder={!offeredProfiles ? 'Loading profiles...' : mediaProfileReg.options.length === 0 ? 'No profiles found' : undefined}
                                 isClearable
                                 aria-invalid={!!errors.localMediaProfileId}
                                 aria-describedby={errors.localMediaProfileId ? 'local-media-profile-errors' : 'local-media-profile-help'}

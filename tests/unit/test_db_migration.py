@@ -24,6 +24,7 @@ RELEASE_REVISIONS = (
     ("0.8.0", "bb0e7c5e17cc"),
     ("0.9.0", "2f7a91c4d8e3"),
     ("0.9.1", "5b8e2d4c9a17"),
+    ("0.10.0", "4c7e19a2b6d0"),
 )
 VODLOFT_0_1_0_REVISION = "f4abb559e3ab"
 VODLOFT_0_5_0_REVISION = "817515eb8209"
@@ -423,7 +424,7 @@ def test_0_7_0_migration_keeps_what_existing_profiles_and_episodes_did(migration
         ))] == [
             "download_failed", "sign_in_needed", "disk_almost_full", "task_failing", "update_available", "daily_summary",
             # Added for creators in 0.10.0.
-            "creator_sections_found",
+            "new_lists_found",
         ]
 
 
@@ -615,8 +616,8 @@ def test_sites_migration_places_named_sources_and_moves_the_domain_preference(mi
             "INSERT INTO source_domain_preferences (domain, source_key) VALUES ('npo.nl', 'ytdlp')"
         ))
 
-    # Up to the migration before the one that adds the Sites VODLoft used to always list.
-    command.upgrade(config, "7c41e2a9d5b3")
+    # Up to 0.9.1, before 0.10.0 adds the Sites VODLoft used to always list.
+    command.upgrade(config, VODLOFT_0_9_1_REVISION)
 
     with engine.connect() as connection:
         assert connection.execute(text(
@@ -1224,284 +1225,12 @@ def test_iptv_migration_gives_each_user_and_the_install_a_stream_token(migration
     assert install and install not in tokens
 
 
-def test_movie_profiles_become_video_profiles_that_keep_their_sites(migration_database):
+def test_0_10_0_episodes_without_usable_media_leave_or_stay_removed_from_their_source(migration_database):
     _database_path, engine = migration_database
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
-    command.upgrade(config, VODLOFT_0_9_0_REVISION)
-    with engine.begin() as connection:
-        profiles = (
-            # id, type, template, Sites
-            (1, "movie", "/downloads/movies/{{ movie_title }}/{{ title }}.ext", '["dailywire"]'),
-            (2, "video", "/downloads/videos/{{ title }} [{{ slug }}].ext", '["youtube"]'),
-            # The same template and format as profile 2.
-            (3, "movie", "/downloads/videos/{{ title }} [{{ slug }}].ext", '["dailywire"]'),
-        )
-        for profile_id, profile_type, path, site_keys in profiles:
-            connection.execute(text(
-                "INSERT INTO local_media_profiles (id, slug, name, type, output_template, preferred_format, video_codecs, "
-                "site_keys, include_upcoming_sites) VALUES (:id, :slug, :slug, :type, :path, 'format_1080p', '[]', :keys, 1)"
-            ), {"id": profile_id, "slug": f"p{profile_id}", "type": profile_type, "path": path, "keys": site_keys})
-            connection.execute(text(f"INSERT INTO local_media_profiles_{profile_type} (id) VALUES (:id)"), {"id": profile_id})
-
-    command.upgrade(config, HEAD_REVISION)
-
-    with engine.connect() as connection:
-        rows = {
-            row.id: row for row in connection.execute(text(
-                "SELECT id, type, output_template, site_keys, include_upcoming_sites FROM local_media_profiles"
-            ))
-        }
-        assert connection.execute(text("SELECT id FROM local_media_profiles_video ORDER BY id")).scalars().all() == [1, 2, 3]
-        assert "local_media_profiles_movie" not in inspect(connection).get_table_names()
-    assert {row.type for row in rows.values()} == {"video"}
-    # Former Movie profiles keep their Sites and stop taking new ones; the Video profile is left as it was.
-    assert [(json.loads(rows[key].site_keys), bool(rows[key].include_upcoming_sites)) for key in (1, 2, 3)] == [
-        (["dailywire"], False), (["youtube"], True), (["dailywire"], False),
-    ]
-    assert rows[1].output_template == "/downloads/movies/{{ movie_title }}/{{ title }}.ext"
-    # A Jinja comment keeps the clashing template apart without naming any file differently.
-    assert rows[3].output_template == "/downloads/videos/{{ title }} [{{ slug }}].ext{# kept apart from p2 #}"
-
-
-def test_every_collection_gets_its_own_link_and_its_episodes_belong_to_it(migration_database):
-    _database_path, engine = migration_database
-    from backend.db.migrations import get_alembic_config
-
-    config = get_alembic_config()
-    command.upgrade(config, "409629042e13")
-    with engine.begin() as connection:
-        for collection_id in (1, 2):
-            connection.execute(text(
-                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
-                "author_name, author_slug, source_key, episode_order) VALUES (:id, :uuid, :slug, 'A', :url, 'free', 'series', "
-                "'numbered', 'The Host', 'host', 'ytdlp', 'newest_first')"
-            ), {"id": collection_id, "uuid": f"uuid-{collection_id}", "slug": f"c{collection_id}",
-                "url": f"https://example.test/{collection_id}"})
-            connection.execute(text(
-                "INSERT INTO seasons (id, collection_id, \"index\", slug, name, season_type, season_number) "
-                "VALUES (:id, :id, 1, '2024', '2024', 'normal', 2024)"
-            ), {"id": collection_id})
-        for episode_id, collection_id in ((10, 1), (11, 1), (12, 2)):
-            connection.execute(text(
-                "INSERT INTO media_items (id, uuid, type, source_key) VALUES (:id, :uuid, 'episode', 'ytdlp')"
-            ), {"id": episode_id, "uuid": f"episode-{episode_id}"})
-            connection.execute(text(
-                "INSERT INTO media_items_episode (id, collection_id, season_id, \"index\", episode_identifier, slug, "
-                "publish_status, sharing_url, source_slug) VALUES (:id, :collection, :collection, :id, :identifier, :slug, "
-                "'published_final', 'https://example.test', :slug)"
-            ), {"id": episode_id, "collection": collection_id, "identifier": f"ep.{episode_id}", "slug": f"e{episode_id}"})
-
-    command.upgrade(config, "34b2dd5c2fe8")
-
-    with engine.connect() as connection:
-        links = connection.execute(text(
-            "SELECT id, collection_id, url, position, placement FROM collection_links ORDER BY collection_id"
-        )).all()
-        assert [tuple(link)[1:] for link in links] == [
-            (1, "https://example.test/1", 0, "site_seasons"), (2, "https://example.test/2", 0, "site_seasons"),
-        ]
-        link_of = {link.collection_id: link.id for link in links}
-        episodes = connection.execute(text("SELECT id, collection_link_id FROM media_items_episode ORDER BY id")).all()
-        assert [tuple(row) for row in episodes] == [(10, link_of[1]), (11, link_of[1]), (12, link_of[2])]
-        items = connection.execute(text("SELECT link_id, source_slug FROM collection_link_items ORDER BY source_slug")).all()
-        assert [tuple(row) for row in items] == [(link_of[1], "e10"), (link_of[1], "e11"), (link_of[2], "e12")]
-
-
-def test_playlist_and_album_links_become_link_seasons_and_an_artist_takes_their_page(migration_database):
-    _database_path, engine = migration_database
-    from backend.db.migrations import get_alembic_config
-
-    config = get_alembic_config()
-    command.upgrade(config, "34b2dd5c2fe8")
-    with engine.begin() as connection:
-        for collection_id, url in ((1, "https://www.youtube.com/@workshop/videos"), (2, "https://gamechops.bandcamp.com/album/one")):
-            connection.execute(text(
-                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
-                "author_name, author_slug, source_key, episode_order) VALUES (:id, :uuid, :slug, 'A', :url, 'free', 'series', "
-                "'seasonal', 'Host', 'host', 'ytdlp', 'newest_first')"
-            ), {"id": collection_id, "uuid": f"uuid-{collection_id}", "slug": f"c{collection_id}", "url": url})
-        connection.execute(text(
-            "INSERT INTO seasons (id, collection_id, \"index\", slug, name, season_type, season_number) "
-            "VALUES (5, 1, 1, 'cabin', 'Building the Cabin', 'normal', 1)"
-        ))
-        links = (
-            (1, 1, "https://www.youtube.com/@workshop/videos", "Videos", "site_seasons", None),
-            (2, 1, "https://www.youtube.com/playlist?list=PLcabin", "Building the Cabin", "one_season", 5),
-            (3, 2, "https://gamechops.bandcamp.com/album/one", "One", "one_season", None),
-            (4, 2, "https://gamechops.bandcamp.com/album/two", "Two", "one_season", None),
-        )
-        for link_id, collection_id, url, title, placement, season_id in links:
-            connection.execute(text(
-                "INSERT INTO collection_links (id, collection_id, url, title, position, placement, season_id) "
-                "VALUES (:id, :collection, :url, :title, :id, :placement, :season)"
-            ), {"id": link_id, "collection": collection_id, "url": url, "title": title, "placement": placement, "season": season_id})
-        connection.execute(text("INSERT INTO collection_link_items (link_id, source_slug) VALUES (2, 'v1'), (2, 'v2'), (4, 't1')"))
-
-    command.upgrade(config, HEAD_REVISION)
-
-    with engine.connect() as connection:
-        seasons = connection.execute(text(
-            "SELECT collection_id, ref, title, season_id, enabled FROM collection_lists ORDER BY id"
-        )).all()
-        assert [tuple(row) for row in seasons] == [
-            (1, "PLcabin", "Building the Cabin", 5, True), (2, "album/one", "One", None, True), (2, "album/two", "Two", None, True),
-        ]
-        items = connection.execute(text("SELECT source_slug FROM collection_list_items ORDER BY source_slug")).scalars().all()
-        assert items == ["t1", "v1", "v2"]
-        collections = connection.execute(text("SELECT id, sharing_url, link_seasons FROM collections ORDER BY id")).all()
-        # The artist's collection is their whole page now, so new albums come in too.
-        assert [tuple(row) for row in collections] == [
-            (1, "https://www.youtube.com/@workshop/videos", "selected"), (2, "https://gamechops.bandcamp.com", "selected"),
-        ]
-        assert "collection_links" not in inspect(connection).get_table_names()
-
-
-def test_a_channel_knows_its_own_collection_and_installations_get_the_new_sections_rule(migration_database):
-    _database_path, engine = migration_database
-    from backend.db.migrations import get_alembic_config
-
-    config = get_alembic_config()
-    command.upgrade(config, "22986fb7a6b8")
-    with engine.begin() as connection:
-        connection.execute(text("INSERT INTO sites (key, name, domains) VALUES ('youtube', 'YouTube', '[\"youtube.com\"]')"))
-        connection.execute(text(
-            "INSERT INTO channels (id, uuid, slug, source_key, site_key, site_ref, title) "
-            "VALUES (1, 'ch', 'workshop', 'ytdlp', 'youtube', 'UCw', 'Northwind Workshop')"
-        ))
-        for collection_id, title in ((1, "Northwind Workshop Shorts"), (2, "Northwind Workshop")):
-            connection.execute(text(
-                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
-                "author_name, author_slug, source_key, episode_order, channel_id) VALUES (:id, :uuid, :slug, :title, :url, "
-                "'free', 'series', 'seasonal', 'Host', 'host', 'ytdlp', 'newest_first', 1)"
-            ), {"id": collection_id, "uuid": f"u{collection_id}", "slug": f"c{collection_id}", "title": title,
-                "url": f"https://example.test/{collection_id}"})
-
-    command.upgrade(config, HEAD_REVISION)
-
-    with engine.connect() as connection:
-        assert connection.execute(text(
-            "SELECT a.main_collection_id, c.new_lists FROM creators c JOIN creator_accounts a ON a.creator_id = c.id"
-        )).one() == (2, '{"youtube": {"list": "ask"}}')
-        rules = connection.execute(text("SELECT default_key, position FROM notification_rules ORDER BY position")).all()
-        assert rules[-1] == ("creator_sections_found", rules[-2].position + 1)
-
-
-def test_channels_become_creators_with_their_sections_collections_and_stored_values(migration_database):
-    _database_path, engine = migration_database
-    from backend.db.migrations import get_alembic_config
-
-    config = get_alembic_config()
-    command.upgrade(config, "8340278b15a0")
-    with engine.begin() as connection:
-        connection.execute(text("INSERT INTO sites (key, name, domains) VALUES ('youtube', 'YouTube', '[\"youtube.com\"]')"))
-        connection.execute(text(
-            "INSERT INTO channels (id, uuid, slug, source_key, site_key, site_ref, title, links, facts) "
-            "VALUES (7, 'ch', 'workshop', 'ytdlp', 'youtube', 'UCw', 'Northwind Workshop', '[\"https://n.test\"]', '[]')"
-        ))
-        connection.execute(text(
-            "INSERT INTO channel_sections (id, channel_id, ref, url, title, kind, status) "
-            "VALUES (3, 7, 'videos', 'https://youtube.test/@w/videos', 'Videos', 'feed', 'new')"
-        ))
-        connection.execute(text(
-            "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
-            "author_name, author_slug, source_key, episode_order, channel_id) VALUES (1, 'u1', 'c1', 'Workshop', "
-            "'https://example.test/1', 'free', 'series', 'seasonal', 'Host', 'host', 'ytdlp', 'newest_first', 7)"
-        ))
-        connection.execute(text(
-            "INSERT INTO local_media_profiles (id, slug, name, output_template, preferred_format, video_codecs, type) "
-            "VALUES (40, 'by-creator', 'By creator', '{{ channel_title }}/{{ channel_handle }} - {{ channel_kind }}/{{ title }}', "
-            "'mp4', '[]', 'video')"
-        ))
-        connection.execute(text(
-            "INSERT INTO notification_events (event, occurred_at, title, body, url, data) VALUES ('channel_sections_found', "
-            "CURRENT_TIMESTAMP, 'New sections', '', '/channel/workshop', '{\"channel\": \"workshop\"}')"
-        ))
-
-    command.upgrade(config, "5fd4ae698d31")
-
-    with engine.connect() as connection:
-        tables = set(inspect(connection).get_table_names())
-        assert {"creators", "creator_sections"} <= tables and not {"channels", "channel_sections"} & tables
-        assert connection.execute(text("SELECT id, slug, links FROM creators")).one() == (7, "workshop", '["https://n.test"]')
-        assert connection.execute(text("SELECT creator_id, status FROM creator_sections")).one() == (7, "new")
-        assert connection.execute(text("SELECT creator_id FROM collections")).scalar_one() == 7
-        assert connection.execute(text("SELECT output_template FROM local_media_profiles WHERE id = 40")).scalar_one() == (
-            "{{ creator_title }}/{{ creator_handle }} - {{ creator_kind }}/{{ title }}"
-        )
-        event = connection.execute(text("SELECT event, url, data FROM notification_events")).one()
-        assert (event.event, event.url, json.loads(event.data)) == (
-            "creator_sections_found", "/creator/workshop", {"creator": "workshop"},
-        )
-        assert "creator_sections_found" in connection.execute(text("SELECT default_key FROM notification_rules")).scalars().all()
-
-    command.downgrade(config, "8340278b15a0")
-    with engine.connect() as connection:
-        assert connection.execute(text("SELECT channel_id FROM collections")).scalar_one() == 7
-        assert connection.execute(text("SELECT channel_id FROM channel_sections")).scalar_one() == 7
-
-
-def test_each_creator_gets_an_account_with_their_site_sections_and_collection(migration_database):
-    _database_path, engine = migration_database
-    from backend.db.migrations import get_alembic_config
-
-    config = get_alembic_config()
-    command.upgrade(config, "5fd4ae698d31")
-    with engine.begin() as connection:
-        connection.execute(text("INSERT INTO sites (key, name, domains) VALUES ('youtube', 'YouTube', '[\"youtube.com\"]')"))
-        connection.execute(text(
-            "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
-            "author_name, author_slug, source_key, episode_order) VALUES (1, 'u1', 'c1', 'Workshop', "
-            "'https://example.test/1', 'free', 'series', 'seasonal', 'Host', 'host', 'ytdlp', 'newest_first')"
-        ))
-        connection.execute(text(
-            "INSERT INTO creators (id, uuid, slug, source_key, site_key, site_ref, url, handle, title, main_collection_id) "
-            "VALUES (4, 'cr', 'workshop', 'ytdlp', 'youtube', 'UCw', 'https://youtube.test/@w', '@w', 'Workshop', 1)"
-        ))
-        connection.execute(text("UPDATE collections SET creator_id = 4"))
-        connection.execute(text(
-            "INSERT INTO creator_sections (id, creator_id, ref, url, title, kind) "
-            "VALUES (3, 4, 'videos', 'https://youtube.test/@w/videos', 'Videos', 'feed')"
-        ))
-
-    command.upgrade(config, "7d3b9e41a6c2")
-
-    with engine.connect() as connection:
-        account = connection.execute(text(
-            "SELECT id, creator_id, source_key, site_key, site_ref, url, handle, main_collection_id FROM creator_accounts"
-        )).one()
-        assert tuple(account) == (4, 4, "ytdlp", "youtube", "UCw", "https://youtube.test/@w", "@w", 1)
-        assert connection.execute(text("SELECT account_id FROM creator_sections")).scalar_one() == 4
-        assert "site_key" not in {column["name"] for column in inspect(connection).get_columns("creators")}
-
-    # A creator with a second account becomes two creators again on the way down.
-    with engine.begin() as connection:
-        connection.execute(text("INSERT INTO sites (key, name, domains) VALUES ('dailywire', 'The Daily Wire', '[]')"))
-        connection.execute(text(
-            "INSERT INTO creator_accounts (id, creator_id, source_key, site_key, site_ref) "
-            "VALUES (9, 4, 'dailywire', 'dailywire', 'host-w')"
-        ))
-        connection.execute(text(
-            "INSERT INTO creator_sections (account_id, ref, url, title, kind, type) "
-            "VALUES (9, 'show', 'https://dw.test/show', 'Show', 'show', 'show')"
-        ))
-    command.downgrade(config, "5fd4ae698d31")
-    with engine.connect() as connection:
-        creators = connection.execute(text("SELECT id, site_key, site_ref, main_collection_id FROM creators ORDER BY id")).all()
-        assert [(row.site_key, row.site_ref, row.main_collection_id) for row in creators] == [
-            ("youtube", "UCw", 1), ("dailywire", "host-w", None),
-        ]
-        sections = dict(connection.execute(text("SELECT ref, creator_id FROM creator_sections")).all())
-        assert sections == {"videos": 4, "show": creators[1].id}
-
-
-def test_episodes_without_usable_media_leave_or_stay_removed_from_their_source(migration_database):
-    _database_path, engine = migration_database
-    from backend.db.migrations import get_alembic_config
-
-    config = get_alembic_config()
-    command.upgrade(config, "63dbd1de00d8")
+    command.upgrade(config, VODLOFT_0_9_1_REVISION)
     with engine.begin() as connection:
         connection.execute(text("PRAGMA foreign_keys = OFF"))
         connection.execute(text(
@@ -1556,6 +1285,8 @@ def test_episodes_without_usable_media_leave_or_stay_removed_from_their_source(m
         assert connection.execute(text(
             "SELECT count(*) FROM metadata WHERE parent_table = 'media_items_episode'"
         )).scalar_one() == 0
+
+
 
 
 def test_a_webdav_folder_name_becomes_the_profiles_title(migration_database):
@@ -1668,321 +1399,65 @@ def test_every_collection_numbers_its_extras_in_episode_index_order(migration_da
     assert numbers == {10: 3, 11: None, 12: 1, 13: 2, 14: None, 15: 1}
 
 
-def test_music_profiles_become_collection_profiles_and_video_profiles_say_what_they_are_for(migration_database):
+def test_0_10_0_movie_profiles_become_video_profiles_that_say_what_they_are_for(migration_database):
     _database_path, engine = migration_database
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
-    command.upgrade(config, "ad2922b7ff06")
+    command.upgrade(config, VODLOFT_0_9_1_REVISION)
     with engine.begin() as connection:
         connection.execute(text("PRAGMA foreign_keys = OFF"))
-        for profile_id, slug, kind in (
-            (1, "tracks", "music"), (2, "music-videos", "collection"), (3, "shows", "collection"),
-            (4, "vodloft-movies", "video"), (5, "vodloft-videos", "video"), (6, "own", "video"),
-        ):
+        profiles = (
+            # id, slug, type, template, Sites
+            (1, "vodloft-movies", "movie", "/downloads/movies/{{ movie_title }}/{{ title }}.ext", '["dailywire"]'),
+            (2, "vodloft-videos", "video", "/downloads/videos/{{ title }} [{{ slug }}].ext", '["youtube"]'),
+            # The same template and format as profile 2.
+            (3, "clash", "movie", "/downloads/videos/{{ title }} [{{ slug }}].ext", '["dailywire"]'),
+            (4, "own", "video", "/downloads/own/{{ title }}.ext", '["youtube"]'),
+        )
+        for profile_id, slug, profile_type, path, site_keys in profiles:
             connection.execute(text(
-                "INSERT INTO local_media_profiles (id, slug, name, output_template, preferred_format, video_codecs, type) "
-                "VALUES (:id, :slug, :slug, '/downloads/' || :slug || '.ext', 'format_1080p', '[]', :kind)"
-            ), {"id": profile_id, "slug": slug, "kind": kind})
-        for profile_id, scope in ((1, "music"), (2, "music"), (3, "both")):
-            connection.execute(text(
-                "INSERT INTO local_media_profiles_collection (id, collection_scope) VALUES (:id, :scope)"
-            ), {"id": profile_id, "scope": scope})
-        for profile_id in (4, 5, 6):
-            connection.execute(text("INSERT INTO local_media_profiles_video (id) VALUES (:id)"), {"id": profile_id})
+                "INSERT INTO local_media_profiles (id, slug, name, type, output_template, preferred_format, video_codecs, "
+                "site_keys, include_upcoming_sites) VALUES (:id, :slug, :slug, :type, :path, 'format_1080p', '[]', :keys, 1)"
+            ), {"id": profile_id, "slug": slug, "type": profile_type, "path": path, "keys": site_keys})
+            connection.execute(text(f"INSERT INTO local_media_profiles_{profile_type} (id) VALUES (:id)"), {"id": profile_id})
         # The seeded Videos profile already holds a movie, so it stays available for movies too.
-        connection.execute(text("INSERT INTO media_downloads (id, type, local_media_profile_id, media_item_id, file_path) VALUES (1, 'movie', 5, 1, '/downloads/movie.mp4')"))
-
-    command.upgrade(config, HEAD_REVISION)
-
-    with engine.connect() as connection:
-        assert connection.execute(text(
-            "SELECT p.slug, p.type, c.collection_scope FROM local_media_profiles p "
-            "JOIN local_media_profiles_collection c ON c.id = p.id ORDER BY p.id"
-        )).all() == [("tracks", "collection", "music"), ("music-videos", "collection", "music"), ("shows", "collection", "podcast-and-series")]
-        assert connection.execute(text(
-            "SELECT p.slug, v.video_scope FROM local_media_profiles p JOIN local_media_profiles_video v ON v.id = p.id ORDER BY p.id"
-        )).all() == [("vodloft-movies", "movies"), ("vodloft-videos", "both"), ("own", "both")]
-
-
-def test_profiles_for_music_tracks_and_music_videos_become_profiles_for_music(migration_database):
-    _database_path, engine = migration_database
-    from backend.db.migrations import get_alembic_config
-
-    config = get_alembic_config()
-    command.upgrade(config, "7c41e2a9d5b3")
-    with engine.begin() as connection:
-        connection.execute(text("PRAGMA foreign_keys = OFF"))
-        for profile_id, scope, preferred_format, episode_nfo in (
-            (1, "music_tracks", "format_audio_only", "episode"), (2, "music_videos", "format_1080p", "music_video"),
-            (3, "podcast", "format_audio_only", "episode"),
-        ):
-            connection.execute(text(
-                "INSERT INTO local_media_profiles (id, slug, name, output_template, preferred_format, video_codecs, type) "
-                "VALUES (:id, :id, :id, '/downloads/' || :id || '.ext', :format, '[]', 'collection')"
-            ), {"id": profile_id, "format": preferred_format})
-            connection.execute(text(
-                "INSERT INTO local_media_profiles_collection (id, collection_scope, episode_nfo) VALUES (:id, :scope, :nfo)"
-            ), {"id": profile_id, "scope": scope, "nfo": episode_nfo})
-
-    def profiles():
-        with engine.connect() as connection:
-            return connection.execute(text(
-                "SELECT c.collection_scope, c.episode_nfo FROM local_media_profiles_collection c ORDER BY c.id"
-            )).all()
-
-    command.upgrade(config, "a4318a92a5ca")
-    assert profiles() == [("music", "episode"), ("music", "music_video"), ("podcast", "episode")]
-
-    command.downgrade(config, "7c41e2a9d5b3")
-    assert [scope for scope, _nfo in profiles()] == ["music_tracks", "music_videos", "podcast"]
-
-
-def test_a_creator_on_sites_without_link_seasons_adds_new_sections_as_collections(migration_database):
-    _database_path, engine = migration_database
-    from backend.db.migrations import get_alembic_config
-
-    config = get_alembic_config()
-    command.upgrade(config, "a91a97a6c374")
-    with engine.begin() as connection:
-        connection.execute(text("PRAGMA foreign_keys = OFF"))
-        # A Daily Wire host, a YouTube creator, a creator with both, and a host who already asked.
-        for creator_id, new_sections in ((1, "season"), (2, "season"), (3, "season"), (4, "ask")):
-            connection.execute(text(
-                "INSERT INTO creators (id, uuid, slug, title, new_sections) VALUES (:id, :id, :id, :id, :new)"
-            ), {"id": creator_id, "new": new_sections})
-        for account_id, creator_id, site_key in ((1, 1, "dailywire"), (2, 2, "youtube"), (3, 3, "dailywire"), (4, 3, "youtube"), (5, 4, "dailywire")):
-            connection.execute(text(
-                "INSERT INTO creator_accounts (id, creator_id, source_key, site_key, site_ref) VALUES (:id, :creator, 's', :site, :id)"
-            ), {"id": account_id, "creator": creator_id, "site": site_key})
-
-    command.upgrade(config, "9c3e1f5a7b20")
-
-    with engine.connect() as connection:
-        assert connection.execute(text("SELECT id, new_lists FROM creators ORDER BY id")).all() == [
-            (1, '{"list": "own"}'), (2, '{"list": "season"}'), (3, '{"list": "season"}'), (4, '{"list": "ask"}'),
-        ]
-
-
-def test_new_lists_are_set_for_each_kind_of_list_of_the_sites(migration_database):
-    _database_path, engine = migration_database
-    from backend.db.migrations import get_alembic_config
-
-    config = get_alembic_config()
-    command.upgrade(config, "5e0c7a2b91d4")
-    with engine.begin() as connection:
-        connection.execute(text("PRAGMA foreign_keys = OFF"))
-        # A SoundCloud artist, a YouTube creator, and a creator on both.
-        for creator_id, new_sections in ((1, "season"), (2, "ignore"), (3, "ask")):
-            connection.execute(text(
-                "INSERT INTO creators (id, uuid, slug, title, new_sections) VALUES (:id, :id, :id, :id, :new)"
-            ), {"id": creator_id, "new": new_sections})
-        for account_id, creator_id, site_key in ((1, 1, "soundcloud"), (2, 2, "youtube"), (3, 3, "youtube"), (4, 3, "soundcloud")):
-            connection.execute(text(
-                "INSERT INTO creator_accounts (id, creator_id, source_key, site_key, site_ref) VALUES (:id, :creator, 's', :site, :id)"
-            ), {"id": account_id, "creator": creator_id, "site": site_key})
-        for collection_id, site_key, action in ((1, "soundcloud", "add"), (2, "youtube", "ignore"), (3, None, "ask")):
-            connection.execute(text(
-                "INSERT INTO collections (id, uuid, slug, title, membership_level, type, episode_identifier, author_name, "
-                "author_slug, source_key, episode_order, site_key, new_link_seasons) VALUES (:id, :id, :id, :id, 'free', "
-                "'series', 'seasonal', 'A', 'a', 'ytdlp', 'newest_first', :site, :action)"
-            ), {"id": collection_id, "site": site_key, "action": action})
-
-    command.upgrade(config, "9c3e1f5a7b20")
-
-    with engine.connect() as connection:
-        assert connection.execute(text("SELECT id, new_lists FROM creators ORDER BY id")).all() == [
-            (1, '{"album": "season", "playlist": "season"}'), (2, '{"list": "ignore"}'),
-            (3, '{"album": "ask", "playlist": "ask", "list": "ask"}'),
-        ]
-        assert connection.execute(text("SELECT id, new_lists FROM collections ORDER BY id")).all() == [
-            (1, '{"album": "add", "playlist": "add"}'), (2, '{"list": "ignore"}'), (3, '{"list": "ask"}'),
-        ]
-
-
-def test_each_creator_section_keeps_its_section_type_and_shows_and_albums_get_their_own_setting(migration_database):
-    _database_path, engine = migration_database
-    from backend.db.migrations import get_alembic_config
-
-    config = get_alembic_config()
-    command.upgrade(config, "9c3e1f5a7b20")
-    with engine.begin() as connection:
-        connection.execute(text("PRAGMA foreign_keys = OFF"))
-        # A Daily Wire host, a creator on The Daily Wire and YouTube, a Bandcamp artist and a SoundCloud artist.
-        for creator_id, settings in ((1, '{"list": "own"}'), (2, '{"list": "ask"}'), (3, '{"list": "season"}'),
-                                     (4, '{"album": "season", "playlist": "ignore"}')):
-            connection.execute(text("INSERT INTO creators (id, uuid, slug, title, new_lists) VALUES (:id, :id, :id, :id, :s)"),
-                               {"id": creator_id, "s": settings})
-        for account_id, creator_id, site_key in ((1, 1, "dailywire"), (2, 2, "dailywire"), (3, 2, "youtube"),
-                                                 (4, 3, "bandcamp"), (5, 4, "soundcloud")):
-            connection.execute(text(
-                "INSERT INTO creator_accounts (id, creator_id, source_key, site_key, site_ref) VALUES (:id, :creator, 's', :site, :id)"
-            ), {"id": account_id, "creator": creator_id, "site": site_key})
-        for section_id, account_id, kind, label in (
-            (1, 1, "show", "Show"), (2, 1, "item", "Movie"), (3, 3, "feed", "Feed"), (4, 3, "list", "Playlist"),
-            (5, 4, "list", "Album"), (6, 4, "item", "Single"), (7, 5, "list", "Album"), (8, 5, "list", "Playlist"),
-        ):
-            connection.execute(text(
-                "INSERT INTO creator_sections (id, account_id, ref, url, title, kind, kind_label) "
-                "VALUES (:id, :account, :id, :id, :id, :kind, :label)"
-            ), {"id": section_id, "account": account_id, "kind": kind, "label": label})
-        for collection_id, site_key in ((1, "dailywire"), (2, "bandcamp"), (3, "youtube")):
-            connection.execute(text(
-                "INSERT INTO collections (id, uuid, slug, title, membership_level, type, episode_identifier, author_name, "
-                "author_slug, source_key, episode_order, site_key, new_lists) VALUES (:id, :id, :id, :id, 'free', "
-                "'series', 'seasonal', 'A', 'a', 'ytdlp', 'newest_first', :site, '{\"list\": \"ask\"}')"
-            ), {"id": collection_id, "site": site_key})
-
-    command.upgrade(config, "7d3b9e41a6c2")
-
-    with engine.connect() as connection:
-        assert connection.execute(text("SELECT id, type FROM creator_sections ORDER BY id")).all() == [
-            (1, "show"), (2, "movie"), (3, "feed"), (4, "list"), (5, "album"), (6, "single"), (7, "album"), (8, "playlist"),
-        ]
-        assert "kind_label" not in {column["name"] for column in inspect(connection).get_columns("creator_sections")}
-        assert connection.execute(text("SELECT id, new_lists FROM creators ORDER BY id")).all() == [
-            (1, '{"show": "own"}'), (2, '{"list": "ask", "show": "ask"}'), (3, '{"album": "season"}'),
-            (4, '{"album": "season", "playlist": "ignore"}'),
-        ]
-        assert connection.execute(text("SELECT id, new_lists FROM collections ORDER BY id")).all() == [
-            (1, '{"show": "ask"}'), (2, '{"album": "ask"}'), (3, '{"list": "ask"}'),
-        ]
-
-    command.downgrade(config, "9c3e1f5a7b20")
-    with engine.connect() as connection:
-        assert connection.execute(text("SELECT id, kind_label FROM creator_sections ORDER BY id")).all()[:2] == [
-            (1, "Show"), (2, "Movie"),
-        ]
-        assert connection.execute(text("SELECT id, new_lists FROM creators ORDER BY id")).all()[0] == (1, '{"list": "own"}')
-
-
-def test_feeds_get_their_types_and_creators_keep_their_new_list_settings_per_site(migration_database):
-    _database_path, engine = migration_database
-    from backend.db.migrations import get_alembic_config
-
-    config = get_alembic_config()
-    command.upgrade(config, "7d3b9e41a6c2")
-    with engine.begin() as connection:
-        connection.execute(text("PRAGMA foreign_keys = OFF"))
-        # A creator on YouTube and The Daily Wire, a SoundCloud artist and a creator on Vimeo.
-        for creator_id, settings in ((1, '{"list": "own", "show": "ask"}'), (2, '{"album": "season", "playlist": "ignore"}'),
-                                     (3, '{"list": "season"}')):
-            connection.execute(text("INSERT INTO creators (id, uuid, slug, title, new_lists) VALUES (:id, :id, :id, :id, :s)"),
-                               {"id": creator_id, "s": settings})
-        for account_id, creator_id, site_key in ((1, 1, "youtube"), (2, 1, "dailywire"), (3, 2, "soundcloud"), (4, 3, "vimeo")):
-            connection.execute(text(
-                "INSERT INTO creator_accounts (id, creator_id, source_key, site_key, site_ref) VALUES (:id, :creator, 's', :site, :id)"
-            ), {"id": account_id, "creator": creator_id, "site": site_key})
-        for section_id, account_id, ref, kind, role, type_ in (
-            (1, 1, "videos", "feed", "main", "feed"), (2, 1, "streams", "feed", "live", "feed"),
-            (3, 1, "shorts", "feed", "short", "feed"), (4, 1, "PL1", "list", "main", "list"),
-            (5, 2, "show", "show", "main", "show"), (6, 3, "tracks", "feed", "main", "feed"),
-            (7, 4, "videos", "feed", "main", "feed"),
-        ):
-            connection.execute(text(
-                "INSERT INTO creator_sections (id, account_id, ref, url, title, kind, role, type) "
-                "VALUES (:id, :account, :ref, :ref, :title, :kind, :role, :type)"
-            ), {"id": section_id, "account": account_id, "ref": ref, "title": f"Title {section_id}", "kind": kind,
-                "role": role, "type": type_})
-
-    command.upgrade(config, HEAD_REVISION)
-
-    with engine.connect() as connection:
-        assert connection.execute(text("SELECT id, type, title FROM creator_sections ORDER BY id")).all() == [
-            (1, "videos", None), (2, "live", None), (3, "shorts", None), (4, "list", "Title 4"), (5, "show", "Title 5"),
-            (6, "tracks", None), (7, "videos", None),
-        ]
-        columns = {column["name"] for column in inspect(connection).get_columns("creator_sections")}
-        assert not {"kind", "role"} & columns
-        assert [(id_, json.loads(value)) for id_, value in connection.execute(
-            text("SELECT id, new_lists FROM creators ORDER BY id")
-        ).all()] == [
-            (1, {"youtube": {"list": "own"}, "dailywire": {"show": "ask"}}),
-            (2, {"soundcloud": {"album": "season", "playlist": "ignore"}}),
-            (3, {"vimeo": {"list": "season"}}),
-        ]
-
-    command.downgrade(config, "7d3b9e41a6c2")
-    with engine.connect() as connection:
-        assert connection.execute(text("SELECT id, kind, role, type FROM creator_sections ORDER BY id")).all()[:3] == [
-            (1, "feed", "main", "feed"), (2, "feed", "live", "feed"), (3, "feed", "short", "feed"),
-        ]
-        assert json.loads(connection.execute(text("SELECT new_lists FROM creators WHERE id = 1")).scalar_one()) == {
-            "list": "own", "show": "ask",
-        }
-
-
-def test_movies_that_a_creators_account_lists_join_that_creator(migration_database):
-    _database_path, engine = migration_database
-    from backend.db.migrations import get_alembic_config
-
-    config = get_alembic_config()
-    command.upgrade(config, "8bf741c29247")
-    with engine.begin() as connection:
-        connection.execute(text("PRAGMA foreign_keys = OFF"))
-        connection.execute(text("INSERT INTO creators (id, uuid, slug, title) VALUES (1, 'c', 'host', 'Host')"))
         connection.execute(text(
-            "INSERT INTO creator_accounts (id, creator_id, source_key, site_key, site_ref) VALUES (1, 1, 'dailywire', 'dailywire', 'host')"
+            "INSERT INTO media_downloads (id, type, local_media_profile_id, media_item_id, file_path) "
+            "VALUES (1, 'movie', 2, 1, '/downloads/movie.mp4')"
         ))
-        # The host's movie, a show of theirs with the same name as another movie, and a movie of nobody's.
-        for section_id, ref, kind in ((1, "tribute", "item"), (2, "other", "show")):
-            connection.execute(text(
-                "INSERT INTO creator_sections (id, account_id, ref, url, title, kind) VALUES (:id, 1, :ref, :ref, :ref, :kind)"
-            ), {"id": section_id, "ref": ref, "kind": kind})
-        for movie_id, slug in ((1, "tribute"), (2, "other"), (3, "nobody")):
-            connection.execute(text(
-                "INSERT INTO media_items (id, uuid, type, source_key) VALUES (:id, :id, 'movie', 'dailywire')"
-            ), {"id": movie_id})
-            connection.execute(text("INSERT INTO media_items_movie (id, slug) VALUES (:id, :slug)"), {"id": movie_id, "slug": slug})
 
     command.upgrade(config, HEAD_REVISION)
 
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT id, creator_id FROM media_items_movie ORDER BY id")).all() == [
-            (1, 1), (2, None), (3, None),
-        ]
-
-
-def test_a_creators_collection_that_holds_only_its_playlists_lists_none_of_its_feeds(migration_database):
-    _database_path, engine = migration_database
-    from backend.db.migrations import get_alembic_config
-
-    config = get_alembic_config()
-    command.upgrade(config, "bd6c56bd1a8d")
-    with engine.begin() as connection:
-        connection.execute(text("PRAGMA foreign_keys = OFF"))
-        # An artist's collection and a creator's of only playlists, a creator's with its feeds, and a plain one.
-        for collection_id, collection_type, outside in ((1, "music", "only"), (2, "series", "only"), (3, "series", "leave_out"), (4, "music", "only")):
-            connection.execute(text(
-                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
-                "author_name, author_slug, source_key, episode_order, outside_videos) VALUES (:id, :slug, :slug, 'Channel', "
-                "'https://example.test/' || :slug, 'free', :type, 'seasonal', 'Artist', 'artist', 'ytdlp', 'newest_first', :outside)"
-            ), {"id": collection_id, "slug": f"c{collection_id}", "type": collection_type, "outside": outside})
-        connection.execute(text("INSERT INTO creators (id, uuid, slug, title) VALUES (1, 'c', 'artist', 'Artist')"))
-        for account_id in (1, 2, 3):
-            connection.execute(text(
-                "INSERT INTO creator_accounts (id, creator_id, source_key, site_key, site_ref, main_collection_id) "
-                "VALUES (:id, 1, 'ytdlp', 'youtube', :id, :id)"
-            ), {"id": account_id})
-
-    command.upgrade(config, HEAD_REVISION)
-
-    with engine.connect() as connection:
-        rows = connection.execute(text("SELECT id, outside_videos, feeds FROM collections ORDER BY id")).all()
-    assert [(row[0], row[1], json.loads(row[2]) if row[2] is not None else None) for row in rows] == [
-        (1, "add", []), (2, "only", []), (3, "leave_out", None), (4, "only", None),
+        rows = {
+            row.id: row for row in connection.execute(text(
+                "SELECT p.id, p.type, p.output_template, p.site_keys, p.include_upcoming_sites, v.video_scope "
+                "FROM local_media_profiles p JOIN local_media_profiles_video v ON v.id = p.id"
+            ))
+        }
+        assert "local_media_profiles_movie" not in inspect(connection).get_table_names()
+    assert sorted(rows) == [1, 2, 3, 4]
+    assert {row.type for row in rows.values()} == {"video"}
+    # Former Movie profiles keep their Sites and stop taking new ones; the Video profiles are left as they were.
+    assert [(json.loads(rows[key].site_keys), bool(rows[key].include_upcoming_sites)) for key in (1, 2, 3, 4)] == [
+        (["dailywire"], False), (["youtube"], True), (["dailywire"], False), (["youtube"], True),
     ]
+    assert rows[1].output_template == "/downloads/movies/{{ movie_title }}/{{ title }}.ext"
+    # A Jinja comment keeps the clashing template apart without naming any file differently.
+    assert rows[3].output_template == "/downloads/videos/{{ title }} [{{ slug }}].ext{# kept apart from vodloft-videos #}"
+    assert {key: row.video_scope for key, row in rows.items()} == {1: "movies", 2: "both", 3: "both", 4: "both"}
 
 
-def test_a_profile_for_podcasts_and_series_is_stored_under_its_own_name(migration_database):
+def test_0_10_0_a_profile_for_podcasts_and_series_is_stored_under_its_own_name(migration_database):
     _database_path, engine = migration_database
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
-    command.upgrade(config, "7d3b9e41a6c2")
+    command.upgrade(config, VODLOFT_0_9_1_REVISION)
     with engine.begin() as connection:
         connection.execute(text("PRAGMA foreign_keys = OFF"))
-        for profile_id, scope in ((1, "both"), (2, "podcast"), (3, "music_tracks")):
+        for profile_id, scope in ((1, "both"), (2, "podcast"), (3, "series")):
             connection.execute(text(
                 "INSERT INTO local_media_profiles (id, slug, name, output_template, preferred_format, video_codecs, type) "
                 "VALUES (:id, :id, :id, '/downloads/' || :id || '.ext', 'format_1080p', '[]', 'collection')"
@@ -1999,73 +1474,28 @@ def test_a_profile_for_podcasts_and_series_is_stored_under_its_own_name(migratio
         column = next(c for c in inspect(engine).get_columns("local_media_profiles_collection") if c["name"] == "collection_scope")
         return column["default"]
 
-    command.upgrade(config, "f3df05c49000")
-    assert scopes() == ["podcast-and-series", "podcast", "music_tracks"]
+    command.upgrade(config, HEAD_REVISION)
+    assert scopes() == ["podcast-and-series", "podcast", "series"]
     assert "podcast-and-series" in scope_default()
 
-    command.downgrade(config, "7d3b9e41a6c2")
-    assert scopes() == ["both", "podcast", "music_tracks"]
+    command.downgrade(config, VODLOFT_0_9_1_REVISION)
+    assert scopes() == ["both", "podcast", "series"]
     assert "both" in scope_default()
 
 
-def test_a_database_that_renamed_podcasts_and_series_early_still_gets_the_lists_and_section_types(migration_database):
+def test_0_10_0_the_sites_get_their_order_and_the_always_listed_sites_become_rows(migration_database):
     _database_path, engine = migration_database
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
-    command.upgrade(config, "bb1c178245cc")
-    assert "new_lists" not in {c["name"] for c in inspect(engine).get_columns("collections")}
-
-    command.upgrade(config, "head")
-    assert "new_lists" in {c["name"] for c in inspect(engine).get_columns("collections")}
-    with engine.connect() as connection:
-        assert connection.execute(text("SELECT alembic_version_num FROM settings")).scalars().all() == [HEAD_REVISION]
-
-
-def test_a_music_collection_repeats_a_video_in_each_album_and_others_keep_one(migration_database):
-    _database_path, engine = migration_database
-    from backend.db.migrations import get_alembic_config
-
-    config = get_alembic_config()
-    command.upgrade(config, "4b9e1d7c2a60")
-    with engine.begin() as connection:
-        connection.execute(text("PRAGMA foreign_keys = OFF"))
-        for collection_id, collection_type in ((1, "music"), (2, "series"), (3, "podcast")):
-            connection.execute(text(
-                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
-                "author_name, author_slug, source_key, episode_order) VALUES (:id, :slug, :slug, 'Channel', "
-                "'https://example.test/' || :slug, 'free', :type, 'seasonal', 'Artist', 'artist', 'ytdlp', 'newest_first')"
-            ), {"id": collection_id, "slug": f"c{collection_id}", "type": collection_type})
-
-    command.upgrade(config, "03646be1903c")
-
-    with engine.connect() as connection:
-        assert connection.execute(text("SELECT repeat_videos FROM collections ORDER BY id")).scalars().all() == [
-            "each_season", "one_season", "one_season",
-        ]
-    unique = {tuple(c["column_names"]) for c in inspect(engine).get_unique_constraints("media_items_episode")}
-    assert ("season_id", "source_slug") in unique
-    assert ("collection_id", "source_slug") not in unique
-
-    command.downgrade(config, "4b9e1d7c2a60")
-    assert "repeat_videos" not in {c["name"] for c in inspect(engine).get_columns("collections")}
-    unique = {tuple(c["column_names"]) for c in inspect(engine).get_unique_constraints("media_items_episode")}
-    assert ("collection_id", "source_slug") in unique
-
-
-def test_the_sites_get_their_order_and_the_always_listed_sites_become_rows(migration_database):
-    _database_path, engine = migration_database
-    from backend.db.migrations import get_alembic_config
-
-    config = get_alembic_config()
-    command.upgrade(config, "7c41e2a9d5b3")
+    command.upgrade(config, VODLOFT_0_9_1_REVISION)
     with engine.begin() as connection:
         for key, name, domain in (("youtube", "YouTube", "youtube.com"), ("twitch", "Twitch", "twitch.tv")):
             connection.execute(text("INSERT INTO sites (key, name, domains) VALUES (:key, :name, :domains)"), {
                 "key": key, "name": name, "domains": json.dumps([domain]),
             })
 
-    command.upgrade(config, "710584a17632")
+    command.upgrade(config, HEAD_REVISION)
 
     with engine.connect() as connection:
         rows = connection.execute(text("SELECT key, domains FROM sites ORDER BY position")).all()
@@ -2074,56 +1504,96 @@ def test_the_sites_get_their_order_and_the_always_listed_sites_become_rows(migra
     assert json.loads(dict(rows)["npo"]) == ["npo.nl"]
 
 
-def test_accounts_get_their_picture_and_own_collections_their_sites_name(migration_database):
+def test_0_10_0_installations_with_notification_rules_get_the_new_lists_rule(migration_database):
     _database_path, engine = migration_database
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
-    command.upgrade(config, "6007aa686523")
+    command.upgrade(config, VODLOFT_0_9_1_REVISION)
+    with engine.connect() as connection:
+        before = connection.execute(text("SELECT default_key FROM notification_rules ORDER BY position")).scalars().all()
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        rules = connection.execute(text(
+            "SELECT default_key, event, position, push FROM notification_rules ORDER BY position"
+        )).all()
+    assert before and "new_lists_found" not in before
+    assert [rule.default_key for rule in rules] == [*before, "new_lists_found"]
+    assert tuple(rules[-1]) == ("new_lists_found", "new_lists_found", rules[-2].position + 1, 1)
+
+
+def test_0_10_0_seasons_of_sites_with_their_own_seasons_came_from_the_site(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, VODLOFT_0_9_1_REVISION)
     with engine.begin() as connection:
-        for collection_id, title in ((1, "Northwind"), (2, "Northwind"), (3, "My own name"), (4, "Solo")):
+        # A Daily Wire show and a YouTube channel.
+        for collection_id, source_key in ((1, "dailywire"), (2, "ytdlp")):
             connection.execute(text(
                 "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
-                "author_name, author_slug, source_key, episode_order) VALUES (:id, :uuid, :slug, :title, "
-                "'https://example.test/' || :slug, 'free', 'series', 'seasonal', 'Author', 'author', 'ytdlp', 'oldest_first')"
-            ), {"id": collection_id, "uuid": f"uuid-{collection_id}", "slug": f"c-{collection_id}", "title": title})
-        known = set(connection.execute(text("SELECT key FROM sites")).scalars())
-        for key, name in (("youtube", "YouTube"), ("soundcloud", "SoundCloud"), ("twitch", "Twitch")):
-            if key not in known:
-                connection.execute(text(
-                    "INSERT INTO sites (key, name, domains, position) VALUES (:key, :name, '[]', 9)"
-                ), {"key": key, "name": name})
-        for creator_id, title, avatar in ((1, "Northwind", "nw.jpg"), (2, "Solo", "solo.jpg")):
+                "author_name, author_slug, source_key, episode_order) VALUES (:id, 'uuid-' || :id, 'c' || :id, 'C', "
+                "'https://example.test/' || :id, 'free', 'series', 'seasonal', 'Host', 'host', :source, 'oldest_first')"
+            ), {"id": collection_id, "source": source_key})
+        for season_id, collection_id, slug in ((1, 1, "season-1"), (2, 1, "2024"), (3, 2, "2023"), (4, 2, "vlogs")):
             connection.execute(text(
-                "INSERT INTO creators (id, uuid, slug, title, avatar_path, banner_path) "
-                "VALUES (:id, :uuid, :slug, :title, :avatar, :banner)"
-            ), {"id": creator_id, "uuid": f"creator-{creator_id}", "slug": title.lower(), "title": title, "avatar": avatar,
-                "banner": f"banner-{avatar}"})
-        accounts = (
-            # (id, creator, site, main collection)
-            (1, 1, "youtube", 1), (2, 1, "soundcloud", 2), (3, 1, "twitch", 3), (4, 2, "youtube", 4),
+                "INSERT INTO seasons (id, collection_id, \"index\", slug, name, season_type, season_number) "
+                "VALUES (:id, :collection, :id, :slug, :slug, 'normal', :id)"
+            ), {"id": season_id, "collection": collection_id, "slug": slug})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT id, origin FROM seasons ORDER BY id")).all() == [
+            (1, "site"), (2, "vodloft"), (3, "vodloft"), (4, "vodloft"),
+        ]
+        collection = connection.execute(text(
+            "SELECT kind, link_seasons, channel_season, repeat_videos, new_lists, creator_id FROM collections WHERE id = 2"
+        )).one()
+    # Every collection starts as a channel collection without lists; a background migration tells its kind.
+    assert tuple(collection) == ("channel", "off", "unlisted", "one_season", "{}", None)
+
+
+def test_0_10_0_downgrades_to_0_9_1_and_upgrades_again(migration_database):
+    _database_path, _engine = migration_database
+    from backend.db.migrations import check_database, get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, HEAD_REVISION)
+    command.downgrade(config, VODLOFT_0_9_1_REVISION)
+    command.upgrade(config, HEAD_REVISION)
+
+    check_database()
+
+
+def test_dw_episode_number_becomes_source_number_in_episodes_and_saved_templates(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, VODLOFT_0_9_1_REVISION)
+    template = "/downloads/{{ dw_episode_number }} {{ title | default('dw_episode_number') }} dw_episode_number.ext"
+    with engine.begin() as connection:
+        connection.execute(text(
+            "INSERT INTO local_media_profiles (id, slug, name, output_template, preferred_format, video_codecs, type) "
+            "VALUES (5, 'p', 'P', :template, 'format_1080p', '[]', 'collection')"
+        ), {"template": template})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT output_template FROM local_media_profiles")).scalar_one() == (
+            "/downloads/{{ source_number }} {{ title | default('dw_episode_number') }} dw_episode_number.ext"
         )
-        for account_id, creator_id, site_key, main in accounts:
-            connection.execute(text(
-                "INSERT INTO creator_accounts (id, creator_id, source_key, site_key, site_ref, main_collection_id) "
-                "VALUES (:id, :creator, 'ytdlp', :site, :ref, :main)"
-            ), {"id": account_id, "creator": creator_id, "site": site_key, "ref": f"ref-{account_id}", "main": main})
+    assert "source_number" in {column["name"] for column in inspect(engine).get_columns("media_items_episode")}
 
-    command.upgrade(config, "148e116c354b")
-
+    command.downgrade(config, VODLOFT_0_9_1_REVISION)
     with engine.connect() as connection:
-        titles = dict(connection.execute(text("SELECT id, title FROM collections")).all())
-        avatars = dict(connection.execute(text("SELECT id, avatar_path FROM creator_accounts")).all())
-    # Only an own collection named exactly after a creator on several Sites takes its Site's name.
-    assert titles == {1: "Northwind YouTube", 2: "Northwind SoundCloud", 3: "My own name", 4: "Solo"}
-    # A creator's first account has their picture; the others get theirs on the next daily look.
-    assert avatars == {1: "nw.jpg", 2: None, 3: None, 4: "solo.jpg"}
-
-    # So does their banner; a background migration looks up the others' pictures.
-    command.upgrade(config, "250f37a05db0")
-    with engine.connect() as connection:
-        banners = dict(connection.execute(text("SELECT id, banner_path FROM creator_accounts")).all())
-    assert banners == {1: "banner-nw.jpg", 2: None, 3: None, 4: "banner-solo.jpg"}
+        assert connection.execute(text("SELECT output_template FROM local_media_profiles")).scalar_one() == template
+    assert "dw_episode_number" in {column["name"] for column in inspect(engine).get_columns("media_items_episode")}
 
 
 def test_yt_dlp_options_vodloft_now_refuses_become_comments(migration_database):
@@ -2132,7 +1602,7 @@ def test_yt_dlp_options_vodloft_now_refuses_become_comments(migration_database):
     from sources.ytdlp_options import check_ytdlp_options
 
     config = get_alembic_config()
-    command.upgrade(config, "a4318a92a5ca")
+    command.upgrade(config, "4c7e19a2b6d0")
     collection_options = "--concurrent-fragments 4\n--limit-rate 2M\n# --test\n--remove-chapters Intro --no-mtime"
     with engine.begin() as connection:
         connection.execute(text(
@@ -2158,6 +1628,6 @@ def test_yt_dlp_options_vodloft_now_refuses_become_comments(migration_database):
     assert all(line.status == "valid" for line in check_ytdlp_options(collection))
     assert all(line.status == "valid" for line in check_ytdlp_options(source))
 
-    command.downgrade(config, "a4318a92a5ca")
+    command.downgrade(config, "4c7e19a2b6d0")
     with engine.connect() as connection:
         assert connection.execute(text("SELECT ytdlp_options FROM collections")).scalar_one() == collection_options

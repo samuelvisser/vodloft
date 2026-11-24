@@ -173,8 +173,8 @@ def test_check_frequency_decides_which_scans_include_a_collection(db, monkeypatc
     check_frequency.full_scan_done(rare.id)
     assert not check_frequency.full_scan_due(rare)
     assert check_frequency.full_scan_due(rare, now=time.monotonic() + 6 * 3600)
-    assert check_frequency.quick_check_minutes(rare, 15) == 360
-    assert check_frequency.quick_check_minutes(regular, 15) == 15
+    assert check_frequency.quick_check_plan(rare, 0).least_minutes == 360
+    assert check_frequency.quick_check_plan(regular, 0).least_minutes == 0
 
 
 def test_quick_checks_skip_own_schedules_and_slow_down_rare_collections(db, monkeypatch):

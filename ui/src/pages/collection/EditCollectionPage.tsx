@@ -4,9 +4,8 @@ import CollectionForm, { CollectionFormValue, defaultCollectionFormValue } from 
 import CustomMetadataEditor from '../../components/CustomMetadataEditor/CustomMetadataEditor'
 import { useQueryClient } from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {useCollection} from '../../lib/queries'
+import {useCollection, useCollectionSeasons} from '../../lib/queries'
 import SimpleSelect from '../../components/common/SimpleSelect'
-import {createSelectRegistry} from '../../utils/selectRegistry'
 import {faIcon} from '../../icons/faIcon'
 import OptionsEditor from '../../components/common/OptionsEditor/OptionsEditor'
 import ReadMore from '../../utils/ReadMore'
@@ -15,37 +14,20 @@ import CronEditor from '../../components/Settings/CronEditor'
 import {useQuery} from '@tanstack/react-query'
 import {toast} from '../../lib/toast'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
-import {removeEpisodePreviewFromStorage, removeSeasonsFromStorage} from '../../lib/cache'
+import {removeEpisodePreviewFromStorage} from '../../lib/cache'
+import {forgetDeletedCollection} from '../../lib/deletedCollection'
 import {episodeQueryKeys} from '../../lib/collectionQueryOptions'
-import {CollectionTypeReg, CollectionTypeValue, episodeIdentifierRegFor, musicIdentificationAdvice, EpisodeIdentifierValue, EpisodeOrderReg, EpisodeOrderValue} from '../../types/collection'
+import {CheckFrequencyReg, type CheckFrequency, CollectionTypeReg, CollectionTypeValue, CookiesModeReg, type CookiesMode, SplitChaptersReg, episodeIdentifierRegFor, musicIdentificationAdvice, EpisodeIdentifierValue, EpisodeOrderReg, EpisodeOrderValue} from '../../types/collection'
 import ChangeIdentificationDialog from '../../components/ChangeIdentificationDialog/ChangeIdentificationDialog'
 import ProgressSelect from '../../components/common/ProgressSelect'
 import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 import {apiUrl} from '../../lib/api'
 import SeasonsDialog from '../../components/CollectionSeasons/SeasonsDialog'
+import ReconcileDialog from '../../components/ReconcileDialog/ReconcileDialog'
 import PageHeader, {PageHeaderAction} from '../../components/common/PageHeader'
 import {collectionWords, wordsFor} from '../../lib/collectionWords'
 import Breadcrumb from '../../components/common/Breadcrumb/Breadcrumb'
 
-const CheckFrequencyReg = createSelectRegistry('CollectionCheckFrequency', {
-  default: {label: 'Like other Collections'},
-  less_often: {label: 'Less often'},
-  own: {label: 'On its own schedule'},
-})
-
-const SplitChaptersReg = createSelectRegistry('CollectionSplitChapters', {
-  whole: {label: 'Keep each video whole'},
-  split: {label: 'A part per chapter'},
-})
-
-const CookiesModeReg = createSelectRegistry('CollectionCookiesMode', {
-  automatic: {label: 'Only when needed'},
-  never: {label: 'Never'},
-  always: {label: 'Always'},
-})
-
-type CheckFrequency = 'default' | 'less_often' | 'own'
-type CookiesMode = 'automatic' | 'never' | 'always'
 
 type RouteParams = { id?: string }
 
@@ -67,6 +49,8 @@ export default function EditCollectionPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const [metadataOpen, setMetadataOpen] = useState(false)
+  // The Move dialog, for the downloaded episodes a save of the seasons left in another season.
+  const [moving, setMoving] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   // A message about new playlists opens the Seasons dialog straight away.
   const seasonsOpen = searchParams.get('seasons') === '1'
@@ -80,6 +64,9 @@ export default function EditCollectionPage() {
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [optionsError, setOptionsError] = useState<string | null>(null)
   const {data: collection} = useCollection(id)
+  // A Music collection that is one album, such as one made from an album, has no albums to group its tracks by.
+  const {data: seasons} = useCollectionSeasons(id)
+  const oneAlbum = seasons?.length === 1
   const initializedCollectionId = useRef<string | undefined>(undefined)
 
   const [form, setForm] = useState<FormState>(() => ({
@@ -241,23 +228,8 @@ export default function EditCollectionPage() {
       toast.error(friendly)
       return
     }
-    removeEpisodePreviewFromStorage(id)
-    removeSeasonsFromStorage(id)
     setDeleteConfirm(false)
-
-    await Promise.all([
-      qc.cancelQueries({queryKey: ['collection', id]}),
-      qc.cancelQueries({queryKey: ['seasons', id]}),
-      qc.cancelQueries({queryKey: episodeQueryKeys.forCollection(id)}),
-    ])
-    qc.removeQueries({queryKey: ['collection', id]})
-    qc.removeQueries({queryKey: ['seasons', id]})
-    qc.removeQueries({queryKey: episodeQueryKeys.forCollection(id)})
-
-    await Promise.all([
-      qc.invalidateQueries({queryKey: ['collections']}),
-      qc.invalidateQueries({queryKey: ['collectionsView']}),
-    ])
+    await forgetDeletedCollection(qc, id)
     navigate('/library?type=collections')
   }
 
@@ -344,8 +316,9 @@ export default function EditCollectionPage() {
           {urlError && <div className="error" role="alert">{urlError}</div>}
           {linkOptional && (
             <div className="help" id="collection-url-help">
-              Optional. This collection holds only what its links have. A channel link here offers that channel's
-              playlists in the {words.season.Plural} window and finds new ones.
+              {collection?.kind === 'custom'
+                ? 'Optional. A link of its own turns this custom collection into a channel or a list collection, by what the link is.'
+                : `Optional. This collection holds only what its ${words.season.plural} have. A channel link here offers that channel's playlists in the ${words.season.Plural} window and finds new ones.`}
             </div>
           )}
         </div>
@@ -435,8 +408,8 @@ export default function EditCollectionPage() {
             How VODLoft numbers the {words.episode.plural}. Changing it numbers every {words.episode.singular} again, renames the files
             that are named by their numbers and rewrites their metadata.
           </div>
-          {musicIdentificationAdvice(form.type, collection?.episodeIdentifier) && (
-            <div className="help form-advice" role="status">{musicIdentificationAdvice(form.type, collection?.episodeIdentifier)}</div>
+          {musicIdentificationAdvice(form.type, collection?.episodeIdentifier, oneAlbum) && (
+            <div className="help form-advice" role="status">{musicIdentificationAdvice(form.type, collection?.episodeIdentifier, oneAlbum)}</div>
           )}
         </div>
 
@@ -610,7 +583,15 @@ export default function EditCollectionPage() {
         collectionSlug={id}
         collectionTitle={collection?.title ?? id}
         onDismiss={() => setSeasonsOpen(false)}
+        onMovesWaiting={() => setMoving(true)}
         words={wordsFor(collection)}
+      />
+
+      <ReconcileDialog
+        open={moving}
+        path={`/collections/${encodeURIComponent(id)}`}
+        what={`the ${wordsFor(collection).episode.plural} of ${collection?.title ?? id}`}
+        onDismiss={() => setMoving(false)}
       />
 
       <CustomMetadataEditor

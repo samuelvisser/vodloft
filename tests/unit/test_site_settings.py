@@ -151,3 +151,18 @@ def test_a_new_download_profile_starts_with_the_check_off_when_nothing_counts_as
     site_settings(youtube={"upgrade_check": False})
     assert download_profile_defaults(site_of("youtube"))["upgrade_check"] is False
 
+
+
+def test_a_new_profile_picks_the_newest_season_only_where_the_seasons_are_the_sites_own():
+    """A show's seasons come from its Site, so a new profile starts at the newest; seasons VODLoft makes, such as an
+    artist's albums, are all picked. A Site's contract can say otherwise."""
+    from dataclasses import replace
+
+    from backend.services.site_settings import profile_seasons
+    from sources import ProfileSeasons, get_source
+
+    assert profile_seasons(site_of("dailywire"), get_source("dailywire")) is ProfileSeasons.NEWEST
+    assert profile_seasons(site_of("npo"), get_source("npo")) is ProfileSeasons.NEWEST
+    assert profile_seasons(site_of("youtube"), get_source("ytdlp")) is ProfileSeasons.ALL
+    newest = replace(site_of("soundcloud"), profile_seasons=ProfileSeasons.NEWEST)
+    assert profile_seasons(newest, get_source("ytdlp")) is ProfileSeasons.NEWEST

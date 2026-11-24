@@ -1,6 +1,6 @@
 import {sourceControls} from '../../lib/sourceControls'
 import {useState} from 'react'
-import {Link, useLocation, useNavigate, useParams} from 'react-router-dom'
+import {Link, useLocation, useParams} from 'react-router-dom'
 import toast from '../../lib/toast'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
@@ -20,7 +20,7 @@ import {faIcon} from '../../icons/faIcon'
 import SiteLink from '../../components/common/SiteLink'
 import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
 import {RemovedBadge, ExpiredBadge} from '../../components/common/RemovedFromSource'
-import SeasonPlaceNote, {MovedBadge, ReassignedBadge, useSeasonPlace} from '../../components/Episode/SeasonPlaceNote'
+import SeasonPlaceNote, {MovedBadge, useSeasonPlace} from '../../components/Episode/SeasonPlaceNote'
 import ReconcileDialog from '../../components/ReconcileDialog/ReconcileDialog'
 import {can} from '../../lib/access'
 import {AccessNotice, ItemAccessBadge} from '../../components/common/AccessLocked'
@@ -32,6 +32,7 @@ import {fileWordsFor, wordsFor} from '../../lib/collectionWords'
 import {addLocalMediaProfilePath} from '../../types/local_media_profile'
 import Breadcrumb from '../../components/common/Breadcrumb/Breadcrumb'
 import LinkedText from '../../components/common/LinkedText'
+import {nameInText} from '../../lib/nameInText'
 
 
 const OPERATION_STARTING_MESSAGE = 'This task is starting...'
@@ -122,12 +123,10 @@ export default function EpisodePage() {
         error: downloadsError,
         hasDomainData: hasDownloadState,
     } = useEpisodeDownloads(episodeId)
-    const navigate = useNavigate()
     const location = useLocation()
     // Its collection's playlists put it in another season, where it waits for the user to move it.
     const {data: seasonPlace} = useSeasonPlace(episodeId)
     const moved = !!seasonPlace?.belongsElsewhere
-    const reassignedTo = seasonPlace?.collectionTitle ?? null
     const [reconciling, setReconciling] = useState(false)
     const collectionProfiles = profiles?.filter((profile) => (
         isCollectionLocalMediaProfileAvailableFor(profile, collection?.type)
@@ -234,10 +233,10 @@ export default function EpisodePage() {
                 `${base}/episodes/${encodeURIComponent(episode.slug)}/refresh-metadata`,
                 {method: 'POST'},
             )
-            toast.success('Metadata refresh started')
+            toast.success('Info refresh started')
         } catch (error) {
             const detail = error instanceof OperationStartError ? error.message : undefined
-            toast.error(detail || 'Could not start metadata refresh')
+            toast.error(detail || 'Could not start the info refresh')
         } finally {
             setMetadataRefreshStarting(false)
         }
@@ -250,7 +249,7 @@ export default function EpisodePage() {
                 <div className="episode-topbar">
                     <Breadcrumb items={[
                         {label: 'Library', to: '/library'},
-                        {label: collection.title, to: `/collection/${collectionId}`},
+                        {label: collection.title, to: (location.state as {fromCollection?: string} | null)?.fromCollection ?? `/collection/${collectionId}`},
                     ]}/>
                     <div className="episode-title-actions">
                         {episode.sharingUrl && (
@@ -259,24 +258,19 @@ export default function EpisodePage() {
                         <ActionMenu
                             items={[
                                 ...(sourceControls(collection).metadataRefresh ? [{
-                                    label: 'Refresh metadata',
+                                    label: `Refresh info from ${siteLabel}`,
                                     description: detailsChecked,
                                     icon: faIcon('fass', 'arrows-rotate'),
                                     disabled: metadataRefreshBusy,
                                     disabledReason: metadataRefreshStarting
                                         ? OPERATION_STARTING_MESSAGE
                                         : metadataRefreshOperation
-                                            ? `A metadata refresh is running for this ${words.episode.singular}.`
+                                            ? `VODLoft is refreshing the info of this ${words.episode.singular}.`
                                             : undefined,
                                     operation: metadataRefreshOperation,
                                     onSelect: () => void refreshMetadata(),
                                 }] : []),
-                                ...(reassignedTo && can('library', 'manage') ? [{
-                                    label: `Move to ${reassignedTo}`,
-                                    description: `Moves the ${words.episode.singular} to the collection its creator places it in now, with its files`,
-                                    icon: faIcon('fass', 'arrow-right-from-bracket'),
-                                    onSelect: () => setReconciling(true),
-                                }] : moved && can('library', 'manage') ? [{
+                                ...(moved && can('library', 'manage') ? [{
                                     label: `Move to its new ${words.season.singular}`,
                                     description: `Moves the ${words.episode.singular} and renames its files to match`,
                                     icon: faIcon('fass', 'arrow-right-arrow-left'),
@@ -309,7 +303,6 @@ export default function EpisodePage() {
                         {episode.removedBy
                             ? <ExpiredBadge removedBy={episode.removedBy}/>
                             : episode.removedFromSource && <RemovedBadge asText/>}
-                        {reassignedTo && <ReassignedBadge collectionTitle={reassignedTo} asText/>}
                         {moved && <MovedBadge asText words={words}/>}
                         <span className={`episode-status${isLive ? ' is-live' : ''}`} title={sourceStatus?.help}>
                             {isLive && <span className="episode-status-dot" aria-hidden="true"/>}
@@ -351,12 +344,6 @@ export default function EpisodePage() {
                     path={`/episodes/${encodeURIComponent(episode.slug)}`}
                     what={episode.title}
                     onDismiss={() => setReconciling(false)}
-                    onDone={(result) => {
-                        // A Reassigned episode lives in its new collection now.
-                        if (result.collectionSlug && result.collectionSlug !== collectionId) {
-                            navigate(`/collection/${result.collectionSlug}/episode/${result.episodeSlug}`, {replace: true})
-                        }
-                    }}
                 />
 
                 {!!episode.description?.trim() && (
@@ -383,7 +370,7 @@ export default function EpisodePage() {
                         )}
                         {!locked && !downloadStateError && profiles !== undefined && !collectionProfiles?.length && (
                             <p>
-                                {profiles.length ? `No Local Media Profile fits ${collection.title} yet.` : 'No Local Media Profiles configured yet.'}{' '}
+                                {profiles.length ? `No Local Media Profile fits ${nameInText(collection.title)} yet.` : 'No Local Media Profiles configured yet.'}{' '}
                                 <Link to={addLocalMediaProfilePath({collectionType: collection.type, siteKey: collection.site?.key, from: collection.title, collectionId: collection.id, returnTo: `${location.pathname}${location.search}`})}>Add one</Link>
                                 {' '}to download this {words.episode.singular}.
                             </p>

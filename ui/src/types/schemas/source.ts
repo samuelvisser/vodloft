@@ -149,7 +149,7 @@ export const MediaLinksReadSchema = z.object({urls: z.array(z.string())})
 
 export const ResolvedLinkReadSchema = z.object({
     source: SourceReadSchema,
-    /** A creator link, such as a Daily Wire host's page, is added as a creator only. */
+    /** A creator link, such as a Daily Wire host's page, can't be added: add one of their shows instead. */
     kind: z.enum(['collection', 'movie', 'episode', 'video', 'creator']),
     slug: z.string(),
     url: z.string(),
@@ -167,11 +167,11 @@ export const ResolvedLinkReadSchema = z.object({
         imageUrl: z.string().nullable(),
         authorName: z.string().nullable(),
     }),
-    /** The creator this link is, on a Site with creators. */
-    creatorUrl: z.string().nullable().optional().default(null),
+    /** For a collection: whether it is a channel or one list. */
+    collectionKind: z.enum(['channel', 'list']).nullable().optional().default(null),
+    /** For a collection on a Site with creators, which can be in one: what its Site calls the creator behind it, such
+     *  as host on The Daily Wire. */
     creatorNames: NamesSchema.nullable().optional().default(null),
-    /** Every type of section that creator has on the Site, named together, such as albums and singles. */
-    creatorSections: NamesSchema.nullable().optional().default(null),
     /** Every Source that claims the link's site, preferred first. */
     candidates: z.array(SourceReadSchema),
 })
@@ -191,8 +191,6 @@ export const SearchResultReadSchema = z.object({
     facts: z.array(z.string()).optional(),
     access: z.string().nullable().optional(),
     accessLabel: z.string().nullable().optional(),
-    /** What the Site calls a creator, when the result is a creator's own page that can be added as one. */
-    creatorNames: NamesSchema.nullable().optional(),
 })
 export type SearchResultRead = z.infer<typeof SearchResultReadSchema>
 
@@ -245,8 +243,12 @@ export const SiteReadSchema = z.object({
     sectionTypes: z.array(SectionTypeSchema),
     /** What the Site calls its lists, all its types of list together, such as albums and playlists. */
     sectionListNames: NamesSchema,
-    /** What the Site calls the lists and shows its creators add, such as playlists, or shows on The Daily Wire. */
-    sectionGrowingNames: NamesSchema,
+    /** What the Site calls a collection of a channel's uploads, such as a YouTube channel. */
+    channelCollectionNames: NamesSchema,
+    /** What the Site calls a collection of one list, such as a YouTube playlist. */
+    listCollectionNames: NamesSchema,
+    /** A channel's playlists or albums at the Site can be seasons of its collection. */
+    linkSeasons: z.boolean().default(false),
 })
 export type SiteRead = z.infer<typeof SiteReadSchema>
 
@@ -314,6 +316,8 @@ export const ApiStatusReadSchema = z.object({
     /** The collections the key speeds up, and what one full re-scan of them costs. */
     collectionCount: z.number(),
     rescanUnits: z.number(),
+    /** What one quick check of each of those collections costs, and how long it waits between checks anyway. */
+    checkCosts: z.array(z.object({units: z.number(), leastMinutes: z.number(), feeds: z.number()})),
 })
 export type ApiStatusRead = z.infer<typeof ApiStatusReadSchema>
 
@@ -400,6 +404,14 @@ export const CollectionDetailsReadSchema = z.object({
     musicReason: z.string().nullable().optional(),
     /** The collection's own seasons, oldest first; empty when VODLoft makes a season per upload year. */
     seasons: z.array(z.object({slug: z.string(), name: z.string()})),
+    /** The collection's Site has sound only, such as SoundCloud: a Music collection there holds tracks. */
+    audioOnly: z.boolean().default(false),
+    /** What the link is: a channel, or one list, such as a playlist or an album, which is the collection's one season. */
+    kind: z.enum(['channel', 'list']),
+    /** Which of its Site's types of list the link is, such as an album or a playlist on SoundCloud, where its link doesn't tell. */
+    listType: z.string().nullable().default(null),
+    /** What the collection's seasons will be once added, by collection type, as its Site's defaults make them. */
+    seasonsPlans: z.record(z.string(), z.string()).default({}),
 })
 export type CollectionDetailsRead = z.infer<typeof CollectionDetailsReadSchema>
 

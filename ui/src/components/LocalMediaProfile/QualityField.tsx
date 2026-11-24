@@ -102,6 +102,13 @@ export default function QualityField({form, mode, isCreating}: Props) {
     }, [offered, preferredFormat])
     const collectionScope = useWatch({control, name: 'collectionScope'}) as string | undefined
     const music = mode === 'collection' && collectionScope === 'music'
+    // An HLS bundle lets podcast apps switch resolutions; a profile for Music keeps tracks or music videos, so moving
+    // to Music takes the nearest plain video instead.
+    useEffect(() => {
+        if (!music || preferredFormat !== 'format_hls') return
+        chooseFormat((offered && nearestVideoFormat(offered, preferredFormat)) ?? 'format_1080p')
+        // chooseFormat only reads the form, so a new one each render needs no new run.
+    }, [music, preferredFormat, offered])
     // A profile for Music keeps tracks when it downloads audio only, so with downloads it stays on one side of that.
     const {hasDownloads, savedTracks} = useTracksLock(form, isCreating)
     const tracksLocked = music && hasDownloads && savedTracks
@@ -145,8 +152,8 @@ export default function QualityField({form, mode, isCreating}: Props) {
             label: 'Other',
             options: [
                 ...(!offered || offered.audioOnly ? [option('format_audio_only')] : []),
-                // Only episodes of a collection are kept as an HLS bundle, for podcast feeds.
-                ...(mode === 'collection' && offered?.hlsBundle ? [option('format_hls')] : []),
+                // Only episodes of podcasts and series are kept as an HLS bundle, for podcast feeds.
+                ...(mode === 'collection' && !music && offered?.hlsBundle ? [option('format_hls')] : []),
             ],
         },
     ].filter((group) => group.options.length)

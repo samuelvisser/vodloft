@@ -1,6 +1,6 @@
 from ...contract import Names, SectionKind, SectionType
 from .feed_section_type import YtdlpFeedSectionType
-from .other_sites import CREATOR_PRESETS, OtherSites
+from .other_sites import OtherSites
 
 ALBUM_LIST = "album"
 PLAYLIST_LIST = "playlist"
@@ -22,7 +22,6 @@ class SoundCloud(OtherSites):
     searchable = True
     costly_search = True
     # An account may be a music artist or anyone else, such as a podcast; a Music collection calls it an artist.
-    creator_presets = CREATOR_PRESETS
     # An account has its Tracks, and its sets: albums and playlists, which SoundCloud tells apart. A track on its own
     # is a single.
     section_types = (
@@ -32,5 +31,9 @@ class SoundCloud(OtherSites):
         SectionType("single", SectionKind.ITEM, Names("single", "singles")),
     )
     link_seasons = True
-    # What is in none of a collection's albums and playlists is its tracks.
-    loose_season = "Tracks"
+    channel_collection_names = Names("account", "accounts")
+    # A set is an album or a playlist, which its link doesn't tell. SoundCloud says which when the set is looked up,
+    # and VODLoft keeps that with the collection; this names a set it has not looked up.
+    list_collection_names = Names.joined((Names("album", "albums"), Names("playlist", "playlists")))
+    channel_season_names = Names("album", "albums")
+    list_season_names = Names("group", "groups")

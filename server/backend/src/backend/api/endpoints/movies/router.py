@@ -1,6 +1,8 @@
 from fastapi import APIRouter, HTTPException, status
 
 from .service import *
+from .bulk import delete_movies
+from ...models.profile_bulk import BulkResultRead, BulkSelectionIn
 from ...models.movie import *
 from ...models.media_download import MediaDownloadAPICreate
 from ...models.operations import (
@@ -25,6 +27,12 @@ from backend.security.deps import may_delete_files, requires, signed_in
 from backend.db.core import run_write_transaction
 
 router = APIRouter(prefix="/movies", tags=["Movies"])
+
+
+@router.post("/bulk/delete", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=BulkResultRead)
+def movies_bulk_delete(body: BulkSelectionIn):
+    """Delete the chosen movies, as deleting each on its page does."""
+    return run_write_transaction(lambda s: delete_movies(s, body))
 
 
 @router.post("/{movie_slug}/index", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=MovieAPIRead, status_code=status.HTTP_201_CREATED)

@@ -82,19 +82,12 @@ def get_download_profile_episodes(
         *,
         only_episode: Optional[Episode] = None,
 ) -> list[Episode]:
-    """Episodes a Download Profile currently wants represented by artifacts. A video that is still downloaded in
-    another collection of the creator, as Reassigned, waits until it is moved here."""
-    from backend.services.reassigned import awaiting_move
-
-    wanted = wanted_episodes(
+    """Episodes a Download Profile currently wants represented by artifacts."""
+    return wanted_episodes(
         s,
         EpisodeSelection.of_profile(profile),
         only_episode=only_episode,
     )
-    if not wanted or profile.collection.creator_id is None:
-        return wanted
-    waiting = awaiting_move(s, profile.collection)
-    return [episode for episode in wanted if episode.id not in waiting] if waiting else wanted
 
 
 _EPISODES_NAMED_IN_A_QUERY = 100

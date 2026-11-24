@@ -58,8 +58,11 @@ def _episode(index: int, published: datetime):
 
 
 def _profile(max_items: int):
+    from backend.db.models import Collection
+
     return SimpleNamespace(
         collection_id=1,
+        collection=Collection(source_key="dailywire", sharing_url="https://www.dailywire.com/show/which", type="podcast"),
         use_downloads=False,
         use_source_stream=True,
         preferred_format="format_1080p",

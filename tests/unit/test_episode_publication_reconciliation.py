@@ -266,7 +266,7 @@ def test_metadata_refresh_repairs_wrong_main_episode_identifier(monkeypatch):
     session.expire_all()
     stored = session.get(type(episode), episode.id)
     assert stored.episode_identifier == "ep.2500"
-    assert stored.dw_episode_number == "2500.00"
+    assert stored.source_number == "2500.00"
     session.close()
     engine.dispose()
 

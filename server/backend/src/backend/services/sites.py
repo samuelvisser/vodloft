@@ -7,6 +7,7 @@ the Site's own id for it is unique per Site.
 """
 from __future__ import annotations
 
+from backend.utils.helpers import name_in_text
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from functools import lru_cache
@@ -18,8 +19,10 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Collection, CreatorAccount, Episode, LocalMediaProfileBase, Movie, Site, Video
 from backend.security.access import Access
-from backend.types.collection_contracts import CollectionWords, collection_contract
-from backend.types.link_season_types import OutsideVideos
+from backend.types.download_profile_types import EpIdType
+from backend.types.collection_contracts import DEFAULT_WORDS, CollectionWords, collection_contract
+from backend.types.link_season_types import CollectionKind, OutsideVideos
+from backend.types.resource_names import CUSTOM_COLLECTION_NAMES
 from backend.services.errors import ServiceError
 from backend.services.local_media_profile_sites import add_upcoming_site
 from sources import EpisodeTag, Names, Site as SourceSite, collection_on_site, get_source, has_site_contract, site_for, site_of, source_site, sources_for
@@ -29,7 +32,7 @@ class CollectionAlreadyAddedError(ValueError):
     """The collection is already in VODLoft, possibly through another Source."""
 
     def __init__(self, existing: Collection, site: Site):
-        super().__init__(f"{existing.title} is already in VODLoft, as a collection on {site.name}")
+        super().__init__(f"{name_in_text(existing.title)} is already in VODLoft, as a collection on {site.name}")
         self.existing = existing
 
 
@@ -72,6 +75,18 @@ def place_collection(s: Session, collection: Collection) -> None:
     collection.site_key, collection.site_ref = record.key, ref
 
 
+def collection_kind(url: str | None, source_key: str) -> CollectionKind:
+    """What a collection's link is: a channel, a creator's page of all their uploads or one of its feeds, or one
+    list. Every collection on a Site without creators is a list: it holds what its link lists, and takes no lists of a
+    channel. A collection without a link is a custom collection."""
+    if url is None:
+        return CollectionKind.CUSTOM
+    source = get_source(source_key)
+    if not _site_of(url, source_key).creators or source.is_list(url):
+        return CollectionKind.LIST
+    return CollectionKind.CHANNEL
+
+
 NO_SITE = SourceSite("", "Several sites")
 """What a collection without a link of its own is on before it has any links."""
 
@@ -80,10 +95,10 @@ def collection_site(collection: Collection) -> SourceSite:
     """The Site a collection is on, with what the collection's own Source offers there. A collection without a link of
     its own, which holds what its link seasons have, is on the Site of the first link it got; what each of its
     episodes does on its own Site, such as a download, follows the episode's Site (``episode_site``)."""
-    url = collection.sharing_url or next(
-        (link.url for link in sorted(collection.lists, key=lambda link: link.id or 0)), None,
-    )
-    return _site_of(url, collection.source_key) if url else NO_SITE
+    if collection.sharing_url is not None:
+        return _site_of(collection.sharing_url, collection.source_key)
+    first = next(iter(sorted(collection.lists, key=lambda link: link.id or 0)), None)
+    return _site_of(first.url, first.source_key or collection.source_key) if first is not None else NO_SITE
 
 
 def collection_creator_names(collection: Collection) -> Names:
@@ -96,7 +111,31 @@ def collection_words(collection: Collection, *, audio: bool | None = None) -> Co
     """What a collection calls its seasons and episodes, by its type's contract: the tracks of a Music collection on a
     Site with sound only, such as Bandcamp, and its music videos elsewhere. Pass ``audio`` where the files are meant,
     which a profile for Music that downloads audio only keeps as sound."""
-    return collection_contract(collection.type).words_for(collection_site(collection).audio_only if audio is None else audio)
+    site = collection_site(collection)
+    words = collection_contract(collection.type).words_for(site.audio_only if audio is None else audio)
+    seasons = site_season_names(site, collection.type, collection.kind)
+    return replace(words, season=seasons) if seasons is not None else words
+
+
+def site_season_names(site: SourceSite, collection_type: str, kind: str | None) -> Names | None:
+    """What the Site calls the seasons of a collection of its kind, such as playlists in a YouTube channel collection
+    or lists in a custom collection, or None where the collection type's own word stands: in a type that names its
+    seasons itself, such as an artist's albums. A custom collection is on the Site of its first list, or on none."""
+    if kind is None or collection_contract(collection_type).words.season != DEFAULT_WORDS.season:
+        return None
+    if kind == CollectionKind.CUSTOM.value:
+        return site.custom_season_names
+    return site.channel_season_names if kind == CollectionKind.CHANNEL.value else site.list_season_names
+
+
+def collection_names(collection: Collection) -> Names:
+    """What the collection's Site calls a collection of its kind, such as a channel or a playlist on YouTube."""
+    if collection.kind == CollectionKind.CUSTOM.value:
+        return CUSTOM_COLLECTION_NAMES
+    site = collection_site(collection)
+    if collection.kind == CollectionKind.CHANNEL.value:
+        return site.channel_collection_names
+    return site.list_collection_names_of(collection.list_type)
 
 
 def collection_episode_tags(collection: Collection) -> tuple[EpisodeTag, ...]:
@@ -104,6 +143,27 @@ def collection_episode_tags(collection: Collection) -> tuple[EpisodeTag, ...]:
     (``collection_words``), such as tracks in a Music collection on Bandcamp."""
     tags = get_source(collection.source_key).episode_tags_for(collection.sharing_url)
     return episode_tags_named(tags, collection_words(collection))
+
+
+def main_tag_of_type(collection: Collection, episode_type: str) -> str:
+    """The episode type as the collection's Site tells types apart. An auxiliary episode on a Site that has no such
+    type, as a collection numbered by date gives a second video of one date or a video's episode in a second
+    playlist, is of the Site's main type there."""
+    if episode_type != EpIdType.AUX:
+        return episode_type
+    tags = collection_episode_tags(collection)
+    if any(tag.key == episode_type for tag in tags):
+        return episode_type
+    return next((tag.key for tag in tags if tag.main), episode_type)
+
+
+def with_main_type(collection: Collection, episode_types: Iterable[str]) -> set[str]:
+    """Episode types picked from a collection's Site's types, with the auxiliary episodes the Site counts as its main
+    type (``main_tag_of_type``) when that type is picked."""
+    picked = set(episode_types)
+    if main_tag_of_type(collection, EpIdType.AUX) in picked:
+        picked.add(EpIdType.AUX.value)
+    return picked
 
 
 def episode_tags_named(tags: Iterable[EpisodeTag], words: CollectionWords) -> tuple[EpisodeTag, ...]:

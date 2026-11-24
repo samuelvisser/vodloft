@@ -15,7 +15,7 @@ import {
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import Select from '../../components/common/Select'
 import {safeReturnPath, useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
-import LocalMediaProfileFitNote from '../../components/DownloadProfile/LocalMediaProfileFitNote'
+import LocalMediaProfileFitNote, {useLocalMediaProfilesForCollection} from '../../components/DownloadProfile/LocalMediaProfileFitNote'
 import RequestedField, {RequestedFieldsProvider} from '../../components/common/RequestedField'
 import {DownloadProfileReadView} from "../../types/schemas/download_profile_view";
 import {useQuery, useQueryClient} from "@tanstack/react-query";
@@ -75,8 +75,10 @@ export default function EditDownloadProfilePage() {
 
     const {data: collections} = useCollections()
     const collection = collections?.find((candidate) => candidate.slug === downloadProfile?.collectionSlug)
-    // Every Collection profile can be chosen; one that doesn't fit the collection says so under the field.
-    const mediaProfileReg = useLocalMediaProfileSelectRegistry(mediaProfiles, 'collection')
+    // Only the profiles available for the collection are offered, and the one this Download Profile already uses,
+    // which says so under the field when it no longer fits.
+    const offeredProfiles = useLocalMediaProfilesForCollection(mediaProfiles, collection, downloadProfile?.localMediaProfileId)
+    const mediaProfileReg = useLocalMediaProfileSelectRegistry(offeredProfiles, 'collection')
     // A collection has one Download Profile per Local Media Profile.
     const usedLocalMediaProfiles = useMemo(() => new Set(
         (collectionProfiles ?? [])
@@ -98,7 +100,7 @@ export default function EditDownloadProfilePage() {
     const localMediaProfileId = useWatch({control: form.control, name: 'localMediaProfileId'})
     const applyRequestedProfile = () => {
         // The list can still be the one from before the profile was created, until it loads again.
-        if (!mediaProfiles?.some((profile) => profile.id === requestedProfileId)) return false
+        if (!offeredProfiles?.some((profile) => profile.id === requestedProfileId)) return false
         form.setValue('localMediaProfileId', requestedProfileId!, {shouldDirty: true, shouldValidate: true})
     }
     const onCancel = useCallback(() => navigate(returnTo ?? '/download-profiles'), [navigate, returnTo])
@@ -266,7 +268,7 @@ export default function EditDownloadProfilePage() {
                                     isOptionDisabled={(opt) => usedLocalMediaProfiles.has(Number(opt.value))}
                                     onBlur={field.onBlur}
                                     isDisabled={mediaProfileReg.options.length === 0}
-                                    placeholder={!mediaProfiles ? 'Loading profiles...' : mediaProfileReg.options.length === 0 ? 'No profiles found' : undefined}
+                                    placeholder={!offeredProfiles ? 'Loading profiles...' : mediaProfileReg.options.length === 0 ? 'No profiles found' : undefined}
                                     aria-invalid={!!errors.localMediaProfileId}
                                     aria-describedby={errors.localMediaProfileId ? 'local-media-profile-errors' : 'local-media-profile-help'}
                                 />

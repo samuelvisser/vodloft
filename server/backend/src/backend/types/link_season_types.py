@@ -1,18 +1,22 @@
 from enum import StrEnum
 
+from sources import ChannelSeason
+
+__all__ = ["ChannelSeason", "CollectionKind", "LinkSeasons", "ListLayout", "ListStatus", "LooseVideos", "NewLinkSeasonAction", "OutsideVideos", "RepeatVideos"]
+
 
 class LinkSeasons(StrEnum):
-    """Whether a collection made from a creator turns the creator's playlists into seasons."""
+    """Whether a channel collection turns the channel's playlists into seasons."""
 
     OFF = "off"
     ALL = "all"
-    """Every playlist is a season, also the ones the creator adds later."""
+    """Every playlist is a season, also the ones the channel adds later."""
     SELECTED = "selected"
     """Only the playlists the user keeps on; ``NewLinkSeasonAction`` says what happens with new ones."""
 
 
 class NewLinkSeasonAction(StrEnum):
-    """What happens with a playlist the creator adds later, when only selected playlists are seasons."""
+    """What happens with a playlist the channel adds later, when only selected playlists are seasons."""
 
     ASK = "ask"
     """Send a message, and show the playlist in the collection's Seasons dialog to turn on."""
@@ -30,7 +34,7 @@ class ListStatus(StrEnum):
 
 class OutsideVideos(StrEnum):
     """What a collection does with the videos of its link seasons that its own link does not list, such as another
-    creator's video in a playlist."""
+    channel's video in a playlist."""
 
     LEAVE_OUT = "leave_out"
     ADD = "add"
@@ -68,3 +72,16 @@ class RepeatVideos(StrEnum):
     """One episode, in the season that comes first."""
     EACH_SEASON = "each_season"
     """An episode in each of those seasons, with files of its own, so every season is whole."""
+
+
+class CollectionKind(StrEnum):
+    """What a collection's own link is, set when the collection is added and whenever its link changes."""
+
+    CHANNEL = "channel"
+    """A creator's own page of all their uploads, such as a YouTube channel or a Daily Wire show: its feeds are its
+    videos, and its lists can be its seasons. Only a channel collection can be in a creator."""
+    LIST = "list"
+    """One list, such as a playlist or an album."""
+    CUSTOM = "custom"
+    """No link of its own: a custom collection, which gets all it holds from the lists the user gives it. Given a link
+    of its own, it becomes a channel or a list collection, by what the link is."""

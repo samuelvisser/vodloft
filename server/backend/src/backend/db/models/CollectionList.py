@@ -13,10 +13,10 @@ if TYPE_CHECKING:
 
 
 class CollectionList(Base):
-    """A list of a collection: what a Site groups videos in, such as a YouTube playlist or an artist's album, from the
-    creator the collection is made from. It is a season of the collection, or one of the lists of a season that holds
-    several. A collection that only holds its lists' videos can also have lists the user added, from any Site its
-    Source fetches.
+    """A list of a collection: what a Site groups videos in, such as a YouTube playlist or an artist's album, of the
+    channel the collection is made from. It is a season of the collection, or one of the lists of a season that holds
+    several. A collection that only holds its lists' videos can also have lists the user added, from any Site, each
+    read by the Source that handles its link.
     """
 
     __tablename__ = "collection_lists"
@@ -27,6 +27,8 @@ class CollectionList(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     collection_id: Mapped[int] = mapped_column(ForeignKey("collections.id", ondelete="CASCADE"), index=True)
     ref: Mapped[str] = mapped_column(comment="The Site's own id for the playlist")
+    source_key: Mapped[str] = mapped_column(comment="Id of the Source that reads the list, as registered in sources")
+    site_key: Mapped[Optional[str]] = mapped_column(ForeignKey("sites.key"), comment="The Site the list is on")
     url: Mapped[str]
     title: Mapped[str]
     image_path: Mapped[Optional[str]]
@@ -45,7 +47,11 @@ class CollectionList(Base):
     )
     added_by_user: Mapped[bool] = mapped_column(
         default=False, server_default="0",
-        comment="The user added the link, rather than it being one of the playlists of the collection's creator",
+        comment="The user added the link, rather than it being one of the playlists of the collection's channel",
+    )
+    is_default: Mapped[bool] = mapped_column(
+        default=False, server_default="0",
+        comment="The default link of a collection without a link of its own, such as the one its picture comes from; such a collection has exactly one",
     )
     season_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("seasons.id", ondelete="SET NULL"), comment="The list's season, once it has one, which other lists of the collection may share",

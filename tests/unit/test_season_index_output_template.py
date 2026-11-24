@@ -41,7 +41,7 @@ def test_collection_output_template_supports_season_index(tmp_path, monkeypatch)
         season=season,
         index=2497,
         episode_identifier="ep.2497",
-        dw_episode_number="2497.00",
+        source_number="2497.00",
         slug="episode-2497",
         title="Example Episode",
         description=None,

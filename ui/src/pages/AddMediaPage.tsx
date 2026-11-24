@@ -159,7 +159,7 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
         else navigate('/browse')
     }
 
-    // A collection can start empty and hold only what the links added to it have, at a Source that allows it.
+    // A custom collection starts empty and holds only what the lists added to it have, at a Source that allows it.
     const [emptyOpen, setEmptyOpen] = useState(false)
     const emptyCollections = !onboarding && !onCollection
         && (sources ?? []).some((source) => canUseSource(source.id) && sourceHas(source, SourceFeature.LINK_COLLECTIONS))
@@ -172,18 +172,11 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
     }
 
     const image = toImageUrl(link?.preview.imageUrl)
-    // A creator's videos can become a collection of their own, or the creator can be added with its playlists.
-    const creatorChoice = !!link?.creatorUrl && !localCollection && !onCollection
-    const addCreator = () => {
-        if (!link?.creatorUrl) return
-        navigate(`/add-creator?source=${encodeURIComponent(link.source.id)}&url=${encodeURIComponent(link.creatorUrl)}`)
-    }
     const actionLabel = (() => {
         if (!target) return null
         if (target.kind === 'video') return localVideo ? 'Open video' : addingVideo ? 'Adding video…' : 'Add this video'
         if (target.kind === 'movie') return localMovie ? 'Open movie' : 'Continue with this movie'
         if (localCollection) return 'Open collection'
-        if (creatorChoice) return 'Only its videos'
         return link?.kind === 'episode' ? 'Add its collection' : 'Continue with this collection'
     })()
 
@@ -267,14 +260,7 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                         {!link.drmProtected && link.accessLocked && <AccessNotice item={link}/>}
                         {target ? (
                             <div className="add-media-preview-actions">
-                                {creatorChoice && (
-                                    <button className="btn btn-primary" type="button" onClick={addCreator}
-                                            title={link.creatorSections ? `Add their ${link.creatorSections.plural}, and choose where each goes` : undefined}>
-                                        Add the {link.creatorNames?.singular}
-                                        <FontAwesomeIcon icon={faIcon('fass', 'arrow-right')}/>
-                                    </button>
-                                )}
-                                <button className={`btn${creatorChoice ? '' : ' btn-primary'}`} type="button" onClick={proceed} disabled={addingVideo}>
+                                <button className="btn btn-primary" type="button" onClick={proceed} disabled={addingVideo}>
                                     {actionLabel}
                                     <FontAwesomeIcon icon={faIcon('fass', 'arrow-right')}/>
                                 </button>
@@ -287,17 +273,12 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                                 )}
                             </div>
                         ) : link.kind === 'creator' ? (
-                            creatorChoice ? (
-                                <div className="add-media-preview-actions">
-                                    <button className="btn btn-primary" type="button" onClick={addCreator}
-                                            title="Add their shows and movies, and choose where each goes">
-                                        Add the {link.creatorNames?.singular}
-                                        <FontAwesomeIcon icon={faIcon('fass', 'arrow-right')}/>
-                                    </button>
-                                </div>
-                            ) : (
-                                <p role="alert">Add {link.creatorNames?.a} from Add media once you are done here.</p>
-                            )
+                            <p role="alert">
+                                This is the page of {kindNames(link.source, 'creator')?.a}. Paste the link to one of
+                                their {kindNames(link.source, 'collection')?.plural} instead. Once it is in your
+                                library, its page can add it to the {kindNames(link.source, 'creator')?.singular}, whose
+                                page then offers the rest of their work.
+                            </p>
                         ) : collectionsUnsupported ? (
                             <p role="alert">
                                 VODLoft cannot add creators or playlists from {link.source.name} yet. Paste the link to one video instead.
@@ -327,14 +308,14 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
 
             {emptyCollections && (
                 <div className="add-media-browse">
-                    <h2>Or start empty</h2>
-                    <p className="view-description">
+                    <h2>Or create a custom collection</h2>
+                    <p className="view-description add-media-browse-text">
                         Make a collection of your own from playlists, creators and videos on any site.
                     </p>
                     <div className="add-media-browse-list">
                         <button className="btn" type="button" onClick={() => setEmptyOpen(true)}>
                             <FontAwesomeIcon icon={faIcon('fass', 'folder-plus')}/>
-                            Add empty collection
+                            Add custom collection
                         </button>
                     </div>
                 </div>

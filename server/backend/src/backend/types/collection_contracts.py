@@ -20,6 +20,8 @@ class CollectionWords:
     episode: Names
     in_season: str = "in"
     """The word for being in one of its seasons, such as on for a track on an album."""
+    numbered_in_season: bool = False
+    """An episode is named by its number in its season alone, as an album's tracks are: Track 3, not S01E03."""
 
 
 DEFAULT_WORDS = CollectionWords(Names("season", "seasons"), Names("episode", "episodes"))
@@ -101,8 +103,8 @@ SERIES = CollectionContract(CollectionType.SERIES, profile_scope=ProfileScope.SE
 
 MUSIC = CollectionContract(
     CollectionType.MUSIC,
-    words=CollectionWords(Names("album", "albums"), Names("music video", "music videos"), in_season="on"),
-    audio_words=CollectionWords(Names("album", "albums"), Names("track", "tracks"), in_season="on"),
+    words=CollectionWords(Names("album", "albums"), Names("music video", "music videos"), in_season="on", numbered_in_season=True),
+    audio_words=CollectionWords(Names("album", "albums"), Names("track", "tracks"), in_season="on", numbered_in_season=True),
     creator_names=Names("artist", "artists"),
     loose_season="Singles",
     media_are_episodes=True,

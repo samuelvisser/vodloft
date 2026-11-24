@@ -71,9 +71,6 @@ export default function SourceSearchPage({sourceId: givenSourceId, siteKey: give
         if (result.kind === 'collection') {
             const local = localCollections?.find((collection) => collection.sourceKey === sourceId && collection.slug === result.slug)
             if (local) navigate(`/collection/${local.slug}`)
-            // A creator's own page, such as a YouTube channel, can be added as the creator or as only its videos:
-            // Add media asks which.
-            else if (result.creatorNames) navigate(`/add?url=${encodeURIComponent(result.url)}`)
             else navigate(`/add-collection?url=${encodeURIComponent(result.url)}`)
             return
         }

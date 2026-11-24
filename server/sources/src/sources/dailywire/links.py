@@ -88,8 +88,6 @@ def resolve_link(url: str) -> ResolvedLink | None:
             title=(host.author_name if host else None) or (movie.author_name if movie else None) or slug,
             image_url=host.author_headshot_path if host else None,
             kind_label="Host",
-            creator_url=host_url(slug),
-            creator_names=HOST,
         )
 
     if kind is LinkKind.MOVIE:

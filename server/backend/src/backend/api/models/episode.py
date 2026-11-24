@@ -50,7 +50,7 @@ class _EpisodeIdentifierAPIOut(ResponseBase):
     """Shared canonical episode-identifier fields for API response models."""
 
     episode_identifier: str
-    dw_episode_number: Optional[str]
+    source_number: Optional[str]
     episode_type: Optional[str]
     episode_extra_type: Optional[str]
     episode_number: Optional[str]
@@ -169,6 +169,3 @@ class EpisodeSeasonPlaceAPIRead(ResponseBase):
     """The playlist it belongs in now; None when it belongs with the videos in no playlist."""
     link_names: Optional[NamesAPIRead] = None
     """What the collection's Site calls its link seasons, such as playlist, or album on Bandcamp."""
-    collection_slug: Optional[str] = None
-    """Reassigned: the collection of its creator that it belongs in now, when that is another one."""
-    collection_title: Optional[str] = None

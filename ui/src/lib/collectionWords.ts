@@ -22,6 +22,8 @@ export interface CollectionWords {
     episode: Noun
     /** The word for being in one of its seasons, such as in a season, or on an album. */
     inSeason: string
+    /** An episode is named by its number in its season alone, as an album's tracks are: Track 3, not S01E03. */
+    numberedInSeason: boolean
     /** A number with the word it counts, such as 1 track or 12 tracks. */
     count: (count: number, noun?: Noun) => string
 }
@@ -38,10 +40,10 @@ function noun({singular, plural, a}: BackendNames): Noun {
 }
 
 /** A collection's words as the backend gives them, such as a creator's, in the forms a sentence needs. */
-export function wordsOf(names: {season: BackendNames, episode: BackendNames, inSeason: string}): CollectionWords {
+export function wordsOf(names: {season: BackendNames, episode: BackendNames, inSeason: string, numberedInSeason?: boolean}): CollectionWords {
     const episode = noun(names.episode)
     return {
-        season: noun(names.season), episode, inSeason: names.inSeason,
+        season: noun(names.season), episode, inSeason: names.inSeason, numberedInSeason: names.numberedInSeason ?? false,
         count: (count, counted = episode) => `${count.toLocaleString()} ${count === 1 ? counted.singular : counted.plural}`,
     }
 }
@@ -116,6 +118,8 @@ export function newProfileScope(type: string): string {
 interface WordedCollection {
     type?: string | null
     site?: { audioOnly?: boolean } | null
+    /** What the collection's Site calls its seasons, such as playlists in a YouTube channel collection. */
+    seasonNames?: BackendNames | null
 }
 
 /** The words for the files of a collection, kept by the Local Media Profiles it is offered: tracks when every one of
@@ -129,8 +133,9 @@ export function fileWordsFor(
 }
 
 /** The words for a collection, as its Site has it: the episodes of a Music collection on a Site with sound only,
- *  such as Bandcamp, are tracks. Pass ``audio`` where the files are meant, which a profile for Music that
+ *  such as Bandcamp, are tracks, and the seasons of a YouTube channel collection are playlists. Pass ``audio`` where the files are meant, which a profile for Music that
  *  downloads audio only keeps as sound. */
 export function wordsFor(collection: WordedCollection | null | undefined, kind?: MediaKind): CollectionWords {
-    return collectionWords(collection?.type, kind ?? (collection?.site?.audioOnly ? 'audio' : 'video'))
+    const words = collectionWords(collection?.type, kind ?? (collection?.site?.audioOnly ? 'audio' : 'video'))
+    return collection?.seasonNames ? {...words, season: noun(collection.seasonNames)} : words
 }

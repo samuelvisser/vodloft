@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, query_expression, relationship
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
-from backend.types.season_types import SeasonType
+from backend.types.season_types import SeasonOrigin, SeasonType
 
 if TYPE_CHECKING:
     from backend.db.models import Collection
@@ -34,6 +34,10 @@ class Season(Base, HasTaskResourcesMixin):
     )
     season_number: Mapped[int] = mapped_column(default=1, server_default="1", comment="Numbered based on it's logical order within the collection. Seasons of type 'extra' always are numbered 0")
 
+    origin: Mapped[str] = mapped_column(
+        default=SeasonOrigin.VODLOFT.value, server_default=SeasonOrigin.VODLOFT.value,
+        comment="Where the season came from: the Site's own (site), one of its lists (list), or made by VODLoft (vodloft)",
+    )
     loose: Mapped[bool] = mapped_column(
         default=False, server_default="0",
         comment="Holds the collection's videos that are in none of the playlists that are its seasons",

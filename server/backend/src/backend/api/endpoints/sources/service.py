@@ -8,21 +8,25 @@ from sqlalchemy.orm import Session
 
 from backend.api.models.source import (
     ApiKeyNoteAPIRead, ApiStatusAPIRead, ProgramStatusAPIRead, SourceProblemAPIRead, ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SearchResultsAPIRead, CollectionDetailsAPIRead,
-    NamesAPIRead, SourceAPIRead, SourceSiteAPIRead,
+    SourceAPIRead, SourceSiteAPIRead,
 )
 from backend.db.models import Collection, CreatorAccount, Episode, MediaItemBase, Settings, Site as SiteRecord
 from backend.security.access import Access
 from backend.types.collection_types import CollectionType
+from backend.services.collections import set_kind
+from backend.services.creators import takes_creators
+from backend.services.link_seasons import seasons_plan
 from backend.services.media_access import access_locked, link_access
 from backend.services.local_media_profile_sites import known_site_keys
-from backend.services.sites import preferred_sources, site_record
+from backend.services.sites import collection_kind, preferred_sources, site_record
 from backend.services.source_requests import asking_source
 from config.network import is_no_internet_error
 from backend.services.users import settings_row
+from backend.services.check_frequency import joins_regular_checks, quick_check_plan
 from backend.utils.helpers import slugify
 from backend.services.source_options import ytdlp_call_options
 from sources import (
-    Feature, LinkKind, ResolvedLink, Site, Source, UnknownSourceError, all_sources, get_source, named_sites, names_a_podcast, sources_for,
+    Feature, LinkKind, QuickCheckCollection, ResolvedLink, Site, Source, UnknownSourceError, all_sources, get_source, named_sites, names_a_podcast, source_site, sources_for,
 )
 
 
@@ -94,7 +98,18 @@ def lookup_show_details(access: Access, source: Source, url: str) -> CollectionD
         ),
         music_reason=music,
         seasons=details.seasons,
+        audio_only=source_site(details.url, source.id).audio_only,
+        kind=collection_kind(details.url, source.id),
+        list_type=details.list_type,
+        seasons_plans={type_.value: _seasons_plan(source, details.url, type_) for type_ in CollectionType},
     )
+
+
+def _seasons_plan(source: Source, url: str, type_: CollectionType) -> str:
+    """What the collection's seasons will be once it is added as the type, as adding it sets it up."""
+    collection = Collection(sharing_url=url, source_key=source.id, type=type_.value)
+    set_kind(collection)
+    return seasons_plan(collection)
 
 
 def search_source(access: Access, source: Source, site_key: str, query: str) -> SearchResultsAPIRead:
@@ -110,25 +125,10 @@ def search_source(access: Access, source: Source, site_key: str, query: str) -> 
         "results": [
             result.model_copy(update={
                 "access_label": _access_label(source, result.url, result.access),
-                "creator_names": _creator_names(source, result.kind, result.url),
             })
             for result in results.results if access.allows_link(source.id, result.url)
         ],
     })
-
-
-def _creator_names(source: Source, kind: str, url: str) -> NamesAPIRead | None:
-    """What the Site calls a creator, when a collection result is a creator's own page that can be added as one."""
-    if kind != "collection" or not source.has(Feature.CREATORS) or not source.is_creator_page(url):
-        return None
-    site = source.site_for(url)
-    return NamesAPIRead.model_validate(site.creator_names) if site is not None and site.creators else None
-
-
-def _creator_sections(source: Source, url: str) -> NamesAPIRead | None:
-    """Every type of section a creator has on the link's Site, named together."""
-    site = source.site_for(url)
-    return NamesAPIRead.model_validate(site.section_names) if site is not None else None
 
 
 def _access_label(source: Source, url: str, key: str | None) -> str | None:
@@ -155,15 +155,22 @@ def list_source_problems() -> list[SourceProblemAPIRead]:
 
 
 def get_api_status(s: Session, source: Source) -> ApiStatusAPIRead:
-    """The Source's API status, given its collections so it can say what checking them costs."""
-    collections = (
-        s.query(Collection.sharing_url, func.count(Episode.id))
-        .outerjoin(Episode, Episode.collection_id == Collection.id)
-        .filter(Collection.source_key == source.id, Collection.sharing_url.is_not(None))
-        .group_by(Collection.id)
+    """The Source's API status, given the collections it checks so it can say what checking them costs."""
+    counts = dict(
+        s.query(Episode.collection_id, func.count(Episode.id))
+        .join(Collection, Collection.id == Episode.collection_id)
+        .filter(Collection.source_key == source.id)
+        .group_by(Episode.collection_id)
         .all()
     )
-    return ApiStatusAPIRead.model_validate(source.api_status([(url, count) for url, count in collections]))
+    collections = s.scalars(
+        select(Collection).where(Collection.source_key == source.id, Collection.sharing_url.is_not(None))
+    ).all()
+    plans = [
+        quick_check_plan(collection, counts.get(collection.id, 0))
+        for collection in collections if joins_regular_checks(collection)
+    ]
+    return ApiStatusAPIRead.model_validate(source.api_status(plans))
 
 
 API_KEY_NOTE_PAUSE = timedelta(days=7)
@@ -187,7 +194,7 @@ def api_key_notes(s: Session) -> list[ApiKeyNoteAPIRead]:
             select(Collection.sharing_url).where(Collection.source_key == source.id, Collection.sharing_url.is_not(None))
             .union(select(CreatorAccount.url).where(CreatorAccount.source_key == source.id, CreatorAccount.url.is_not(None)))
         ).all()
-        status = source.api_status([(link, 0) for link in links])
+        status = source.api_status([QuickCheckCollection(link) for link in links])
         site = next((site for link in links if (site := source.site_for(link)) is not None and site.takes_api_key), None)
         if status.key_hint is None and status.collection_count and site is not None:
             notes.append(ApiKeyNoteAPIRead(source_key=source.id, site_name=site.name))
@@ -219,6 +226,8 @@ def _to_read(s: Session, source: Source, link: ResolvedLink, candidates: list[So
         if local_collection is not None:
             collection_slug, collection_url = local_collection.slug, local_collection.sharing_url
     found = link_access(source.id, link.url, link.access)
+    kind = collection_kind(link.url, source.id) if link.kind is LinkKind.COLLECTION else None
+    site = source_site(link.url, source.id) if kind is not None else None
     return ResolvedLinkAPIRead(
         source=SourceAPIRead.model_validate(source),
         kind=link.kind,
@@ -233,9 +242,8 @@ def _to_read(s: Session, source: Source, link: ResolvedLink, candidates: list[So
         access_description=found.description if found is not None else None,
         access_locked=access_locked(source.id, link.access, None),
         preview=ResolvedLinkPreviewAPIRead.model_validate(link),
-        creator_url=link.creator_url,
-        creator_names=NamesAPIRead.model_validate(link.creator_names) if link.creator_names else None,
-        creator_sections=_creator_sections(source, link.creator_url or link.url) if link.creator_names else None,
+        collection_kind=kind,
+        creator_names=site.creator_names if site is not None and takes_creators(source.id, site) else None,
         candidates=[SourceAPIRead.model_validate(candidate) for candidate in candidates],
     )
 

@@ -11,7 +11,7 @@ from .service import refresh_episode_now, run_metadata_refresh
 @on_cron(cron="*/2 * * * *", resource_type="system", resource_id=0, coalesce=True)
 @task(
     key="refresh_metadata",
-    title="Refresh metadata",
+    title="Refresh info from Sites",
     description=(
         "Looks new episodes and videos up again for a while after they are published, on their Site's schedule, "
         "so changed titles, descriptions and thumbnails reach VODLoft."
@@ -29,8 +29,8 @@ async def refresh_metadata(*, resource_id: int | None = None, progress=None) -> 
 
 @task(
     key="refresh_episode_metadata",
-    title="Refresh episode metadata now",
-    description="Looks one episode up again right away, as Refresh now on an episode or collection asks.",
+    title="Refresh episode info now",
+    description="Looks one episode up again right away, as Refresh info on an episode or collection asks.",
     allowed_resource_types=("episode",),
     default_max_retries=0,
     tracks_progress=False,

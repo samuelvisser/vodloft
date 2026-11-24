@@ -1,7 +1,7 @@
 """Media that yt-dlp only downloads with --allow-unplayable-formats, for another reason than DRM.
 
 Revision ID: ac034d79c796
-Revises: a4318a92a5ca
+Revises: 4c7e19a2b6d0
 Create Date: 2026-11-21
 """
 from __future__ import annotations
@@ -11,7 +11,7 @@ from alembic import op
 
 
 revision = "ac034d79c796"
-down_revision = "a4318a92a5ca"
+down_revision = "4c7e19a2b6d0"
 branch_labels = None
 depends_on = None
 

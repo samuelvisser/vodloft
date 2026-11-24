@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qs, urlsplit, urlunsplit
+
+from progress_plan import PlanTracker, StageSpec
 
 from ...contract import LIST_TYPE, MAIN_TAG, CollectionDetails, CreatorDetails, SearchResults, SectionRef, link_host, on_domain
 from ... import ytdlp_runner as runner
@@ -44,15 +45,18 @@ def channel_root(url: str) -> str | None:
     return urlunsplit(("https", "www.youtube.com", f"/{match.group(1)}", "", ""))
 
 
-def picture(info: dict) -> str | None:
-    """The picture yt-dlp names for a video or playlist, as it names it."""
-    if info.get("thumbnail"):
-        return info["thumbnail"]
-    candidates = [
-        t for t in info.get("thumbnails") or []
+def pictures(info: dict) -> list[str]:
+    """The pictures yt-dlp names for a video or playlist, the one it prefers first."""
+    named = [
+        t["url"] for t in reversed(info.get("thumbnails") or [])
         if isinstance(t, dict) and t.get("url") and not _UNSIGNED_PLAYLIST_PICTURE.match(t["url"])
     ]
-    return candidates[-1]["url"] if candidates else None
+    return [info["thumbnail"], *named] if info.get("thumbnail") else named
+
+
+def picture(info: dict) -> str | None:
+    """The picture yt-dlp names for a video or playlist, as it names it."""
+    return next(iter(pictures(info)), None)
 
 
 def _count(number: int) -> str:
@@ -111,17 +115,18 @@ class YouTubeImplementation(OtherSitesImplementation):
     def creator_root(self, url: str) -> str | None:
         return channel_root(collection_url(url))
 
-    def creator_page(self, url: str) -> str | None:
-        # A channel's Videos tab is the whole channel too.
-        return channel_root(url) if self.is_creator_page(url) else None
-
     def is_creator_page(self, url: str) -> bool:
         """A channel's own link or its Videos tab, which stand for all its uploads. Not one playlist, nor only a
         channel's Shorts or Live tab."""
         ref = mapping.youtube_ref(collection_url(url))
         return ref is not None and ref.kind != "playlist" and ref.tab == "videos" and channel_root(collection_url(url)) is not None
 
-    def creator_details(self, ref: str, progress: Callable[[str], None]) -> CreatorDetails:
+    def is_list(self, url: str) -> bool:
+        """A playlist, such as an album on YouTube Music."""
+        ref = mapping.youtube_ref(collection_url(url))
+        return ref is not None and ref.kind == "playlist"
+
+    def creator_details(self, ref: str, plan: PlanTracker) -> CreatorDetails:
         """A channel through yt-dlp, which costs no API quota: its details, the feeds it has, and its playlists.
         ``ref`` is the channel's link or its ID.
 
@@ -129,12 +134,16 @@ class YouTubeImplementation(OtherSitesImplementation):
         root = channel_root(ref) if ref.startswith("http") else mapping.channel_url(ref)
         if root is None:
             raise runner.YtDlpError("This link is not a YouTube channel")
-        progress("Reading the channel, its videos and its playlists")
         main = next(type_ for type_ in self.feed_types if type_.key == "videos")
         with ThreadPoolExecutor(max_workers=len(self.feed_types) + 2, thread_name_prefix="channel-lookup", **keep_call_options()) as pool:
-            listings = self.read_feeds(root, pool)
-            playlists = pool.submit(self.playlists, root)
-            releases = pool.submit(self.has_releases, root)
+            listings = self.read_feeds(root, pool, plan)
+            # The playlists take longest, so their step comes last.
+            plan.add(
+                StageSpec(id="releases", code="read_releases", label="Checking for releases"),
+                StageSpec(id="playlists", code="read_lists", label=f"Reading the {self.site.section_list_names.plural}"),
+            )
+            playlists = plan.follow("playlists", pool.submit(self.playlists, root))
+            releases = plan.follow("releases", pool.submit(self.has_releases, root))
             info = listings[main.key].result()
             channel_id = str(info.get("channel_id") or "")
             if not channel_id:
