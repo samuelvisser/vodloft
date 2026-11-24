@@ -5,7 +5,7 @@ placeholder. A link now gets the largest size YouTube serves, or the still of it
 up again the links with a playlist's own picture. A link that can't be looked up now keeps the picture it has.
 
 Revision ID: 9c25f5b4d4d1
-Revises: 7c2e91d4a6f0
+Revises: 7aaaa88fe96d
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from sources import get_source
 logger = logging.getLogger(__name__)
 
 revision = "9c25f5b4d4d1"
-down_revision = "7c2e91d4a6f0"
+down_revision = "7aaaa88fe96d"
 title = "Give links a YouTube playlist picture that YouTube serves"
 
 _TITLE = "Looking up the pictures of YouTube playlists"
