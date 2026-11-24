@@ -11,33 +11,11 @@ from backend.api.models.base import RequestBase, ResponseBase
 from backend.api.models.episode import EpisodeAPIReadView
 from backend.api.models.pagination import CursorPageRead
 from backend.api.models.profile_bulk import BulkSelectionIn
+from backend.api.models.collection import CollectionAPIReadView
 from backend.api.models.collection_contract import CollectionWordsAPIRead
 from backend.api.models.source import NamesAPIRead, SiteAPIRead, checked_ytdlp_options
 from backend.services.unplayable_formats import options_allow_unplayable_formats
 from sources.ytdlp_options import MAX_OPTIONS_LENGTH
-
-
-class CreatorCollectionAPIRead(ResponseBase):
-    id: int
-    slug: str
-    title: str
-    type: str
-    source_key: str
-    thumbnail_landscape_path: Optional[str] = None
-    thumbnail_portrait_path: Optional[str] = None
-    thumbnail_square_path: Optional[str] = None
-    logo_image_path: Optional[str] = None
-    author_headshot_path: Optional[str] = None
-    episode_count: int = 0
-    years: str = ""
-    """The years of its oldest and newest episode, such as 2015-2026, as the Library shows them."""
-    first_published_date: Optional[datetime] = None
-    """When its oldest episode came out."""
-    loose_season: Optional[str] = None
-    """The one season the videos in none of its lists share, such as Singles; None when they get a season per year,
-    or it has no lists as seasons."""
-    site: Optional[SiteAPIRead] = None
-    """The website the collection is on, which tells whether its music is tracks or music videos."""
 
 
 class CreatorAccountAPIRead(ResponseBase):
@@ -127,7 +105,8 @@ class CreatorEpisodePageAPIRead(CursorPageRead[CreatorEpisodeAPIRead]):
 class CreatorPageAPIRead(CreatorAPIRead):
     """A creator's page: their collections and movies."""
 
-    collections: list[CreatorCollectionAPIRead]
+    collections: list[CollectionAPIReadView]
+    """Its collections, as the Library reads them, so their cards are the Library's own."""
     movies: list[CreatorMovieAPIRead] = Field(default_factory=list)
     last_published_date: Optional[datetime] = None
     """When the newest episode of all of the creator's collections came out."""

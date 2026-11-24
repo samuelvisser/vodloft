@@ -1,3 +1,4 @@
+import {CollectionReadViewSchema} from './collection'
 import {CollectionWordsSchema} from './collection_contract'
 import {z} from 'zod'
 import {ApiDateTimeSchema} from './datetime'
@@ -55,25 +56,8 @@ export const CreatorReadSchema = z.object({
 export type CreatorRead = z.infer<typeof CreatorReadSchema>
 
 export const CreatorPageReadSchema = CreatorReadSchema.extend({
-    collections: z.array(z.object({
-        id: z.number(),
-        slug: z.string(),
-        title: z.string(),
-        type: z.string(),
-        sourceKey: z.string(),
-        thumbnailLandscapePath: z.string().nullable(),
-        thumbnailPortraitPath: z.string().nullable(),
-        thumbnailSquarePath: z.string().nullable(),
-        logoImagePath: z.string().nullable(),
-        authorHeadshotPath: z.string().nullable(),
-        episodeCount: z.number(),
-        years: z.string(),
-        firstPublishedDate: ApiDateTimeSchema.nullable(),
-        /** The one season the videos in none of its lists share, such as Singles; null when they get one per year. */
-        looseSeason: z.string().nullable().optional(),
-        /** The Site the collection is on, which tells whether its music is tracks or music videos. */
-        site: SiteReadSchema.nullable().default(null),
-    })),
+    /** Its collections, as the Library reads them, so their cards are the Library's own. */
+    collections: z.array(CollectionReadViewSchema),
     /** The creator's movies in the Library. */
     movies: z.array(z.object({
         slug: z.string(),
