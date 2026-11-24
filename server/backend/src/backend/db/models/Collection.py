@@ -121,6 +121,12 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
                 "downloads that wait for its Move action. Kept up to date as VODLoft works on it, and set right by the "
                 "nightly collection health check",
     )
+    move_causes: Mapped[list[dict]] = mapped_column(
+        JSON, default=list, server_default="[]",
+        comment="The setting changes that put its downloads in another season, which wait for its Move action: each "
+                "setting as it was before and is now, by where it is changed, such as its Seasons dialog. Empty once "
+                "nothing waits, or when none was recorded",
+    )
     site_creator_ref: Mapped[Optional[str]] = mapped_column(
         index=True,
         comment="The Site's id of the creator behind its link, as the collection health check found it, for suggesting "

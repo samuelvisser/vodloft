@@ -26,6 +26,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from backend.db.core import get_session, run_write_transaction, write_when_changed
 from backend.db.models import Collection, CollectionList, CreatorAccount, HealthDismissal, Settings
 from backend.services.link_seasons import moved_episodes, section_list_names, seasons_plan
+from backend.services.move_causes import clear_move_causes
 from backend.services.sites import collection_site, collection_words
 from backend.services.source_options import ytdlp_call_options
 from backend.types.collection_contracts import CollectionWords
@@ -126,12 +127,22 @@ def note_collection_health(s: Session, collection: Collection) -> bool:
     whether that changed what it stored.
 
     ``s`` is a write transaction's session, or a read session that ``write_when_changed`` checks."""
+    causes = list(collection.move_causes or ())
+    return bool(_note_checks(s, collection)) or causes != list(collection.move_causes or ())
+
+
+def _note_checks(s: Session, collection: Collection) -> list[str]:
+    """Store what every check that is on finds. Returns the kinds whose stored health changed."""
     off = checks_off(s)
-    changed = [
-        check.kind.value for check in CHECKS
-        if collection.note_health(check.kind, 0 if check.kind.value in off else check.count(s, collection))
-    ]
-    return bool(changed)
+    changed = []
+    for check in CHECKS:
+        count = 0 if check.kind.value in off else check.count(s, collection)
+        if collection.note_health(check.kind, count):
+            changed.append(check.kind.value)
+        if check.kind is HealthIssueKind.MOVES and check.kind.value not in off and not count:
+            # Nothing waits for the Move action, so what made downloads wait is over.
+            clear_move_causes(collection)
+    return changed
 
 
 @dataclass(frozen=True)
@@ -158,11 +169,7 @@ def check_collection_health(collection_id: int) -> CollectionHealth | None:
         collection = s.get(Collection, collection_id)
         if collection is None:
             return None
-        off = checks_off(s)
-        corrected = [
-            check.kind.value for check in CHECKS
-            if collection.note_health(check.kind, 0 if check.kind.value in off else check.count(s, collection))
-        ]
+        corrected = _note_checks(s, collection)
         if corrected:
             # Setting right what VODLoft stored does not change the collection, so it keeps its last update time.
             flag_modified(collection, "updated_at")

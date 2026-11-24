@@ -68,6 +68,29 @@
     opacity: 0.75;
 }
 
+/* The setting changes that made the Move dialog's downloads wait: what each setting is, above its from -> to. */
+.change-identification-dialog .move-causes {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 10px;
+}
+
+.change-identification-dialog .move-causes li {
+    display: grid;
+    gap: 2px;
+}
+
+.change-identification-dialog .move-cause-setting {
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.change-identification-dialog .move-causes + .move-reason {
+    margin-top: 8px;
+}
+
 /* What the change does, one framed row each */
 .change-identification-dialog .change-identification-steps {
     list-style: none;

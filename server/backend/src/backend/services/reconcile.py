@@ -23,10 +23,12 @@ from backend.services.errors import ServiceError
 from backend.services.link_seasons import (
     _holders, belongs_elsewhere, lists_in, moved_episodes, place_in_link_seasons, seasons_plan,
 )
+from backend.services.move_causes import clear_move_causes, move_causes
 from backend.services.season_order import match_seasons_of_downloaded
 from backend.services.sites import collection_words
 from backend.types.collection_contracts import CollectionWords
 from backend.types.collection_types import EpisodeIdentifier
+from backend.types.move_cause_types import MoveCause
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from sources import Names
 
@@ -147,8 +149,10 @@ class MovePreview:
     type: str
     episode_identifier: EpisodeIdentifier
     parts: list[MovedPart]
+    causes: list[MoveCause]
+    """The setting changes that made them wait, each as it was and is now; none when VODLoft recorded none."""
     seasons_plan: str
-    """Why they move: what the collection's settings make its seasons now, in words."""
+    """What the collection's settings make its seasons now, in words: why they move when no change was recorded."""
     renumber_offered: bool
     """Whether it can number its episodes again: not when it numbers them by date."""
     changes: list[IdentificationChange]
@@ -171,6 +175,7 @@ def preview_reconcile(s: Session, scope: ReconcileScope) -> MovePreview:
     collection = scope.collection
     slug, title, type_ = collection.slug, collection.title, collection.type
     plan = seasons_plan(collection)
+    causes = move_causes(collection)
     before = {
         episode.id: (episode.title, episode.published_date)
         for episode in s.scalars(select(Episode).where(Episode.collection_id == collection.id))
@@ -192,7 +197,7 @@ def preview_reconcile(s: Session, scope: ReconcileScope) -> MovePreview:
     changes, changed_ids = renumber_changes(s, collection) if offered else ([], set())
     follow = bool(done.renamed)
     preview = MovePreview(
-        slug=slug, title=title, type=type_, episode_identifier=identification, parts=parts, seasons_plan=plan,
+        slug=slug, title=title, type=type_, episode_identifier=identification, parts=parts, causes=causes, seasons_plan=plan,
         renumber_offered=offered and bool(changes), changes=changes,
         profiles=profile_file_changes(s, collection, changed_ids) if follow or changes else [], files_follow=follow,
     )
@@ -208,6 +213,8 @@ def reconcile(s: Session, scope: ReconcileScope, *, renumber: Mapping[str, bool]
     ``s`` is a write transaction's session."""
     done = _apply(s, scope)
     collection = s.get(Collection, scope.collection.id)
+    if not moved_episodes(s, collection):
+        clear_move_causes(collection)
     again = EpisodeIdentifier(collection.episode_identifier) is not EpisodeIdentifier.DATE_BASED and renumber.get(
         collection.slug, True,
     )

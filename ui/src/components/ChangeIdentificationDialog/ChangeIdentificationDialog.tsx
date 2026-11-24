@@ -9,7 +9,7 @@ import {faIcon} from '../../icons/faIcon'
 import {apiUrl} from '../../lib/api'
 import {OperationStartError, useStartOperation} from '../../lib/operations'
 import {episodeIdentifierRegFor, EpisodeOrderReg, type EpisodeIdentifierValue, type EpisodeOrderValue} from '../../types/collection'
-import {ChangeList, names, Step} from './ChangeSteps'
+import {ChangeChips, ChangeList, names, Step} from './ChangeSteps'
 import './ChangeIdentificationDialog.css'
 import {collectionWords, CollectionWords} from '../../lib/collectionWords'
 
@@ -141,11 +141,10 @@ export default function ChangeIdentificationDialog({
             {isError && <p className="error" role="alert">VODLoft could not look up what the change does.</p>}
             {preview && target && (
                 <>
-                    <p className="change-identification-change">
-                        <span className="change-identification-chip">{episodeIdentifierRegFor(collectionType).getLabelLoose(current)}</span>
-                        <span className="change-identification-arrow" aria-label="to">→</span>
-                        <span className="change-identification-chip is-target">{episodeIdentifierRegFor(collectionType).getLabelLoose(target)}</span>
-                    </p>
+                    <ChangeChips
+                        before={episodeIdentifierRegFor(collectionType).getLabelLoose(current)}
+                        after={episodeIdentifierRegFor(collectionType).getLabelLoose(target)}
+                    />
                     {preview.episodesRenumbered === 0 && <p>The {episode.plural} of {nameInText(collectionTitle)} keep their numbers.</p>}
                     <ul className="change-identification-steps">
                         {preview.episodesRenumbered > 0 && (
