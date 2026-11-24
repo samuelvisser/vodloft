@@ -1,8 +1,8 @@
 """Upgrade the VODLoft 0.9.1 schema to 0.10.0.
 
-Revision ID: 8a47bfd00213
+Revision ID: 4c7e19a2b6d0
 Revises: 5b8e2d4c9a17
-Create Date: 2026-11-23
+Create Date: 2026-11-24
 
 The single release migration for 0.10.0. It takes a 0.9.1 database straight to 0.10.0; each step's docstring says
 what it does. The pre-releases of 0.10.0 tried several designs for channels and creators before 0.10.0 settled on
@@ -16,9 +16,10 @@ from datetime import datetime, timezone
 
 import sqlalchemy as sa
 from alembic import op
+from jinja2 import Environment, TemplateSyntaxError
 
 
-revision = "8a47bfd00213"
+revision = "4c7e19a2b6d0"
 down_revision = "5b8e2d4c9a17"
 branch_labels = None
 depends_on = None
@@ -37,9 +38,11 @@ def upgrade() -> None:
     _upgrade_api_key_note()
     _upgrade_new_lists_rule()
     _upgrade_season_origin()
+    _upgrade_source_number()
 
 
 def downgrade() -> None:
+    _downgrade_source_number()
     _downgrade_season_origin()
     _downgrade_new_lists_rule()
     _downgrade_api_key_note()
@@ -310,6 +313,11 @@ def _upgrade_collection_lists() -> None:
             "season_id", sa.Integer(), nullable=True,
             comment="The list's season, once it has one, which other lists of the collection may share",
         ),
+        sa.Column(
+            "is_default", sa.Boolean(), nullable=False, server_default=sa.false(),
+            comment="The default link of a collection without a link of its own, such as the one its picture comes "
+                    "from; such a collection has exactly one",
+        ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.ForeignKeyConstraint(
             ["collection_id"], ["collections.id"], name="fk_collection_lists_collection_id_collections", ondelete="CASCADE",
@@ -344,7 +352,15 @@ def _upgrade_collection_lists() -> None:
         )
         batch.add_column(sa.Column(
             "kind", sa.String(), nullable=False, server_default="channel",
-            comment="What its own link is: channel, a creator's page of all their uploads, or list, one list or no link",
+            comment=(
+                "What its own link is: channel, a creator's page of all their uploads, list, one list, or custom, no "
+                "link: it gets all it holds from the lists the user gives it"
+            ),
+        ))
+        batch.add_column(sa.Column(
+            "list_type", sa.String(), nullable=True,
+            comment="The key of its Site's type of list its link is, such as album or playlist on SoundCloud, where the "
+                    "Site has several types its links don't tell apart",
         ))
         batch.add_column(sa.Column(
             "creator_id", sa.Integer(), nullable=True,
@@ -430,6 +446,7 @@ def _downgrade_collection_lists() -> None:
         batch.drop_index("ix_collections_creator_id")
         batch.drop_constraint("fk_collections_creator_id_creators", type_="foreignkey")
         batch.drop_column("creator_id")
+        batch.drop_column("list_type")
         batch.drop_column("kind")
     # A collection without a link of its own cannot go back to 0.9.1.
     op.execute("DELETE FROM collections WHERE sharing_url IS NULL")
@@ -735,3 +752,61 @@ def _upgrade_season_origin() -> None:
 def _downgrade_season_origin() -> None:
     with op.batch_alter_table("seasons") as batch:
         batch.drop_column("origin")
+
+
+# Source numbers.
+
+_OLD_NUMBER_NAME = "dw_episode_number"
+_NEW_NUMBER_NAME = "source_number"
+_OLD_NUMBER_COMMENT = "Episode number exactly as returned by The Daily Wire"
+_NEW_NUMBER_COMMENT = "The episode number as its Site writes it, such as 2460.10 on The Daily Wire; empty on most Sites"
+
+# Every stored template that can name an episode's variables.
+_TEMPLATE_COLUMNS = (
+    ("local_media_profiles", "output_template"),
+    ("local_media_profiles_collection", "episode_title_template"),
+    ("local_media_profiles_collection", "episode_description_template"),
+    ("existing_file_scans", "template"),
+)
+
+
+def _upgrade_source_number() -> None:
+    """An episode's dw_episode_number becomes its source_number: the episode number as its Site writes it, such as
+    2460.10 on The Daily Wire. Saved output, NFO and existing-file scan templates name the new variable; only the
+    variable is renamed, not literal text."""
+    _rename_number_column(_OLD_NUMBER_NAME, _NEW_NUMBER_NAME, _NEW_NUMBER_COMMENT, _OLD_NUMBER_COMMENT)
+    _rename_in_templates(_OLD_NUMBER_NAME, _NEW_NUMBER_NAME)
+
+
+def _downgrade_source_number() -> None:
+    _rename_in_templates(_NEW_NUMBER_NAME, _OLD_NUMBER_NAME)
+    _rename_number_column(_NEW_NUMBER_NAME, _OLD_NUMBER_NAME, _OLD_NUMBER_COMMENT, _NEW_NUMBER_COMMENT)
+
+
+def _rename_variable(source: str, old: str, new: str) -> str:
+    """Rename one variable in a Jinja template, leaving all other text, such as literal text, as it is."""
+    try:
+        tokens = list(Environment().lex(source))
+    except TemplateSyntaxError:
+        return source
+    if "".join(value for _, _, value in tokens) != source:
+        return source
+    return "".join(new if kind == "name" and value == old else value for _, kind, value in tokens)
+
+
+def _rename_in_templates(old: str, new: str) -> None:
+    connection = op.get_bind()
+    for table_name, column_name in _TEMPLATE_COLUMNS:
+        table = sa.table(table_name, sa.column("id"), sa.column(column_name))
+        column = table.c[column_name]
+        rows = connection.execute(sa.select(table.c.id, column).where(column.like(f"%{old}%"))).all()
+        for row_id, template in rows:
+            renamed = _rename_variable(template, old, new)
+            if renamed != template:
+                connection.execute(table.update().where(table.c.id == row_id).values({column_name: renamed}))
+
+
+def _rename_number_column(old: str, new: str, comment: str, existing_comment: str) -> None:
+    with op.batch_alter_table("media_items_episode") as batch:
+        batch.alter_column(old, new_column_name=new, existing_type=sa.String(), existing_nullable=True,
+                           comment=comment, existing_comment=existing_comment)

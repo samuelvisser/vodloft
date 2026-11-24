@@ -24,7 +24,7 @@ RELEASE_REVISIONS = (
     ("0.8.0", "bb0e7c5e17cc"),
     ("0.9.0", "2f7a91c4d8e3"),
     ("0.9.1", "5b8e2d4c9a17"),
-    ("0.10.0", "8a47bfd00213"),
+    ("0.10.0", "4c7e19a2b6d0"),
 )
 VODLOFT_0_1_0_REVISION = "f4abb559e3ab"
 VODLOFT_0_5_0_REVISION = "817515eb8209"
@@ -1567,76 +1567,18 @@ def test_0_10_0_downgrades_to_0_9_1_and_upgrades_again(migration_database):
     check_database()
 
 
-def test_each_collection_of_links_keeps_its_picture_link_or_gets_its_first_as_its_default(migration_database):
-    _database_path, engine = migration_database
-    from backend.db.migrations import get_alembic_config
-
-    config = get_alembic_config()
-    command.upgrade(config, "0e8510a81f57")
-    with engine.begin() as connection:
-        # Two collections of links, one of them with a link chosen for its picture, and a channel collection.
-        for collection_id, sharing_url in ((1, None), (2, "https://www.youtube.com/@channel"), (3, None)):
-            connection.execute(text(
-                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
-                "author_name, author_slug, source_key, episode_order) VALUES (:id, 'uuid-' || :id, 'c' || :id, 'C', "
-                ":url, 'free', 'series', 'seasonal', '', '', 'ytdlp', 'oldest_first')"
-            ), {"id": collection_id, "url": sharing_url})
-        for list_id, collection_id, position, picture in ((1, 1, 1, 0), (2, 1, 0, 0), (3, 2, 0, 0), (4, 3, 0, 0), (5, 3, 1, 1)):
-            connection.execute(text(
-                "INSERT INTO collection_lists (id, collection_id, ref, url, title, source_key, site_position, enabled, "
-                "picture) VALUES (:id, :collection, 'PL' || :id, 'https://www.youtube.com/playlist?list=PL' || :id, "
-                "'L', 'ytdlp', :position, 1, :picture)"
-            ), {"id": list_id, "collection": collection_id, "position": position, "picture": picture})
-
-    command.upgrade(config, HEAD_REVISION)
-
-    with engine.connect() as connection:
-        assert connection.execute(text("SELECT id, is_default FROM collection_lists ORDER BY id")).all() == [
-            (1, 0), (2, 1), (3, 0), (4, 0), (5, 1),
-        ]
-
-
-def test_every_collection_without_a_link_of_its_own_becomes_a_custom_collection(migration_database):
-    _database_path, engine = migration_database
-    from backend.db.migrations import get_alembic_config
-
-    config = get_alembic_config()
-    command.upgrade(config, "7f3c2a9e5b14")
-    with engine.begin() as connection:
-        for collection_id, sharing_url, kind in (
-            (1, None, "list"), (2, "https://www.youtube.com/@channel", "channel"),
-            (3, "https://www.youtube.com/playlist?list=PL1", "list"),
-        ):
-            connection.execute(text(
-                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
-                "author_name, author_slug, source_key, episode_order, kind) VALUES (:id, 'uuid-' || :id, 'c' || :id, "
-                "'C', :url, 'free', 'series', 'seasonal', '', '', 'ytdlp', 'oldest_first', :kind)"
-            ), {"id": collection_id, "url": sharing_url, "kind": kind})
-
-    command.upgrade(config, HEAD_REVISION)
-
-    with engine.connect() as connection:
-        assert connection.execute(text("SELECT id, kind FROM collections ORDER BY id")).all() == [
-            (1, "custom"), (2, "channel"), (3, "list"),
-        ]
-
-
 def test_dw_episode_number_becomes_source_number_in_episodes_and_saved_templates(migration_database):
     _database_path, engine = migration_database
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
-    command.upgrade(config, "b5d81e3c7a26")
+    command.upgrade(config, VODLOFT_0_9_1_REVISION)
     template = "/downloads/{{ dw_episode_number }} {{ title | default('dw_episode_number') }} dw_episode_number.ext"
     with engine.begin() as connection:
         connection.execute(text(
             "INSERT INTO local_media_profiles (id, slug, name, output_template, preferred_format, video_codecs, type) "
             "VALUES (5, 'p', 'P', :template, 'format_1080p', '[]', 'collection')"
         ), {"template": template})
-        connection.execute(text(
-            "INSERT INTO local_media_profiles_collection (id, episode_title_template, episode_description_template) "
-            "VALUES (5, '{{ dw_episode_number }} {{ title }}', NULL)"
-        ))
 
     command.upgrade(config, HEAD_REVISION)
 
@@ -1644,12 +1586,9 @@ def test_dw_episode_number_becomes_source_number_in_episodes_and_saved_templates
         assert connection.execute(text("SELECT output_template FROM local_media_profiles")).scalar_one() == (
             "/downloads/{{ source_number }} {{ title | default('dw_episode_number') }} dw_episode_number.ext"
         )
-        assert tuple(connection.execute(text(
-            "SELECT episode_title_template, episode_description_template FROM local_media_profiles_collection"
-        )).one()) == ("{{ source_number }} {{ title }}", None)
     assert "source_number" in {column["name"] for column in inspect(engine).get_columns("media_items_episode")}
 
-    command.downgrade(config, "b5d81e3c7a26")
+    command.downgrade(config, VODLOFT_0_9_1_REVISION)
     with engine.connect() as connection:
         assert connection.execute(text("SELECT output_template FROM local_media_profiles")).scalar_one() == template
     assert "dw_episode_number" in {column["name"] for column in inspect(engine).get_columns("media_items_episode")}
