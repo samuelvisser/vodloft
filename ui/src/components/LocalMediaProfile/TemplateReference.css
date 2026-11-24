@@ -394,8 +394,29 @@
 }
 
 .template-reference__usage {
-    display: block;
     margin: 10px 0 6px;
+}
+
+/* Code in the reference shows in the editor's colours, on the reference's own background. */
+.template-reference .template-reference__code {
+    min-width: 0;
+}
+
+.template-reference .template-reference__code .cm-content {
+    padding: 0;
+}
+
+.template-reference .template-reference__code .cm-line {
+    padding: 0;
+}
+
+/* The panel is narrow: let long code wrap inside an expression too, rather than cut it off. */
+.template-reference .template-reference__code .cm-jinja-expression {
+    white-space: normal;
+}
+
+.template-reference__example .template-reference__code {
+    flex: 1 1 100%;
 }
 
 .template-reference__arguments {
