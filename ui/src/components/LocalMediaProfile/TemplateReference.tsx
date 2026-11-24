@@ -168,8 +168,8 @@ export default function TemplateReference({mode, variables, builtInIndexes, cust
         return [...groups.entries()]
     }, [mode, variables])
     const jinjaEntries = useMemo<ReferenceEntry[]>(
-        () => JINJA_FILTERS.map(({name, usage, description}) => ({
-            code: name, insert: `| ${name}`, description, short: '',
+        () => JINJA_FILTERS.map(({name, short, usage, description}) => ({
+            code: name, insert: `| ${name}`, description, short,
             // Only the name shows on the row; how to call it is part of what opens.
             readMore: usage === name ? undefined : {paragraphs: [`<code>${usage}</code>`]},
         })),
