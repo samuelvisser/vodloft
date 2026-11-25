@@ -128,7 +128,10 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     const newLinks = watch('addedLinks') ?? []
     const removedSeasons = watch('removedSeasons') ?? []
     // Whether lists can be seasons: they are on, and not every one is included as contents only, as a feed is.
-    const listsSeasons = linkSeasonsOn && (mode === 'selected' || listsAsSeasons || outsideVideos === 'only')
+    // Picked lists that are all contents only are the same as every list included as contents.
+    const anyPickedSeason = playlistChoices.some((choice) => choice.enabled && choice.asSeason && !removedLinks.includes(choice.id))
+    const listsSeasons = linkSeasonsOn
+        && (outsideVideos === 'only' || (mode === 'selected' ? anyPickedSeason : listsAsSeasons))
     // Only a collection of nothing but its lists lays them out by year; one with videos of its own includes its lists as
     // contents only, with the videos in none of them by year, instead.
     const listsByYear = listsSeasons && outsideVideos === 'only' && listLayout === 'by_year'
