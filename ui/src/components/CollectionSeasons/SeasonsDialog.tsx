@@ -62,6 +62,8 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         queryFn: ({signal}) => fetch(endpoint, {signal, credentials: 'include'}).then(readSeasons),
     })
     const [refreshing, setRefreshing] = useState(false)
+    // The boxes of What's in the collection that are folded shut: the lists start shut while they are off.
+    const [shut, setShut] = useState<{feeds: boolean, lists: boolean}>({feeds: false, lists: false})
     const [confirm, setConfirm] = useState<Leaving | null>(null)
     const [dragging, setDragging] = useState<number | null>(null)
     const confirmed = useRef(false)
@@ -84,6 +86,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         loadedFor.current = view
         // A fresh answer while the dialog is open, such as the seasons a link got once VODLoft listed its videos,
         // keeps what the user changed already.
+        if (first) setShut({feeds: false, lists: view.linkSeasons === 'off' && view.hasOwnLink})
         if (first || !isDirty) reset(seasonsFormValues(view))
         else keepChoices(view)
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -132,6 +135,9 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     /** What each source is now: a season of its own, part of the collection, or off. */
     const roleOfList = (choice: {id: number, enabled: boolean, asSeason?: boolean}): SourceRole =>
         !listsOn || !choice.enabled || removedLinks.includes(choice.id) ? 'off' : choice.asSeason !== false ? 'season' : 'part'
+    // What a list is set to, also while the lists are switched off, when the box shows it dimmed.
+    const setRoleOfList = (choice: {id: number, enabled: boolean, asSeason?: boolean}): SourceRole =>
+        !choice.enabled || removedLinks.includes(choice.id) ? 'off' : choice.asSeason !== false ? 'season' : 'part'
     const roleOfFeed = (ref: string): SourceRole => !feeds.includes(ref) ? 'off' : ref in feedSeasons ? 'season' : 'part'
     const anyListSeason = playlistChoices.some((choice) => roleOfList(choice) === 'season')
     const anyPart = channelFeeds.some((feed) => roleOfFeed(feed.ref) === 'part')
@@ -546,7 +552,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     )
     const listRow = ({choice, playlist}: {choice: {id: number, enabled: boolean, asSeason?: boolean, seasonId: number | null}, playlist: CollectionListRead},
                      actions?: ReactNode, details?: (string | null)[]) => sourceRow({
-        key: `list-${playlist.id}`, title: playlist.title, role: roleOfList(choice),
+        key: `list-${playlist.id}`, title: playlist.title, role: setRoleOfList(choice),
         badge: playlist.status === 'new' ? 'New' : undefined,
         details: details ?? [
             playlist.itemCount !== null ? counted(playlist.itemCount, words.video, words.videos) : null,
@@ -556,6 +562,22 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         onRole: (role) => setListRoles(new Set([playlist.id]), role),
         actions,
     })
+    /** The button that folds a box of sources shut or open. */
+    const foldButton = (box: 'feeds' | 'lists', title: string) => (
+        <button
+            type="button" className="seasons-dialog-fold" aria-expanded={!shut[box]}
+            aria-label={`${shut[box] ? 'Show' : 'Hide'} ${title}`} title={shut[box] ? 'Show' : 'Hide'}
+            onClick={() => setShut((current) => ({...current, [box]: !current[box]}))}
+        >
+            <FontAwesomeIcon icon={faIcon('fass', shut[box] ? 'chevron-down' : 'chevron-up')} aria-hidden="true"/>
+        </button>
+    )
+    /** What the sources of a folded box are, counted by choice, such as "2 part of the collection · 1 off". */
+    const summary = (roles: SourceRole[]) => (['season', 'part', 'off'] as const)
+        .map((role) => [role, roles.filter((x) => x === role).length] as const)
+        .filter(([, count]) => count > 0)
+        .map(([role, count]) => `${count} ${role === 'season' ? (count === 1 ? `${season.singular} of its own` : `${season.plural} of their own`) : role === 'part' ? 'part of the collection' : 'off'}`)
+        .join(' · ')
     /** The choice for every source in a group, shown above them once there is more than one. */
     const allOf = (label: string, roles: SourceRole[], onRole: (role: SourceRole) => void, seasonsToo = true) => roles.length > 1 && (
         <span className="seasons-dialog-all">
@@ -591,22 +613,27 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                             </div>
 
                                             {channelFeeds.length > 0 && (
-                                                <div className="seasons-dialog-box">
+                                                <div className={`seasons-dialog-box${shut.feeds ? ' is-shut' : ''}`}>
                                                     <div className="seasons-dialog-box-head">
-                                                        <div>
-                                                            <h4>From the {words.channel}</h4>
-                                                            <p className="seasons-dialog-muted">The parts of the {words.channel} page.</p>
+                                                        <div className="seasons-dialog-box-title-row">
+                                                            <div className="seasons-dialog-box-name" onClick={() => setShut((current) => ({...current, feeds: !current.feeds}))}>
+                                                                <h4>From the {words.channel}</h4>
+                                                                <p className="seasons-dialog-muted">
+                                                                    {shut.feeds ? summary(channelFeeds.map((feed) => roleOfFeed(feed.ref))) : `The parts of the ${words.channel} page.`}
+                                                                </p>
+                                                            </div>
+                                                            {foldButton('feeds', `the parts of the ${words.channel}`)}
                                                         </div>
-                                                        {allOf('All', channelFeeds.map((feed) => roleOfFeed(feed.ref)),
+                                                        {!shut.feeds && allOf('All', channelFeeds.map((feed) => roleOfFeed(feed.ref)),
                                                             (role) => setFeedRoles(new Set(channelFeeds.map((feed) => feed.ref)), role), feedsAsSeasons)}
                                                     </div>
-                                                    <ul className="seasons-dialog-sources">
+                                                    {!shut.feeds && <ul className="seasons-dialog-sources">
                                                         {channelFeeds.map((feed) => sourceRow({
                                                             key: `feed-${feed.ref}`, title: capitalized(feed.names.plural), role: roleOfFeed(feed.ref),
                                                             details: [roleOfFeed(feed.ref) === 'season' ? sharedIn(feedSeasons[feed.ref], capitalized(feed.names.plural)) : null],
                                                             onRole: (role) => setFeedRoles(new Set([feed.ref]), role), seasonsToo: feedsAsSeasons,
                                                         }))}
-                                                    </ul>
+                                                    </ul>}
                                                     {only && (
                                                         <div className="help seasons-dialog-box-note">
                                                             Every part is off, so the collection holds only what its {names.plural} and links have.
@@ -624,20 +651,26 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                             )}
 
                                             {view.linkSeasonsOffered && (
-                                                <div className={`seasons-dialog-box${listsOn ? '' : ' is-off'}`}>
+                                                <div className={`seasons-dialog-box${listsOn ? '' : ' is-off'}${shut.lists ? ' is-shut' : ''}`}>
                                                     <div className="seasons-dialog-box-head">
+                                                        <div className="seasons-dialog-box-title-row">
                                                         <div className="seasons-dialog-with-switch">
                                                             {view.hasOwnLink && (
                                                                 <Controller control={control} name="linkSeasonsOn" render={({field}) => (
                                                                     <Switch
-                                                                        id="seasons-link-seasons" checked={!!field.value || only} onChange={field.onChange}
+                                                                        id="seasons-link-seasons" checked={!!field.value || only}
+                                                                        onChange={(on) => {
+                                                                            field.onChange(on)
+                                                                            // Switched on, the lists show what they will be.
+                                                                            if (on) setShut((current) => ({...current, lists: false}))
+                                                                        }}
                                                                         disabled={only} aria-labelledby="seasons-dialog-links"
                                                                         onColor="#0ea5e9" offColor="#d1d5db" uncheckedIcon={false} checkedIcon={false}
                                                                         height={18} width={34} handleDiameter={14}
                                                                     />
                                                                 )}/>
                                                             )}
-                                                            <div>
+                                                            <div className="seasons-dialog-box-name" onClick={() => setShut((current) => ({...current, lists: !current.lists}))}>
                                                                 <h4 id="seasons-dialog-links">
                                                                     {view.listsPlaylists ? `${capitalized(view.sectionListNames.plural)} and links` : capitalized(names.plural)}
                                                                 </h4>
@@ -647,10 +680,13 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                                         : listsOn
                                                                             ? `Lists of ${words.videos}, which can hold ${words.videos} of other ${words.creators}.`
                                                                             : `Off: the collection holds only what is on the ${words.channel} page.`}
+                                                                    {listsOn && shut.lists && ` ${summary([...creatorLists, ...userLinks].map((row) => setRoleOfList(row.choice)))}`}
                                                                 </p>
                                                             </div>
                                                         </div>
-                                                        {listsOn && view.listsPlaylists && (
+                                                        {foldButton('lists', view.listsPlaylists ? `the ${view.sectionListNames.plural} and links` : `the ${names.plural}`)}
+                                                        </div>
+                                                        {listsOn && !shut.lists && view.listsPlaylists && (
                                                             <button type="button" className="btn btn-small" onClick={() => void refreshPlaylists()} disabled={refreshing}>
                                                                 <FontAwesomeIcon icon={faIcon('fass', 'arrows-rotate')} spin={refreshing} aria-hidden="true"/>
                                                                 <span>{refreshing ? 'Looking…' : `Look for new ${names.plural}`}</span>
@@ -659,8 +695,9 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                     </div>
                                                     {errors.linkSeasonsOn && <div className="error seasons-dialog-box-note" role="alert">{errors.linkSeasonsOn.message}</div>}
 
-                                                    {listsOn && (
-                                                        <>
+                                                    {!shut.lists && (
+                                                        // While the lists are off, they show what each would be, dimmed, until switched on.
+                                                        <div className="seasons-dialog-box-body" inert={!listsOn}>
                                                             {view.listsPlaylists && creatorLists.length === 0 && (
                                                                 <p className="seasons-dialog-muted seasons-dialog-box-note" role="status">
                                                                     {refreshing ? (
@@ -672,7 +709,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                                 <Fragment key={group.key}>
                                                                     <div className="seasons-dialog-kind">
                                                                         <span>{group.title}</span>
-                                                                        {allOf(`All ${group.title.toLowerCase()}`, group.rows.map((row) => roleOfList(row.choice)),
+                                                                        {allOf(`All ${group.title.toLowerCase()}`, group.rows.map((row) => setRoleOfList(row.choice)),
                                                                             (role) => setListRoles(new Set(group.rows.map((row) => row.choice.id)), role))}
                                                                     </div>
                                                                     <ul className="seasons-dialog-sources">{group.rows.map((row) => listRow(row))}</ul>
@@ -681,7 +718,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
 
                                                             <div className="seasons-dialog-kind">
                                                                 <span>Your links</span>
-                                                                {allOf('All links', userLinks.filter((row) => !removedLinks.includes(row.playlist.id)).map((row) => roleOfList(row.choice)),
+                                                                {allOf('All links', userLinks.filter((row) => !removedLinks.includes(row.playlist.id)).map((row) => setRoleOfList(row.choice)),
                                                                     (role) => setListRoles(new Set(userLinks.map((row) => row.choice.id)), role))}
                                                             </div>
                                                             <ul className="seasons-dialog-sources">
@@ -783,7 +820,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                                     )}
                                                                 </div>
                                                             )}
-                                                        </>
+                                                        </div>
                                                     )}
                                                 </div>
                                             )}

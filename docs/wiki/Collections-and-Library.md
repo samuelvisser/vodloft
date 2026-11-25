@@ -115,7 +115,7 @@ A collection of a whole YouTube channel, or of an artist on Bandcamp or SoundClo
 - **From the channel** (**From the artist**): the parts of the channel page, such as Videos, Shorts and Livestreams on YouTube. See [Feeds and the channel's own season](#feeds-and-the-channels-own-season).
 - **Playlists and links** (in the site's own words, such as **Albums, playlists and links**): the creator's playlists, grouped by kind where the site knows more than one, such as albums and playlists on SoundCloud, and **Your links**, links you add yourself from any site VODLoft can read. **Look for new playlists** asks the site for the list again. The switch in its header turns the whole box off when you don't want playlists at all: the collection then holds only what is on the channel page.
 
-A header with more than one item has an **All** choice that sets every item under it at once. A new channel collection starts with every playlist a season of its own, each one whole (a video in several playlists is in each), and with the videos of other channels in them included.
+A header with more than one item has an **All** choice that sets every item under it at once. The arrow beside a box folds it shut to one line that counts its choices; the playlists box starts folded while it is switched off. A new channel collection starts with every playlist a season of its own, each one whole (a video in several playlists is in each), and with the videos of other channels in them included.
 
 Under **For these lists**:
 
