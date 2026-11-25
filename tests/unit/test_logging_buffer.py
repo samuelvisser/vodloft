@@ -27,3 +27,33 @@ def test_other_access_logs_are_still_captured():
 
     assert not is_logs_endpoint_access(_access_record("/api/pull"))
     assert not is_logs_endpoint_access(_access_record("/api/tasks/ledger?limit=100"))
+
+
+def test_logs_endpoint_returns_newest_records_shortened_and_without_pull_requests(monkeypatch):
+    from datetime import datetime, timezone
+
+    from backend.api.endpoints.logs import router as logs_router
+    from backend.logging_buffer import ApplicationLogEntry
+
+    now = datetime.now(timezone.utc)
+    entries = [
+        ApplicationLogEntry(id=i, timestamp=now, level="INFO", logger="vodloft", message=f"record {i}")
+        for i in range(1, 1501)
+    ]
+    entries.append(
+        ApplicationLogEntry(
+            id=1501, timestamp=now, level="INFO", logger="uvicorn.access",
+            message='127.0.0.1:1 - "GET /api/pull?since=1 HTTP/1.1" 200',
+        )
+    )
+    entries.append(ApplicationLogEntry(id=1502, timestamp=now, level="INFO", logger="vodloft", message="x" * 50_000))
+    monkeypatch.setattr(logs_router, "get_application_logs", lambda: entries)
+
+    page = logs_router.application_logs(level=None, search=None, hide_pull_requests=True, limit=1_000)
+
+    assert page.total == 1501
+    assert len(page.items) == 1_000
+    assert page.items[0].id == 502
+    assert all(item.logger != "uvicorn.access" for item in page.items)
+    assert page.items[-1].message.startswith("x" * 10_000)
+    assert page.items[-1].message.endswith("(40,000 more characters)")
