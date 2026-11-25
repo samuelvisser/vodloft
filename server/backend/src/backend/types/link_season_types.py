@@ -22,6 +22,8 @@ class NewLinkSeasonAction(StrEnum):
     """Send a message, and show the playlist in the collection's Seasons dialog to turn on."""
     ADD = "add"
     """Make it a season."""
+    CONTENTS = "contents"
+    """Include its videos, without a season of its own: contents only."""
     IGNORE = "ignore"
     """Leave it off."""
 

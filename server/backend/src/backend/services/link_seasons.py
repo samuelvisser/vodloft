@@ -287,11 +287,12 @@ def seasons_plan(collection: Collection) -> str:
         return f"VODLoft puts the {episodes} of each upload year in their own {season.singular}."
     settings = collection_new_lists(collection)
     if collection.link_seasons == LinkSeasons.ALL.value:
-        taken, skipped = [setting.kind.names for setting in settings], []
+        taken, skipped, contents = [setting.kind.names for setting in settings], [], []
     else:
         actions = {setting.key: setting.action for setting in settings}
         taken = [s.kind.names for s in settings if actions[s.key] == NewLinkSeasonAction.ADD.value]
         skipped = [s.kind.names for s in settings if actions[s.key] == NewLinkSeasonAction.IGNORE.value]
+        contents = [s.kind.names for s in settings if actions[s.key] == NewLinkSeasonAction.CONTENTS.value]
     creator = collection_creator_names(collection).singular
     sentences = []
     if taken:
@@ -303,6 +304,9 @@ def seasons_plan(collection: Collection) -> str:
             sentences.append(f"The {episodes} of every {creator} {lists.singular} go in {season.a} per upload year.")
         else:
             sentences.append(f"Every {creator} {lists.singular} becomes {season.a} in VODLoft.")
+    if contents:
+        sentences.append(f"The {episodes} of every {creator} {Names.joined(contents).singular} are part of the "
+                         f"{collection_names(collection).singular}.")
     if skipped:
         sentences.append(f"{Names.joined(skipped).plural.capitalize()} are ignored.")
     if collection.loose_videos == LooseVideos.BY_YEAR.value:
@@ -414,7 +418,8 @@ def _look_up_outside(
 def _added(action: NewLinkSeasonAction, *, first: bool, every: bool) -> bool:
     """A new list is a season: every list is, in a collection where all are; the lists the channel had when the
     collection was set up are, but for a kind it skips; and later ones are when the collection adds them."""
-    return every or action is NewLinkSeasonAction.ADD or (first and action is not NewLinkSeasonAction.IGNORE)
+    return every or action in (NewLinkSeasonAction.ADD, NewLinkSeasonAction.CONTENTS) or (
+        first and action is not NewLinkSeasonAction.IGNORE)
 
 
 def save_lists(s: Session, collection: Collection, listing: LinkListing) -> list[CollectionList]:
@@ -439,8 +444,9 @@ def save_lists(s: Session, collection: Collection, listing: LinkListing) -> list
                 url=found.url, title=found.title, image_path=found.image_url, item_count=found.item_count,
                 site_position=position, enabled=_added(action, first=first, every=every),
                 status=(ListStatus.NEW if asks else ListStatus.KNOWN).value,
-                # While every list is in, a new one is included as the others are: a season, or contents only.
-                as_season=collection.lists_as_seasons if every else True,
+                # While every list is in, a new one is included as the others are: a season, or contents only. One
+                # the collection takes as contents only adds its videos to the other seasons.
+                as_season=collection.lists_as_seasons if every else action is not NewLinkSeasonAction.CONTENTS,
             )
             collection.lists.append(playlist)
             known[found.ref] = playlist

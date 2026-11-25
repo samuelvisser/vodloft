@@ -300,6 +300,29 @@ def test_a_new_playlist_waits_for_the_users_choice_when_only_selected_ones_are_s
     assert _seasons(session) == [("Videos", 1, ["b"]), ("One", 2, ["a"])]
 
 
+def test_a_new_playlist_the_collection_takes_as_contents_adds_its_videos_without_a_season(source, session):
+    from backend.db.models import CollectionList
+
+    source.videos = [_video("a", 2024), _video("b", 2025), _video("c", 2025, 6)]
+    source.lists = [_list("PLone", "One")]
+    source.items = {"PLone": ("a",), "PLtwo": ("b",)}
+    collection = _collection(session, mode="selected")
+    collection.new_lists = {LIST_TYPE: "contents"}
+    session.commit()
+    _index(session, collection, source)
+    # Set up with it, the channel's first playlist is contents only too.
+    assert _seasons(session) == [("Collection", 1, ["a", "b", "c"])]
+
+    source.lists = [_list("PLtwo", "Two"), _list("PLone", "One")]
+    _index(session, collection, source)
+
+    session.expire_all()
+    assert {link.ref: (link.enabled, link.status, link.as_season) for link in session.scalars(select(CollectionList))} == {
+        "PLone": (True, "known", False), "PLtwo": (True, "known", False),
+    }
+    assert _seasons(session) == [("Collection", 1, ["a", "b", "c"])]
+
+
 def test_an_artists_albums_are_named_as_music(source, session):
     source.videos = [_video("t1", 2024), _video("t2", 2024, 2)]
     source.lists = [_list("PLalbum", "Harp")]

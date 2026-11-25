@@ -3,7 +3,7 @@ import {NamesSchema, SectionTypeSchema} from './source'
 import {CollectionWordsSchema} from './collection_contract'
 
 export const LinkSeasonModeValues = ['all', 'selected'] as const
-export const NewLinkSeasonValues = ['ask', 'add', 'ignore'] as const
+export const NewLinkSeasonValues = ['ask', 'add', 'contents', 'ignore'] as const
 export type NewLinkSeason = typeof NewLinkSeasonValues[number]
 export const ListLayoutValues = ['season_each', 'by_year'] as const
 /** How the collection groups its own videos: for a channel collection, every video of its feeds in one season, the

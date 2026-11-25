@@ -13,7 +13,6 @@ import {episodeQueryKeys} from '../../lib/collectionQueryOptions'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {createSelectRegistry, type SelectRegistry} from '../../utils/selectRegistry'
 import SimpleSelect from '../common/SimpleSelect'
-import DisabledReason from '../common/DisabledReason'
 import NewListSettings from '../common/NewListSettings'
 import {capitalized} from '../../types/creator'
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
@@ -147,11 +146,6 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     const looseSeason = view ? view.channelSeasonNames[holdsWholeChannel ? 'everything' : 'one_season'] : undefined
     const names = useMemo(() => view ? namesOf(view, looseSeason!) : undefined, [view, looseSeason])
     const words = dialogWords(collectionWordsGiven ?? (view ? wordsOf(view.words) : collectionWords(null)), view)
-    // Laid out by year, a video has one upload year, so it never belongs in several seasons.
-    const repeatByYear = listsByYear
-    const repeatByYearReason = names
-        ? `The ${names.plural} are laid out by year, so this setting does nothing: ${words.episode.a} has one upload year, and is ${words.inSeason} the ${words.season.singular} of that year.`
-        : undefined
     const {season} = words
     const regs = useMemo(() => view && names ? registries(names, words, view) : null, [view, names, words])
     const only = outsideVideos === 'only'
@@ -861,23 +855,17 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                 </div>
                                             )
                                         })()}
-                                        {regs && (
+                                        {/* Only lists that are seasons put a video in several seasons; laid out by year, a video has one
+                                            upload year, so it is in one season. */}
+                                        {regs && listsSeasons && !listsByYear && (
                                             <div className="form-row">
                                                 <label htmlFor="seasons-repeat">
                                                     When {words.episode.a} belongs {words.inSeason} several {season.plural}
                                                 </label>
-                                                {/* Laid out by year, a video has one upload year, so it is in one season. */}
-                                                <DisabledReason reason={repeatByYear ? repeatByYearReason : undefined} placement="below-start" as="div">
-                                                    {({describedBy, explain}) => (
-                                                        <div onClick={repeatByYear ? explain : undefined}>
-                                                            <SimpleSelect
-                                                                inputId="seasons-repeat" registry={regs.repeat} value={repeatVideos}
-                                                                isDisabled={repeatByYear} aria-describedby={describedBy}
-                                                                onChange={(value) => setValue('repeatVideos', value as CollectionSeasonsFormIn['repeatVideos'], {shouldDirty: true})}
-                                                            />
-                                                        </div>
-                                                    )}
-                                                </DisabledReason>
+                                                <SimpleSelect
+                                                    inputId="seasons-repeat" registry={regs.repeat} value={repeatVideos}
+                                                    onChange={(value) => setValue('repeatVideos', value as CollectionSeasonsFormIn['repeatVideos'], {shouldDirty: true})}
+                                                />
                                                 <div className="help">{regs.repeat.getHelp(repeatVideos)}</div>
                                                 {errors.repeatVideos && <div className="error" role="alert">{errors.repeatVideos.message}</div>}
                                             </div>

@@ -49,6 +49,7 @@ export function registries(names: ListNames, words: Words, view: CollectionSeaso
         newLinks: (kind: ListKind) => createSelectRegistry(`NewLinkSeasons-${kind.key}-${kind.names.singular}-${words.season.a}`, {
             ask: {label: 'Ask me', help: `VODLoft sends a message, and the new ${words.creator} ${kind.names.singular} waits here for you to switch it on.`},
             add: {label: `Make it ${words.season.a} in VODLoft`, help: `A new ${words.creator} ${kind.names.singular} becomes ${words.season.a} in VODLoft right away.`},
+            contents: {label: 'Include its contents only', help: `The videos of a new ${words.creator} ${kind.names.singular} join the collection right away, without ${words.season.a} of their own.`},
             ignore: {label: 'Always skip it', help: `A new ${words.creator} ${kind.names.singular} stays off. You can switch it on here.`},
         }),
         // How a channel collection groups the videos of its feeds while none of its lists are seasons: the whole
