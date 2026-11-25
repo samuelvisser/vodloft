@@ -60,14 +60,3 @@ class ReconcileAPIRead(ResponseBase):
 
     episode_slug: Optional[str] = None
     collection_slug: Optional[str] = None
-
-
-class MovesWaitingAPIRead(ResponseBase):
-    """A collection whose videos wait for its Move action."""
-
-    slug: str
-    title: str
-    moved: int
-    words: CollectionWordsAPIRead
-    seasons_plan: str
-    """Why they move: what the collection's settings make its seasons now, in words."""

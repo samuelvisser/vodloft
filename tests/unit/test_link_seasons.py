@@ -184,10 +184,12 @@ def test_a_video_with_files_stays_until_it_is_moved_to_where_it_belongs(source, 
     assert [moved.source_slug for moved in moved_episodes(session, collection)] == ["b"]
     # Home's Needs attention says why: what the collection's settings make its seasons now.
     from backend.services.link_seasons import seasons_plan
-    from backend.services.reconcile import waiting_in_library
-    [waiting] = waiting_in_library(session)
-    assert waiting.moved == 1 and waiting.seasons_plan == seasons_plan(collection)
-    assert "playlist" in waiting.seasons_plan
+    from backend.services.collection_health import MovesIssue, unhealthy_collections
+    # The collection stored it in its health when the check placed its videos; Home reads it from there.
+    assert (collection.healthy, collection.health_issues) == (False, {"moves": 1})
+    [unhealthy] = unhealthy_collections(session)
+    assert unhealthy.issues == [MovesIssue(1, seasons_plan(collection))]
+    assert "playlist" in unhealthy.issues[0].seasons_plan
     episode_id = episode.id
     session.commit()
     run_write_transaction(lambda w: reconcile(w, ReconcileScope.of_episode(w.get(Episode, episode_id)), renumber={}))
@@ -198,6 +200,44 @@ def test_a_video_with_files_stays_until_it_is_moved_to_where_it_belongs(source, 
     assert session.scalar(select(Episode.episode_identifier).where(Episode.source_slug == "b")).startswith("ep.S01E")
     assert belongs_elsewhere(session, session.scalar(select(Episode).where(Episode.source_slug == "b"))) is None
     assert moved_episodes(session, session.get(type(collection), collection.id)) == []
+    # Moving it counted again: nothing waits any more.
+    found = session.get(type(collection), collection.id)
+    assert (found.healthy, found.health_issues) == (True, {})
+    assert unhealthy_collections(session) == []
+
+
+def test_the_collection_health_check_sets_right_health_that_drifted(source, session):
+    from backend.services.collection_health import check_collection_health, unhealthy_collections
+
+    source.videos = [_video("a", 2024), _video("b", 2025)]
+    source.lists = [_list("PLone", "One")]
+    source.items = {"PLone": ("a",)}
+    collection = _collection(session, identifier="seasonal")
+    _index(session, collection, source)
+    _give_files(session, "b")
+    source.items = {"PLone": ("a", "b")}
+    _index(session, collection, source)
+    session.expire_all()
+    assert session.get(type(collection), collection.id).health_issues == {"moves": 1}
+    updated_at = session.get(type(collection), collection.id).updated_at
+
+    # Something VODLoft missed left its health off.
+    drifted = session.get(type(collection), collection.id)
+    drifted.healthy, drifted.health_issues = True, {}
+    session.commit()
+    assert unhealthy_collections(session) == []
+
+    health = check_collection_health(collection.id)
+    assert (health.corrected, health.needs_attention, health.healthy) == (["moves"], ["moves"], False)
+    session.expire_all()
+    found = session.get(type(collection), collection.id)
+    assert (found.healthy, found.health_issues) == (False, {"moves": 1})
+    # Checking is no change to the collection itself.
+    assert found.updated_at == updated_at
+    assert [[issue.count for issue in item.issues] for item in unhealthy_collections(session)] == [[1]]
+    # A count that is right is left alone.
+    assert check_collection_health(collection.id).corrected == []
+    session.rollback()
 
 
 def test_moving_a_video_after_the_seasons_were_put_in_another_order_skips_numbers_downloaded_episodes_keep(source, session):

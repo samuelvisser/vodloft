@@ -741,6 +741,8 @@ def place_in_link_seasons(
         # A season the lists just left is one its videos leave too, also the extra episodes there.
         _drop_outside(s, collection, by_user=by_user, extras=places.extras)
     if not places.anything:
+        _note_health(s, collection)
+        s.flush()
         return 0
     kept = set() if with_files is True else _with_files(s, collection) - (with_files or set())
     finder = SeasonFinder(s, collection, now)
@@ -771,7 +773,16 @@ def place_in_link_seasons(
         _add_placements(s, collection, finder, places.missing)
     _drop_emptied(s, collection, left)
     arrange_seasons(s, collection)
+    _note_health(s, collection)
+    s.flush()
     return moved
+
+
+def _note_health(s: Session, collection: Collection) -> None:
+    # The collection's health keeps what its placement leaves for the user, such as downloads to move.
+    from backend.services.collection_health import note_collection_health
+
+    note_collection_health(s, collection)
 
 
 # What an episode of a video in another season has of its own, rather than of the video.

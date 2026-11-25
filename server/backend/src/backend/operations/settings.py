@@ -71,3 +71,10 @@ class FileWatcherCronOperation(_SingleTaskSettingsCronOperation):
     title_text = "File watcher"
     task = "file_watcher"
     target_resource_type = "collection"
+
+
+class CollectionHealthCronOperation(_SingleTaskSettingsCronOperation):
+    kind = "system.cron.collection_health"
+    title_text = "Check collection health"
+    task = "check_collection_health"
+    target_resource_type = "system"

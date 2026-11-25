@@ -52,7 +52,8 @@ export default function ReconcileDialog({open, path, what, onDismiss, onDone}: P
             await Promise.all([
                 queryClient.invalidateQueries({queryKey: ['collection']}),
                 queryClient.invalidateQueries({queryKey: ['episode']}),
-                queryClient.invalidateQueries({queryKey: ['movesWaiting']}),
+                queryClient.invalidateQueries({queryKey: ['collectionHealth']}),
+                queryClient.invalidateQueries({queryKey: ['collections']}),
             ])
             await onDone?.(result)
             onDismiss()

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, String, Text, false, func
+from sqlalchemy import JSON, Boolean, String, Text, false, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.db import Base
@@ -18,6 +18,10 @@ class Settings(Base):
         default=False,
         server_default=false(),
         nullable=False,
+    )
+    health_checks_off: Mapped[list[str]] = mapped_column(
+        JSON, default=list, server_default="[]", nullable=False,
+        comment="The checks of the collection health check that the user turned off, by kind, such as creators",
     )
     user_accounts_enabled: Mapped[bool] = mapped_column(
         Boolean,

@@ -30,7 +30,8 @@ import {
     CreatorEpisodePageReadSchema, CreatorOfferingsSchema, CreatorPageReadSchema, CreatorReadSchema, type CreatorPageRead, type CreatorRead,
     CollectionCreatorMatchSchema, type CollectionCreatorMatch,
 } from '../types/schemas/creator'
-import {MovePreviewSchema, type MovePreview, ReconcileResultSchema, type ReconcileResult, MovesWaitingSchema} from '../types/schemas/reconcile'
+import {MovePreviewSchema, type MovePreview, ReconcileResultSchema, type ReconcileResult} from '../types/schemas/reconcile'
+import {HealthChecksSchema, LibraryHealthSchema, type HealthChecks, type HealthIssueKind} from '../types/schemas/collection_health'
 import {downloadStatusesForApi} from './downloadStatusFilters'
 import {
     episodeQueryKeys,
@@ -974,13 +975,50 @@ export async function reconcile(path: string, renumber: Record<string, boolean>)
     return ReconcileResultSchema.parse(await response.json())
 }
 
-/** The collections whose Moved episodes wait to be moved. */
-export function useMovesWaiting(enabled = true) {
+/** What the collection health check found that needs the user: the collections that need them, as each stored its
+ * health, and the creators whose collections they could group. */
+export function useCollectionHealth(enabled = true) {
     return useQuery({
-        queryKey: ['movesWaiting'],
+        queryKey: ['collectionHealth'],
         enabled,
-        queryFn: ({signal}) => apiJson('/collections/moves-waiting', (data) => z.array(MovesWaitingSchema).parse(data), {signal}),
+        queryFn: ({signal}) => apiJson('/collections/health', (data) => LibraryHealthSchema.parse(data), {signal}),
     })
+}
+
+/** The checks of the collection health check, and which are on. */
+export function useHealthChecks(enabled = true) {
+    return useQuery({
+        queryKey: ['collectionHealth', 'checks'],
+        enabled,
+        queryFn: ({signal}) => apiJson('/collections/health/checks', (data) => HealthChecksSchema.parse(data), {signal}),
+    })
+}
+
+/** Turn one check of the collection health check on or off. */
+export function setHealthCheck(kind: HealthIssueKind, on: boolean): Promise<HealthChecks> {
+    return apiJson(`/collections/health/checks/${kind}`, (data) => HealthChecksSchema.parse(data), {method: 'PUT', json: {on}})
+}
+
+/** Show every suggestion the user put off or dismissed again. */
+export function resetHealthDismissals(): Promise<HealthChecks> {
+    return apiJson('/collections/health/dismissals', (data) => HealthChecksSchema.parse(data), {method: 'DELETE'})
+}
+
+function creatorSuggestionPath(siteKey: string, ref: string) {
+    return `/collections/health/creators/${encodeURIComponent(siteKey)}/${encodeURIComponent(ref)}`
+}
+
+/** Put a suggestion to group a creator's collections off for a week, or dismiss it for good. */
+export async function answerCreatorSuggestion(siteKey: string, ref: string, answer: 'later' | 'dismiss'): Promise<void> {
+    const response = await fetch(apiUrl(`${creatorSuggestionPath(siteKey, ref)}/answer`), {
+        method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({answer}),
+    })
+    if (!response.ok) throw await responseError(response)
+}
+
+/** Group the collections of a suggestion under their creator. Answers with the creator's slug. */
+export function groupCreatorSuggestion(siteKey: string, ref: string): Promise<string> {
+    return apiJson(`${creatorSuggestionPath(siteKey, ref)}/group`, (data) => z.object({creatorSlug: z.string()}).parse(data).creatorSlug, {method: 'POST'})
 }
 
 /** Make one of a creator's accounts a creator of their own again, with its collections. Answers with the new

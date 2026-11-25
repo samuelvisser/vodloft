@@ -33,7 +33,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "5c1e8b7d3f20"
+HEAD_REVISION = "917089ea3b82"
 
 
 @pytest.fixture
@@ -1631,3 +1631,30 @@ def test_yt_dlp_options_vodloft_now_refuses_become_comments(migration_database):
     command.downgrade(config, "4c7e19a2b6d0")
     with engine.connect() as connection:
         assert connection.execute(text("SELECT ytdlp_options FROM collections")).scalar_one() == collection_options
+
+
+def test_downloads_to_move_become_an_issue_of_the_collections_health(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "6ab9362820f3")
+    with engine.begin() as connection:
+        for collection_id, waiting in ((1, 0), (2, 3)):
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key, episode_order, moves_waiting) VALUES (:id, 'uuid-' || :id, "
+                "'c' || :id, 'C', 'https://example.test/' || :id, 'free', 'series', 'seasonal', 'Host', 'host', "
+                "'ytdlp', 'oldest_first', :waiting)"
+            ), {"id": collection_id, "waiting": waiting})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        rows = connection.execute(text("SELECT id, healthy, health_issues FROM collections ORDER BY id")).all()
+    assert [(row[0], bool(row[1]), json.loads(row[2])) for row in rows] == [(1, True, {}), (2, False, {"moves": 3})]
+    assert "moves_waiting" not in {column["name"] for column in inspect(engine).get_columns("collections")}
+
+    command.downgrade(config, "6ab9362820f3")
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT id, moves_waiting FROM collections ORDER BY id")).all() == [(1, 0), (2, 3)]

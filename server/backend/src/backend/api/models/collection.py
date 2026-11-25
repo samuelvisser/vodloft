@@ -11,6 +11,7 @@ from backend.api.models.profile_bulk import BulkChangesIn
 from backend.api.models.source import NamesAPIRead, SiteAPIRead, SourcedResponse
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.collection_contracts import collection_contract
+from backend.types.collection_health_types import HealthIssueKind
 from backend.types.collection_types import CheckFrequency, CollectionType, CookiesMode, EpisodeIdentifier, EpisodeOrder
 from backend.types.link_season_types import CollectionKind, OutsideVideos
 from backend.types.resource_names import CUSTOM_COLLECTION_NAMES
@@ -325,6 +326,10 @@ class CollectionAPIRead(_CollectionAPIBaseOut):
     updated_at: datetime
     added_by: Optional[str] = None
     """Who added it, with user accounts on."""
+    healthy: bool = True
+    """Whether the collection needs nothing from the user, as it stored it."""
+    health_issues: dict[HealthIssueKind, int] = Field(default_factory=dict)
+    """What it needs the user for, by kind of issue, with how many things each concerns."""
 
 
 class CollectionAPIReadView(CollectionAPIRead):

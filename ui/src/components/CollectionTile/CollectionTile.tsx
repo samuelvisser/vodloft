@@ -8,6 +8,7 @@ import {wordsFor} from '../../lib/collectionWords'
 import {useActiveOperation} from '../OperationNotifier/OperationNotifier'
 import CollectionIndexingProgress from '../CollectionIndexingProgress/CollectionIndexingProgress'
 import {BulkTileCheck} from '../ProfileBulkEdit/BulkEditControls'
+import type {HealthIssueKind} from '../../types/schemas/collection_health'
 
 type CollectionTileProps = {
     collection: {
@@ -26,6 +27,8 @@ type CollectionTileProps = {
         linkImagePath?: string | null
         logoImagePath?: string | null
         authorHeadshotPath?: string | null
+        /** What it needs the user for, by kind of issue, as it stored its health. */
+        healthIssues?: Partial<Record<HealthIssueKind, number>>
     }
     /** The line under the title, such as the collection's author. */
     subtitle?: string | null
@@ -54,6 +57,8 @@ export default function CollectionTile({collection, subtitle, showSource = true,
         || collection.linkImagePath || collection.logoImagePath || collection.authorHeadshotPath,
     )
     const indexing = !!useActiveOperation('collection.index', 'collection', collection.id ?? null)
+    const words = wordsFor(collection)
+    const moves = collection.healthIssues?.moves ?? 0
     const content = (
         <>
             <span className="library-tile-art">
@@ -61,6 +66,15 @@ export default function CollectionTile({collection, subtitle, showSource = true,
                     ? <CollectionTileArt key={image} src={image}/>
                     : <span className="collection-art-placeholder"><FontAwesomeIcon icon={faIcon('fass', 'podcast')}/></span>}
                 {showSource && <SourceBadge sourceKey={collection.sourceKey} className="library-tile-source"/>}
+                {moves > 0 && (
+                    <span
+                        className="library-tile-moves"
+                        title={`${words.count(moves)} ${moves === 1 ? 'waits' : 'wait'} to move to another ${words.season.singular}`}
+                    >
+                        <FontAwesomeIcon icon={faIcon('fass', 'arrow-right-arrow-left')}/>
+                        {moves}
+                    </span>
+                )}
                 {selection && <BulkTileCheck title={collection.title} chosen={selection.chosen} onToggle={selection.onToggle}/>}
             </span>
             <span className="library-tile-copy">
@@ -69,7 +83,7 @@ export default function CollectionTile({collection, subtitle, showSource = true,
                 <span className="library-tile-status">
                     {/* A collection that is still being indexed has no episodes yet, only progress. */}
                     {!(indexing && collection.episodeCount === 0) && (
-                        <TileStats parts={[wordsFor(collection).count(collection.episodeCount), collection.years]}/>
+                        <TileStats parts={[words.count(collection.episodeCount), collection.years]}/>
                     )}
                     {collection.id !== undefined && (
                         <CollectionIndexingProgress

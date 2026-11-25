@@ -342,7 +342,12 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
             const moves = await fetch(`${endpoint}/moved-episodes`, {credentials: 'include'})
                 .then((response) => response.ok ? response.json() : {episodeSlugs: []})
                 .catch(() => ({episodeSlugs: []}))
-            await queryClient.invalidateQueries({queryKey: ['collection', collectionSlug, 'movedEpisodes']})
+            await Promise.all([
+                queryClient.invalidateQueries({queryKey: ['collection', collectionSlug, 'movedEpisodes']}),
+                // The collection stored how many wait, which Home and the Library show.
+                queryClient.invalidateQueries({queryKey: ['collectionHealth']}),
+                queryClient.invalidateQueries({queryKey: ['collections']}),
+            ])
             onDismiss()
             if ((moves.episodeSlugs ?? []).length > 0) onMovesWaiting?.()
         },

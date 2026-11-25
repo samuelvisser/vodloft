@@ -2,7 +2,7 @@ from datetime import datetime
 from collections.abc import Iterable
 from typing import Optional, TYPE_CHECKING, TypeAlias
 
-from sqlalchemy import JSON, ForeignKey, Text, UniqueConstraint, func
+from sqlalchemy import JSON, ForeignKey, Text, UniqueConstraint, func, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
@@ -11,6 +11,7 @@ from backend.db.mixins.MediaContentMetadataMixin import PICTURE_PATH_COMMENT
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 from backend.db.mixins.CreatedByMixin import CreatedByMixin
 from backend.types.collection_types import EpisodeOrder
+from backend.types.collection_health_types import HealthIssueKind
 from backend.types.collection_contracts import collection_contract
 from backend.types.link_season_types import ChannelSeason, CollectionKind, ListLayout, LooseVideos, LinkSeasons, OutsideVideos
 
@@ -110,6 +111,24 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
         default=False, server_default="0",
         comment="The user put the seasons in their own order, so a new season goes last instead of where its date puts it",
     )
+    healthy: Mapped[bool] = mapped_column(
+        default=True, server_default=true(), index=True,
+        comment="Whether nothing in it needs the user, as its health_issues say",
+    )
+    health_issues: Mapped[dict[str, int]] = mapped_column(
+        JSON, default=dict, server_default="{}",
+        comment="What it needs the user for, by the kind of issue, with how many things each concerns, such as moves: 3 "
+                "downloads that wait for its Move action. Kept up to date as VODLoft works on it, and set right by the "
+                "nightly collection health check",
+    )
+    site_creator_ref: Mapped[Optional[str]] = mapped_column(
+        index=True,
+        comment="The Site's id of the creator behind its link, as the collection health check found it, for suggesting "
+                "to group a creator's collections; null when none was found or it has not been looked up",
+    )
+    site_creator_url: Mapped[Optional[str]] = mapped_column(
+        comment="The link that site_creator_ref was looked up for: a link it no longer has is looked up again",
+    )
     split_chapters: Mapped[bool] = mapped_column(
         default=False, server_default="0",
         comment="Each new video with chapters becomes a season of its own, with an episode per chapter",
@@ -183,6 +202,18 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     lists: Mapped[list["CollectionList"]] = relationship(
         back_populates="collection", cascade="all, delete-orphan", order_by="CollectionList.site_position",
     )
+
+    def note_health(self, kind: "HealthIssueKind", count: int) -> bool:
+        """Store how many things of one kind of issue need the user, none when it is healthy in that way. Returns
+        whether that changed what it stored."""
+        issues = {key: value for key, value in (self.health_issues or {}).items() if key != kind.value}
+        if count:
+            issues[kind.value] = count
+        if issues == (self.health_issues or {}):
+            return False
+        self.health_issues = issues
+        self.healthy = not issues
+        return True
 
     @property
     def ytdlp_option_texts(self) -> tuple[str, ...]:

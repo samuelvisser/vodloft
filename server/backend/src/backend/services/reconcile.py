@@ -63,31 +63,6 @@ def waiting(s: Session, scope: ReconcileScope) -> int:
 
 
 @dataclass(frozen=True)
-class WaitingIn:
-    """A collection with videos that wait to be moved."""
-
-    slug: str
-    title: str
-    moved: int
-    words: CollectionWords
-    """What it calls its seasons and episodes."""
-    seasons_plan: str
-    """Why they move: what the collection's settings make its seasons now, in words."""
-
-
-def waiting_in_library(s: Session) -> list[WaitingIn]:
-    """Every collection whose videos wait to be moved, by title. Reading only."""
-    found = []
-    for collection in s.scalars(select(Collection).order_by(Collection.title)):
-        moved = waiting(s, ReconcileScope.of_collection(collection))
-        if moved:
-            found.append(WaitingIn(
-                collection.slug, collection.title, moved, collection_words(collection), seasons_plan(collection),
-            ))
-    return found
-
-
-@dataclass(frozen=True)
 class _Group:
     """The videos that move to one season, from one list."""
 
@@ -242,4 +217,6 @@ def reconcile(s: Session, scope: ReconcileScope, *, renumber: Mapping[str, bool]
         queue_renumber(s, collection, renumber=again)
 
 
-__all__ = ["MovePreview", "ReconcileScope", "WaitingIn", "preview_reconcile", "reconcile", "waiting", "waiting_in_library"]
+__all__ = [
+    "MovePreview", "ReconcileScope", "preview_reconcile", "reconcile", "waiting",
+]

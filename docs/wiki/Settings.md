@@ -220,6 +220,23 @@ A quick check looks only at a collection's newest videos and looks up the ones V
 
 Metadata intervals accept positive values using `s`, `m`, `h`, or `d`, separated by commas and ordered from shortest to longest.
 
+### Collection health
+
+| Setting | Environment variable | Default | What it does |
+| --- | --- | --- | --- |
+| `collectionHealth.checkCronEnabled` | `VL_COLLECTION_HEALTH__CHECK_CRON_ENABLED` | `true` | Enables the collection health check. |
+| `collectionHealth.checkCron` | `VL_COLLECTION_HEALTH__CHECK_CRON` | `0 4 * * *` | Checks every collection once a night, and marks the ones that need you. |
+
+VODLoft keeps track of what each collection needs from you as it works. Home lists those collections under **Needs attention**, and the Library marks them with a badge. The health check works this out again for every collection, in case something was missed, and sets it right. **Run now** runs it at once.
+
+Below the schedule you choose which checks run. They are saved as soon as you change them:
+
+- **Downloads to move**: downloaded videos that your season settings put in another season, which wait for you to move them. Home shows them as a warning.
+- **New lists to choose**: lists a channel added later, such as a new playlist, which wait for you to choose whether they are added. Home shows them as info.
+- **Creators to group**: VODLoft finds the creator behind each collection that is in no creator yet. When three or more of your collections are by one creator, Home suggests grouping them under that creator, to keep the Library tidy. **Group** groups them, **Later** asks again in a week, **Dismiss** stops asking about that creator, and **Never suggest grouping creators** turns this check off.
+
+**Reset dismissed suggestions** brings back every suggestion you dismissed or put off.
+
 ### Per-Site scheduling
 
 Each Site follows the settings above unless you give it settings of its own under **Settings → Automation → Per-Site
