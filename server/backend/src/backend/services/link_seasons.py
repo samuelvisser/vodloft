@@ -261,7 +261,10 @@ def collection_list_kinds(collection: Collection) -> list[ListKind]:
 
 def collection_new_lists(collection: Collection) -> list[NewListSetting]:
     """What the collection does with a new list of each kind of its Site."""
-    return new_link_seasons_settings(collection_list_kinds(collection), collection.new_lists)
+    return new_link_seasons_settings(
+        collection_list_kinds(collection), collection.new_lists,
+        albums_only=collection_contract(collection.type).album_lists,
+    )
 
 
 def seasons_plan(collection: Collection) -> str:

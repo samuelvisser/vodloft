@@ -539,11 +539,11 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                             <div className="seasons-dialog-switch-row">
                                                 <div>
                                                     <h3 id="seasons-dialog-links">
-                                                        {view.siteOrder ? capitalized(names.plural) : `${capitalized(names.plural)} as ${season.plural}`}
+                                                        {view.siteOrder ? capitalized(names.plural) : `Include ${view.sectionListNames.plural} made by the ${words.creator}`}
                                                     </h3>
                                                     <p className="seasons-dialog-muted">
                                                         Each {names.singular} becomes {season.a} of its own in VODLoft, with its {words.videos} in the
-                                                        order the {names.singular} has them.
+                                                        order the {names.singular} has them, or adds its {words.videos} to the collection, as you choose below.
                                                     </p>
                                                 </div>
                                                 <Controller control={control} name="linkSeasonsOn" render={({field}) => (
