@@ -79,17 +79,17 @@ sides. Some examples:
 | Your setup | Path in VODLoft | Path in the media server |
 |---|---|---|
 | Both in Docker, the media server mounts the downloads as `/media` | `/downloads` | `/media` |
-| Plex on Windows, which sees the downloads folder as drive `M:` | `/downloads` | `M:\` |
+| Plex on Windows, which sees the downloads folder as drive `D:` | `/downloads` | `D:\` |
 | Plex on Windows through a network share | `/downloads` | `\\nas\downloads` |
 | The media server sees the same path as VODLoft | leave both empty | |
 
 When both fields are filled in, the form shows one of your folders as VODLoft sees it and as the media server will
-be told it, such as `/downloads/Video/Show` as `M:\Video\Show`. Check that the second one is a folder you can find
+be told it, such as `/downloads/Video/Show` as `D:\Video\Show`. Check that the second one is a folder you can find
 in your media server. For Plex, **Test the connection** also checks that one of your Plex libraries holds your newest
 download's folder, and tells you when the mapping is off.
 
-Library folders only count when they hold the downloads. If Plex's library folder is `M:\Video` and VODLoft saves to
-`/downloads/Video/...`, map `/downloads` to `M:\`, not to `M:\Video`.
+Library folders only count when they hold the downloads. If Plex's library folder is `D:\Video` and VODLoft saves to
+`/downloads/Video/...`, map `/downloads` to `D:\`, not to `D:\Video`.
 
 If you can't get it to match, choose **The whole library** under **What to refresh**. VODLoft then refreshes every
 library instead of only the changed folder, which needs no path mapping but makes the server scan more.
