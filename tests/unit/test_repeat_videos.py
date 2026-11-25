@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import select
 
 from test_link_seasons import (  # noqa: F401
-    CreatorSource, _collection, _index, _list, _seasons, session, source,
+    CreatorSource, _collection, _index, _list, _seasons, links_source, session, source,
 )
 from test_ytdlp_collections import _video
 
@@ -112,12 +112,16 @@ def test_a_downloaded_extra_leaves_with_its_files_when_the_user_made_it_one_and_
         assert held_back(extra)
 
 
-def test_lists_by_year_give_a_video_one_episode(source, session):
+def test_lists_by_year_give_a_video_one_episode(links_source, session):
     from backend.db.models import Collection
 
+    source = links_source
     _albums(source)
+    source.outside = {video.slug: video for video in source.videos}
     collection = _collection(session, music=True)
     collection = session.get(Collection, collection.id)
+    # Only a collection of nothing but its lists lays them out by year.
+    collection.outside_videos = "only"
     collection.list_layout = "by_year"
     session.commit()
 

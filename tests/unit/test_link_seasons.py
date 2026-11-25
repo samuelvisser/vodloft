@@ -1390,7 +1390,7 @@ def test_a_list_only_joins_a_season_of_the_collections_lists(source, session):
         _put_together(session, {"PLone": videos})
 
 
-def test_lists_laid_out_by_year_still_decide_what_is_in(source, session):
+def test_lists_included_as_contents_with_the_rest_by_year_still_decide_what_is_in(source, session):
     from backend.services.link_seasons import moved_episodes
 
     source.videos = [_video("a", 2023), _video("b", 2024), _video("c", 2024, 6), _video("d", 2025)]
@@ -1401,18 +1401,18 @@ def test_lists_laid_out_by_year_still_decide_what_is_in(source, session):
     _give_files(session, "d")
     assert _seasons(session) == [("Videos", 1, ["c", "d"]), ("The Tour", 2, ["a", "b"])]
 
-    _update(session, list_layout="by_year")
+    _update(session, lists_as_seasons=False, loose_videos="by_year")
 
     # The playlist's videos and the others share the year seasons; the other creator's video stays out. The
     # downloaded one stays where it is until it is moved, as with any season change.
     assert _seasons(session) == [("Videos", 1, ["d"]), ("2023", 2, ["a"]), ("2024", 3, ["b", "c"])]
     assert [episode.source_slug for episode in moved_episodes(session, collection)] == ["d"]
 
-    _update(session, list_layout="season_each")
+    _update(session, lists_as_seasons=True, loose_videos="one_season")
     assert _seasons(session) == [("Videos", 1, ["c", "d"]), ("The Tour", 2, ["a", "b"])]
 
 
-def test_an_episode_of_a_list_laid_out_by_year_names_its_list_in_templates(source, session):
+def test_an_episode_of_a_list_included_as_contents_names_its_list_in_templates(source, session):
     from backend.db.models import Episode
     from backend.utils.output_template import _creator_values
 
@@ -1421,7 +1421,7 @@ def test_an_episode_of_a_list_laid_out_by_year_names_its_list_in_templates(sourc
     source.items = {"PLtour": ("a",)}
     collection = _collection(session)
     _index(session, collection, source)
-    _update(session, list_layout="by_year")
+    _update(session, lists_as_seasons=False, loose_videos="by_year")
     session.expire_all()
 
     titles = {

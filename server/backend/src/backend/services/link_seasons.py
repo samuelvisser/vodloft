@@ -143,8 +143,11 @@ def offers_link_seasons(collection: Collection) -> bool:
 
 
 def lists_by_year(collection: Collection) -> bool:
-    """Whether the collection lays its lists out in seasons per upload year, rather than a season each."""
-    return collection.list_layout == ListLayout.BY_YEAR.value and lists_are_seasons(collection)
+    """Whether the collection, which holds nothing but the videos of its lists, lays them out in seasons per upload
+    year rather than a season each. A collection with videos of its own gets that by including its lists as contents
+    only, with the videos in none of them in a season per year."""
+    return (collection.list_layout == ListLayout.BY_YEAR.value and holds_only_link_seasons(collection)
+            and lists_are_seasons(collection))
 
 
 def lists_are_seasons(collection: Collection) -> bool:
@@ -283,7 +286,10 @@ def seasons_plan(collection: Collection) -> str:
     sentences = []
     if taken:
         lists = Names.joined(taken)
-        if collection.list_layout == ListLayout.BY_YEAR.value:
+        if not lists_are_seasons(collection):
+            sentences.append(f"The {episodes} of every {creator} {lists.singular} are part of the "
+                             f"{collection_names(collection).singular}.")
+        elif lists_by_year(collection):
             sentences.append(f"The {episodes} of every {creator} {lists.singular} go in {season.a} per upload year.")
         else:
             sentences.append(f"Every {creator} {lists.singular} becomes {season.a} in VODLoft.")

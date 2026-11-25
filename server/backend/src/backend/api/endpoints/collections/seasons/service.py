@@ -36,7 +36,7 @@ from backend.types.collection_contracts import collection_contract
 from backend.types.season_types import SeasonType
 from backend.types.resource_names import OWN_LINK_NAMES
 from backend.types.link_season_types import (
-    CollectionKind, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos, RepeatVideos,
+    CollectionKind, ListLayout, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos, RepeatVideos,
 )
 from backend.services.source_options import ytdlp_call_options
 from sources import Feature, Names, SectionKind, get_source, sources_for
@@ -374,7 +374,9 @@ def update_seasons(
     current = {setting.key: setting.action for setting in collection_new_lists(collection)}
     collection.new_lists = checked_new_link_seasons(collection_list_kinds(collection), {**current, **body.new_lists})
     collection.loose_videos = body.loose_videos
-    collection.list_layout = body.list_layout
+    # Only a collection of nothing but its lists lays them out by year; one with videos of its own includes them as
+    # contents only instead.
+    collection.list_layout = body.list_layout if only else ListLayout.SEASON_EACH.value
     if body.repeat_videos is not None:
         # An episode of a video in each season it belongs in, made or let go of below.
         collection.repeat_videos = RepeatVideos(body.repeat_videos).value

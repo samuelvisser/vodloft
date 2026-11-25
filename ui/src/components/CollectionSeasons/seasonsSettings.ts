@@ -80,7 +80,7 @@ export function registries(names: ListNames, words: Words, view: CollectionSeaso
         } as Record<LooseVideos, {label: string, help: string}>),
         layout: createSelectRegistry(`ListLayout-${names.plural}-${words.creator}-${words.season.a}`, {
             season_each: {label: `${capitalized(words.season.a)} per ${names.singular}`, help: `Each ${names.singular} is ${words.season.a} in VODLoft, or shares one with the ${names.plural} you put together below.`},
-            by_year: {label: `Together in ${words.season.plural} by year`, help: `The ${names.plural} still decide which ${words.videos} are in, but every ${words.video} goes to the ${words.season.singular} of its year, as do the ${words.videos} in no ${names.singular}. When you save, VODLoft offers to move the downloaded ones, files and all.`},
+            by_year: {label: `Together in ${words.season.plural} by year`, help: `The ${names.plural} still decide which ${words.videos} are in, but every ${words.video} goes to the ${words.season.singular} of its upload year. When you save, VODLoft offers to move the downloaded ones, files and all.`},
         }),
         // A collection made from one list: the list's one season, or a season per upload year.
         listSeasons: createSelectRegistry(`ListSeasons-${words.season.singular}-${words.videos}`, {

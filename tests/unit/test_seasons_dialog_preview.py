@@ -81,7 +81,9 @@ def _season_id(view, name):
 CHANNEL_CHANGES = {
     "one season for videos in no list": lambda v, d: d.update(loose_videos="one_season"),
     "a season per year for videos in no list": lambda v, d: d.update(loose_videos="by_year"),
-    "lists laid out by year": lambda v, d: d.update(list_layout="by_year"),
+    "the lists contents only and the rest by year": lambda v, d: (
+        _set_playlist(d, v, "One", as_season=False), _set_playlist(d, v, "Two", as_season=False),
+        d.update(loose_videos="by_year")),
     "a list switched off": lambda v, d: (d.update(link_seasons="selected"), _set_playlist(d, v, "One", enabled=False)),
     "lists off": lambda v, d: d.update(link_seasons="off"),
     "every list contents only": lambda v, d: d.update(link_seasons="all", lists_as_seasons=False),

@@ -33,7 +33,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "0421aa4848d2"
+HEAD_REVISION = "d571b0dc3805"
 
 
 @pytest.fixture
@@ -1760,3 +1760,49 @@ def test_odysee_site_becomes_the_lbry_site_its_links_have(migration_database):
             "SELECT key, name, domains FROM sites WHERE key IN ('odysee', 'lbry')"
         )).all() == [("lbry", "Odysee", '["odysee.com"]')]
         assert connection.execute(text("SELECT site_key FROM collections ORDER BY id")).scalars().all() == ["lbry", "lbry"]
+
+
+def test_lists_laid_out_by_year_become_contents_only_lists_with_the_other_videos_by_year(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "0421aa4848d2")
+    rows = (
+        # Every list in, and a few chosen; a collection of only its lists keeps its layout; one with lists off and one
+        # laid out a season each stay as they were, but for the layout that meant nothing.
+        (1, "channel", "all", "add", "by_year", "one_season"),
+        (2, "channel", "selected", "add", "by_year", "one_season"),
+        (3, "custom", "all", "only", "by_year", "one_season"),
+        (4, "channel", "off", "add", "by_year", "one_season"),
+        (5, "channel", "all", "add", "season_each", "one_season"),
+    )
+    with engine.begin() as connection:
+        for collection_id, kind, link_seasons, outside, layout, loose in rows:
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key, episode_order, kind, link_seasons, outside_videos, list_layout, "
+                "loose_videos) VALUES (:id, 'uuid-' || :id, 'c' || :id, 'C', 'https://example.test/' || :id, 'free', "
+                "'series', 'seasonal', 'Host', 'host', 'ytdlp', 'oldest_first', :kind, :link_seasons, :outside, :layout, "
+                ":loose)"
+            ), {"id": collection_id, "kind": kind, "link_seasons": link_seasons, "outside": outside, "layout": layout,
+                "loose": loose})
+            connection.execute(text(
+                "INSERT INTO collection_lists (collection_id, ref, source_key, url, title, as_season) VALUES "
+                "(:id, 'PL' || :id, 'ytdlp', 'https://example.test/PL' || :id, 'List', 1)"
+            ), {"id": collection_id})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        found = {row[0]: tuple(row[1:]) for row in connection.execute(text(
+            "SELECT c.id, c.list_layout, c.loose_videos, c.lists_as_seasons, l.as_season FROM collections c "
+            "JOIN collection_lists l ON l.collection_id = c.id"
+        )).all()}
+    assert found == {
+        1: ("season_each", "by_year", 0, 0),
+        2: ("season_each", "by_year", 0, 0),
+        3: ("by_year", "one_season", 1, 1),
+        4: ("season_each", "one_season", 1, 1),
+        5: ("season_each", "one_season", 1, 1),
+    }
