@@ -427,7 +427,7 @@ export default function DestinationDialog({destination, onDismiss}: Props) {
                             <div className="notif-advanced__body">
                                 <span className="help">
                                     Only needed when {KIND_LABELS[kind]} sees the files under another path, for example
-                                    /downloads in VODLoft and /media in {KIND_LABELS[kind]}, or W:\ when {KIND_LABELS[kind]} runs on Windows.
+                                    /downloads in VODLoft and /media in {KIND_LABELS[kind]}, or M:\ when {KIND_LABELS[kind]} runs on Windows.
                                 </span>
                                 <div className="form-row">
                                     <label htmlFor="notif-path-from">Path in VODLoft</label>
