@@ -429,10 +429,11 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         setBulk(false)
         setChosen(new Set())
     }
-    /** Change the chosen lists in the form; nothing is saved until the dialog is. */
-    const changeChosen = (change: {enabled?: boolean, asSeason?: boolean}) => setValue(
-        'playlists', playlistChoices.map((choice) => chosen.has(choice.id) ? {...choice, ...change} : choice), {shouldDirty: true},
-    )
+    /** Change the chosen lists in the form, which ends bulk edit; nothing is saved until the dialog is. */
+    const changeChosen = (change: {enabled?: boolean, asSeason?: boolean}) => {
+        setValue('playlists', playlistChoices.map((choice) => chosen.has(choice.id) ? {...choice, ...change} : choice), {shouldDirty: true})
+        stopBulk()
+    }
     const addedLinks = (view?.playlists ?? []).filter((playlist) => playlist.addedByUser)
     // A collection without a link of its own always has one default link. When the user removes it, the first link
     // that stays takes over, as the backend does on saving.

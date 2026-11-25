@@ -16,13 +16,24 @@ export default function SourceProgramCard({source}: {source: SourceRead}) {
     const {data: program, isPending, error} = useSourceProgram(source.id)
     const [updating, setUpdating] = useState(false)
     const [updateError, setUpdateError] = useState<string | null>(null)
+    const [updateResult, setUpdateResult] = useState<string | null>(null)
 
     const update = async () => {
         setUpdating(true)
         setUpdateError(null)
+        setUpdateResult(null)
+        const before = program?.version ?? null
         try {
             const status = await updateSourceProgram(source.id)
             queryClient.setQueryData(['sourceProgram', source.id], status)
+            const after = status.version ?? null
+            setUpdateResult(
+                after && after === before
+                    ? `Already on the latest version (${after}).`
+                    : after
+                        ? `Updated to ${after}${before ? ` (was ${before})` : ''}.`
+                        : `${status.name} was updated.`,
+            )
         } catch (exc) {
             setUpdateError(exc instanceof Error ? exc.message : String(exc))
         } finally {
@@ -51,6 +62,7 @@ export default function SourceProgramCard({source}: {source: SourceRead}) {
                     <p className="source-setting-error" role="alert">The last update failed: {program.lastUpdateError}</p>
                 )}
                 {updateError && <p className="source-setting-error" role="alert">{updateError}</p>}
+                {updateResult && <p className="source-setting-result" role="status">{updateResult}</p>}
             </div>
             <button className="btn" type="button" onClick={() => void update()} disabled={updating}>
                 {updating ? 'Updating…' : 'Update now'}

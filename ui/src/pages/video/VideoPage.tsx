@@ -121,13 +121,14 @@ export default function VideoPage() {
     return (
         <section className="view episode-view video-view" aria-labelledby="video-title">
             <article className="episode-details" aria-label="Video details">
-                {/* The menu shares the breadcrumb's row, so the title below gets the full width. */}
+                {/* The buttons share the breadcrumb's row, like an episode's, so the title below gets the full width. */}
                 <div className="episode-topbar">
                     <Breadcrumb items={[
                         {label: 'Library', to: '/library'},
                         {label: 'Videos', to: '/library?type=videos'},
                     ]}/>
                     <div className="episode-title-actions">
+                        <SiteLink className="btn-secondary episode-open-link" url={video.sharingUrl} siteName={video.site?.name ?? siteName(video.sharingUrl) ?? sourceName} site={video.site}/>
                         <ActionMenu
                             items={[
                                 {
@@ -193,9 +194,6 @@ export default function VideoPage() {
                                 </span>
                             </>
                         )}
-                    </div>
-                    <div className="video-site-link">
-                        <SiteLink url={video.sharingUrl} siteName={video.site?.name ?? siteName(video.sharingUrl) ?? sourceName} site={video.site}/>
                     </div>
                 </header>
 
