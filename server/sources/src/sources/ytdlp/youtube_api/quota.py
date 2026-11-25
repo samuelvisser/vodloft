@@ -1,7 +1,7 @@
 """Counting the units the API key spends, per Pacific-time day.
 
 Google does not tell an API key its limit or what is left, so VODLoft counts
-its own units and plans with the split from Settings › Sources. Google resets
+its own units and plans with the split from Settings › Sites. Google resets
 the quota at midnight Pacific time.
 
 A summary of each day is logged at info level once the next one starts.

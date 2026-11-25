@@ -2,7 +2,7 @@
 
 VODLoft calls the services it adds media from **Sources**. Each Source knows how to talk to one service: how to recognise its links, list a collection's episodes and find the media to download. Everything after that, such as profiles, file naming, metadata, artwork, NFO files and RSS feeds, works the same whatever the Source.
 
-**Settings → Sources** lists every Source with what it supports, and holds its settings. Signing in is per site, under **Authentication** there.
+**Settings → Sites** lists every Source that has settings, with what it supports. Signing in is per site, under **Authentication** there.
 
 ## The Sources
 
@@ -36,7 +36,7 @@ Much of NPO Start is protected by DRM, often whole seasons, so a series can be i
 
 Paste a link on the **Add media** page. VODLoft asks the Sources that claim the link's site whether they recognise it, and shows a preview from the first one that does. Nothing is added until you continue.
 
-Some sites can be handled by more than one Source. Today that is npo.nl, which both NPO Start and yt-dlp claim. NPO Start is asked first by default. The **Sites** card under Settings → Sources changes which Source is asked first for a site, and **Look up with** on the Add media page asks another Source for one link.
+Some sites can be handled by more than one Source. Today that is npo.nl, which both NPO Start and yt-dlp claim. NPO Start is asked first by default. The **Which Source to ask first** card under Settings → Sites changes which Source is asked first for a site, and **Look up with** on the Add media page asks another Source for one link.
 
 A collection stays with the Source it was added from.
 

@@ -198,7 +198,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                         <p>
                             All optional. Signing in is only needed for content that requires an account, and a free
                             YouTube API key keeps your YouTube collections up to date much better. You can do this
-                            later in Settings › Sources too.
+                            later in Settings › Sites too.
                         </p>
                     </div>
                     <div className="onboarding-authentication">

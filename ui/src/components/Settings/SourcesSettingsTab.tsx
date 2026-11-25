@@ -37,6 +37,8 @@ function SourceCard({source, tabProps}: {source: SourceRead; tabProps: SettingsT
         Settings ? <Settings key="settings" {...tabProps}/> : null,
         sourceHas(source, SourceFeature.YTDLP_OPTIONS) ? <SourceYtdlpOptionsCard key="ytdlp-options" source={source}/> : null,
     ].filter(Boolean)
+    // A Source with nothing to set is left out; what it supports shows on the Add media page.
+    if (!parts.length) return null
     return (
         <SourceSection
             title={source.name}
@@ -49,7 +51,7 @@ function SourceCard({source, tabProps}: {source: SourceRead; tabProps: SettingsT
                 </span>
             }
         >
-            {parts.length ? parts : <p className="source-section__empty">{source.name} has nothing to set up.</p>}
+            {parts}
         </SourceSection>
     )
 }
@@ -61,8 +63,8 @@ export default function SourcesSettingsTab(tabProps: SettingsTabProps) {
     return (
         <div className="source-card-list">
             <p className="view-description">
-                The services VODLoft can add media from. A link you paste on the Add media page goes to the Source that
-                recognises it. Signing in and API keys are optional, and set up per site under Authentication.
+                The sites VODLoft can add media from. Signing in and API keys are optional, and set up per site under
+                Authentication. Below that are the settings of each Source, the part of VODLoft that fetches from a site.
             </p>
             <SiteAuthenticationCard/>
             {(sources ?? []).filter(sourceShown).map((source) => (
