@@ -2475,6 +2475,7 @@ a.icon-btn { display: inline-block; text-decoration: none; }
 .source-setting-copy h4 { margin: 0 0 4px; font-size: 15px; }
 .source-setting-copy p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
 .source-setting-copy .source-setting-error { margin-top: 6px; color: var(--error); }
+.source-setting-copy .source-setting-result { margin-top: 6px; color: var(--success, #16a34a); }
 .source-setting-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .source-setting .btn { white-space: nowrap; }
 .source-setting--stacked { flex-direction: column; align-items: stretch; gap: 10px; }
