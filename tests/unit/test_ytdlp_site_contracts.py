@@ -73,6 +73,10 @@ def test_every_site_implementation_answers_the_section_types_of_its_contract():
 
     for key, implementation in IMPLEMENTATIONS.items():
         site = site_of(key)
+        if not site.creators:
+            # Like every Site without an implementation of its own, it has no creators whose sections VODLoft reads;
+            # its implementation is there for something else, such as its account sign-in.
+            continue
         answered = implementation(site, lambda url: {})
         assert {type_.key for type_ in site.section_types} == (
             {type_.key for type_ in answered.feed_types} | implementation.list_keys

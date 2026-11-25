@@ -17,6 +17,7 @@ from pathlib import Path
 from ..contract import GENERIC_PREFIX, DownloadOptions, Site, domain_site, link_host, on_domain
 from ..cookies import site_cookies
 from ..registry import named_site_for
+from . import accounts
 from .site_contracts import CONTRACTS, MEMBERS_KEY, PREMIUM_KEY, OtherSites
 from .site_contracts.other_sites import SITE_FIELDS
 from .site_contracts.soundcloud import ALBUM_LIST, PLAYLIST_LIST
@@ -80,13 +81,16 @@ def no_page_of_its_site(url: str) -> bool:
 
 
 def cookies_for(url: str, use: bool = True) -> Path | None:
-    """The cookies file of the link's Site, which yt-dlp signs in with there; ``use`` False leaves it out.
+    """The cookies file of the link's Site, which yt-dlp signs in with there, with the user's account sign-in on the
+    Site when there is one; ``use`` False leaves both out.
 
     A Site some Source is made for, such as NPO Start, has its cookies file whichever Source fetches it,
     and a Site that takes no cookies, such as The Daily Wire, never gets one.
     """
     site = named_site_for(url) or site_for(url)
-    return site_cookies(site.key) if use and site.takes_cookies else None
+    if not use or not site.takes_cookies:
+        return None
+    return accounts.cookies_file(site, site_cookies(site.key))
 
 
 @cache

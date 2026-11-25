@@ -37,7 +37,6 @@ def _seasons_settings(collection: Collection) -> Settings:
     }
     if collection.kind == CollectionKind.CHANNEL.value:
         settings[("feeds", None)] = (list(collection.feeds) if collection.feeds is not None else None, None)
-        settings[("channel_season", None)] = (collection.channel_season, None)
     if collection.link_seasons != LinkSeasons.OFF.value:
         # What each list is: off, a season of its own, or only adding its videos to the other seasons.
         chosen = collection.link_seasons == LinkSeasons.SELECTED.value

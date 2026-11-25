@@ -40,7 +40,7 @@ from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import EpisodeIdentifier
 from backend.types.season_types import SeasonOrigin, SeasonType
 from backend.types.link_season_types import (
-    ChannelSeason, CollectionKind, ListLayout, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos, RepeatVideos,
+    CollectionKind, ListLayout, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos, RepeatVideos,
 )
 from backend.utils.helpers import generate_uuid, slugify
 from sources import MAIN_TAG, Feature, ItemRef, Names, SectionKind, SectionRef, SectionType, Source, VideoDetails, get_source
@@ -61,10 +61,19 @@ def section_list_names(collection: Collection) -> Names:
 
 
 def holds_whole_channel(collection: Collection) -> bool:
-    """Whether the collection's channel season holds every video of its feeds, also those its lists have. Only on a
-    Site whose lists can be seasons: elsewhere, such as on The Daily Wire, seasons are the Site's own."""
-    return (collection.channel_season == ChannelSeason.EVERYTHING.value and collection_site(collection).link_seasons
-            and lists_own_link(collection))
+    """Whether the collection's channel season holds every video of its feeds, also those its lists have: it is set
+    to, or none of its lists are seasons. Only on a Site whose lists can be seasons: elsewhere, such as on The Daily
+    Wire, seasons are the Site's own."""
+    if not (channel_season_offered(collection) and loose_in_one_season(collection)):
+        return False
+    return collection.loose_videos == LooseVideos.EVERYTHING.value or not link_seasons_on(collection)
+
+
+def channel_season_offered(collection: Collection) -> bool:
+    """Whether the videos of the collection's feeds can be in one season of their own, the channel season, rather than
+    in a season per upload year: it is a channel collection on a Site whose lists can be seasons, and it lists its
+    own link."""
+    return lists_playlists(collection) and lists_own_link(collection)
 
 
 def loose_season_name(collection: Collection) -> str:
@@ -145,9 +154,16 @@ def repeats_videos(collection: Collection) -> bool:
 
 
 def loose_in_one_season(collection: Collection) -> bool:
-    """Whether the videos in none of the lists go to one season of their own. With the lists laid out by year, they
-    join the year seasons."""
-    return collection.loose_videos == LooseVideos.ONE_SEASON.value and collection.list_layout != ListLayout.BY_YEAR.value
+    """Whether the videos in none of the lists that are seasons go to one season of their own, which holds the whole
+    channel when it is set to. With the lists laid out by year, they join the year seasons."""
+    return (collection.loose_videos in (LooseVideos.ONE_SEASON.value, LooseVideos.EVERYTHING.value)
+            and not lists_by_year(collection))
+
+
+def loose_season_on(collection: Collection) -> bool:
+    """Whether the collection has a season of the videos in none of its lists that are seasons: its lists are
+    seasons, or it is a channel collection set to keep its feeds in one season."""
+    return (link_seasons_on(collection) or channel_season_offered(collection)) and loose_in_one_season(collection)
 
 
 def is_in(collection: Collection, playlist: CollectionList) -> bool:
@@ -245,6 +261,8 @@ def seasons_plan(collection: Collection) -> str:
     if list_in_one_season(collection):
         return f"The {collection_names(collection).singular} is one {season.singular} in VODLoft, its {episodes} in its order."
     if not lists_playlists(collection) or collection.link_seasons == LinkSeasons.OFF.value:
+        if holds_whole_channel(collection):
+            return f"VODLoft puts every {words.episode.singular} in one {season.singular}, {loose_season_name(collection)}."
         return f"VODLoft puts the {episodes} of each upload year in their own {season.singular}."
     settings = collection_new_lists(collection)
     if collection.link_seasons == LinkSeasons.ALL.value:
@@ -472,7 +490,7 @@ class SeasonFinder:
         self._by_slug = {season.slug: season for season in collection.seasons}
         self._by_year = {season_year(season): season for season in collection.seasons if season_year(season) is not None}
         self.numbers = SeasonNumbers(s)
-        self._loose_one = link_seasons_on(collection) and loose_in_one_season(collection)
+        self._loose_one = loose_season_on(collection)
         self._from_list = made_from_list(collection)
         self._one_list = list_in_one_season(collection)
 
@@ -618,7 +636,7 @@ class _Places:
         self.holders = {slug: lists[0] for slug, lists in every.items()}
         self.every = every if on and repeats_videos(collection) else {}
         playlist_ids = {playlist.season_id for playlist in collection.lists if playlist.season_id is not None}
-        self.loose_one = on and loose_in_one_season(collection)
+        self.loose_one = loose_season_on(collection)
         self.by_year = lists_by_year(collection)
         # A collection that only holds its link seasons has no season of videos in none of them: those leave.
         self.only = holds_only_link_seasons(collection)
@@ -635,7 +653,7 @@ class _Places:
             self.channel = None
         # A season that its lists just left, for another list's season, empties too.
         self.movable = playlist_ids | self.loose_ids | year_ids | left
-        self.anything = on or bool(playlist_ids) or bool(self.loose_ids) or self.from_list
+        self.anything = on or self.loose_one or bool(playlist_ids) or bool(self.loose_ids) or self.from_list
         self.extras: set[int] = set()
         """The ids of the episodes a video has beyond one for each season it belongs in."""
         self.missing: dict[str, list[_Seat]] = {}

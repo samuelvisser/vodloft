@@ -87,7 +87,9 @@ def searches(monkeypatch, api):
 
 def test_youtube_and_soundcloud_are_searched_each_on_their_own():
     assert [(site.key, site.name, site.costly_search) for site in YtDlpSource().search_sites] == [
-        ("youtube", "YouTube", True), ("twitch", "Twitch", False), ("soundcloud", "SoundCloud", True)]
+        ("youtube", "YouTube", True), ("twitch", "Twitch", False), ("soundcloud", "SoundCloud", True),
+        ("dailymotion", "Dailymotion", False), ("kick", "Kick", False), ("nebula", "Nebula", False), ("lbry", "Odysee", False),
+        ("peertube", "PeerTube", False), ("niconico", "Niconico", False)]
 
 
 def test_soundclouds_own_search_finds_accounts_albums_playlists_and_tracks(api):

@@ -61,14 +61,13 @@ def source(monkeypatch):
     sites._site_of.cache_clear()
 
 
-def _collection(session, *, mode="all", loose="one_season", identifier="seasonal", url=CREATOR, music=False, channel_season="unlisted"):
+def _collection(session, *, mode="all", loose="one_season", identifier="seasonal", url=CREATOR, music=False):
     from backend.db.models import Collection
 
     collection = Collection(
         uuid="uuid-creator", slug="creator", source_key="seasons", title="The Creator", sharing_url=url,
         membership_level="FREE", type="music" if music else "series", episode_identifier=identifier,
         author_name="The Creator", author_slug="the-creator", link_seasons=mode, loose_videos=loose,
-        channel_season=channel_season,
     )
     session.add(collection)
     session.commit()
@@ -434,12 +433,40 @@ def test_turning_link_seasons_off_puts_the_videos_back_in_a_season_per_year(sour
     seasons = session.scalars(select(Season).order_by(Season.index)).all()
     body = CollectionSeasonsAPIUpdate(
         seasons=[{"id": season.id, "name": season.name} for season in seasons], custom_season_order=False,
-        link_seasons="off",
+        link_seasons="off", loose_videos="by_year",
     )
     session.rollback()
     run_write_transaction(lambda s: update_seasons(s, "creator", body))
 
     assert [(name, episodes) for name, _number, episodes in _seasons(session) if episodes] == [("2024", ["a"]), ("2025", ["b"])]
+
+
+def test_without_link_seasons_the_whole_channel_can_be_one_season(source, session):
+    from backend.api.endpoints.collections.seasons import service
+    from backend.api.models.collection_seasons import CollectionSeasonsAPIUpdate
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Season
+
+    source.videos = [_video("a", 2024), _video("b", 2025)]
+    source.lists = [_list("PLone", "One")]
+    source.items = {"PLone": ("a",)}
+    collection = _collection(session, mode="off", loose="by_year")
+    _index(session, collection, source)
+    assert [(name, episodes) for name, _number, episodes in _seasons(session) if episodes] == [("2024", ["a"]), ("2025", ["b"])]
+    view = service.seasons_view(session, "creator")
+    assert view.channel_season_offered
+
+    seasons = session.scalars(select(Season).order_by(Season.index)).all()
+    body = CollectionSeasonsAPIUpdate(
+        seasons=[{"id": season.id, "name": season.name} for season in seasons], custom_season_order=False,
+        link_seasons="off", loose_videos="everything",
+    )
+    session.rollback()
+    run_write_transaction(lambda s: update_seasons_call(service, s, body))
+
+    # Named as the Site calls a channel, as it is while it holds the whole channel.
+    assert [(name, episodes) for name, _number, episodes in _seasons(session) if episodes] == [
+        (view.channel_season_names["everything"], ["a", "b"])]
 
 
 def test_only_a_whole_creator_can_turn_link_seasons_on(source, session):
@@ -757,11 +784,11 @@ def test_the_channel_season_takes_its_new_name_when_it_holds_the_whole_channel(s
     view = service.seasons_view(session, "creator")
     session.rollback()
     loose = next(season for season in view.seasons if season.loose)
-    assert loose.name == view.channel_season_names["unlisted"]
+    assert loose.name == view.channel_season_names["one_season"]
 
     body = CollectionSeasonsAPIUpdate(
         seasons=[{"id": x.id, "name": x.name} for x in view.seasons], custom_season_order=False,
-        link_seasons="selected", loose_videos="one_season", channel_season="everything",
+        link_seasons="selected", loose_videos="everything",
     )
     run_write_transaction(lambda s: update_seasons_call(service, s, body))
 
@@ -1560,12 +1587,12 @@ def test_the_seasons_list_marks_the_channel_season_while_it_holds_the_whole_chan
     source.videos = [_video("a", 2024), _video("b", 2025)]
     source.lists = [_list("PLone", "One")]
     source.items = {"PLone": ("a",)}
-    collection = _collection(session, channel_season="everything")
+    collection = _collection(session, loose="everything")
     _index(session, collection, source)
 
     assert [(season.name, season.whole_channel) for season in get_seasons_list(session, "creator")
             if season.whole_channel] == [(next(season.name for season in collection.seasons if season.loose), True)]
-    collection.channel_season = "unlisted"
+    collection.loose_videos = "one_season"
     session.commit()
     assert not any(season.whole_channel for season in get_seasons_list(session, "creator"))
     # The season of what is in no list stays marked, so a collection page lists it first.

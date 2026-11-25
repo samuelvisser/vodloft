@@ -20,10 +20,10 @@ from backend.services.new_lists import checked_new_link_seasons
 from backend.services.link_seasons import (
     collection_list_kinds, collection_new_lists,
     LinkListing, channel_feeds, holds_only_link_seasons, is_in, leaving_outside, section_list_names,
-    lists_playlists, loose_season_name, made_from_list, offers_link_seasons, outside_only_in, place_in_link_seasons, save_lists,
+    channel_season_offered, lists_playlists, loose_season_name, made_from_list, offers_link_seasons, outside_only_in, place_in_link_seasons, save_lists,
     active_lists, let_go_of_seasons, moved_episodes, rehome_removed, season_removable, seasons_with_parts,
 )
-from backend.services.sites import collection_creator_names, collection_site, collection_words, preferred_sources, site_record
+from backend.services.sites import collection_creator_names, collection_site, preferred_sources, site_record
 from backend.services.season_moves import queue_season_folder_moves
 from backend.services.move_causes import note_move_causes, settings_of
 from backend.types.move_cause_types import MoveCauseOrigin
@@ -36,7 +36,7 @@ from backend.types.collection_contracts import collection_contract
 from backend.types.season_types import SeasonType
 from backend.types.resource_names import OWN_LINK_NAMES
 from backend.types.link_season_types import (
-    ChannelSeason, CollectionKind, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos, RepeatVideos,
+    CollectionKind, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos, RepeatVideos,
 )
 from backend.services.source_options import ytdlp_call_options
 from sources import Feature, Names, SectionKind, get_source, sources_for
@@ -105,6 +105,7 @@ class _View:
     repeated_count: int
     feeds: list
     channel_season_names: dict[str, str]
+    channel_season_offered: bool
     channel_names: Names
 
     def __getattr__(self, name):
@@ -140,11 +141,12 @@ def _feeds(collection: Collection) -> list[_Feed]:
 
 
 def _channel_season_names(collection: Collection) -> dict[str, str]:
-    """What the channel season is called when it holds each of its choices, such as Channel and Videos."""
+    """What the channel season is called when it holds the whole channel or what is in no list, such as Channel and
+    Videos, by the ``loose_videos`` choice that has it hold that."""
     site = collection_site(collection)
     return {
-        ChannelSeason.EVERYTHING.value: site.channel_collection_names.singular.capitalize(),
-        ChannelSeason.UNLISTED.value: collection_contract(collection.type).loose_season_on(site),
+        LooseVideos.EVERYTHING.value: site.channel_collection_names.singular.capitalize(),
+        LooseVideos.ONE_SEASON.value: collection_contract(collection.type).loose_season_on(site),
     }
 
 
@@ -186,7 +188,10 @@ def seasons_view(s: Session, collection_slug: str) -> CollectionSeasonsAPIRead:
         creator_list_names=(
             OWN_LINK_NAMES if collection.sharing_url is None else _creator_lists(collection_creator_names(collection), lists)
         ),
-        loose_season=loose_season_name(collection), site_order=contract.site_order, words=collection_words(collection),
+        loose_season=loose_season_name(collection), site_order=contract.site_order,
+        # The dialog calls VODLoft's own seasons seasons, or what the collection's type calls them, such as albums,
+        # never what its Site calls them, such as playlists: those are the creator's lists.
+        words=contract.words_for(collection_site(collection).audio_only),
         creator_names=collection_creator_names(collection), media_names=contract.media_names_on(collection_site(collection)),
         playlists=[_Playlist(playlist, firsts.get(playlist.id), *leaving.get(playlist.id, (0, 0))) for playlist in playlists],
         outside_count=len(outside), outside_with_files=len(with_files),
@@ -198,6 +203,7 @@ def seasons_view(s: Session, collection_slug: str) -> CollectionSeasonsAPIRead:
         repeated_count=_repeated(s, collection),
         feeds=_feeds(collection),
         channel_season_names=_channel_season_names(collection),
+        channel_season_offered=channel_season_offered(collection),
         channel_names=collection_site(collection).channel_collection_names,
     ))
 
@@ -272,6 +278,11 @@ def update_seasons(
     if any(not playlists[link_id].added_by_user for link_id in body.removed_links):
         raise ServiceError(f"Only a link you added can be removed; switch {lists.a} of the channel off instead", field="playlists")
     only = body.outside_videos == OutsideVideos.ONLY
+    if body.loose_videos == LooseVideos.EVERYTHING and collection.kind != CollectionKind.CHANNEL.value:
+        raise ServiceError(
+            f"Only a channel collection can keep every {collection_contract(collection.type).words.episode.singular} in "
+            f"one {collection_contract(collection.type).words.season.singular}", field="loose_videos",
+        )
     if only and body.link_seasons == LinkSeasons.OFF:
         raise ServiceError(
             f"A collection that holds only what its {lists.plural} have needs its {lists.plural} as "
@@ -358,8 +369,6 @@ def update_seasons(
     collection.link_seasons = body.link_seasons
     collection.outside_videos = body.outside_videos
     collection.feeds = feeds
-    if body.channel_season is not None and collection.kind == CollectionKind.CHANNEL.value:
-        collection.channel_season = ChannelSeason(body.channel_season).value
     current = {setting.key: setting.action for setting in collection_new_lists(collection)}
     collection.new_lists = checked_new_link_seasons(collection_list_kinds(collection), {**current, **body.new_lists})
     collection.loose_videos = body.loose_videos

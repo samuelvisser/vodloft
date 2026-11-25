@@ -17,7 +17,7 @@ from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
-from backend.types.link_season_types import CollectionKind, LinkSeasons, OutsideVideos, RepeatVideos
+from backend.types.link_season_types import ChannelSeason, CollectionKind, LinkSeasons, LooseVideos, OutsideVideos, RepeatVideos
 from backend.utils.helpers import generate_uuid, slugify
 from sources import Feature, SectionKind, UnknownSourceError, all_sources, get_source, source_site
 from task_manager.events.transactional import queue_event
@@ -73,8 +73,10 @@ def set_kind(collection: Collection) -> None:
     # The defaults are about the channel's lists, which only a Site whose lists can be seasons has.
     if not site.link_seasons:
         return
-    if collection.channel_season is None:
-        collection.channel_season = site.channel_season.value
+    if collection.loose_videos is None:
+        # The channel season holds what its Site's channels hold: the whole channel, or what is in no list.
+        whole = site.channel_season == ChannelSeason.EVERYTHING
+        collection.loose_videos = (LooseVideos.EVERYTHING if whole else LooseVideos.ONE_SEASON).value
     if collection.link_seasons is None:
         albums_only = collection_contract(collection.type).album_lists and album_kinds(list_kinds(site))
         every = site.every_list_a_season and not albums_only

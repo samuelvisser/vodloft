@@ -129,7 +129,7 @@ export default function Destinations({destinations}: {destinations: DestinationR
                     icon={faIcon('fass', 'trash')}
                     iconTone="danger"
                     onDismiss={() => setDeleting(null)}
-                    confirmButton={{label: 'Delete', className: 'btn-danger', onClick: () => remove(deleting)}}
+                    confirmButton={{label: 'Delete', className: 'btn btn-danger', onClick: () => remove(deleting)}}
                 >
                     <p>Rules that use it keep working without it.</p>
                 </ConfirmDialog>

@@ -195,7 +195,10 @@ def test_add_media_offers_only_the_search_and_catalogue_of_added_sites():
             return ["youtube"]
 
     sources = {source.id: source for source in list_sources(OnlyYouTubeAdded())}
-    assert {site.key: site.added for site in sources["ytdlp"].search_sites} == {"youtube": True, "twitch": False, "soundcloud": False}
+    assert {site.key: site.added for site in sources["ytdlp"].search_sites} == {
+        "youtube": True, "twitch": False, "soundcloud": False, "dailymotion": False, "kick": False, "nebula": False,
+        "lbry": False, "peertube": False, "niconico": False,
+    }
     assert [(site.key, site.added) for site in sources["dailywire"].sites] == [("dailywire", False)]
     assert [(site.key, site.added) for site in sources["npo"].search_sites] == [("npo", False)]
 

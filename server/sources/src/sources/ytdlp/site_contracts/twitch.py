@@ -1,7 +1,7 @@
 from dataclasses import replace
 from datetime import timedelta
 
-from ...contract import LIST_TYPE, VIDEO_TAGS, ApiField, EpisodeTag, GuideStep, Names, Retention, SiteApi, RssEpisodeType, SectionKind, SectionRole, SectionType, UpgradeChecks, UpgradeImprovement
+from ...contract import LIST_TYPE, VIDEO_TAGS, AccountSignIn, ApiField, SignInKind, EpisodeTag, GuideStep, Names, Retention, SiteApi, RssEpisodeType, SectionKind, SectionRole, SectionType, UpgradeChecks, UpgradeImprovement
 from .feed_section_type import YtdlpFeedSectionType
 from .other_sites import OtherSites
 
@@ -42,6 +42,7 @@ class Twitch(OtherSites):
     )
     # Twitch's own API finds channels by name. It is free, with an application the user registers at dev.twitch.tv.
     searchable = True
+    search_note = "Twitch's search only finds channels. To add a single video or a playlist, paste its link on Add media."
     site_api = SiteApi(
         "Twitch API",
         (ApiField("client_id", "Client ID"), ApiField("client_secret", "Client secret", secret=True)),
@@ -60,6 +61,15 @@ class Twitch(OtherSites):
             GuideStep("Open the application under Manage, copy its Client ID, and choose New Secret to get its client secret."),
         ),
         searches=True,
+    )
+    # Twitch's TV app signs in with a code entered at twitch.tv/activate; VODLoft signs in the same way.
+    account_sign_in = AccountSignIn(
+        SignInKind.DEVICE_CODE,
+        "Sign in with your Twitch account to download subscriber-only videos of the channels you subscribe to.",
+        caution=(
+            "VODLoft signs in the way Twitch's TV app does, as yt-dlp does with a cookies file. Twitch made no sign-in "
+            "for other programs, so it may stop working; a cookies file still works then."
+        ),
     )
     # Twitch streams and keeps its videos at 1080p at most, and has no subtitles.
     downloads = replace(OtherSites.downloads, video_heights=(360, 480, 720, 1080), subtitles=False)

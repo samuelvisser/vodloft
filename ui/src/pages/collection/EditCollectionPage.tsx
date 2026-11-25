@@ -601,7 +601,9 @@ export default function EditCollectionPage() {
         collectionTitle={collection?.title ?? id}
         onDismiss={() => setSeasonsOpen(false)}
         onMovesWaiting={() => setMoving(true)}
-        words={wordsFor(collection)}
+        // The dialog calls VODLoft's own seasons seasons, or what the collection's type calls them, never what its
+        // Site calls them, such as playlists, which are the creator's lists there.
+        words={wordsFor({type: collection?.type, site: collection?.site})}
       />
 
       <ReconcileDialog

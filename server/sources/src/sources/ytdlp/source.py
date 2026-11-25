@@ -8,7 +8,7 @@ import time
 from concurrent.futures import Future
 
 import requests
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import replace
 from datetime import date, datetime, timezone
 from urllib.parse import parse_qs, urlsplit
@@ -19,12 +19,13 @@ from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 from progress_plan import PlanTracker
 
 from ..contract import (
+    AccountStatus, DeviceCode, SignInKind, SignInRejected,
     Chapter,
     ANY_DOMAIN, ApiKeyRejected, combined_tags, CreatorDetails, SectionRef, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, ApiQuotaShare, ApiStatus, QuickCheckCollection, QuickCheckCost, DownloadOptions, Feature, LinkKind, LinkPreview, LiveStream, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
     ResolvedLink, SearchResults, CollectionDetails, Site, SiteApiStatus, SiteSetting, Source, SourceProblem, SponsorBlockSegment, StreamMethod, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
     link_host, on_domain,
 )
-from .. import pacing, site_api_keys, ytdlp_runner as runner
+from .. import pacing, site_accounts, site_api_keys, ytdlp_runner as runner
 from . import sites, thumbnails, youtube_rss
 from .site_contracts import CONTRACTS
 from .site_implementations import IMPLEMENTATIONS, OtherSitesImplementation
@@ -432,7 +433,7 @@ class YtDlpSource(Source):
     name = "yt-dlp"
     domains = (ANY_DOMAIN,)
     features = frozenset({
-        Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.PAGE_STREAMS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES, Feature.OPTIONAL_COOKIES, Feature.API_KEY, Feature.SITE_API,
+        Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.PAGE_STREAMS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES, Feature.OPTIONAL_COOKIES, Feature.API_KEY, Feature.SITE_API, Feature.ACCOUNT_SIGN_IN,
         Feature.QUICK_CHECK, Feature.CATALOGUE_REFRESH, Feature.SEARCH,
         Feature.FORMAT_CHOICES, Feature.YTDLP_OPTIONS, Feature.METADATA_REFRESH,
         Feature.PENDING_CHECKS, Feature.CREATORS, Feature.CHAPTERS, Feature.LINK_COLLECTIONS,
@@ -1274,6 +1275,33 @@ class YtDlpSource(Source):
 
     def remove_site_api(self, site: Site) -> None:
         site_api_keys.remove(site.key)
+
+    def _signing_in(self, site: Site, *kinds: SignInKind) -> OtherSitesImplementation:
+        if site.account_sign_in is None or site.account_sign_in.kind not in kinds:
+            raise SignInRejected(f"VODLoft can't sign in on {site.name} this way")
+        return self._site_implementation(site)
+
+    def account_status(self, site: Site) -> AccountStatus:
+        signed_in = site_accounts.load(site.key)
+        if signed_in is None:
+            return AccountStatus(signed_in=False)
+        return AccountStatus(signed_in=True, account=signed_in.account, problem=signed_in.problem)
+
+    def sign_in(self, site: Site, values: Mapping[str, str]) -> AccountStatus:
+        signed_in = self._signing_in(site, SignInKind.PASSWORD, SignInKind.TOKEN).sign_in(values)
+        site_accounts.save(site.key, signed_in)
+        return self.account_status(site)
+
+    def start_code_sign_in(self, site: Site) -> DeviceCode:
+        return self._signing_in(site, SignInKind.DEVICE_CODE).start_code_sign_in()
+
+    def finish_code_sign_in(self, site: Site, code: DeviceCode, stop: Callable[[float], bool]) -> AccountStatus:
+        signed_in = self._signing_in(site, SignInKind.DEVICE_CODE).finish_code_sign_in(code, stop)
+        site_accounts.save(site.key, signed_in)
+        return self.account_status(site)
+
+    def sign_out(self, site: Site) -> None:
+        site_accounts.remove(site.key)
 
     def search(self, site: Site, query: str) -> SearchResults:
         """The Site's search, as its implementation does it. The same search within an hour is answered from memory."""

@@ -11,7 +11,7 @@ from backend.api.models.base import RequestBase, ResponseBase
 from backend.api.models.collection_contract import CollectionWordsAPIRead
 from backend.api.models.source import ListKindAPIRead, NamesAPIRead, SectionTypeAPIRead
 from backend.types.link_season_types import (
-    ChannelSeason, CollectionKind, ListLayout, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos, RepeatVideos,
+    CollectionKind, ListLayout, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos, RepeatVideos,
 )
 
 
@@ -97,10 +97,11 @@ class CollectionSeasonsAPIRead(ResponseBase):
     """The collection is made from one list: the list is its one season, or its videos go in a season per year."""
     feeds: list[CollectionFeedAPIRead]
     """For a channel collection: the feeds of its channel, and whether it takes each."""
-    channel_season: ChannelSeason
-    """What the season of the channel's own videos holds: everything, or only the videos in no list."""
+    channel_season_offered: bool
+    """The videos of the collection's feeds can be in one season of their own rather than a season per year."""
     channel_season_names: dict[str, str]
-    """What that season is called with each choice, such as Channel and Videos."""
+    """What that season is called by how the collection groups its videos (``loose_videos``), such as Channel while
+    it holds everything and Videos while it holds what is in no list."""
     channel_names: NamesAPIRead
     """What the collection's Site calls a channel, such as channel, or account on SoundCloud."""
     link_seasons: LinkSeasons
@@ -181,8 +182,6 @@ class CollectionSeasonsAPIUpdate(RequestBase):
     """False puts the seasons back in VODLoft's order by date, whatever ``seasons`` says about their order."""
     feeds: Optional[list[str]] = Field(default=None, max_length=20)
     """For a channel collection: the refs of the feeds it takes; None takes all of them."""
-    channel_season: Optional[ChannelSeason] = None
-    """None keeps the collection's setting."""
     link_seasons: LinkSeasons = LinkSeasons.OFF
     new_lists: dict[str, NewLinkSeasonAction] = Field(default_factory=dict, max_length=20)
     """What happens with a list the channel adds, by the key of its kind; a kind left out keeps its setting."""

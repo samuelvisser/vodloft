@@ -1,9 +1,10 @@
-from ...contract import Names, SectionKind, SectionType
+from ...contract import AccountSignIn, ApiField, GuideStep, Names, SectionKind, SectionType, SignInKind
 from .feed_section_type import YtdlpFeedSectionType
 from .other_sites import OtherSites
 
 ALBUM_LIST = "album"
 PLAYLIST_LIST = "playlist"
+SOUNDCLOUD_TOKEN = "token"
 
 
 class SoundCloud(OtherSites):
@@ -37,3 +38,18 @@ class SoundCloud(OtherSites):
     list_collection_names = Names.joined((Names("album", "albums"), Names("playlist", "playlists")))
     channel_season_names = Names("album", "albums")
     list_season_names = Names("group", "groups")
+    # SoundCloud lets no other program sign in with a password, but its website keeps a token yt-dlp signs in with.
+    account_sign_in = AccountSignIn(
+        SignInKind.TOKEN,
+        "Sign in with your SoundCloud account to download what only your account may play, such as your own "
+        "private tracks or SoundCloud Go+ tracks.",
+        (ApiField(SOUNDCLOUD_TOKEN, "Sign-in token", secret=True),),
+        (
+            GuideStep("Sign in on soundcloud.com in your browser.", "Open SoundCloud", "https://soundcloud.com/signin"),
+            GuideStep(
+                "Open the browser's developer tools (F12), go to Application (Storage in Firefox), then Cookies, "
+                "https://soundcloud.com.",
+            ),
+            GuideStep("Copy the value of the cookie named oauth_token. It starts with 2-."),
+        ),
+    )

@@ -1063,7 +1063,7 @@ def _create_collection(session: Session, plan: CollectionPlan, creators: dict[st
     an artist's."""
     from backend.services.collections import add_collection, index_new_collection
     from backend.types.collection_types import CollectionType, EpisodeIdentifier
-    from backend.types.link_season_types import ChannelSeason, LinkSeasons, RepeatVideos
+    from backend.types.link_season_types import LinkSeasons, LooseVideos, RepeatVideos
     from backend.utils.helpers import generate_uuid, slugify
     from sources import get_source
 
@@ -1089,7 +1089,8 @@ def _create_collection(session: Session, plan: CollectionPlan, creators: dict[st
         # season of what is in none of them, and a video in one season. A channel collection's own defaults would add
         # every playlist. An artist's page keeps those defaults: every album a season, the ones to come too.
         collection.link_seasons = LinkSeasons.OFF.value
-        collection.channel_season = ChannelSeason.UNLISTED.value
+        # Without playlists, a season per upload year; with them, the videos in none of them in one season.
+        collection.loose_videos = LooseVideos.BY_YEAR.value
         collection.repeat_videos = RepeatVideos.ONE_SEASON.value
         # A link to one tab of a channel, such as its Videos, lists only that feed, as the other program did.
         feeds = plan.settings.get("feeds")
@@ -1168,7 +1169,7 @@ def _add_link_seasons(session: Session, collection: Collection, plan: Collection
 
     from backend.db.models import CollectionList
     from backend.services.seasons import create_season_record
-    from backend.types.link_season_types import LinkSeasons, ListStatus, OutsideVideos
+    from backend.types.link_season_types import LinkSeasons, ListStatus, LooseVideos, OutsideVideos
     from backend.types.season_types import SeasonOrigin
     from backend.utils.helpers import slugify
     from sources import get_source
@@ -1220,6 +1221,8 @@ def _add_link_seasons(session: Session, collection: Collection, plan: Collection
         collection.keep_a_default_link()
         if collection.link_seasons == LinkSeasons.OFF.value:
             collection.link_seasons = LinkSeasons.SELECTED.value
+            if collection.loose_videos == LooseVideos.BY_YEAR.value:
+                collection.loose_videos = LooseVideos.ONE_SEASON.value
         # The other program kept every video of these links, also another channel's.
         if collection.outside_videos != OutsideVideos.ONLY.value:
             collection.outside_videos = OutsideVideos.ADD.value
