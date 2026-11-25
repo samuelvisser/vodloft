@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session
 
 from backend.services.site_settings import download_profile_defaults, local_media_profile_defaults
 from backend.services.sites import CollectionAlreadyAddedError, collection_site, site_record
+from backend.services.seasons import collection_indexed
 
 import importer.pinchflat  # noqa: F401  (registers the importer)
 import importer.wireloft  # noqa: F401  (registers the importer)
@@ -2042,18 +2043,6 @@ def enable_run_download_profiles(session: Session, run: ImportRun) -> int:
     return enabled
 
 
-def _indexed(session: Session, collection_id: int) -> bool:
-    """Whether the Collection's first index finished, so its step only waits for its files to be adopted."""
-    from task_manager.scheduler.db import TaskOperation
-    from task_manager.scheduler.types import OperationStatus
-
-    return session.scalar(select(TaskOperation.id).where(
-        TaskOperation.kind == "collection.index", TaskOperation.resource_type == "collection",
-        TaskOperation.resource_id == collection_id,
-        TaskOperation.status.in_((OperationStatus.SUCCEEDED.value, OperationStatus.PARTIAL.value)),
-    ).limit(1)) is not None
-
-
 @dataclass(frozen=True)
 class DownloadProfilesView:
     total: int
@@ -2096,7 +2085,7 @@ def run_view(session: Session, run: ImportRun) -> RunView:
             collection_slug=collection.slug if collection else None,
             collection_title=collection.title if collection else None,
             status=step.status,
-            indexed=step.status != STEP_WAITING or _indexed(session, step.collection_id),
+            indexed=step.status != STEP_WAITING or collection_indexed(session, step.collection_id),
             files=sum(1 for file in step.files if file.get("kind") == "file"),
             counts=result.get("counts", {}),
             problems=result.get("problems", []),
