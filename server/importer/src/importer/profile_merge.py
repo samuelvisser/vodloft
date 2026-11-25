@@ -15,7 +15,7 @@ import re
 from collections.abc import Collection as Some, Sequence
 from dataclasses import dataclass, field, replace
 
-from jinja2 import Environment
+from jinja2 import Environment, TemplateError, meta
 from jinja_analysis import Alignment, AlignmentFailure, align_templates
 
 from .contract import CollectionPlan, ImportPlan, ImportWarning, ProfilePlan
@@ -56,6 +56,39 @@ def _align(profiles: Sequence[ProfilePlan], max_fields: int) -> Alignment | Alig
         variable=_field_variable, typed=lambda source: f"{source} | as_typed",
         default_fallback="collection_title | as_typed", max_slots=max_fields,
     )
+
+
+_RENDER = Environment()
+# Typed text is cleaned like the template's own text when VODLoft names files; it reads the same.
+_RENDER.filters["as_typed"] = str
+
+
+def _collection_values(collection: CollectionPlan) -> dict[str, str]:
+    """The template values the plan already knows of a collection, as VODLoft will give them to its template."""
+    known = {"collection_title": collection.title, "collection_author": collection.settings.get("author"),
+             "artist": collection.artist}
+    return {name: str(value) for name, value in known.items() if value}
+
+
+def _own_text(collection: CollectionPlan, member_values: dict[str, str], fallbacks: dict[str, str]) -> dict[str, str]:
+    """The texts the collection needs of its own.
+
+    A slot without the field gives the collection whatever the profile's template puts there, such as its
+    channel's name for ``{{ channel }}``. Text that is the same as that is left to the template; a slot whose
+    template value hangs on anything the plan doesn't know of the collection, such as an episode's, keeps it.
+    """
+    known = _collection_values(collection)
+    own = {}
+    for key, text in member_values.items():
+        source = "{{ " + fallbacks[key] + " }}"
+        try:
+            same = meta.find_undeclared_variables(_RENDER.parse(source)) <= known.keys() and \
+                _RENDER.from_string(source).render(known) == text
+        except TemplateError:
+            same = False
+        if not same:
+            own[key] = text
+    return own
 
 
 def _common_name(names: Sequence[str]) -> str:
@@ -173,6 +206,7 @@ def merge_profiles(plan: ImportPlan, *, selected: Some[str] | None = None, max_f
 
     merged: dict[str, ProfilePlan] = {}
     values: dict[str, dict[str, str]] = {}
+    fallbacks: dict[str, dict[str, str]] = {}
     renamed: dict[str, str] = {}
     # A variant family is named after its base profile, as that profile is named after the merge.
     base_names: dict[str, str] = {}
@@ -189,6 +223,8 @@ def merge_profiles(plan: ImportPlan, *, selected: Some[str] | None = None, max_f
         for member, member_values in zip(family.members, family.alignment.values, strict=True):
             renamed[member.external_id] = plan_.external_id
             values[member.external_id] = member_values
+            # Without an expression of its own, a slot falls back to the collection's title.
+            fallbacks[member.external_id] = {slot.key: slot.fallback or "collection_title" for slot in family.alignment.slots}
 
     profiles: list[ProfilePlan] = []
     for profile in plan.profiles:
@@ -205,7 +241,7 @@ def merge_profiles(plan: ImportPlan, *, selected: Some[str] | None = None, max_f
             collections.append(collection)
             continue
         settings = dict(collection.settings)
-        if values[member]:
-            settings["custom_metadata"] = {**dict(settings.get("custom_metadata") or {}), **values[member]}
+        if own := _own_text(collection, values[member], fallbacks[member]):
+            settings["custom_metadata"] = {**dict(settings.get("custom_metadata") or {}), **own}
         collections.append(replace(collection, profile_external_id=target, settings=settings))
     return replace(plan, profiles=tuple(profiles), collections=tuple(collections))

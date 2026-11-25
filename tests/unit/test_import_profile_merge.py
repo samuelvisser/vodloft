@@ -76,3 +76,69 @@ def test_only_the_collections_being_imported_decide_the_families():
     ids = {profile.external_id for profile in merged.profiles}
     assert {"p:3", "p:4", "p:3:s:9", "p:3:s:13"} <= ids
     assert not any(external_id.endswith(":family") for external_id in ids)
+
+
+CHANNEL = "/downloads/A/{folder}/{{{{ date }}}} - {{{{ title }}}}.ext"
+
+
+def _channel(external_id, profile, author):
+    return CollectionPlan(external_id, f"https://example.com/{external_id}", f"{external_id.title()} title", profile,
+                          settings={"collection_type": "channel", "author": author})
+
+
+def test_a_collection_whose_folder_is_what_the_fallback_gives_it_keeps_no_text_of_its_own():
+    plan = ImportPlan(
+        importer="test",
+        profiles=(
+            _profile("p:1", "Audio", CHANNEL.format(folder="{{ collection_author or 'NA' }}")),
+            _profile("p:1:s:2", "Audio (Same)", CHANNEL.format(folder="Same Channel"), "Audio"),
+            _profile("p:1:s:3", "Audio (Other)", CHANNEL.format(folder="Own Folder"), "Audio"),
+        ),
+        collections=(
+            _channel("plain", "p:1", "Plain Channel"),
+            _channel("same", "p:1:s:2", "Same Channel"),
+            _channel("other", "p:1:s:3", "Other Channel"),
+        ),
+    )
+    merged = merge_profiles(plan)
+    assert merged.profiles[0].output_template == (
+        "/downloads/A/{{ (meta_collection_folder | as_typed) if meta_collection_folder else (collection_author or 'NA') }}"
+        "/{{ date }} - {{ title }}.ext"
+    )
+    values = {collection.external_id: collection.settings.get("custom_metadata") for collection in merged.collections}
+    assert values == {"plain": None, "same": None, "other": {"folder": "Own Folder"}}
+
+
+def test_a_folder_that_is_the_collection_title_falls_back_to_the_title():
+    plan = ImportPlan(
+        importer="test",
+        profiles=(
+            _profile("p:1", "Audio", CHANNEL.format(folder="Plain title")),
+            _profile("p:2", "Audio 2", CHANNEL.format(folder="Elsewhere")),
+        ),
+        collections=(_channel("plain", "p:1", "Plain Channel"), _channel("moved", "p:2", "Moved Channel")),
+    )
+    values = {collection.external_id: collection.settings.get("custom_metadata")
+              for collection in merge_profiles(plan).collections}
+    assert values == {"plain": None, "moved": {"folder": "Elsewhere"}}
+
+
+def test_any_collection_value_of_the_template_counts_and_episode_values_never_do():
+    plan = ImportPlan(
+        importer="test",
+        profiles=(
+            _profile("p:1", "Music", CHANNEL.format(folder="{{ artist | upper }}")),
+            _profile("p:1:s:2", "Music (Same)", CHANNEL.format(folder="SAME ARTIST"), "Music"),
+            _profile("p:3", "Uploads", CHANNEL.format(folder="{{ episode_uploader }}")),
+            _profile("p:3:s:4", "Uploads (Named)", CHANNEL.format(folder="Uploader"), "Uploads"),
+        ),
+        collections=(
+            CollectionPlan("plain", "https://example.com/plain", "Plain", "p:1", artist="Plain Artist"),
+            CollectionPlan("same", "https://example.com/same", "Same", "p:1:s:2", artist="Same Artist"),
+            CollectionPlan("up", "https://example.com/up", "Up", "p:3"),
+            CollectionPlan("named", "https://example.com/named", "Uploader", "p:3:s:4", settings={"author": "Uploader"}),
+        ),
+    )
+    values = {collection.external_id: collection.settings.get("custom_metadata")
+              for collection in merge_profiles(plan).collections}
+    assert values == {"plain": None, "same": None, "up": None, "named": {"folder": "Uploader"}}

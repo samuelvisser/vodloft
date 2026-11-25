@@ -49,6 +49,19 @@ def _trim_straight_line_filename(tree: nodes.Template) -> None:
     tree.body = tree.body[:body_index + 1]
 
 
+def _valueless_collection_shares(root: list[str], valueless_candidates: Callable[[], tuple[list, str | None]]) -> bool:
+    """Whether a collection without any values of its own would be placed in ``root`` too.
+
+    A folder named by a collection value only belongs to that collection when the value is there: a template's
+    fallback for an empty value, such as ``collection_author or 'NA'``, is one folder every such collection shares.
+    """
+    try:
+        blank, _ = valueless_candidates()
+    except (TemplateError, TypeError, ValueError, ArithmeticError):
+        return False
+    return any(parts[:len(root)] == root for parts, _ in blank)
+
+
 def infer_collection_media_directory(
     output_template: str,
     values: Mapping[str, object],
@@ -70,57 +83,63 @@ def infer_collection_media_directory(
         if any(tree.find_all((nodes.Include, nodes.Import, nodes.FromImport, nodes.Extends))):
             raise ValueError("Collection root cannot be inferred from an external template.")
         _trim_straight_line_filename(tree)
-        # A collection's creator is the same for each of its episodes, so a folder per creator is above the collection's.
+        # A collection's author and creator are the same for each of its episodes, so a folder named by them is
+        # the collection's own or above it.
         collection_fields = {
             name for name in values
-            if name in {"collection", "collection_title", "artist"} | CREATOR_OUTPUT_TEMPLATE_FIELDS or name.startswith("meta_collection_")
+            if name in {"collection", "collection_title", "collection_author", "artist"} | CREATOR_OUTPUT_TEMPLATE_FIELDS
+            or name.startswith("meta_collection_")
         }
-        analysis = analyze_template(tree, environment=environment, variables=values,
-                                    known_values={name: values[name] for name in collection_fields})
-        evaluator = analysis_environment(environment)
         known_seasons = {sanitize_component(name).casefold() for name in season_names if name}
         collection_names = {sanitize_component(str(values[name])) for name in ("collection", "collection_title") if values.get(name)}
-        candidates = []
-        for variant in analysis.variants:
-            output = []
-            for part in variant.parts:
-                if isinstance(part, str):
-                    output.append(part)
-                elif isinstance(part, UnknownOutput):
-                    output.append(_ITEM_MARK)
-                else:
-                    dependencies = expression_dependencies(part)
-                    if dependencies - collection_fields:
+
+        def candidates_for(known: Mapping[str, object]) -> tuple[list[tuple[list[str], list[bool]]], str | None]:
+            analysis = analyze_template(tree, environment=environment, variables=values, known_values=known)
+            evaluator = analysis_environment(environment)
+            found = []
+            for variant in analysis.variants:
+                output = []
+                for part in variant.parts:
+                    if isinstance(part, str):
+                        output.append(part)
+                    elif isinstance(part, UnknownOutput):
                         output.append(_ITEM_MARK)
+                    else:
+                        dependencies = expression_dependencies(part)
+                        if dependencies - collection_fields:
+                            output.append(_ITEM_MARK)
+                            continue
+                        ast = nodes.Template([nodes.Output([part])]).set_lineno(1).set_environment(evaluator)
+                        value = evaluator.from_string(ast).render()
+                        output.append(_COLLECTION_START + value + _COLLECTION_END if dependencies & collection_fields else value)
+                rendered = "".join(output)
+                if not rendered.startswith("/downloads/") or "\n" in rendered or "\r" in rendered:
+                    raise ValueError("Every output branch must stay inside /downloads/ on a single line.")
+                if len(rendered) > 8192:
+                    raise ValueError("Rendered output path is too long.")
+                parts, identities = [], []
+                for component in rendered.split("/")[2:-1]:
+                    if _ITEM_MARK in component:
+                        break
+                    collection_value = any(_COLLECTION_VALUE.findall(component))
+                    plain = component.replace(_COLLECTION_START, "").replace(_COLLECTION_END, "")
+                    if not plain:
                         continue
-                    ast = nodes.Template([nodes.Output([part])]).set_lineno(1).set_environment(evaluator)
-                    value = evaluator.from_string(ast).render()
-                    output.append(_COLLECTION_START + value + _COLLECTION_END if dependencies & collection_fields else value)
-            rendered = "".join(output)
-            if not rendered.startswith("/downloads/") or "\n" in rendered or "\r" in rendered:
-                raise ValueError("Every output branch must stay inside /downloads/ on a single line.")
-            if len(rendered) > 8192:
-                raise ValueError("Rendered output path is too long.")
-            parts, identities = [], []
-            for component in rendered.split("/")[2:-1]:
-                if _ITEM_MARK in component:
-                    break
-                collection_value = any(_COLLECTION_VALUE.findall(component))
-                plain = component.replace(_COLLECTION_START, "").replace(_COLLECTION_END, "")
-                if not plain:
-                    continue
-                if plain in {".", ".."}:
-                    raise ValueError("Collection root cannot contain relative path components.")
-                cleaned = sanitize_component(plain)
-                if any(identities) and not collection_value and (
-                    _SEASON_FOLDER.fullmatch(cleaned) or cleaned.casefold() in known_seasons
-                ):
-                    break
-                parts.append(cleaned)
-                identities.append(collection_value or cleaned in collection_names)
-            candidates.append((parts, identities))
+                    if plain in {".", ".."}:
+                        raise ValueError("Collection root cannot contain relative path components.")
+                    cleaned = sanitize_component(plain)
+                    if any(identities) and not collection_value and (
+                        _SEASON_FOLDER.fullmatch(cleaned) or cleaned.casefold() in known_seasons
+                    ):
+                        break
+                    parts.append(cleaned)
+                    identities.append(collection_value or cleaned in collection_names)
+                found.append((parts, identities))
+            return found, analysis.reason
+
+        candidates, reason = candidates_for({name: values[name] for name in collection_fields})
         if not candidates:
-            raise ValueError(analysis.reason or "No reachable output path could be established.")
+            raise ValueError(reason or "No reachable output path could be established.")
         common = candidates[0][0].copy()
         for parts, _ in candidates[1:]:
             shared_length = 0
@@ -129,7 +148,11 @@ def infer_collection_media_directory(
                     break
                 shared_length += 1
             common = common[:shared_length]
-        if not common or not all(any(identities[:len(common)]) for _, identities in candidates):
+        if not common or not all(any(identities[:len(common)]) for _, identities in candidates) or (
+            not collection_names.intersection(common) and _valueless_collection_shares(
+            common, lambda: candidates_for(dict.fromkeys(collection_fields, "")),
+        )
+        ):
             raise ValueError("No shared collection-specific directory could be established. Artwork will not be written to a shared library folder.")
         return CollectionMediaDirectory("/downloads/" + "/".join(common))
     except (TemplateError, TypeError, ValueError, ArithmeticError) as exc:
