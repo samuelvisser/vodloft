@@ -66,7 +66,7 @@ def holds_whole_channel(collection: Collection) -> bool:
     Wire, seasons are the Site's own."""
     if not (channel_season_offered(collection) and loose_in_one_season(collection)):
         return False
-    return collection.loose_videos == LooseVideos.EVERYTHING.value or not link_seasons_on(collection)
+    return collection.loose_videos == LooseVideos.EVERYTHING.value or not lists_are_seasons(collection)
 
 
 def channel_season_offered(collection: Collection) -> bool:
@@ -144,7 +144,15 @@ def offers_link_seasons(collection: Collection) -> bool:
 
 def lists_by_year(collection: Collection) -> bool:
     """Whether the collection lays its lists out in seasons per upload year, rather than a season each."""
-    return collection.list_layout == ListLayout.BY_YEAR.value and link_seasons_on(collection)
+    return collection.list_layout == ListLayout.BY_YEAR.value and lists_are_seasons(collection)
+
+
+def lists_are_seasons(collection: Collection) -> bool:
+    """Whether lists of the collection can be seasons of their own: its lists are on, and not every one of them is
+    included as contents only, part of the channel as a feed is."""
+    if collection.link_seasons == LinkSeasons.ALL.value and not collection.lists_as_seasons and not holds_only_link_seasons(collection):
+        return False
+    return link_seasons_on(collection)
 
 
 def repeats_videos(collection: Collection) -> bool:
@@ -415,6 +423,8 @@ def save_lists(s: Session, collection: Collection, listing: LinkListing) -> list
                 url=found.url, title=found.title, image_path=found.image_url, item_count=found.item_count,
                 site_position=position, enabled=_added(action, first=first, every=every),
                 status=(ListStatus.NEW if asks else ListStatus.KNOWN).value,
+                # While every list is in, a new one is included as the others are: a season, or contents only.
+                as_season=collection.lists_as_seasons if every else True,
             )
             collection.lists.append(playlist)
             known[found.ref] = playlist

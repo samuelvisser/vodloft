@@ -105,6 +105,8 @@ class CollectionSeasonsAPIRead(ResponseBase):
     channel_names: NamesAPIRead
     """What the collection's Site calls a channel, such as channel, or account on SoundCloud."""
     link_seasons: LinkSeasons
+    lists_as_seasons: bool
+    """While every list is in: each is a season of its own, or only adds its videos to the channel's own seasons."""
     new_lists: list[CollectionNewListAPIRead]
     """What happens with a list the channel adds, for each kind of list of the collection's Site."""
     list_layout: ListLayout
@@ -183,6 +185,8 @@ class CollectionSeasonsAPIUpdate(RequestBase):
     feeds: Optional[list[str]] = Field(default=None, max_length=20)
     """For a channel collection: the refs of the feeds it takes; None takes all of them."""
     link_seasons: LinkSeasons = LinkSeasons.OFF
+    lists_as_seasons: Optional[bool] = None
+    """While every list is in: each is a season of its own, or contents only. None keeps the collection's setting."""
     new_lists: dict[str, NewLinkSeasonAction] = Field(default_factory=dict, max_length=20)
     """What happens with a list the channel adds, by the key of its kind; a kind left out keeps its setting."""
     list_layout: ListLayout = ListLayout.SEASON_EACH

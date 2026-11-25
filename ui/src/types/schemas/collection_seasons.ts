@@ -87,6 +87,8 @@ export const CollectionSeasonsReadSchema = z.object({
     /** What the collection's Site calls a channel, such as channel, or account on SoundCloud. */
     channelNames: NamesSchema,
     linkSeasons: z.enum(['off', ...LinkSeasonModeValues]),
+    /** While every list is in: each is a season of its own, or only adds its videos to the channel's own seasons. */
+    listsAsSeasons: z.boolean().default(true),
     /** What happens with a list the channel adds, for each kind of list of the collection's Site. */
     newLists: z.array(z.object({
         key: z.string(), names: NamesSchema, albums: z.boolean().default(false),
@@ -137,6 +139,7 @@ export const CollectionSeasonsFormSchema = z.object({
     feeds: z.array(z.string()).default([]),
     linkSeasonsOn: z.boolean().default(false),
     linkSeasonMode: z.enum(LinkSeasonModeValues).default('all'),
+    listsAsSeasons: z.boolean().default(true),
     /** What happens with a new list, by the key of its kind. */
     newLists: z.record(z.string(), z.enum(NewLinkSeasonValues)).default({}),
     listLayout: z.enum(ListLayoutValues).default('season_each'),
@@ -175,6 +178,7 @@ export function seasonsFormValues(view: CollectionSeasonsRead): CollectionSeason
         feeds: view.feeds.filter((feed) => feed.on).map((feed) => feed.ref),
         linkSeasonsOn: view.linkSeasons !== 'off',
         linkSeasonMode: view.linkSeasons === 'off' ? 'all' : view.linkSeasons,
+        listsAsSeasons: view.listsAsSeasons,
         newLists: Object.fromEntries(view.newLists.map((setting) => [setting.key, setting.action])),
         listLayout: view.listLayout,
         looseVideos: view.looseVideos,

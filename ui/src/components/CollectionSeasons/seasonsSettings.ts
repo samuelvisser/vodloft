@@ -37,12 +37,12 @@ export async function readSeasons(response: Response): Promise<CollectionSeasons
 export function registries(names: ListNames, words: Words, view: CollectionSeasonsRead) {
     const outside = {
         leave_out: {label: 'Only include media already in the collection', help: `${capitalized(names.a)} only takes the ${words.videos} the collection's own link has.`},
-        add: {label: 'Include media that is not in the collection', help: `They join the collection in their ${names.singular}'s ${words.season.singular} in VODLoft. Switching off ${names.a} or this setting removes them again, files and all. When the ${words.creator} takes a downloaded one out, Home asks whether to keep it.`},
+        add: {label: 'Include media that is not in the collection', help: `They join the collection where the other ${words.videos} of their ${names.singular} go. Switching off ${names.a} or this setting removes them again, files and all. When the ${words.creator} takes a downloaded one out, Home asks whether to keep it.`},
         only: {label: `Include only what the ${names.plural} contain`, help: `The collection holds nothing but the ${words.videos} of its ${names.plural}, also other ${words.creators}', and you can add links of your own, from any site. Its own ${words.videos} in no ${names.singular} leave.`},
     }
     return {
         mode: createSelectRegistry(`LinkSeasonMode-${names.plural}`, {
-            all: {label: `Every ${names.singular}`, help: `Every ${names.singular}, also the ones to come, is ${words.season.a} in VODLoft.`},
+            all: {label: `Every ${names.singular}`, help: `Every ${names.singular}, also the ones to come, is in the collection, as you choose below.`},
             selected: {label: `Only the ${names.plural} I pick`, help: `Only the ${names.plural} switched on below are ${words.season.plural} in VODLoft.`},
         }),
         // One for each kind of list of the Site, such as a SoundCloud artist's albums and their playlists.
@@ -66,8 +66,8 @@ export function registries(names: ListNames, words: Words, view: CollectionSeaso
         // And while its lists are seasons: what goes in the channel's own season, by the name it then has.
         channelWithLists: createSelectRegistry(`ChannelGroupingLists-${view.channelSeasonNames.everything}-${view.channelSeasonNames.one_season}-${names.plural}-${words.season.singular}`, {
             everything: {
-                label: `Everything in one ${words.season.singular}, ${view.channelSeasonNames.everything}`,
-                help: `Every ${words.video} of the feeds is ${words.inSeason} ${view.channelSeasonNames.everything}, also the ones in ${names.a} that is ${words.season.a} of its own.`,
+                label: `The whole ${words.channel} in one ${words.season.singular}, ${view.channelSeasonNames.everything}`,
+                help: `Every ${words.video} of the feeds is ${words.inSeason} ${view.channelSeasonNames.everything}, also the ones in ${names.a} that is ${words.season.a} of its own. ${capitalized(names.a)} included as contents only is part of the ${words.channel}. ${capitalized(words.videos)} of other ${words.creators} in ${names.a} that is ${words.season.a} of its own are only there.`,
             },
             one_season: {
                 label: `What is in no ${names.singular} in one ${words.season.singular}, ${view.channelSeasonNames.one_season}`,
@@ -91,6 +91,14 @@ export function registries(names: ListNames, words: Words, view: CollectionSeaso
             by_year: {
                 label: `${capitalized(words.season.a)} per year`,
                 help: `Every ${words.video} goes to the ${words.season.singular} of its upload year. When you save, VODLoft offers to move the downloaded ones, files and all.`,
+            },
+        }),
+        // While every list is in: each a season of its own, or their videos part of the channel, as a feed's are.
+        listsAs: createSelectRegistry(`ListsAs-${names.plural}-${words.season.singular}-${words.channel}`, {
+            season: {label: `As ${words.season.plural} of their own`, help: `Each ${names.singular} is ${words.season.a} named after it.`},
+            contents: {
+                label: `Their contents, as part of the ${words.channel}`,
+                help: `Their ${words.videos} join the ${words.channel}'s own, as a feed's do, in the ${words.season.plural} where ${words.videos} in no ${names.singular} go.`,
             },
         }),
         // Whether a list is a season of its own, or only adds its videos to the collection's other seasons.

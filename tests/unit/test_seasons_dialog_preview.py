@@ -84,6 +84,7 @@ CHANNEL_CHANGES = {
     "lists laid out by year": lambda v, d: d.update(list_layout="by_year"),
     "a list switched off": lambda v, d: (d.update(link_seasons="selected"), _set_playlist(d, v, "One", enabled=False)),
     "lists off": lambda v, d: d.update(link_seasons="off"),
+    "every list contents only": lambda v, d: d.update(link_seasons="all", lists_as_seasons=False),
     "lists off and one season": lambda v, d: d.update(link_seasons="off", loose_videos="one_season"),
     "a list joins another's season": lambda v, d: _set_playlist(d, v, "Two", season_id=_playlist(v, "One").season_id),
     "a list no season of its own": lambda v, d: _set_playlist(d, v, "One", as_season=False),

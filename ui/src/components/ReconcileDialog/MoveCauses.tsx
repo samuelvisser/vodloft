@@ -96,7 +96,8 @@ function seasonsRows(view: CollectionSeasonsRead, causes: MoveCause[]): CauseRow
         loose_videos: {
             setting: `How VODLoft groups the ${words.videos}`,
             value: (value) => view.madeFromList ? regs.listSeasons.getLabelLoose(text(value))
-                : view.linkSeasons !== 'off' ? regs.channelWithLists.getLabelLoose(text(value))
+                : view.linkSeasons === 'selected' || (view.linkSeasons === 'all' && (view.listsAsSeasons || only))
+                    ? regs.channelWithLists.getLabelLoose(text(value))
                     // With no lists as seasons, the one season holds the whole channel.
                     : regs.channel.getLabelLoose(value === 'one_season' ? 'everything' : text(value)),
         },
@@ -105,6 +106,10 @@ function seasonsRows(view: CollectionSeasonsRead, causes: MoveCause[]): CauseRow
             value: (value) => regs.repeat.getLabelLoose(text(value)),
         },
         feeds: {setting: 'Feeds', value: feeds},
+        lists_as_seasons: {
+            setting: `How the ${lists.plural} are included`,
+            value: (value) => regs.listsAs.getLabelLoose(text(value)),
+        },
     }
     return causes.flatMap((cause) => {
         const known = cause.setting === 'list'
