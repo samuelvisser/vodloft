@@ -245,7 +245,7 @@ On a site where VODLoft knows no creators, such as NPO Start, every collection i
 
 In the Seasons window of a channel collection (the Albums window for music), **Feeds** lists the parts of the channel the collection takes its videos from, such as Videos, Shorts and Live on YouTube. Switch a feed off to leave its videos out. The channel is listed again when you save: its videos that no feed or playlist of the collection still has leave the collection, downloaded ones with their files. Saving tells you how many leave first.
 
-**How VODLoft groups the videos**, under **Seasons**, chooses where the channel's own videos go. Without the creator's playlists:
+**How VODLoft groups the videos**, under **Seasons**, chooses where the channel's own videos go. Without the creator's playlists, or when every playlist you include is contents only:
 
 - **One season**, called **Channel**: every video of the feeds is in it.
 - **A season per year**: every video goes to the season of the year it came out.

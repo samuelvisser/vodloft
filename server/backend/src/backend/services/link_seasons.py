@@ -152,10 +152,17 @@ def lists_by_year(collection: Collection) -> bool:
 
 def lists_are_seasons(collection: Collection) -> bool:
     """Whether lists of the collection can be seasons of their own: its lists are on, and not every one of them is
-    included as contents only, part of the channel as a feed is."""
-    if collection.link_seasons == LinkSeasons.ALL.value and not collection.lists_as_seasons and not holds_only_link_seasons(collection):
+    included as contents only, part of the channel as a feed is. Picked lists that are all contents only are the same
+    as every list included as contents: the channel's own videos are grouped as if it had no lists."""
+    if not link_seasons_on(collection):
         return False
-    return link_seasons_on(collection)
+    if holds_only_link_seasons(collection):
+        return True
+    if collection.link_seasons == LinkSeasons.ALL.value:
+        return collection.lists_as_seasons
+    if collection.link_seasons == LinkSeasons.SELECTED.value:
+        return any(is_season(collection, playlist) for playlist in collection.lists)
+    return False
 
 
 def repeats_videos(collection: Collection) -> bool:

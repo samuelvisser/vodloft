@@ -672,7 +672,8 @@ def test_a_video_from_outside_with_files_leaves_with_its_files(source, session, 
     assert deleted == ["/downloads/guest.mp4"]
     session.expire_all()
     assert session.scalars(select(Episode.source_slug)).all() == ["a"]
-    assert _seasons(session) == [("Videos", 1, ["a"])]
+    # With no playlist a season, the one season holds the whole channel.
+    assert _seasons(session) == [("Collection", 1, ["a"])]
 
 
 def test_the_downloaded_videos_of_a_playlist_turned_off_move_where_new_videos_would_go(source, session, monkeypatch):
@@ -834,7 +835,7 @@ def test_a_removed_season_per_year_comes_back_when_the_settings_put_its_videos_t
 
     # In one season instead, they go for good.
     _remove(session, service, "2024", "2025", loose_videos="one_season")
-    assert [(name, episodes) for name, _number, episodes in _seasons(session)] == [("Videos", ["a", "b"])]
+    assert [(name, episodes) for name, _number, episodes in _seasons(session)] == [("Collection", ["a", "b"])]
 
 
 def test_a_removed_season_of_a_list_or_a_leftover_season_goes_to_the_seasons_the_settings_give(source, session, monkeypatch):
@@ -879,7 +880,7 @@ def test_a_season_the_site_has_itself_is_not_removable(source, session):
 
     view = service.seasons_view(session, "creator")
     session.rollback()
-    assert {x.name: x.removable for x in view.seasons} == {"Videos": True, "Season 1": False}
+    assert {x.name: x.removable for x in view.seasons} == {"Collection": True, "Season 1": False}
     with pytest.raises(ServiceError):
         _remove(session, service, "Season 1", loose_videos="one_season")
 
@@ -1509,7 +1510,7 @@ def test_the_preview_shows_the_seasons_a_save_would_leave_and_saves_nothing(sour
     )
     preview = run_write_transaction(lambda s: preview_seasons(s, "creator", body))
 
-    assert [(season.name, season.episode_count) for season in preview.seasons] == [("Videos", 2)]
+    assert [(season.name, season.episode_count) for season in preview.seasons] == [("Collection", 2)]
     assert _seasons(session) == before
 
 
@@ -1687,3 +1688,24 @@ def test_every_list_can_be_included_as_contents_only_part_of_the_channel(source,
     _index(session, session.get(Collection, collection.id), source)
     session.expire_all()
     assert {link.ref: link.as_season for link in session.scalars(select(CollectionList))} == {"PLone": False, "PLtwo": False}
+
+
+def test_picked_lists_that_are_all_contents_only_are_as_every_list_included_as_contents(source, session):
+    from backend.db.models import Collection
+    from backend.services.link_seasons import holds_whole_channel, lists_are_seasons
+
+    source.videos = [_video("a", 2023), _video("b", 2024)]
+    source.lists = [_list("PLone", "One"), _list("PLtwo", "Two")]
+    source.items = {"PLone": ("a",), "PLtwo": ("b",)}
+    collection = _collection(session, mode="selected")
+    _index(session, collection, source)
+    view = _update(session, playlists=[
+        {"id": link.id, "enabled": link.title == "One", "as_season": False}
+        for link in session.get(Collection, collection.id).lists
+    ])
+
+    collection = session.get(Collection, collection.id)
+    assert not lists_are_seasons(collection) and holds_whole_channel(collection)
+    # One season holding the whole channel, as with every list included as contents.
+    assert _seasons(session) == [("Collection", 1, ["a", "b"])]
+    assert view.loose_videos == "one_season"
