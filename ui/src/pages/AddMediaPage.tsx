@@ -14,6 +14,7 @@ import {capitalized} from '../types/creator'
 import {DrmNotice} from '../components/common/DrmProtected'
 import {AccessNotice} from '../components/common/AccessLocked'
 import {ClearInputButton} from '../components/common/ClearInputButton'
+import {useAutoLookup} from '../lib/useAutoLookup'
 import AddEmptyCollectionDialog from '../components/AddEmptyCollection/AddEmptyCollectionDialog'
 import LookupSteps from './creator/LookupSteps'
 import type {ProgressStep} from '../types/progress'
@@ -70,6 +71,7 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
         if (!trimmed) return
         if (!sourceKey) setCandidates([])
         setAskedSource(sourceKey ?? null)
+        autoLookup.remember(trimmed)
         requestRef.current?.abort()
         const controller = new AbortController()
         requestRef.current = controller
@@ -91,9 +93,25 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
         } catch (exc) {
             if (!controller.signal.aborted) setError(exc instanceof Error ? exc.message : String(exc))
         } finally {
-            if (!controller.signal.aborted) setResolving(false)
+            if (!controller.signal.aborted) {
+                setResolving(false)
+                requestRef.current = null
+            }
         }
     }
+
+    // Stops the lookup of a link the user has since changed.
+    const cancelLookup = () => {
+        if (!requestRef.current) return false
+        requestRef.current.abort()
+        requestRef.current = null
+        setResolving(false)
+        setSteps([])
+        setFirstLook(null)
+        return true
+    }
+
+    const autoLookup = useAutoLookup({lookUp: (value) => void lookUp(value), cancel: cancelLookup})
 
     useEffect(() => {
         const initial = initialUrl ?? params.get('url')
@@ -105,6 +123,7 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
 
     const clear = () => {
         requestRef.current?.abort()
+        autoLookup.reset()
         setUrl('')
         setLink(null)
         setError(null)
@@ -260,7 +279,11 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                         autoComplete="off"
                         placeholder="https://…"
                         value={url}
-                        onChange={(event) => setUrl(event.target.value)}
+                        onPaste={autoLookup.onPaste}
+                        onChange={(event) => {
+                            setUrl(event.target.value)
+                            autoLookup.changed(event.target.value)
+                        }}
                     />
                     {url && <ClearInputButton onClear={clear} label="Clear the link"/>}
                 </span>
