@@ -1,6 +1,4 @@
 .creator-view { display: flex; flex-direction: column; gap: 1.25rem; }
-/* The page's gap already parts the header from what follows, so the header adds no margin of its own. */
-.creator-edit-head .page-header { margin-bottom: 0; }
 
 /* The banner hero: the banner, the creator's picture over its lower edge, their name beside it and their buttons on
    the right. A phone stacks them, with the buttons last. */
@@ -70,7 +68,6 @@
     .creator-banner { margin: 0 -12px; }
 }
 
-.creator-setup { display: flex; flex-direction: column; gap: 1.25rem; }
 
 .creator-section-group h2 { font-size: 1rem; margin: 0 0 .5rem; }
 /* A row's select takes the width of the longest choice in its list (SimpleSelect's fitLabels), so the selects of a
@@ -101,13 +98,6 @@
     .creator-shelf.episodes-row { grid-auto-columns: 200px; gap: 12px; margin-right: -16px; padding-right: 16px; }
 }
 .creator-empty { margin: 0; opacity: .8; }
-
-/* New playlists and shows wait for a choice on the Edit page. */
-
-.creator-membership { max-width: 360px; }
-/* The settings of each collection the creator adds, side by side where there is room. */
-
-.creator-setup .actions .btn { white-space: nowrap; }
 
 .creator-note { margin: 0; opacity: .75; font-size: .875rem; }
 
