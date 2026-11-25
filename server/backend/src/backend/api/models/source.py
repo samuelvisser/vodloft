@@ -550,6 +550,21 @@ class CookiesAPIUpdate(RequestBase):
     content: str = Field(min_length=1, max_length=4 * 1024 * 1024)
 
 
+class LinkedSiteAPIRead(ResponseBase):
+    """The Site of a page a browser shows, such as VODLoft's browser extension asks for."""
+
+    key: str
+    name: str
+    domains: list[str]
+    takes_cookies: bool
+
+
+class BrowserCookiesAPIUpdate(CookiesAPIUpdate):
+    """The cookies a browser has for a page, such as VODLoft's browser extension sends."""
+
+    url: str = Field(min_length=1, max_length=4096)
+
+
 class ResolvedLinkAPIRead(ResponseBase):
     source: SourceAPIRead
     kind: Literal["collection", "movie", "episode", "video", "creator"]

@@ -354,6 +354,41 @@ def save_site_cookies(s: Session, site_key: str, content: bytes) -> SiteAuthenti
     return _authentication(site, domains, sites_kept(s))
 
 
+@dataclass(frozen=True)
+class LinkedSite:
+    """The Site of a page a browser shows, for sending that browser's cookies for it."""
+
+    key: str
+    name: str
+    domains: tuple[str, ...]
+    """Every domain VODLoft knows for the Site, whose cookies its cookies file keeps."""
+    takes_cookies: bool
+
+
+def site_of_page(url: str) -> LinkedSite:
+    """The Site of the page at ``url``, with every domain VODLoft knows for it. Raises SiteLinkError for a link no
+    Source takes."""
+    with _reading() as s:
+        site = site_of_link(s, url.strip())
+        site, domains = _known_sites(s).get(site.key, (site, site.domains))
+    return LinkedSite(key=site.key, name=site.name, domains=domains, takes_cookies=site.takes_cookies)
+
+
+def save_browser_cookies(url: str, content: bytes) -> SiteAuthentication:
+    """Keep the cookies a browser sent for the page at ``url``, such as VODLoft's browser extension does, as the
+    cookies file of that page's Site. A Site VODLoft does not know yet is added first.
+
+    Raises SiteLinkError for a link no Source takes, and ValueError as ``save_site_cookies`` does.
+    """
+    with _reading() as s:
+        site = site_of_link(s, url.strip())
+        known = site.key in _known_sites(s)
+    if not known:
+        run_write_transaction(lambda s: site_record(s, site))
+    with _reading() as s:
+        return save_site_cookies(s, site.key, content)
+
+
 def remove_site_cookies(s: Session, site_key: str) -> SiteAuthentication:
     known = _known_sites(s)
     if site_key not in known:

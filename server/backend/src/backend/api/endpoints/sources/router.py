@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from backend.api.models.source import (
     DownloadOptionsAPIRead, DownloadProfileDefaultsAPIRead, SiteOptionsAPIRead, YtdlpOptionLineAPIRead, YtdlpOptionsAPIRead, YtdlpOptionsAPIUpdate, YtdlpOptionsCheckAPIRequest,
-    ApiKeyAPIUpdate, ApiKeyNoteAPIIn, ApiKeyNoteAPIRead, ApiStatusAPIRead, EpisodeTagAPIRead, PublishStatusLabelAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, MediaLinksAPIRequest, MediaLinksAPIRead, SearchResultsAPIRead,
+    ApiKeyAPIUpdate, ApiKeyNoteAPIIn, ApiKeyNoteAPIRead, ApiStatusAPIRead, EpisodeTagAPIRead, PublishStatusLabelAPIRead, SourceProblemAPIRead, BrowserCookiesAPIUpdate, CookiesAPIUpdate, LinkedSiteAPIRead, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, MediaLinksAPIRequest, MediaLinksAPIRead, SearchResultsAPIRead,
     CollectionDetailsAPIRead, SourceAPIRead, SourceSiteAPIRead, SourceSiteAPIUpdate, UpgradeChecksAPIRead,
     SiteAddAPIRequest, SiteAddedAPIRead, SiteChoiceAPIRead, SitesPickAPIRequest, SiteApiValuesAPIUpdate, SiteAuthenticationAPIRead,
     AccountValuesAPIUpdate, CodeSignInAPIRead,
@@ -16,6 +16,7 @@ from sources import ApiKeyRejected, Feature, SignInCodeEnded, SignInRejected, So
 from sources.ytdlp_options import check_ytdlp_options
 from backend.services.site_cookies import (
     SiteAuthentication, SiteNotKnownError, list_site_authentication, pick_sites, remove_known_site, remove_site_api, remove_site_cookies,
+    save_browser_cookies, site_of_page,
     save_site_api, save_site_cookies, test_site_api, cancel_code_sign_in, finish_code_sign_in, sign_in_account, sign_out_account,
     start_code_sign_in,
 )
@@ -310,9 +311,37 @@ def save_site_cookie_file(site_key: str, body: CookiesAPIUpdate):
         except SiteNotKnownError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+            raise _field_refused("content", exc) from exc
     _sign_in_changed(listing)
     return SiteAuthenticationAPIRead.model_validate(listing)
+
+
+@router.get("/sources/authentication/site-of-page", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=LinkedSiteAPIRead)
+def linked_site(url: str = Query(min_length=1, max_length=4096)):
+    """The Site of a page, with the domains whose cookies its cookies file keeps, so a browser knows which of its
+    cookies to send."""
+    try:
+        return LinkedSiteAPIRead.model_validate(site_of_page(url))
+    except SiteLinkError as exc:
+        raise _field_refused("url", exc) from exc
+
+
+@router.post("/sources/authentication/browser-cookies", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SiteAuthenticationAPIRead)
+def save_browser_cookie_file(body: BrowserCookiesAPIUpdate):
+    """Store the cookies a browser has for a page, such as VODLoft's browser extension sends, as the cookies file of
+    that page's Site. A Site VODLoft does not know yet is added."""
+    try:
+        listing = save_browser_cookies(body.url, body.content.encode())
+    except SiteLinkError as exc:
+        raise _field_refused("url", exc) from exc
+    except ValueError as exc:
+        raise _field_refused("content", exc) from exc
+    _sign_in_changed(listing)
+    return SiteAuthenticationAPIRead.model_validate(listing)
+
+
+def _field_refused(field: str, exc: Exception) -> HTTPException:
+    return HTTPException(status_code=422, detail=[{"loc": ["body", field], "msg": str(exc), "type": "value_error"}])
 
 
 @router.delete("/sources/authentication/{site_key}/cookies", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SiteAuthenticationAPIRead)
