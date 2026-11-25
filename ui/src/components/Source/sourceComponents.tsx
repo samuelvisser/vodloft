@@ -6,7 +6,7 @@ import type {SettingsTabProps} from '../Settings/SettingsTabTypes'
 import YouTubeApiSettings, {YouTubeApiKey} from './YouTubeApiSettings'
 
 /** The screens a Source brings with it: its own sign-in, its API key and its own settings. The sign-in and
- *  the API key show on the Sites they are for, under Settings › Sources › Authentication. */
+ *  the API key show on the Sites they are for, under Settings › Sites › Authentication. */
 type SourceComponents = {
     SignIn?: ComponentType
     ApiKey?: ComponentType

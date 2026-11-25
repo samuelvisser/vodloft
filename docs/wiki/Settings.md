@@ -1,6 +1,6 @@
 # Settings
 
-Most VODLoft configuration can be changed from the **Settings** page. The interface groups normal options into General, Downloads, Quick download, Automation, Messages and actions, Sources, Users, Import and Advanced tabs, and explains environment-variable overrides when they are active. Notifications, media server refreshes, webhooks and scripts have their own page: [[Messages-and-Actions]].
+Most VODLoft configuration can be changed from the **Settings** page. The interface groups normal options into General, Downloads, Quick download, Automation, Messages and actions, Sites, Users, Import and Advanced tabs, and explains environment-variable overrides when they are active. Notifications, media server refreshes, webhooks and scripts have their own page: [[Messages-and-Actions]].
 
 This page is the complete 1.1 reference for settings users may need to configure.
 
@@ -277,9 +277,9 @@ These are safeguards for unusual Daily Wire publication states. Most users shoul
 
 ---
 
-## Sources
+## Sites
 
-The Sources tab lists every Source VODLoft can add media from, with what it supports. A Source made for one site, such as The Daily Wire, only shows while that site is added. A site that has nothing in VODLoft can be removed with the trash button on its row, but VODLoft always keeps at least one site. See [[Sources]] for what each one does. Signing in and API keys are set up per site, under **Authentication** at the top. The Daily Wire's card contains advanced integration settings. Ordinary installations should leave the endpoint, OAuth, and pacing values unchanged.
+The Sites tab holds sign-ins per site and the settings of each Source VODLoft fetches with. A Source with nothing to set, such as NPO Start, is not listed. A Source made for one site, such as The Daily Wire, only shows while that site is added. A site that has nothing in VODLoft can be removed with the trash button on its row, but VODLoft always keeps at least one site. See [[Sources]] for what each one does. Signing in and API keys are set up per site, under **Authentication** at the top. The Daily Wire's card contains advanced integration settings. Ordinary installations should leave the endpoint, OAuth, and pacing values unchanged.
 
 ### Authentication
 

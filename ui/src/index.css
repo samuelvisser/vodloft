@@ -2465,12 +2465,11 @@ a.icon-btn { display: inline-block; text-decoration: none; }
   .add-media-preview--loading span.add-media-preview-art { width: 100%; height: 180px; }
 }
 
-/* Settings › Sources */
+/* Settings › Sites */
 .source-card-list { display: flex; flex-direction: column; gap: 16px; }
 .source-section__body { display: grid; gap: 18px; }
 .source-section__body > * { min-width: 0; margin: 0; }
 .source-section__body > .source-setting:first-child { padding-top: 0; border-top: 0; }
-.source-section__empty { color: var(--muted); font-size: 13px; }
 .source-setting { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; padding-top: 18px; border-top: 1px solid rgba(100,116,139,.25); }
 .source-setting-copy { min-width: 0; }
 .source-setting-copy h4 { margin: 0 0 4px; font-size: 15px; }

@@ -1,7 +1,7 @@
 import type {SettingsTabProps} from './SettingsTabTypes'
 import {DurationField, NumberField, SettingsDisclosure, TextField} from './SettingsControls'
 
-/** Daily Wire's own settings, shown on its card in Settings › Sources. */
+/** Daily Wire's own settings, shown on its card in Settings › Sites. */
 export default function DailyWireSettingsTab({draft, updateDraft, environmentVariableFor, errorFor}: SettingsTabProps) {
     return (
         <>

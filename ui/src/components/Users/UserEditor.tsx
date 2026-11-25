@@ -296,7 +296,7 @@ export default function UserEditor({user, options, onDone}: Props) {
                                 />
                                 <span>
                                     Members-only media
-                                    <small>Uses the memberships signed in under Settings › Sources, such as the Daily Wire’s.</small>
+                                    <small>Uses the memberships signed in under Settings › Sites, such as the Daily Wire’s.</small>
                                 </span>
                             </label>
                         </>

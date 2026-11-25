@@ -4,7 +4,7 @@ On first launch, VODLoft asks which sites you use, helps you review security, an
 
 ## 1. Sites
 
-VODLoft downloads from YouTube and over a thousand other sites. The first-run setup shows the popular ones, such as YouTube, Twitch, The Daily Wire and SoundCloud: pick the ones you use. For any other site, type its address, such as `nebula.tv`, or paste a link to a page on it. You need at least one site to continue. If you only use YouTube, pick only YouTube: VODLoft then leaves out everything that is only about other sites. You can add more sites at any time under **Settings → Sources**, and a site is also added when you add something from it.
+VODLoft downloads from YouTube and over a thousand other sites. The first-run setup shows the popular ones, such as YouTube, Twitch, The Daily Wire and SoundCloud: pick the ones you use. For any other site, type its address, such as `nebula.tv`, or paste a link to a page on it. You need at least one site to continue. If you only use YouTube, pick only YouTube: VODLoft then leaves out everything that is only about other sites. You can add more sites at any time under **Settings → Sites**, and a site is also added when you add something from it.
 
 Next, **Set up your sites** offers signing in per site, as an optional step: The Daily Wire has a sign-in of its own, and other sites, such as YouTube or NPO Start, sign in with a cookies file. See [[Sources]] and [[Settings#authentication]].
 
@@ -16,7 +16,7 @@ VODLoft does **not** ask for your The Daily Wire password.
 
 Signing in is only needed for member-exclusive content. You can continue without signing in and use what The Daily Wire makes publicly available.
 
-You can sign in, reconnect or change the session later from **Settings → Sources → Authentication**.
+You can sign in, reconnect or change the session later from **Settings → Sites → Authentication**.
 
 ## 2. Decide how VODLoft should be protected
 
@@ -68,7 +68,7 @@ For most installations:
 
 1. Make sure `/config` and `/downloads` are persistent.
 2. Set `TZ` to your local timezone.
-3. Sign in to The Daily Wire under Settings → Sources → Authentication if you use member content.
+3. Sign in to The Daily Wire under Settings → Sites → Authentication if you use member content.
 4. Protect the VODLoft UI if it is not confined to a trusted network.
 5. Add one collection with **Add media** in the Library.
 6. Create a Local Media Profile with the format and folder structure you want.
