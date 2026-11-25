@@ -94,6 +94,37 @@ def test_logs_endpoint_pages_before_and_after_a_record(monkeypatch):
     assert [item.id for item in newer.items] == list(range(51, 61))
     assert newer.has_newer
 
-    errors = page(level="error", after=94, limit=10)
+    errors = page(level="ERROR", after=94, limit=10)
     assert [item.id for item in errors.items] == [95, 97, 99]
     assert (errors.total, errors.has_older, errors.has_newer) == (50, True, False)
+
+
+def test_logs_endpoint_level_shows_that_level_and_every_more_severe_one(monkeypatch):
+    from datetime import datetime, timezone
+
+    from backend.api.endpoints.logs import router as logs_router
+    from backend.logging_buffer import ApplicationLogEntry
+
+    now = datetime.now(timezone.utc)
+    levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+    entries = [
+        ApplicationLogEntry(id=i, timestamp=now, level=name, logger="vodloft", message=name)
+        for i, name in enumerate(levels, start=1)
+    ]
+    monkeypatch.setattr(logs_router, "get_application_logs", lambda: entries)
+
+    def shown(level):
+        page = logs_router.application_logs(
+            level=level, search=None, hide_pull_requests=False, before=None, after=None, limit=1_000
+        )
+        return page.level, [item.level for item in page.items]
+
+    assert shown("DEBUG") == ("DEBUG", levels)
+    assert shown("WARNING") == ("WARNING", ["WARNING", "ERROR", "CRITICAL"])
+    assert shown("CRITICAL") == ("CRITICAL", ["CRITICAL"])
+
+    class Configured:
+        log_level = "ERROR"
+
+    monkeypatch.setattr(logs_router, "get_settings", lambda: Configured())
+    assert shown(None) == ("ERROR", ["ERROR", "CRITICAL"])

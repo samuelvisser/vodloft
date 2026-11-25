@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 import re
 from bisect import bisect_left, bisect_right
 from dataclasses import replace
+from typing import Literal
 
+from config import get_settings
 from fastapi import APIRouter, Query
 
 from backend.api.models.logs import ApplicationLogEntryRead, ApplicationLogPageRead
@@ -33,7 +36,9 @@ def _shortened(text: str | None) -> str | None:
 
 @router.get("", dependencies=[requires(Area.LOGS, Level.VIEW)], response_model=ApplicationLogPageRead)
 def application_logs(
-    level: str | None = None,
+    level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = Query(
+        default=None, description="Show this level and every more severe one. Defaults to the configured log level."
+    ),
     search: str | None = None,
     hide_pull_requests: bool = Query(default=False, alias="hidePullRequests"),
     before: int | None = Query(default=None, description="Only records older than this record id."),
@@ -46,9 +51,11 @@ def application_logs(
     ``after`` the page just after it, so following ``hasNewer`` never skips a record."""
 
     entries = get_application_logs()
-    if level:
-        requested_level = level.upper()
-        entries = [entry for entry in entries if entry.level == requested_level]
+    level = level or get_settings().log_level
+    level_numbers = logging.getLevelNamesMapping()
+    threshold = level_numbers[level]
+    # A record with a level name logging does not know counts as the lowest level.
+    entries = [entry for entry in entries if level_numbers.get(entry.level, 0) >= threshold]
     if hide_pull_requests:
         entries = [entry for entry in entries if not _is_pull_request(entry)]
     if search:
@@ -78,6 +85,7 @@ def application_logs(
             for entry in entries[start:end]
         ],
         total=total,
+        level=level,
         has_older=start > 0,
         has_newer=end < total,
         retained_limit=max_application_log_entries(),
