@@ -5,6 +5,7 @@ from __future__ import annotations
 import html
 import logging
 import re
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qs, urlsplit
 
@@ -12,10 +13,11 @@ import requests
 
 from progress_plan import PlanTracker, StageSpec
 
-from ...contract import LIST_TYPE, MAIN_TAG, ApiKeyRejected, CreatorDetails, SearchNotice, SearchResults, SectionRef
+from ...contract import LIST_TYPE, MAIN_TAG, ApiKeyRejected, CreatorDetails, DeviceCode, SearchNotice, SearchResults, SectionRef
+from ...site_accounts import SignedIn
 from ... import site_api_keys
 from ... import ytdlp_runner as runner
-from .. import sites, twitch_api
+from .. import sites, twitch_account, twitch_api
 from ..site_contracts.twitch import CLIP_TAG
 from .other_sites import OtherSitesImplementation
 from sources.ytdlp_options import keep_call_options
@@ -44,6 +46,15 @@ def _parts(url: str) -> list[str]:
 class TwitchImplementation(OtherSitesImplementation):
     key = "twitch"
     list_keys = frozenset({LIST_TYPE})
+
+    def start_code_sign_in(self) -> DeviceCode:
+        return twitch_account.start()
+
+    def finish_code_sign_in(self, code: DeviceCode, stop: Callable[[float], bool]) -> SignedIn:
+        return twitch_account.finish(code, stop)
+
+    def renew_sign_in(self, signed_in: SignedIn) -> SignedIn:
+        return twitch_account.renew(signed_in)
 
     def test_api(self, values: dict[str, str]) -> None:
         try:

@@ -41,12 +41,6 @@ class Kick(OtherSites):
     domains = ("kick.com",)
 
 
-class Nebula(OtherSites):
-    key, name = "nebula", "Nebula"
-    initials = "NB"
-    domains = ("nebula.tv",)
-
-
 class Odysee(OtherSites):
     key, name = "odysee", "Odysee"
     initials = "OD"
@@ -88,4 +82,4 @@ class Vimeo(OtherSites):
     pitch = "Channels, showcases and videos"
 
 
-NAMED = (BBC, Bilibili, BitChute, Dailymotion, Facebook, Kick, Nebula, Odysee, Patreon, PeerTube, Reddit, Rumble, Vimeo)
+NAMED = (BBC, Bilibili, BitChute, Dailymotion, Facebook, Kick, Odysee, Patreon, PeerTube, Reddit, Rumble, Vimeo)

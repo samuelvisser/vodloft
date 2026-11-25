@@ -15,7 +15,8 @@ from urllib.parse import urljoin
 
 from progress_plan import PlanTracker, StageSpec
 
-from ...contract import MAIN_TAG, CollectionDetails, CreatorDetails, SearchResults, SectionRef, SectionRole, Site, link_host
+from ...contract import MAIN_TAG, CollectionDetails, CreatorDetails, DeviceCode, SearchResults, SectionRef, SectionRole, SignInRejected, Site, link_host
+from ...site_accounts import SignedIn
 import requests
 
 from ... import ytdlp_runner as runner
@@ -74,6 +75,25 @@ class OtherSitesImplementation:
         """Ask the Site's own API (``Site.site_api``) once with these values. Raises ApiKeyRejected when the Site does
         not accept them."""
         raise runner.YtDlpError(f"VODLoft uses no API of {self.site.name}")
+
+    def sign_in(self, values: Mapping[str, str]) -> SignedIn:
+        """Sign in on the Site with what the user filled in for its ``PASSWORD`` or ``TOKEN`` account sign-in
+        (``Site.account_sign_in``). Raises SignInRejected when the Site does not accept it."""
+        raise SignInRejected(f"VODLoft can't sign in on {self.site.name} with an account")
+
+    def start_code_sign_in(self) -> DeviceCode:
+        """Ask the Site for a code the user enters on its own page, for a ``DEVICE_CODE`` account sign-in."""
+        raise SignInRejected(f"VODLoft can't sign in on {self.site.name} with a code")
+
+    def finish_code_sign_in(self, code: DeviceCode, stop: Callable[[float], bool]) -> SignedIn:
+        """Wait until the user entered the code; ``stop`` waits the seconds it is given and tells whether to give up.
+        Raises SignInCodeEnded when the code ran out or the user turned it down."""
+        raise SignInRejected(f"VODLoft can't sign in on {self.site.name} with a code")
+
+    def renew_sign_in(self, signed_in: SignedIn) -> SignedIn:
+        """The sign-in again, before it runs out (``SignedIn.renew_at``). Raises SignInRejected when the Site no
+        longer accepts it."""
+        raise SignInRejected(f"VODLoft can't renew a sign-in on {self.site.name}")
 
     def search(self, query: str) -> SearchResults:
         """The Site's collections and videos whose name matches the query, on a Site whose contract makes it
