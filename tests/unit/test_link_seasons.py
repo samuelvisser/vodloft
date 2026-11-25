@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from sources import LIST_TYPE, Feature, ItemRef, Names, SectionKind, SectionRef, SectionType, Site
 from test_ytdlp_collections import ListedSource, _video, session  # noqa: F401
@@ -1599,3 +1599,24 @@ def test_a_channel_collection_takes_links_in_the_same_save_that_makes_it_hold_on
     assert {(link.ref, link.added_by_user) for link in session.scalars(select(CollectionList))} == {
         ("PLbest", False), ("PLmine", True),
     }
+
+
+def test_a_channel_season_of_everything_holds_only_the_channels_own_videos(source, session):
+    from backend.db.models import Episode
+
+    source.videos = [_video("a", 2024)]
+    source.lists = [_list("PLcollab", "Collabs")]
+    source.items = {"PLcollab": ("guest", "a")}
+    source.outside = {"guest": _video("guest", 2023)}
+    collection = _collection(session, channel_season="everything")
+    collection.outside_videos = "add"
+    collection.repeat_videos = "each_season"
+    session.commit()
+
+    _index(session, collection, source)
+
+    # Another channel's video in a playlist is in that playlist's season only, once.
+    seasons = dict((name, episodes) for name, _number, episodes in _seasons(session))
+    assert seasons["Collabs"] == ["a", "guest"]
+    assert "guest" not in next(episodes for name, episodes in seasons.items() if name != "Collabs")
+    assert session.scalar(select(func.count()).select_from(Episode).where(Episode.source_slug.like("guest%"))) == 1
