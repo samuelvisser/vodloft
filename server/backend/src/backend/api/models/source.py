@@ -161,6 +161,8 @@ class SearchSiteAPIRead(SourceSiteAddedAPIRead):
 
     costly_search: bool
     """Each search costs something, so the search page searches when asked instead of while the user types."""
+    search_note: Optional[str] = None
+    """What the Site's search cannot find, and how to add it anyway, shown above its search."""
     ready: bool = False
     """The Source can search the Site now: one whose search goes through its own API once that is set up. Told by
     the ``ready_sites`` the Sources are read with."""

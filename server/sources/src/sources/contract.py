@@ -1186,6 +1186,9 @@ class Site:
     costly_search: bool = False
     """Each search of the Site costs something, such as API quota or a slow lookup, so the search page searches when
     asked instead of while the user types."""
+    search_note: str | None = None
+    """What the Site's search cannot find, and how to add it anyway, for a ``searchable`` Site whose search does not
+    find all it has, such as only channels on Twitch. The search page shows it above the search."""
     retention: Retention | None = None
     """How the Site removes its media itself after a while, such as Twitch its past broadcasts. Media that leaves
     such a Site once it is older than the Retention's ``kept_for`` is removed by its retention: VODLoft expects it to

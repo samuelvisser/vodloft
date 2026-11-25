@@ -33,7 +33,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "1620d5023d82"
+HEAD_REVISION = "4b9e2d7c1a60"
 
 
 @pytest.fixture
@@ -1731,3 +1731,32 @@ def test_what_the_channel_season_holds_and_where_videos_in_no_list_go_become_one
         ("repeat_videos", "one_season", "each_season"), ("loose_videos", "one_season", "everything"),
     ]
     assert "channel_season" not in {column["name"] for column in inspect(engine).get_columns("collections")}
+
+
+def test_odysee_site_becomes_the_lbry_site_its_links_have(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "1620d5023d82")
+    with engine.begin() as connection:
+        # Odysee added by its home page, and an Odysee channel added by its link before that.
+        connection.execute(text(
+            "INSERT INTO sites (key, name, domains, position) VALUES ('odysee', 'Odysee', '[\"odysee.com\"]', 1), "
+            "('lbry', 'odysee.com', '[]', 2)"
+        ))
+        for collection_id, site_key in ((1, "odysee"), (2, "lbry")):
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key, episode_order, site_key) VALUES (:id, 'uuid-' || :id, 'c' || :id, 'C', "
+                "'https://odysee.com/@c' || :id, 'free', 'series', 'numbered', 'Host', 'host', 'ytdlp', 'oldest_first', "
+                ":site_key)"
+            ), {"id": collection_id, "site_key": site_key})
+
+    command.upgrade(config, "4b9e2d7c1a60")
+
+    with engine.connect() as connection:
+        assert connection.execute(text(
+            "SELECT key, name, domains FROM sites WHERE key IN ('odysee', 'lbry')"
+        )).all() == [("lbry", "Odysee", '["odysee.com"]')]
+        assert connection.execute(text("SELECT site_key FROM collections ORDER BY id")).scalars().all() == ["lbry", "lbry"]

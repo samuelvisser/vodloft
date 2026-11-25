@@ -2516,8 +2516,10 @@ a.icon-btn { display: inline-block; text-decoration: none; }
 
 /* A Source whose searches cost something searches with a button, like Look up on Add media. */
 .browse-toolbar.browse-toolbar--submit { flex-direction: row; justify-content: flex-start; align-items: stretch; gap: 8px; }
+.browse-toolbar--submit .browse-search { min-width: 0; }
 .browse-search__submit { flex: none; min-width: 7.5em; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; }
 .search-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: -12px 0 18px; font-size: 13px; color: var(--muted); }
+.search-notice--note { flex-wrap: nowrap; align-items: baseline; gap: 8px; }
 .search-notice__badge { padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; background: rgba(100,116,139,.16); color: var(--text); }
 .search-notice--warning .search-notice__badge { background: rgba(234,88,12,.14); color: #9a3412; }
 @media (prefers-color-scheme: dark) {

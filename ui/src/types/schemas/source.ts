@@ -103,6 +103,8 @@ export const SearchSiteReadSchema = z.object({
     key: z.string(),
     name: z.string(),
     costlySearch: z.boolean(),
+    /** What the Site's search cannot find, and how to add it anyway, shown above its search. */
+    searchNote: z.string().nullable().optional(),
     /** The Site is added to VODLoft, so Add Media offers its search. */
     added: z.boolean(),
     /** The Source can search the Site now: one whose search goes through its own API once that is set up. */
