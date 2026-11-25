@@ -604,6 +604,9 @@ class YtDlpSource(Source):
         plan = plan or PlanTracker()
         implementation = self._implementation(url)
         url = implementation.collection_link(implementation.full_link(url))
+        if sites.no_page_of_its_site(url):
+            # Such as a YouTube video link without its id: not something to add, whatever the page leads to.
+            return None
         if self._catalogue(adding=True) is not None and mapping.youtube_ref(url) is not None:
             with plan.step("ytdlp_api", "Asking the YouTube API"):
                 collection = self._api_collection(url)

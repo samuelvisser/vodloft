@@ -320,7 +320,9 @@ def resolve_link(s: Session, access: Access, question: LinkQuestion, plan: PlanT
                 return _to_read(s, source, link, question.allowed)
     if question.one_source:
         raise LinkNotRecognisedError(f"{question.asked[0].name} does not recognise this link")
-    raise LinkNotRecognisedError("No Source recognises this link")
+    raise LinkNotRecognisedError(
+        "VODLoft finds no video, channel or playlist at this link. Check that the link is complete."
+    )
 
 
 def _site_read(site: Site, preferred: dict[str, str]) -> SourceSiteAPIRead:

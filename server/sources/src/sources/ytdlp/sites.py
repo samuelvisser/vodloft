@@ -22,7 +22,7 @@ from .site_contracts.other_sites import SITE_FIELDS
 from .site_contracts.soundcloud import ALBUM_LIST, PLAYLIST_LIST
 
 __all__ = [
-    "ALBUM_LIST", "MEMBERS_KEY", "PLAYLIST_LIST", "PREMIUM_KEY", "api_key_sites", "cookies_for", "download_options", "search_sites", "site_for", "site_of",
+    "ALBUM_LIST", "MEMBERS_KEY", "PLAYLIST_LIST", "PREMIUM_KEY", "api_key_sites", "cookies_for", "download_options", "no_page_of_its_site", "search_sites", "site_for", "site_of",
 ]
 
 _PREFIX = "yt_dlp.extractor."
@@ -64,6 +64,19 @@ def site_for(url: str) -> Site:
         ), None)
         return site_of(contract.key if contract else domain.key, domain.name)
     return site_of(_family(extractor), domain.name)
+
+
+def no_page_of_its_site(url: str) -> bool:
+    """Whether the link is on a Site with a contract of its own, such as YouTube, but is none of its pages with media:
+    only yt-dlp's generic extractor would read it, such as a video link without its id (``watch?v=``) or the home
+    page. Reading it would bring whatever the page leads to, such as YouTube's recommended videos."""
+    host = link_host(url)
+    if not any(on_domain(host, own) for contract in CONTRACTS.values() for own in contract.domains):
+        return False
+    if any(host in getattr(contract, "share_hosts", ()) for contract in CONTRACTS.values()):
+        return False
+    extractor = next((candidate for candidate in _extractor_classes() if candidate.suitable(url)), None)
+    return extractor is None or extractor.ie_key() == "Generic"
 
 
 def cookies_for(url: str, use: bool = True) -> Path | None:

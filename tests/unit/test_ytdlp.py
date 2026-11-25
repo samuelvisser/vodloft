@@ -747,3 +747,14 @@ def test_ytdlp_writes_the_info_file_when_asked(fake_ytdlp, tmp_path):
     assert result.info_json == str(keep / "media.info.json")
     assert (keep / "media.info.json").read_text() == '{"id": "x", "title": "Video"}'
     assert download_ytdlp("https://x/video", str(tmp_path / "off.mp4"), command=fake_ytdlp).info_json is None
+
+
+def test_a_link_that_is_no_page_of_its_site_is_not_looked_up(lookups):
+    answers, asked = lookups
+    # yt-dlp's generic extractor would follow it to YouTube's recommended videos.
+    answers["https://www.youtube.com/watch?v="] = {"_type": "playlist", "id": "recommended", "extractor_key": "YoutubeTab"}
+    source = YtDlpSource()
+
+    assert source.resolve("https://www.youtube.com/watch?v=") is None
+    assert source.resolve("https://youtu.be/") is None
+    assert not asked
