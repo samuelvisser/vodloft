@@ -294,6 +294,17 @@ signed in and whether it has an API key; open it to change that.
   where you are signed in on that site, with a browser extension made for that. Every Source that fetches the site uses
   the site's own file, for every lookup and download there: yt-dlp on YouTube, and both NPO Start and yt-dlp on npo.nl.
   A site keeps only its own cookies from the file you choose, so a file with cookies of other sites is fine.
+- **Some sites also let you sign in with your account**, without a cookies file. The cookies file stays available on
+  them too, and when you use both, the sign-in counts where they overlap.
+  - **Nebula, CuriosityStream, Dropout and Niconico**: fill in your email address and password. Nebula and
+    CuriosityStream give VODLoft a sign-in that lasts until you sign out, so VODLoft does not keep your password. Dropout
+    and Niconico end their sign-in after a while, so VODLoft keeps your email address and password to sign in again by
+    itself. A Niconico account that asks for a one-time code can't sign in this way.
+  - **Twitch**: choose **Sign in to Twitch**, open Twitch's activation page and enter the code VODLoft shows, as you
+    would for Twitch's TV app. Twitch made no sign-in for other programs, so this may stop working one day; a cookies
+    file still works then.
+  - **SoundCloud**: paste the sign-in token SoundCloud's website keeps in your browser. **Where to find it** shows
+    the steps.
 - **NPO Start** checks its cookies file with npo.nl, and shows whether it signs in with NPO Plus.
 - **YouTube** also takes an optional YouTube Data API key, which makes VODLoft much faster there. See
   [[Settings#youtube-data-api-key]].

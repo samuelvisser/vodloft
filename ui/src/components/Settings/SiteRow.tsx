@@ -53,7 +53,7 @@ function RemoveSiteButton({siteKey, name}: {siteKey: string; name: string}) {
                     icon={faIcon('fass', 'trash')}
                     iconTone="danger"
                     onDismiss={() => setAsking(false)}
-                    confirmButton={{label: 'Remove', className: 'btn-danger', onClick: remove}}
+                    confirmButton={{label: 'Remove', className: 'btn btn-danger', onClick: remove}}
                 >
                     <p>
                         VODLoft has nothing from {name}, so it leaves every list of sites, with its cookies file.

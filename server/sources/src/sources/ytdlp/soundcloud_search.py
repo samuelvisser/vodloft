@@ -15,13 +15,13 @@ from datetime import datetime, timezone
 
 from ..contract import LinkKind, ResolvedLink, SearchNotice, SearchResults
 from .. import ytdlp_runner as runner
-from ..cookies import site_cookies
+from .sites import cookies_for
 from .search_facts import date, facts, length, plural
 from sources.ytdlp_options import keep_call_options
 
 logger = logging.getLogger(__name__)
 
-_SITE = "soundcloud"
+_HOME = "https://soundcloud.com/"
 """The Site key of SoundCloud, whose cookies file searches sign in with."""
 _TRACKS = 20
 _ACCOUNTS = 5
@@ -153,7 +153,7 @@ def _search_api(query: str) -> list[ResolvedLink]:
     SoundCloud extractor, which keeps the key SoundCloud's web API takes up to date."""
     from yt_dlp import YoutubeDL
 
-    cookies = site_cookies(_SITE)
+    cookies = cookies_for(_HOME)
     options = {"quiet": True, "no_warnings": True, **({"cookiefile": str(cookies)} if cookies else {})}
     results: list[ResolvedLink] = []
     with YoutubeDL(options) as ydl:
@@ -173,7 +173,7 @@ def _search_api(query: str) -> list[ResolvedLink]:
 
 def _search_tracks(query: str, avatar: Callable[[str], str | None]) -> list[ResolvedLink]:
     """The accounts behind the best matching tracks, then the tracks. ``avatar`` finds an account's profile picture."""
-    listing = runner.run_json("--flat-playlist", f"scsearch{_TRACKS}:{query}", cookies=site_cookies(_SITE))
+    listing = runner.run_json("--flat-playlist", f"scsearch{_TRACKS}:{query}", cookies=cookies_for(_HOME))
     entries = [entry for entry in listing.get("entries") or [] if isinstance(entry, dict)]
     return _accounts(entries, avatar) + [link for entry in entries if (link := _track(entry))]
 
