@@ -150,7 +150,8 @@ def resolve_collection_media_directory(
     """
     values = {}
     if collection is not None:
-        values.update(collection=collection.slug, collection_title=collection.title)
+        values.update(collection=collection.slug, collection_title=collection.title,
+                      collection_author=collection.author_name or "")
         values.update(creator_output_template_values(collection.creator))
         values.update(artist=collection_artist(collection))
         values.update(custom_metadata_template_values("collection", get_custom_metadata(collection)))

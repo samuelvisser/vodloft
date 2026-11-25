@@ -4,22 +4,15 @@ import ReadMore from '../../utils/ReadMore'
 /** The collection root of the example: where the poster, background and tvshow.nfo are saved. */
 export default function CollectionRootNote({preview}: {preview: LocalMediaProfilePreviewState}) {
     const root = preview.result?.collectionRoot
-    const text = preview.error
-        ? null
-        : root?.path
-            ? root.path
-            : root?.reason
-                ? root.reason
-                : preview.loading
-                    ? 'Resolving collection root…'
-                    : 'Choose an example episode to see the collection root.'
-    if (text === null) return null
+    if (preview.error) return null
+    // A path is where the artwork goes; a reason is a whole sentence of its own, saying why there is none.
+    const summary = root?.path
+        ? <>Collection root: <code style={{overflowWrap: 'anywhere'}}>{root.path}</code>. Posters, backgrounds and tvshow.nfo go here.</>
+        : <>Collection root: {root?.reason ?? (preview.loading ? 'Resolving collection root…' : 'Choose an example episode to see the collection root.')}</>
 
     return (
         <div className="help template-collection-root">
-            <ReadMore summary={<>
-                Collection root: <code style={{overflowWrap: 'anywhere'}}>{text}</code>. Posters, backgrounds and tvshow.nfo go here.
-            </>}>
+            <ReadMore summary={summary}>
                 <p>
                     VODLoft works out the folder all of a collection's episodes share, also through conditional Jinja
                     paths. The poster, background and square artwork, and the show's NFO file, are saved there when they
