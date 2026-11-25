@@ -234,9 +234,7 @@ export default function CreatorPage() {
                 {creator.collections.length ? (
                     <div className="library-collection-grid" role="list" aria-label="Collections">
                         {creator.collections.map((collection) => (
-                            <CollectionTile
-                                key={collection.slug} collection={collection} showSource={several}
-                            />
+                            <CollectionTile key={collection.slug} collection={collection}/>
                         ))}
                     </div>
                 ) : (

@@ -1,7 +1,7 @@
 """The creators API: the Library's creators, their pages, and grouping collections under them."""
 from __future__ import annotations
 
-from backend.utils.helpers import name_in_text, year_range
+from backend.utils.helpers import name_in_text
 import logging
 import threading
 import time
@@ -20,13 +20,12 @@ from backend.api.models.creator import (
 )
 from backend.api.pagination import InvalidCursorError, decode_cursor, encode_cursor
 from backend.api.models.collection import CollectionAPIRead
+from backend.api.endpoints.collections.as_view.service import get_collection_views_list
 from backend.api.endpoints.episodes.service import episode_view_columns
 from backend.api.endpoints.movies.service import add_movies
 from backend.db.models import Creator, CreatorAccount, Collection, Episode
 from backend.services import creators
 from backend.services.errors import ServiceError
-from backend.services.link_seasons import link_seasons_on, loose_in_one_season, loose_season_name
-from backend.services.sites import collection_site
 from progress_plan import PlanSnapshot, PlanTracker, StageSpec
 from sources import CreatorDetails, Feature, Names, SectionRef, SectionType, Site, get_source
 from backend.services.source_requests import asking_source
@@ -244,34 +243,6 @@ def list_creators(s: Session) -> list[CreatorAPIRead]:
     ]
 
 
-@dataclass(frozen=True)
-class _CollectionRead:
-    collection: Collection
-    episode_count: int
-    first_published_date: datetime | None
-    last_published_date: datetime | None
-
-    @property
-    def years(self) -> str:
-        return year_range(
-            self.first_published_date.year if self.first_published_date else None,
-            self.last_published_date.year if self.last_published_date else None,
-        )
-
-    @property
-    def loose_season(self) -> str | None:
-        if not (link_seasons_on(self.collection) and loose_in_one_season(self.collection)):
-            return None
-        return loose_season_name(self.collection)
-
-    @property
-    def site(self) -> Site | None:
-        return collection_site(self.collection) if self.collection.site_key else None
-
-    def __getattr__(self, name):
-        return getattr(self.collection, name)
-
-
 def creator_page(s: Session, slug: str) -> CreatorPageAPIRead:
     creator = s.scalar(
         select(Creator).where(Creator.slug == slug)
@@ -280,26 +251,19 @@ def creator_page(s: Session, slug: str) -> CreatorPageAPIRead:
     if creator is None:
         raise CreatorNotFoundError(f"Creator '{slug}' not found")
     collections_count, episodes = _counts(s, [creator.id])
-    stats = {
-        row.collection_id: row for row in s.execute(
-            select(
-                Episode.collection_id, func.count().label("episode_count"),
-                func.min(Episode.published_date).label("first"), func.max(Episode.published_date).label("last"),
-            ).where(Episode.collection_id.in_([c.id for c in creator.collections])).group_by(Episode.collection_id)
-        )
-    }
-    collections = [
-        _CollectionRead(
-            collection, stats[collection.id].episode_count if collection.id in stats else 0,
-            stats[collection.id].first if collection.id in stats else None,
-            stats[collection.id].last if collection.id in stats else None,
-        )
-        for collection in sorted(creator.collections, key=lambda c: c.created_at or c.id)
-    ]
+    # The cards are the Library's own, so the collections are read as the Library reads them.
+    collections = sorted(
+        get_collection_views_list(s, Collection.creator_id == creator.id),
+        key=lambda c: c.created_at.isoformat() if c.created_at else str(c.id),
+    )
+    last_published_date = s.scalar(
+        select(func.max(Episode.published_date)).join(Collection, Episode.collection_id == Collection.id)
+        .where(Collection.creator_id == creator.id)
+    )
     return CreatorPageAPIRead.model_validate(_CreatorRead(
         creator, collections_count.get(creator.id, 0), episodes.get(creator.id, 0), collections=collections,
         movies=sorted(creator.movies, key=lambda movie: (movie.release_date or movie.published_at or datetime.min).isoformat(), reverse=True),
-        last_published_date=max((row.last for row in stats.values() if row.last is not None), default=None),
+        last_published_date=last_published_date,
     ))
 
 
