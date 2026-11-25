@@ -7,7 +7,7 @@ class Nebula(OtherSites):
     key = "nebula"
     name = "Nebula"
     initials = "NB"
-    domains = ("nebula.tv",)
+    domains = ("nebula.tv", "watchnebula.com", "nebula.app")
     # Nebula trades the email address and password for a token, which VODLoft keeps instead of the password.
     account_sign_in = AccountSignIn(
         SignInKind.PASSWORD,
