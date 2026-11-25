@@ -1,11 +1,13 @@
 """Adding a Collection to the Library, the same way wherever it comes from."""
 from __future__ import annotations
 
+from pathlib import Path
+
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from backend.db.mixins.HasTaskResourcesMixin import delete_task_rows
-from backend.db.models import Collection, Episode, MediaDownloadBase, MediaItemBase, Metadata
+from backend.db.models import Collection, CollectionLocalAsset, Episode, MediaDownloadBase, MediaItemBase, Metadata
 from backend.operations.collections import CollectionIndexOperation, CollectionSyncOperation
 from backend.services.errors import ServiceError
 from backend.services.new_lists import album_kinds, list_kinds
@@ -14,6 +16,7 @@ from backend.types import work_weights
 from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.dailywire_user_info import DwMembershipLevel
+from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.link_season_types import CollectionKind, LinkSeasons, OutsideVideos, RepeatVideos
 from backend.utils.helpers import generate_uuid, slugify
 from sources import Feature, SectionKind, UnknownSourceError, all_sources, get_source, source_site
@@ -138,6 +141,35 @@ def add_links_only_collection(
     s.flush()
     queue_event(s, "collection.added", CollectionAdded(collection))
     return collection
+
+
+def downloaded_files_of(s: Session, collection: Collection) -> list[tuple[str, tuple[str, ...]]]:
+    """The files on disk of the collection's downloads: each media file, with the files VODLoft wrote beside it, such
+    as subtitles and thumbnails, and the collection's own artwork and NFO files."""
+    episodes = select(Episode.id).where(Episode.collection_id == collection.id).scalar_subquery()
+    downloads = s.scalars(select(MediaDownloadBase).where(
+        MediaDownloadBase.media_item_id.in_(episodes),
+        MediaDownloadBase.artifact_status != MediaDownloadArtifactStatus.ABSENT.value,
+    )).all()
+    own = s.scalars(select(CollectionLocalAsset.file_path).where(CollectionLocalAsset.collection_id == collection.id))
+    return [
+        *((download.file_path, tuple(asset.path for asset in download.assets)) for download in downloads if download.file_path),
+        *((path, ()) for path in own),
+    ]
+
+
+def remove_downloaded_files(files: list[tuple[str, tuple[str, ...]]]) -> None:
+    """Delete these downloaded files, such as those of a collection that was just deleted, and the folders they
+    leave empty. Runs after the transaction that forgot them."""
+    from backend.services.download_relocation import remove_folders_left_empty
+    from downloader.storage.artifacts import remove_download_artifacts
+
+    folders: set[Path] = set()
+    for path, sidecars in files:
+        remove_download_artifacts(path, sidecar_paths=sidecars)
+        folders.add(Path(path).parent)
+        folders.update(Path(sidecar).parent for sidecar in sidecars)
+    remove_folders_left_empty(folders)
 
 
 def delete_episodes_of(s: Session, collection: Collection) -> None:
