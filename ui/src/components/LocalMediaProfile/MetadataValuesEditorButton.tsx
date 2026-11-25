@@ -9,12 +9,19 @@ import type {CollectionLocalMediaProfileScope} from '../../types/local_media_pro
 import {createSelectRegistry} from '../../utils/selectRegistry'
 
 
-/** Opens a collection's metadata from the template reference's Metadata tab. The dialog starts with a pick of the
- * collections the profile can be used for, and then shows what the collection's own Metadata dialog shows. */
-export default function MetadataValuesEditorButton({collectionScope, siteKeys}: {
+/** Opens a collection's metadata, by default from the template reference's Metadata tab. The dialog starts with a
+ * pick of the collections the profile can be used for, and then shows what the collection's own Metadata dialog
+ * shows. */
+export default function MetadataValuesEditorButton({
+    collectionScope, siteKeys, addFields, className = 'template-reference__button', label = 'Define values',
+}: {
     collectionScope: CollectionLocalMediaProfileScope
     /** The Sites the profile is for; undefined for every Site. */
     siteKeys?: string[]
+    /** Fields to start with as new rows, such as the ones the template uses that do not exist yet. */
+    addFields?: readonly string[]
+    className?: string
+    label?: string
 }) {
     const [open, setOpen] = useState(false)
     const [slug, setSlug] = useState<string | null>(null)
@@ -56,13 +63,13 @@ export default function MetadataValuesEditorButton({collectionScope, siteKeys}: 
         <>
             <button
                 type="button"
-                className="template-reference__button"
+                className={className}
                 onClick={() => {
                     setSlug(null)
                     setOpen(true)
                 }}
             >
-                Define values
+                {label}
             </button>
             {open ? createPortal(
                 <CustomMetadataEditor
@@ -70,6 +77,7 @@ export default function MetadataValuesEditorButton({collectionScope, siteKeys}: 
                     title="Metadata values"
                     scope="collection"
                     picker={picker}
+                    addFields={addFields}
                     metadata={collection?.customMetadata}
                     endpoint={collection ? `/collections/${encodeURIComponent(collection.slug)}/metadata` : undefined}
                     invalidateQueryKeys={collection ? [
