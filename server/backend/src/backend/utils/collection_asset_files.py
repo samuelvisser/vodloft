@@ -23,6 +23,13 @@ class ArtworkConflict(ValueError):
     """An unsafe path or user-owned file must be left untouched."""
 
 
+class UserArtworkKept(ArtworkConflict):
+    """A file the user put there or changed, which VODLoft keeps as it is.
+
+    Nothing is wrong: the artwork task meets the same file on every run, so this is only worth an info line.
+    """
+
+
 @dataclass(frozen=True)
 class PreparedCollectionAsset:
     path: Path
@@ -33,7 +40,7 @@ class PreparedCollectionAsset:
 def safe_asset_path(download_root: Path, target: Path) -> Path:
     root = download_root.resolve()
     if target.is_symlink():
-        raise ArtworkConflict(f"Artwork is a symlink and was left untouched: {target}")
+        raise UserArtworkKept(f"Artwork is a symlink and was left untouched: {target}")
     resolved = target.resolve()
     if resolved == root or not resolved.is_relative_to(root):
         raise ArtworkConflict("Artwork must remain inside the configured download root.")
@@ -42,7 +49,7 @@ def safe_asset_path(download_root: Path, target: Path) -> Path:
 
 def asset_file_hash(path: Path) -> str | None:
     if path.is_symlink():
-        raise ArtworkConflict(f"Artwork is a symlink and was left untouched: {path}")
+        raise UserArtworkKept(f"Artwork is a symlink and was left untouched: {path}")
     try:
         if not path.is_file() or path.stat().st_size > MAX_ASSET_BYTES:
             if path.exists():
