@@ -1,7 +1,7 @@
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import {capitalized, type ListKind} from '../../types/creator'
 import type {Names} from '../../types/schemas/source'
-import {CollectionSeasonsReadSchema, type ChannelSeason, type CollectionSeasonsRead} from '../../types/schemas/collection_seasons'
+import {CollectionSeasonsReadSchema, type CollectionSeasonsRead, type LooseVideos} from '../../types/schemas/collection_seasons'
 import type {CollectionWords, Noun} from '../../lib/collectionWords'
 
 /** The words and select options of a collection's Seasons dialog, which the Move dialog also names its changes in. */
@@ -17,8 +17,9 @@ export const dialogWords = (collection: CollectionWords, view: CollectionSeasons
 })
 
 /** What the collection's Site calls its lists, all its types of list together, such as "albums and playlists" on
- * SoundCloud, as the creator's: creator playlists, so they are not taken for the collection's own seasons, which a
- * YouTube channel collection also calls playlists. And the season of the videos in none of them. */
+ * SoundCloud, as the creator's: creator playlists, so they are not taken for the collection's own seasons, which the
+ * dialog always calls seasons (or what the collection's type calls them, such as albums). And the season of the
+ * videos in none of them. */
 export type ListNames = Names & {looseSeason: string}
 export const namesOf = (view: CollectionSeasonsRead, looseSeason: string): ListNames => ({...view.creatorListNames, looseSeason})
 
@@ -50,17 +51,33 @@ export function registries(names: ListNames, words: Words, view: CollectionSeaso
             add: {label: `Make it ${words.season.a} in VODLoft`, help: `A new ${words.creator} ${kind.names.singular} becomes ${words.season.a} in VODLoft right away.`},
             ignore: {label: 'Always skip it', help: `A new ${words.creator} ${kind.names.singular} stays off. You can switch it on here.`},
         }),
-        // What the channel's own season holds, by the name it then has.
-        channel: createSelectRegistry(`ChannelSeason-${view.channelSeasonNames.everything}-${view.channelSeasonNames.unlisted}-${names.plural}`, {
+        // How a channel collection groups the videos of its feeds while none of its lists are seasons: the whole
+        // channel in one season, named after it, or a season per year.
+        channel: createSelectRegistry(`ChannelGrouping-${view.channelSeasonNames.everything}-${words.season.singular}-${words.videos}`, {
             everything: {
-                label: `Everything, as ${view.channelSeasonNames.everything}`,
-                help: `Every ${words.video} of the feeds is in ${view.channelSeasonNames.everything}, also the ones in ${names.a} that is ${words.season.a} in VODLoft.`,
+                label: `One ${words.season.singular}, ${view.channelSeasonNames.everything}`,
+                help: `Every ${words.video} of the feeds is ${words.inSeason} one ${words.season.singular}, ${view.channelSeasonNames.everything}.`,
             },
-            unlisted: {
-                label: `What is in no ${names.singular}, as ${view.channelSeasonNames.unlisted}`,
-                help: `${capitalized(words.videos)} in ${names.a} that is ${words.season.a} in VODLoft are only there.`,
+            by_year: {
+                label: `${capitalized(words.season.a)} per year`,
+                help: `Every ${words.video} goes to the ${words.season.singular} of its upload year.`,
             },
-        } as Record<ChannelSeason, {label: string, help: string}>),
+        }),
+        // And while its lists are seasons: what goes in the channel's own season, by the name it then has.
+        channelWithLists: createSelectRegistry(`ChannelGroupingLists-${view.channelSeasonNames.everything}-${view.channelSeasonNames.one_season}-${names.plural}-${words.season.singular}`, {
+            everything: {
+                label: `Everything in one ${words.season.singular}, ${view.channelSeasonNames.everything}`,
+                help: `Every ${words.video} of the feeds is ${words.inSeason} ${view.channelSeasonNames.everything}, also the ones in ${names.a} that is ${words.season.a} of its own.`,
+            },
+            one_season: {
+                label: `What is in no ${names.singular} in one ${words.season.singular}, ${view.channelSeasonNames.one_season}`,
+                help: `${capitalized(words.videos)} in ${names.a} that is ${words.season.a} of its own are only there. The others share one ${words.season.singular}, ${view.channelSeasonNames.one_season}, shown before the ${names.plural}.`,
+            },
+            by_year: {
+                label: `What is in no ${names.singular} in ${words.season.a} per year`,
+                help: `${capitalized(words.videos)} in ${names.a} that is ${words.season.a} of its own are only there. The others go to the ${words.season.singular} of their upload year, between the ${names.plural} by date.`,
+            },
+        } as Record<LooseVideos, {label: string, help: string}>),
         layout: createSelectRegistry(`ListLayout-${names.plural}-${words.creator}-${words.season.a}`, {
             season_each: {label: `${capitalized(words.season.a)} per ${names.singular}`, help: `Each ${names.singular} is ${words.season.a} in VODLoft, or shares one with the ${names.plural} you put together below.`},
             by_year: {label: `Together in ${words.season.plural} by year`, help: `The ${names.plural} still decide which ${words.videos} are in, but every ${words.video} goes to the ${words.season.singular} of its year, as do the ${words.videos} in no ${names.singular}. When you save, VODLoft offers to move the downloaded ones, files and all.`},
@@ -75,10 +92,6 @@ export function registries(names: ListNames, words: Words, view: CollectionSeaso
                 label: `${capitalized(words.season.a)} per year`,
                 help: `Every ${words.video} goes to the ${words.season.singular} of its upload year. When you save, VODLoft offers to move the downloaded ones, files and all.`,
             },
-        }),
-        loose: createSelectRegistry(`LooseVideos-${names.looseSeason}`, {
-            one_season: {label: `One ${words.season.singular}, ${names.looseSeason}`, help: `They share one ${words.season.singular}, shown before the ${names.plural}.`},
-            by_year: {label: `${capitalized(words.season.a)} per year`, help: `They get ${words.season.a} per upload year, with the ${names.plural} between them by date.`},
         }),
         // Whether a list is a season of its own, or only adds its videos to the collection's other seasons.
         placement: createSelectRegistry(`ListPlacement-${words.season.singular}-${words.videos}`, {

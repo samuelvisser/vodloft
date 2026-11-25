@@ -146,7 +146,7 @@ def test_a_collection_of_a_channel_is_a_channel_with_the_channel_defaults(tube, 
     collection = _collection(session, "workshop")
     assert collection.kind == "channel"
     # Every list is a season, whole, and the channel season holds the whole channel, as a channel shows itself.
-    assert (collection.link_seasons, collection.outside_videos, collection.repeat_videos, collection.channel_season) == (
+    assert (collection.link_seasons, collection.outside_videos, collection.repeat_videos, collection.loose_videos) == (
         "all", "add", "each_season", "everything",
     )
 

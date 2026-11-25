@@ -22,7 +22,7 @@ import {BulkBar} from '../ProfileBulkEdit/BulkEditControls'
 import {
     AddedLinkReadSchema, type AddedLinkRead, CollectionSeasonsFormSchema, LinkSeasonAddFormSchema, SeasonsPreviewReadSchema, seasonsFormValues, type SeasonsPreviewRead,
     type CollectionListRead, type CollectionSeasonsFormIn, type CollectionSeasonsFormOut, type CollectionSeasonsRead,
-    type LinkSeasonAddFormIn, type LinkSeasonAddFormOut, type NewLinkSeason, type ChannelSeason, type CollectionSeasonRead,
+    type LinkSeasonAddFormIn, type LinkSeasonAddFormOut, type NewLinkSeason, type LooseVideos, type CollectionSeasonRead,
 } from '../../types/schemas/collection_seasons'
 import './SeasonsDialog.css'
 import {dialogWords, namesOf, readSeasons, registries, type ListNames, type Words} from './seasonsSettings'
@@ -119,7 +119,6 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     const outsideVideos = watch('outsideVideos') ?? 'leave_out'
     const newLists = watch('newLists') ?? {}
     const feeds = watch('feeds') ?? []
-    const channelSeason = watch('channelSeason') ?? 'everything'
     // A feed the collection took before is switched off now.
     const feedsOff = !!view && view.feeds.some((feed) => feed.on && !feeds.includes(feed.ref))
     const customOrder = watch('customSeasonOrder') ?? false
@@ -127,11 +126,17 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     const removedLinks = watch('removedLinks') ?? []
     const newLinks = watch('addedLinks') ?? []
     const removedSeasons = watch('removedSeasons') ?? []
+    const listsByYear = linkSeasonsOn && listLayout === 'by_year'
+    // A channel collection's own videos can be in one season of their own, the channel season, as the form is set now.
+    const channelSeasonOffered = !!view && view.kind === 'channel' && view.listsPlaylists && view.hasOwnLink
+        && outsideVideos !== 'only' && feeds.length > 0
+    // With no lists as seasons, nothing is in a list: the channel season holds the whole channel, whichever way the
+    // videos in no list were grouped.
+    const grouping: LooseVideos = channelSeasonOffered && !linkSeasonsOn && looseVideos === 'one_season' ? 'everything' : looseVideos
     // The channel season is called Channel while it holds the whole channel, as the form is set now, so the names
     // follow the form before it is saved.
-    const holdsWholeChannel = !!view && view.kind === 'channel' && view.feeds.length > 0 && outsideVideos !== 'only'
-        && feeds.length > 0 && channelSeason === 'everything'
-    const looseSeason = view ? view.channelSeasonNames[holdsWholeChannel ? 'everything' : 'unlisted'] : undefined
+    const holdsWholeChannel = channelSeasonOffered && grouping === 'everything' && !listsByYear
+    const looseSeason = view ? view.channelSeasonNames[holdsWholeChannel ? 'everything' : 'one_season'] : undefined
     const names = useMemo(() => view ? namesOf(view, looseSeason!) : undefined, [view, looseSeason])
     const words = dialogWords(collectionWordsGiven ?? (view ? wordsOf(view.words) : collectionWords(null)), view)
     // Laid out by year, a video has one upload year, so it never belongs in several seasons.
@@ -176,7 +181,6 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         // Every feed on is all of them, also the ones the channel adds later.
         ...(view?.kind === 'channel' ? {
             feeds: view.feeds.every((feed) => data.feeds.includes(feed.ref)) ? null : data.feeds,
-            channelSeason: data.channelSeason,
         } : {}),
         linkSeasons: data.linkSeasonsOn || data.outsideVideos === 'only' ? data.linkSeasonMode : 'off',
         newLists: data.newLists,
@@ -362,7 +366,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         'removedSeasons', removedSeasons.includes(id) ? removedSeasons.filter((x) => x !== id) : [...removedSeasons, id], {shouldDirty: true},
     )
     // Deleted seasons the settings, as the form has them now, fill again when you save.
-    const byYear = looseVideos === 'by_year' || listLayout === 'by_year'
+    const byYear = looseVideos === 'by_year' || listsByYear
     // What saving leaves, once the server has worked it out: each season as it will be, by id. A deleted season the
     // settings make again comes back under its own slug, and the seasons the settings add are new.
     const afterById = new Map((after ?? []).map((x) => [x.id, x]))
@@ -409,7 +413,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         .map((id) => seasonsById.get(id))
         .filter((removed): removed is CollectionSeasonRead => !!removed && (after ? !!afterSave(removed.id) : removed.episodeCount > 0 && (
             removed.year !== null ? byYear
-                : removed.loose ? !only && listLayout !== 'by_year' && looseVideos === 'one_season'
+                : removed.loose ? !only && !listsByYear && looseVideos !== 'by_year'
                     : listLayout !== 'by_year' && stillSeasons.has(removed.id)
         )))
     const yearsComingBack = comingBack.some((removed) => removed.year !== null)
@@ -519,15 +523,6 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                             )}
                                             {errors.feeds && <div className="error" role="alert">{String(errors.feeds.message ?? errors.feeds.root?.message)}</div>}
 
-                                            <div className="form-row">
-                                                <label htmlFor="seasons-channel-season">The {words.channel}'s own {season.singular}</label>
-                                                <SimpleSelect
-                                                    inputId="seasons-channel-season" registry={regs.channel} value={channelSeason}
-                                                    onChange={(value) => setValue('channelSeason', value as ChannelSeason, {shouldDirty: true})}
-                                                />
-                                                <div className="help">{regs.channel.getHelp(channelSeason)}</div>
-                                                {errors.channelSeason && <div className="error" role="alert">{errors.channelSeason.message}</div>}
-                                            </div>
                                         </section>
                                     )}
 
@@ -704,15 +699,6 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                         <div className="help">{regs.layout.getHelp(listLayout)}</div>
                                                     </div>
 
-                                                    {!only && listLayout !== 'by_year' && <div className="form-row">
-                                                        <label htmlFor="seasons-loose">{capitalized(words.videos)} in no {names.singular}</label>
-                                                        <SimpleSelect
-                                                            inputId="seasons-loose" registry={regs.loose} value={looseVideos}
-                                                            onChange={(value) => setValue('looseVideos', value as CollectionSeasonsFormIn['looseVideos'], {shouldDirty: true})}
-                                                        />
-                                                        <div className="help">{regs.loose.getHelp(looseVideos)}</div>
-                                                    </div>}
-
                                                     {view.listsPlaylists ? (
                                                         <div className="form-row">
                                                             <label htmlFor="seasons-outside">How {names.singular} content fits in the collection</label>
@@ -839,17 +825,22 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                 </button>
                                             )}
                                         </div>
-                                        {regs && view.madeFromList && (
-                                            <div className="form-row">
-                                                <label htmlFor="seasons-list-seasons">How VODLoft groups the {words.videos}</label>
-                                                <SimpleSelect
-                                                    inputId="seasons-list-seasons" registry={regs.listSeasons} value={looseVideos}
-                                                    onChange={(value) => setValue('looseVideos', value as CollectionSeasonsFormIn['looseVideos'], {shouldDirty: true})}
-                                                />
-                                                <div className="help">{regs.listSeasons.getHelp(looseVideos)}</div>
-                                                {errors.looseVideos && <div className="error" role="alert">{errors.looseVideos.message}</div>}
-                                            </div>
-                                        )}
+                                        {regs && (view.madeFromList || (channelSeasonOffered && !listsByYear)) && (() => {
+                                            // A list's one season or a season per year; for a channel, the whole channel in
+                                            // one season, or what is in no list that is a season in one, or a season per year.
+                                            const registry: SelectRegistry = view.madeFromList ? regs.listSeasons : linkSeasonsOn ? regs.channelWithLists : regs.channel
+                                            return (
+                                                <div className="form-row">
+                                                    <label htmlFor="seasons-list-seasons">How VODLoft groups the {words.videos}</label>
+                                                    <SimpleSelect
+                                                        inputId="seasons-list-seasons" registry={registry} value={grouping}
+                                                        onChange={(value) => setValue('looseVideos', value as LooseVideos, {shouldDirty: true})}
+                                                    />
+                                                    <div className="help">{registry.getHelp(grouping)}</div>
+                                                    {errors.looseVideos && <div className="error" role="alert">{errors.looseVideos.message}</div>}
+                                                </div>
+                                            )
+                                        })()}
                                         {regs && (
                                             <div className="form-row">
                                                 <label htmlFor="seasons-repeat">

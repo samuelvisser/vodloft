@@ -93,18 +93,18 @@ function seasonsRows(view: CollectionSeasonsRead, causes: MoveCause[]): CauseRow
             value: (value) => regs.outside.getLabelLoose(text(value)),
         },
         list_layout: {setting: `Where the ${lists.plural} go`, value: (value) => regs.layout.getLabelLoose(text(value))},
-        loose_videos: view.madeFromList
-            ? {setting: `How VODLoft groups the ${words.videos}`, value: (value) => regs.listSeasons.getLabelLoose(text(value))}
-            : {setting: `${capitalized(words.videos)} in no ${lists.singular}`, value: (value) => regs.loose.getLabelLoose(text(value))},
+        loose_videos: {
+            setting: `How VODLoft groups the ${words.videos}`,
+            value: (value) => view.madeFromList ? regs.listSeasons.getLabelLoose(text(value))
+                : view.linkSeasons !== 'off' ? regs.channelWithLists.getLabelLoose(text(value))
+                    // With no lists as seasons, the one season holds the whole channel.
+                    : regs.channel.getLabelLoose(value === 'one_season' ? 'everything' : text(value)),
+        },
         repeat_videos: {
             setting: `When ${words.episode.a} belongs ${words.inSeason} several ${words.season.plural}`,
             value: (value) => regs.repeat.getLabelLoose(text(value)),
         },
         feeds: {setting: 'Feeds', value: feeds},
-        channel_season: {
-            setting: `The ${words.channel}'s own ${words.season.singular}`,
-            value: (value) => regs.channel.getLabelLoose(text(value)),
-        },
     }
     return causes.flatMap((cause) => {
         const known = cause.setting === 'list'

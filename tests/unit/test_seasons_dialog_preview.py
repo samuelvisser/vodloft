@@ -90,7 +90,9 @@ CHANNEL_CHANGES = {
     "a list's season deleted": lambda v, d: d.update(removed_seasons=[_season_id(v, "One")]),
     "the season of videos in no list deleted": lambda v, d: d.update(removed_seasons=[x.id for x in v.seasons if x.loose]),
     "a video in each of its seasons": lambda v, d: d.update(repeat_videos="each_season"),
-    "the channel season holds everything": lambda v, d: d.update(channel_season="everything"),
+    "the channel season holds everything": lambda v, d: d.update(loose_videos="everything"),
+    "lists off and a season per year": lambda v, d: d.update(link_seasons="off", loose_videos="by_year"),
+    "lists off and the whole channel in one season": lambda v, d: d.update(link_seasons="off", loose_videos="everything"),
     "the user's own order": lambda v, d: (d.update(custom_season_order=True), d["seasons"].reverse()),
 }
 
