@@ -178,17 +178,23 @@ def _list_new_episodes(s: Session, collection: Collection, source: Source, progr
     return found
 
 
-def index_listed_collection(s: Session, *, collection_id: int, source: Source, progress=None, dry_run: bool = False) -> int:
+def index_listed_collection(
+    s: Session, *, collection_id: int, source: Source, progress=None, dry_run: bool = False, by_user: bool = False,
+) -> int:
     """Add the collection's new episodes, and put its videos in the seasons of the playlists that are seasons.
-    Returns how many episodes were added, or would be added in a dry run."""
+    Returns how many episodes were added, or would be added in a dry run. ``by_user`` says the user's own change
+    asked for this listing, so the downloaded videos that leave the collection go with their files, as the user
+    was told, rather than waiting for the Home page."""
     collection = s.get(Collection, collection_id)
     if collection is None:
         return 0
     with ytdlp_call_options(source, *collection.ytdlp_option_texts, session=s):
-        return _index_listed_collection(s, collection_id=collection_id, source=source, progress=progress, dry_run=dry_run)
+        return _index_listed_collection(
+            s, collection_id=collection_id, source=source, progress=progress, dry_run=dry_run, by_user=by_user,
+        )
 
 
-def _index_listed_collection(s: Session, *, collection_id: int, source: Source, progress, dry_run: bool) -> int:
+def _index_listed_collection(s: Session, *, collection_id: int, source: Source, progress, dry_run: bool, by_user: bool) -> int:
     collection = s.get(Collection, collection_id)
     if collection is None:
         return 0
@@ -229,7 +235,7 @@ def _index_listed_collection(s: Session, *, collection_id: int, source: Source, 
                 episode.from_link_season = True
         if collection is None:
             return added
-        place_in_link_seasons(w, collection)
+        place_in_link_seasons(w, collection, by_user=by_user)
         return added
 
     return run_write_transaction(save)

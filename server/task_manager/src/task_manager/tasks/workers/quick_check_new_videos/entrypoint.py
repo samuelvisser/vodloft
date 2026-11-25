@@ -65,9 +65,11 @@ async def quick_check_new_videos(*, resource_id: int | None = None, progress=Non
     default_max_retries=3,
     tracks_progress=False,
 )
-async def rescan_quick_checked_collections(*, resource_id: int | None = None, progress=None) -> TaskResult:
+async def rescan_quick_checked_collections(*, resource_id: int | None = None, by_user: bool = False, progress=None) -> TaskResult:
     with db_session() as s:
-        result = await run_fetch_new_episodes(s, collection_id=resource_id, quick_checked=True, progress=progress)
+        result = await run_fetch_new_episodes(
+            s, collection_id=resource_id, quick_checked=True, by_user=by_user, progress=progress,
+        )
         refreshed = run_catalogue_refresh(s, collection_id=resource_id)
     return TaskResult(
         summary=f"{result.summary()}. {refreshed.summary()}",

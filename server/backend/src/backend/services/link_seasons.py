@@ -979,9 +979,9 @@ def held_back(episode: Episode) -> bool:
 
 def _drop_outside(s: Session, collection: Collection, *, by_user: bool = False, extras: set[int] | None = None) -> int:
     """Remove the videos that left the collection: at once when they have no files, and otherwise by a task that
-    deletes their files first. A downloaded video only leaves with its files when the user changed the playlists;
-    one the creator took out of a playlist stays, and the Home page asks whether to keep it. Returns how many went
-    now.
+    deletes their files first. A downloaded video only leaves with its files when the user's own change made it
+    leave; one the creator took out of a playlist stays, and the Home page asks whether to keep it. Returns how many
+    went now.
 
     ``s`` is a write transaction's session."""
     from task_manager.scheduler.transactional import queue_task_after_commit
@@ -998,7 +998,7 @@ def _drop_outside(s: Session, collection: Collection, *, by_user: bool = False, 
     for episode in leaving:
         if episode.id not in with_files:
             continue
-        if by_user and episode.id not in extras:
+        if by_user:
             # The user was told the files go with it.
             for download in episode.downloads:
                 download.kept = False

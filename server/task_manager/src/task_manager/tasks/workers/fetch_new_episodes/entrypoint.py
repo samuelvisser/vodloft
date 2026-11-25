@@ -39,6 +39,7 @@ async def fetch_new_episodes(
     slug: Optional[str] = None,
     dry_run: bool = False,
     initial_index: bool = False,
+    by_user: bool = False,
     progress=None,
 ) -> TaskResult:
     """Delegate episode discovery to the worker service."""
@@ -49,6 +50,7 @@ async def fetch_new_episodes(
             collection_slug=slug,
             dry_run=dry_run,
             initial_index=initial_index,
+            by_user=by_user,
             # Collections with quick checks get their full re-scan once a day instead.
             quick_checked=False,
             progress=progress,

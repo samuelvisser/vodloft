@@ -43,6 +43,14 @@ class CollectionSyncOperation(_CollectionOperation):
 
     kind = "collection.sync"
 
+    def __init__(self, collection: Collection, *, by_user: bool = False, **kwargs) -> None:
+        super().__init__(collection, **kwargs)
+        self.by_user = by_user
+        """The user's own change to the collection asked for it, such as saving its Seasons dialog."""
+
+    def task_kwargs(self) -> dict[str, object]:
+        return {"by_user": True} if self.by_user else {}
+
     @property
     def task(self) -> str:  # type: ignore[override]
         # Collections with quick checks are only listed in full by their daily re-scan, which also refreshes their

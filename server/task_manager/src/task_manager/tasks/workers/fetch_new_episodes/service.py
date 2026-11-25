@@ -147,11 +147,13 @@ async def run_fetch_new_episodes(
     dry_run: bool = False,
     initial_index: bool = False,
     quick_checked: bool | None = None,
+    by_user: bool = False,
     progress=None,
 ) -> FetchNewEpisodesResult:
     """Scan one collection, or all collections. ``quick_checked`` limits a scan of all collections to the
     collections whose Source has quick checks (True), which get a full re-scan once a day,
-    or to the other collections (False)."""
+    or to the other collections (False). ``by_user`` says the user's own change to the collection asked for the
+    scan (see ``index_listed_collection``)."""
 
     collections: Sequence[Collection] = get_collections(s, collection_id=collection_id, collection_slug=collection_slug)
     if quick_checked is not None and collection_id is None and not collection_slug:
@@ -169,7 +171,7 @@ async def run_fetch_new_episodes(
         full_scan_done(current_collection_id)
         completed.append(await _index_collection(
             s, collection=collection, daily_wire=daily_wire, dry_run=dry_run, initial_index=initial_index,
-            progress=progress,
+            by_user=by_user, progress=progress,
         ))
     return FetchNewEpisodesResult(collections=tuple(completed), dry_run=dry_run)
 
@@ -198,6 +200,7 @@ async def _index_collection(
     daily_wire: _DailyWireClient,
     dry_run: bool,
     initial_index: bool,
+    by_user: bool = False,
     progress=None,
 ) -> CollectionEpisodeScanResult:
     """Add a collection's new episodes, the same way for every Source once they are found.
@@ -218,7 +221,7 @@ async def _index_collection(
     try:
         if source.has(Feature.EPISODE_LISTS):
             found = index_listed_collection(
-                s, collection_id=collection_id, source=source, progress=progress, dry_run=dry_run,
+                s, collection_id=collection_id, source=source, progress=progress, dry_run=dry_run, by_user=by_user,
             )
         elif source.has(Feature.EPISODE_LOOKUPS):
             client = daily_wire.get(s)

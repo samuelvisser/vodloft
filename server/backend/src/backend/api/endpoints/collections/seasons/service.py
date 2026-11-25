@@ -220,6 +220,11 @@ def _left_by_only(s: Session, collection: Collection) -> list[int]:
     """The videos that would leave the collection if it held only what its playlists have now."""
     if holds_only_link_seasons(collection):
         return []
+    return _in_no_list(s, collection)
+
+
+def _in_no_list(s: Session, collection: Collection) -> list[int]:
+    """The collection's videos that none of its lists in it has, as VODLoft last listed them."""
     held = set(s.scalars(
         select(CollectionListItem.source_slug).where(CollectionListItem.list_id.in_(
             [link.id for link in collection.lists if is_in(collection, link)]
@@ -418,7 +423,7 @@ def update_seasons(
         match_seasons_of_downloaded(s, collection, moving)
         queue_season_folder_moves(s, collection, sorted(moving))
     if relisting:
-        reindex_collection(s, collection)
+        reindex_collection(s, collection, by_user=True)
     s.flush()
     # Downloads the new settings put in another season wait for the Move action, which shows what changed.
     note_move_causes(collection, MoveCauseOrigin.SEASONS, was_settings, waiting=bool(moved_episodes(s, collection)))
@@ -429,10 +434,31 @@ def update_seasons(
 
 def preview_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIUpdate) -> SeasonsPreviewAPIRead:
     """The seasons saving the dialog with ``body`` would leave: the save is made and rolled back, so the dialog shows
-    what saving does.
+    what saving does. What the save sets going happens after it: downloaded videos that leave are removed with their
+    files by a task, a collection that now holds only what its lists have loses the videos in none of them once its
+    lists are listed again, and downloaded videos that belong in another season are moved by the Move dialog the save
+    opens. The preview shows all of it done, as the collection is once it is.
 
     ``s`` is a write transaction's session; it is rolled back."""
-    view = update_seasons(s, collection_slug, body)
+    from backend.services.link_seasons import held_back, leaving_outside, moved_episodes, remove_left_episode
+
+    was_only = holds_only_link_seasons(_collection(s, collection_slug))
+    update_seasons(s, collection_slug, body)
+    s.expire_all()
+    collection = _collection(s, collection_slug)
+    leaving = {episode.id for episode in leaving_outside(s, collection) if not held_back(episode)}
+    if holds_only_link_seasons(collection) and not was_only:
+        leaving |= set(_in_no_list(s, collection))
+    if leaving:
+        for episode_id in sorted(leaving):
+            remove_left_episode(s, s.get(Episode, episode_id))
+        s.expire(collection, ["seasons", "lists"])
+        arrange_seasons(s, collection)
+    waiting = {episode.id for episode in moved_episodes(s, collection)}
+    if waiting:
+        place_in_link_seasons(s, collection, with_files=waiting, drop=False)
+        s.flush()
+    view = seasons_view(s, collection_slug)
     s.rollback()
     return SeasonsPreviewAPIRead(seasons=view.seasons)
 

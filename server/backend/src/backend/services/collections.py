@@ -94,11 +94,12 @@ def _check_list_type(collection: Collection) -> None:
         raise ServiceError(f"{site.name} has no type of list {collection.list_type!r}", field="list_type")
 
 
-def reindex_collection(s: Session, collection: Collection) -> None:
+def reindex_collection(s: Session, collection: Collection, *, by_user: bool = False) -> None:
     """List a Collection again, as Sync now does, after its links changed. VODLoft starts it itself, so it runs in the
-    background without a toast when it finishes."""
+    background without a toast when it finishes. ``by_user`` says the user's change asked for it: the downloaded
+    videos that leave then go with their files, as the user was told when saving."""
     s.flush()
-    operation = create_operation(s, CollectionSyncOperation(collection, source=OperationSource.SYSTEM.value))
+    operation = create_operation(s, CollectionSyncOperation(collection, source=OperationSource.SYSTEM.value, by_user=by_user))
     queue_operation_target_dispatch(s, operation.id, operation.targets[0].slot_key)
 
 

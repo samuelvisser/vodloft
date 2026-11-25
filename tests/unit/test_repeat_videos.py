@@ -2,6 +2,8 @@
 its lists that are seasons an episode in each, with files of its own; one that does not keeps it in the first."""
 from __future__ import annotations
 
+import pytest
+
 from sqlalchemy import select
 
 from test_link_seasons import (  # noqa: F401
@@ -69,7 +71,10 @@ def test_a_video_that_leaves_one_album_stays_on_the_other(source, session):
     assert ("Best Of", 3, ["c"]) in _seasons(session)
 
 
-def test_a_downloaded_extra_waits_for_home_and_one_without_files_leaves(source, session):
+@pytest.mark.parametrize("by_user", [True, False], ids=["the user's change", "found by a check"])
+def test_a_downloaded_extra_leaves_with_its_files_when_the_user_made_it_one_and_waits_for_home_otherwise(
+    source, session, by_user,
+):
     from backend.db.models import Collection
     from backend.db.core import run_write_transaction
     from backend.services.link_seasons import active_lists, extra_episodes, held_back, place_in_link_seasons
@@ -87,17 +92,24 @@ def test_a_downloaded_extra_waits_for_home_and_one_without_files_leaves(source, 
     def one_season(w):
         found = w.get(Collection, collection.id)
         found.repeat_videos = "one_season"
-        place_in_link_seasons(w, found, by_user=True)
+        place_in_link_seasons(w, found, by_user=by_user)
 
     run_write_transaction(one_season)
 
-    # The one without files left; the downloaded one stays, marked removed, until Home asked whether to keep it.
+    # The one without files left at once.
     assert len(_episodes(session, "b")) == 1
     kept, extra = sorted(_episodes(session, "a"), key=lambda episode: episode.id != a_later.id)[::-1]
     assert (kept.season_id, kept.removed_from_source) == (first_season, False)
-    assert (extra.id, extra.removed_from_source) == (a_later.id, True)
-    assert extra.downloads[0].removal_answered_at is None and held_back(extra)
+    assert extra.id == a_later.id
     assert extra_episodes(session, session.get(Collection, collection.id)) == {extra.id}
+    if by_user:
+        # The user was told its files go: the task that deletes them removes it, and Home asks nothing.
+        assert not extra.removed_from_source and extra.downloads[0].removal_answered_at is not None
+        assert not held_back(extra)
+    else:
+        # Nobody chose this: it stays, marked removed, until Home asked whether to keep it.
+        assert extra.removed_from_source and extra.downloads[0].removal_answered_at is None
+        assert held_back(extra)
 
 
 def test_lists_by_year_give_a_video_one_episode(source, session):

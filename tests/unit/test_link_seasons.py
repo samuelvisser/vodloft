@@ -1058,16 +1058,47 @@ def test_switching_to_only_the_playlists_removes_the_videos_none_of_them_has(lin
     _give_files(session, "b", "a")
 
     view = _update(session, outside_videos="only")
-    # Nothing leaves before the playlists are listed again.
+    # Nothing leaves before the playlists are listed again, which the save asks for as the user's change.
     assert (view.outside_videos, view.only_leaving_count) == ("only", 0)
     assert sorted(session.scalars(select(Episode.source_slug)).all()) == ["a", "b", "c"]
+    from task_manager.scheduler.db.TaskOperationTarget import TaskOperationTarget
+    assert [target.task_kwargs for target in session.scalars(select(TaskOperationTarget))] == [{"by_user": True}]
+    queued.clear()
 
-    _index(session, collection, source)
-    # The one without files leaves; the downloaded one stays until the user answers the Home page.
+    from task_manager.tasks.helpers.listed_collections import index_listed_collection
+    index_listed_collection(session, collection_id=collection.id, source=source, by_user=True)
+    # The one without files leaves; the downloaded one leaves with its files, by the task that deletes them first,
+    # since the user chose this: the Home page asks nothing.
     session.expire_all()
     assert sorted(session.scalars(select(Episode.source_slug)).all()) == ["a", "b"]
-    assert session.scalar(select(Episode.removed_from_source).where(Episode.source_slug == "b"))
+    b = session.scalar(select(Episode).where(Episode.source_slug == "b"))
+    assert not b.removed_from_source and b.downloads[0].removal_answered_at is not None
+    assert [kwargs["def_key"] for kwargs in queued] == ["remove_left_episodes"]
     assert _seasons(session)[-1] == ("Best Of", 2, ["a"])
+
+
+def test_a_check_that_finds_a_video_gone_from_the_playlists_leaves_it_for_the_home_page(links_source, session, monkeypatch):
+    from backend.db.models import Collection, Episode
+
+    monkeypatch.setattr("task_manager.scheduler.transactional.queue_task_after_commit", lambda s, **kwargs: None)
+    source = links_source
+    source.videos = []
+    source.lists = [_list("PLbest", "Best Of")]
+    source.items = {"PLbest": ("a", "b")}
+    source.outside = {"a": _video("a", 2024), "b": _video("b", 2025)}
+    collection = _collection(session, mode="all")
+    collection.outside_videos = "only"
+    session.commit()
+    _index(session, collection, source)
+    _give_files(session, "b")
+
+    # The creator takes the downloaded video out of the playlist; nobody in VODLoft chose that.
+    source.items = {"PLbest": ("a",)}
+    _index(session, session.get(Collection, collection.id), source)
+
+    session.expire_all()
+    b = session.scalar(select(Episode).where(Episode.source_slug == "b"))
+    assert b.removed_from_source and b.downloads[0].removal_answered_at is None
 
 
 def test_an_empty_collection_takes_links_the_user_adds(links_source, session):
