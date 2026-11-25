@@ -36,6 +36,8 @@ class MovePreviewAPIRead(ResponseBase):
     type: str
     episode_identifier: EpisodeIdentifier
     parts: list[MovedPartAPIRead]
+    seasons_plan: str
+    """Why they move: what the collection's settings make its seasons now, in words."""
     renumber_offered: bool
     """Whether it can number its episodes again: not when it numbers them by date."""
     changes: list[CollectionIdentificationChangeItemAPIRead]
@@ -67,3 +69,5 @@ class MovesWaitingAPIRead(ResponseBase):
     title: str
     moved: int
     words: CollectionWordsAPIRead
+    seasons_plan: str
+    """Why they move: what the collection's settings make its seasons now, in words."""
