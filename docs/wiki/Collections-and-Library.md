@@ -116,7 +116,9 @@ A collection of a whole YouTube channel, or of an artist on Bandcamp or SoundClo
 
 Each playlist season is named after its playlist, and its videos keep the order of the playlist, as do their episode numbers. An album's tracks keep the album's track order. Playlist seasons go in the order of their first video, so with a season per year a 2025 playlist comes after the 2025 season. An artist's albums come after Singles, in the order the artist lists them; you can still reorder them, and **Automatic order** brings back the artist's order. A video that is in more than one playlist goes to the season that comes first, unless the collection is set to put it in each (see [A video in several seasons](#a-video-in-several-seasons)). Files you already downloaded keep their numbers.
 
-**Playlists** (**Albums**) chooses how the playlist seasons are laid out: **A season per playlist**, or **Together in seasons by year**. By year, the playlists still decide which videos are in the collection, but every video goes to the season of the year it came out, as do the videos in no playlist. Inside a year, videos go by date. When you save, VODLoft shows the **Move** dialog for the videos you already downloaded, so they move along, files and all. Output templates still get the playlist a video came from as `section_title`, so files can be named by playlist inside a year folder.
+To have every video in the season of the year it came out, while the playlists still decide which videos are in, include the playlists as **Contents only** (or **Their contents, as part of the channel**) and put what is in no playlist in a season per year. Output templates still get the playlist a video came from as `section_title`, so files can be named by playlist inside a year folder.
+
+In a [collection of only playlists](#collections-of-only-playlists), **Where the playlists go** chooses **A season per playlist**, or **Together in seasons by year**: every video goes to the season of the year it came out, by date inside a year. When you save, VODLoft shows the **Move** dialog for the videos you already downloaded, so they move along, files and all.
 
 #### A video in several seasons
 
@@ -125,7 +127,7 @@ In the Seasons window, **When an episode belongs in several seasons** (in a Musi
 - **Only in the first season** (**Only on the first album**): it is one episode, in the season that comes first in the order shown in the window. This is where a Podcast or Series starts.
 - **In each season** (**On each album**): it is an episode in each of those seasons, with its own number and its own files, so every season is whole. Each one downloads on its own, so a track on two albums is two files, each tagged with its own album and track number. This is where a Music collection starts.
 
-Two playlists that share one season still give a video one episode there, and with **Together in seasons by year** a video has one upload year, so it is in one season. When a playlist no longer has a video, only its episode in that season leaves. Switching back to **Only in the first season** removes the extra episodes: ones without downloads go at once, and downloaded ones stay, marked **Removed**, until you answer on Home whether to keep them.
+Two playlists that share one season still give a video one episode there, and in a collection of only playlists laid out **Together in seasons by year** a video has one upload year, so it is in one season. When a playlist no longer has a video, only its episode in that season leaves. Switching back to **Only in the first season** removes the extra episodes: ones without downloads go at once, and downloaded ones stay, marked **Removed**, until you answer on Home whether to keep them.
 
 Several playlists can share one season, such as a "Part 1" and a "Part 2" of the same series. In the Seasons window, pick the other season under **Together with** on a playlist's season. The season keeps its name and holds the videos of its first playlist first, then those of the next, numbered in that order. **Own season** gives a playlist a season of its own again. Either way, downloaded videos move with their files.
 
@@ -254,7 +256,7 @@ With playlists as seasons:
 - **What is in no playlist in one season**, as **Videos**: a video that is in a playlist season is only there. On sites with sound only, such as SoundCloud and Bandcamp, this is the default, and the season is called **Singles**.
 - **What is in no playlist in a season per year**: a video that is in a playlist season is only there; the others go to the season of their year.
 
-With the playlists laid out **Together in seasons by year**, every video goes to the season of its year, so this setting is not shown.
+In a collection of only playlists laid out **Together in seasons by year**, every video goes to the season of its year, so this setting is not shown.
 
 ### Adding a collection to a creator
 

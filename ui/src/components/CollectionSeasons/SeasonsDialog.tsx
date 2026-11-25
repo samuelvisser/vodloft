@@ -129,7 +129,9 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     const removedSeasons = watch('removedSeasons') ?? []
     // Whether lists can be seasons: they are on, and not every one is included as contents only, as a feed is.
     const listsSeasons = linkSeasonsOn && (mode === 'selected' || listsAsSeasons || outsideVideos === 'only')
-    const listsByYear = listsSeasons && listLayout === 'by_year'
+    // Only a collection of nothing but its lists lays them out by year; one with videos of its own includes its lists as
+    // contents only, with the videos in none of them by year, instead.
+    const listsByYear = listsSeasons && outsideVideos === 'only' && listLayout === 'by_year'
     // A channel collection's own videos can be in one season of their own, the channel season, as the form is set now.
     const channelSeasonOffered = !!view && view.kind === 'channel' && view.listsPlaylists && view.hasOwnLink
         && outsideVideos !== 'only' && feeds.length > 0
@@ -191,7 +193,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         newLists: data.newLists,
         looseVideos: data.looseVideos,
         repeatVideos: data.repeatVideos,
-        listLayout: data.listLayout,
+        listLayout: data.outsideVideos === 'only' ? data.listLayout : 'season_each',
         outsideVideos: data.outsideVideos,
         playlists: data.playlists,
         removedLinks: data.removedLinks,
@@ -420,7 +422,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         .filter((removed): removed is CollectionSeasonRead => !!removed && (after ? !!afterSave(removed.id) : removed.episodeCount > 0 && (
             removed.year !== null ? byYear
                 : removed.loose ? !only && !listsByYear && looseVideos !== 'by_year'
-                    : listLayout !== 'by_year' && stillSeasons.has(removed.id)
+                    : !listsByYear && stillSeasons.has(removed.id)
         )))
     const yearsComingBack = comingBack.some((removed) => removed.year !== null)
     const oneSeason = () => {
@@ -705,7 +707,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                         </div>
                                                     )}
 
-                                                    {(mode === 'selected' || listsAsSeasons || only) && <div className="form-row">
+                                                    {only && <div className="form-row">
                                                         <label htmlFor="seasons-layout">Where the {names.plural} go</label>
                                                         <SimpleSelect
                                                             inputId="seasons-layout" registry={regs.layout} value={listLayout}
@@ -956,7 +958,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                                 {next && next.episodeCount !== counts ? `, ${counted(next.episodeCount, words.video, words.videos)} when you save` : null}
                                                                 {season?.loose ? (holdsWholeChannel ? ` · Everything in the collection` : ` · ${capitalized(words.videos)} in no ${names.singular}`) : null}
                                                             </span>
-                                                            {season && listLayout !== 'by_year' && listSeasonIds.includes(season.id) && (
+                                                            {season && !listsByYear && listSeasonIds.includes(season.id) && (
                                                                 <SeasonLists
                                                                     season={field.id} names={names} words={words} lists={listsIn(field.id)}
                                                                     titles={playlistsById} joinRegistry={joinRegistry(field.id)}
