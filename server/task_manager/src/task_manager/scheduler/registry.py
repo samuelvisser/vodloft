@@ -133,6 +133,15 @@ def task(
     return decorator
 
 
+def _require_findings(meta: TaskMeta) -> None:
+    """A task that runs on its own names its findings, so every log of it can leave out the runs that found nothing.
+
+    A task the user starts has done what they asked in each run, so every run of it is worth seeing.
+    """
+    if not meta.findings:
+        raise ValueError(f"Task {meta.key!r} runs on its own, so it must name its findings in @task(findings=...)")
+
+
 def on_cron(
     cron: str,
     resource_type: str = "collection",
@@ -153,6 +162,7 @@ def on_cron(
     """
     def decorator(fn: TaskCallable):
         meta = _registered_task_meta(fn, "on_cron")
+        _require_findings(meta)
 
         trigger = TriggerMeta(
             trigger_type='cron',
@@ -179,6 +189,7 @@ def on_event(event_name: str, resource_type: Optional[str] = None):
     """
     def decorator(fn: TaskCallable):
         meta = _registered_task_meta(fn, "on_event")
+        _require_findings(meta)
 
         trigger = TriggerMeta(
             trigger_type='event',

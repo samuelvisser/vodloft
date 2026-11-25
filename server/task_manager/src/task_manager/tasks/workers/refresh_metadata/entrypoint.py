@@ -19,6 +19,7 @@ from .service import refresh_episode_now, run_metadata_refresh
     allowed_resource_types=("system",),
     default_max_retries=0,
     tracks_progress=False,
+    findings=("updated", "removed", "failed"),
 )
 async def refresh_metadata(*, resource_id: int | None = None, progress=None) -> TaskResult:
     del resource_id, progress

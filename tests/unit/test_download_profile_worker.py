@@ -1120,9 +1120,10 @@ def test_a_large_show_is_reconciled_in_short_write_transactions(db_session, monk
         return real(work, **kwargs)
 
     monkeypatch.setattr(service, "run_write_transaction", counting)
-    asyncio.run(service.run_download_profile_worker(db_session))
+    result = asyncio.run(service.run_download_profile_worker(db_session))
 
     assert db_session.query(TaskOperation).count() == 120
+    assert result.data["prepared"] == 120
     # Three batches of at most 50 episodes, the cleanup and the final dispatch.
     assert len(transactions) == 5
 

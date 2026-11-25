@@ -166,7 +166,7 @@ def _task_ledger_collection_revision(
     session: Session,
     *,
     filters: list,
-    definition_key: str | None,
+    join_definition: bool,
     ordering,
 ) -> tuple[str, int]:
     """Fingerprint only the ordered task IDs matching these filters.
@@ -182,7 +182,7 @@ def _task_ledger_collection_revision(
         func.aggregate_strings(cast(TaskRun.id, String), ",").aggregate_order_by(*ordering),
         func.count(),
     ).where(*filters)
-    if definition_key is not None:
+    if join_definition:
         statement = statement.join(
             TaskDefinition,
             TaskDefinition.id == TaskRun.definition_id,
@@ -263,10 +263,12 @@ def query_ledger(
         filters.append(TaskRun.status.in_([TaskStatus(status) for status in statuses]))
     if started_after is not None:
         filters.append(TaskRun.started_at >= started_after)
-    can_hide_empty = definition_key is not None and finds_things(definition_key)
+    can_hide_empty = finds_things(definition_key)
     hide_empty = hide_empty and can_hide_empty
     if hide_empty:
         filters.append(~found_nothing(definition_key))
+    # Filters on the task's key, or on which of its runs found nothing, read its definition.
+    join_definition = definition_key is not None or hide_empty
 
     cursor_scope = {
         "definition_key": definition_key,
@@ -303,7 +305,7 @@ def query_ledger(
     revision, total = _task_ledger_collection_revision(
         s,
         filters=filters,
-        definition_key=definition_key,
+        join_definition=join_definition,
         ordering=ordering,
     )
 
@@ -333,7 +335,7 @@ def query_ledger(
                     if workflow else (stored_sort_text(order_column),)
                 )
                 anchor_stmt = select(*anchor_columns).where(TaskRun.id == cursor_id, *filters)
-                if definition_key is not None:
+                if join_definition:
                     anchor_stmt = anchor_stmt.join(
                         TaskDefinition,
                         TaskDefinition.id == TaskRun.definition_id,
@@ -361,7 +363,7 @@ def query_ledger(
         .options(joinedload(TaskRun.definition))
         .where(*filters)
     )
-    if definition_key is not None:
+    if join_definition:
         run_stmt = run_stmt.join(
             TaskDefinition,
             TaskDefinition.id == TaskRun.definition_id,

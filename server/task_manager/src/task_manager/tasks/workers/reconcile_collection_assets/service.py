@@ -26,6 +26,7 @@ from backend.utils.collection_asset_files import (
 )
 from config import get_settings
 from controller.db_utils import db_session
+from task_manager.scheduler.results import TaskResult
 from task_manager.tasks.helpers.progress import update_progress
 
 logger = logging.getLogger(__name__)
@@ -581,7 +582,7 @@ def _cleanup_old_roots(
 
 def run_reconcile_collection_assets(
     *, resource_id=None, resource_type=None, progress=None, check_canceled: Callable[[], None],
-) -> None:
+) -> TaskResult:
     warnings = []
     user_files = []
     plans = []
@@ -593,7 +594,7 @@ def run_reconcile_collection_assets(
         if resource_type == "download_profile" and resource_id:
             profile = session.get(DownloadProfile, resource_id)
             if profile is None:
-                return
+                return TaskResult(summary="Download profile no longer exists", data={"artwork": 0, "nfo_files": 0, "skipped": 0})
             collection_id = profile.collection_id
         else:
             collection_id = resource_id or None
@@ -684,4 +685,7 @@ def run_reconcile_collection_assets(
         logger.info("Collection artwork: %s", kept)
     if errors:
         raise RuntimeError(f"Could not refresh {len(errors)} collection artwork or NFO file(s): {errors[0]}")
-    update_progress(progress, 100, f"Reconciled collection artwork; {len(warnings) + len(user_files)} skipped or ambiguous destination(s)")
+    skipped = len(warnings) + len(user_files)
+    summary = f"Reconciled collection artwork; {skipped} skipped or ambiguous destination(s)"
+    update_progress(progress, 100, summary)
+    return TaskResult(summary=summary, data={"artwork": len(plans), "nfo_files": len(nfo_plans), "skipped": skipped})

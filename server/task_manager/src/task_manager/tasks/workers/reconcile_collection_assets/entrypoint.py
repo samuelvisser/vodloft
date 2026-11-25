@@ -19,6 +19,8 @@ from .service import run_reconcile_collection_assets
 @on_event(event_name="app.startup", resource_type="collection")
 @task(
     key="reconcile_collection_assets",
+    # It does not tell new artwork from unchanged artwork, so a run counts as finding something when it had to skip.
+    findings=("skipped",),
     title="Reconcile collection artwork",
     description="Download and reconcile shared collection posters, backgrounds, square artwork and clear logos, "
                 "and write show and season NFO files.",
@@ -36,7 +38,7 @@ async def reconcile_collection_assets(*, resource_id: int | None = None, resourc
     # Sessions are created in the worker thread, never transferred between threads.
     # Cancellation must also reach the thread before it can publish downloaded bytes.
     try:
-        await asyncio.to_thread(
+        return await asyncio.to_thread(
             run_reconcile_collection_assets, resource_id=resource_id, resource_type=resource_type,
             progress=progress, check_canceled=check_canceled,
         )

@@ -14,6 +14,7 @@ from backend.services.episode_filters import has_latest_count
 from task_manager.scheduler.types import OperationSource
 from task_manager.tasks.helpers.download_profiles import lock_enabled_download_profile
 from task_manager.tasks.helpers.custom_index_readiness import wait_for_custom_index_pair
+from task_manager.scheduler.results import TaskResult
 from task_manager.tasks.helpers.progress import update_progress
 from task_manager.tasks.media_download_operations import (
     create_media_download_operation,
@@ -33,7 +34,7 @@ from ._helpers import (
 
 async def run_download_profile_worker(
         s: Session, *, resource_id: Optional[int] = None, resource_type: Optional[str] = None, progress=None
-) -> None:
+) -> TaskResult:
     """Reconcile Download Profile domain state and create SYSTEM download operations.
 
     Each profile reconciliation owns a lock on that Download Profile until its
@@ -53,10 +54,10 @@ async def run_download_profile_worker(
     if not profile_ids:
         # A final-publication event must also release manual bulk downloads
         # waiting for a countdown, even when this collection has no Download Profiles.
-        run_write_transaction(dispatch_queued_media_download_operations)
+        started = run_write_transaction(dispatch_queued_media_download_operations)
         update_progress(progress, 100, "No enabled download profile in scope")
         print("download_profile_worker completed: nothing to do")
-        return
+        return _result("No enabled download profile in scope", prepared=0, started=started)
 
     only_episode_id = resource_id if resource_type == "episode" and resource_id is not None else None
     created = 0
@@ -71,7 +72,7 @@ async def run_download_profile_worker(
         made = _reconcile_profile(s, profile_id, only_episode_id)
         if made is None:
             update_progress(progress, 100, f"Episode {only_episode_id} no longer exists")
-            return
+            return _result(f"Episode {only_episode_id} no longer exists", prepared=created, started=0)
         created += made
         update_progress(
             progress,
@@ -86,6 +87,12 @@ async def run_download_profile_worker(
         message += f"; started {dispatched} queued download(s)"
     update_progress(progress, 100, message)
     print(f"download_profile_worker completed: {message}")
+    return _result(message, prepared=created, started=dispatched)
+
+
+def _result(summary: str, *, prepared: int, started: int) -> TaskResult:
+    """What one run did: the downloads it prepared for the profiles, and the queued ones it started."""
+    return TaskResult(summary=summary, data={"prepared": prepared, "started": started})
 
 
 # How many episodes one write transaction reconciles. A show can have thousands of episodes, and
