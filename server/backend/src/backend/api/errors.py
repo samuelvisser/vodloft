@@ -77,9 +77,12 @@ async def integrity_error_handler(request: Request, exc: Exception) -> JSONRespo
 
 def _with_field(error: dict) -> dict:
     cause = (error.get("ctx") or {}).get("error")
-    if not isinstance(cause, FieldValueError):
-        return error
-    return {**error, "loc": (*error["loc"], to_camel(cause.field)), "msg": str(cause)}
+    if isinstance(cause, FieldValueError):
+        return {**error, "loc": (*error["loc"], to_camel(cause.field)), "msg": str(cause)}
+    if isinstance(cause, ValueError):
+        # A validator's own words, without the "Value error, " Pydantic puts before them.
+        return {**error, "msg": str(cause)}
+    return error
 
 
 async def validation_error_handler(request: Request, exc: Exception) -> JSONResponse:

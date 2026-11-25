@@ -14,7 +14,7 @@ import threading
 from functools import cache
 from pathlib import Path
 
-from ..contract import DownloadOptions, Site, domain_site, link_host, on_domain
+from ..contract import GENERIC_PREFIX, DownloadOptions, Site, domain_site, link_host, on_domain
 from ..cookies import site_cookies
 from ..registry import named_site_for
 from .site_contracts import CONTRACTS, MEMBERS_KEY, PREMIUM_KEY, OtherSites
@@ -80,16 +80,20 @@ def cookies_for(url: str, use: bool = True) -> Path | None:
 def site_of(key: str, host: str | None = None) -> Site:
     """The Site with the key, as yt-dlp fetches it: its own contract, and ``OtherSites`` for whatever that leaves out,
     or for a site without a contract. A link's host names a Site without a name of its own. A contract never changes,
-    so each Site is built once per key and host."""
+    so each Site is built once per key and host. Without a host, the Site has its contract's own domains, so a Site
+    first seen through a short link, such as youtu.be, still signs in on youtube.com."""
     contract = CONTRACTS.get(key, OtherSites)
-    values = {name: getattr(contract, name) for name in SITE_FIELDS if hasattr(contract, name)}
+    if host is None and key.startswith(GENERIC_PREFIX):
+        # A Site of its own domain (``domain_site``) is named after the domain, such as example.com.
+        host = key.removeprefix(GENERIC_PREFIX)
+    values ={name: getattr(contract, name) for name in SITE_FIELDS if hasattr(contract, name)}
     values["accesses"] = _accesses(contract)
     if values.get("audio_only"):
         # On a site with sound only, what yt-dlp offers every site is for sound, unless its contract says otherwise.
         for name in ("downloads", "upgrade_checks"):
             if values[name] is getattr(OtherSites, name):
                 values[name] = values[name].for_audio_only()
-    return Site(key, contract.name or host or key, (host,) if host else (), **values)
+    return Site(key, contract.name or host or key, (host,) if host else contract.domains, **values)
 
 
 def api_key_sites() -> tuple[Site, ...]:

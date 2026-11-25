@@ -291,10 +291,11 @@ export function useTaskLedgerInfinite({
     ] as const,
     initialCount: limit,
     batchSize: limit,
-    enabled: pageActive && enabled && (definitionKey === undefined || definitionKey.length > 0),
+    // A page the user is not looking at, such as in a window without focus, still loads, and waits to poll.
+    enabled: enabled && (definitionKey === undefined || definitionKey.length > 0),
     // This helps refresh backend data when filters change
     staleTime: 0,
-    pollIntervalMs: 3000,
+    pollIntervalMs: pageActive ? 3000 : undefined,
     pollWhilePageCountAtMost: 2,
     derivePlaceholderData: (queryClient) => deriveTaskLedgerCollectionPlaceholder(
       queryClient,

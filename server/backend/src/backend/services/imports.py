@@ -427,14 +427,20 @@ def _library_collections(session: Session) -> dict[str, Collection]:
 
 
 def _matching_profile(session: Session, plan: ProfilePlan) -> CollectionLocalMediaProfile | None:
-    """A VODLoft profile that names files the same way, to use instead of a copy."""
+    """A VODLoft profile that names files the same way and keeps them the same way, such as in the same audio
+    format, to use instead of a copy."""
     if plan.output_template is None:
         return None
-    return session.scalar(select(CollectionLocalMediaProfile).where(
+    wanted = {name: value for name, value in _profile_wanted(plan).items() if value is not None}
+    candidates = session.scalars(select(CollectionLocalMediaProfile).where(
         CollectionLocalMediaProfile.type == plan.settings.get("type", "collection"),
         CollectionLocalMediaProfile.output_template == plan.output_template,
         CollectionLocalMediaProfile.preferred_format == plan.settings.get("preferred_format"),
-    ).limit(1))
+    ).order_by(CollectionLocalMediaProfile.id))
+    return next((
+        profile for profile in candidates
+        if all(values.get(name, value) == value for values in (_profile_values(profile),) for name, value in wanted.items())
+    ), None)
 
 
 def _published(value: str | None) -> datetime | None:

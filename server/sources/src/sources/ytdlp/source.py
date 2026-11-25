@@ -62,13 +62,12 @@ _SEARCH_CACHE_SECONDS = 3600
 _LATEST_COUNT = 15
 
 
-def _site(info: dict) -> str:
-    extractor = str(info.get("extractor_key") or "")
-    if extractor == "Generic":
+def _site(info: dict, site: Site) -> str:
+    """What a looked-up link says it is on: the name of its Site, such as SoundCloud, or that only yt-dlp's generic
+    extractor reads it."""
+    if str(info.get("extractor_key") or "") == "Generic":
         return GENERIC_SITE
-    if extractor.startswith("Youtube"):
-        return "YouTube"
-    return str(info.get("webpage_url_domain") or extractor or "Unknown site")
+    return site.name
 
 
 def video_slug(info: dict) -> str:
@@ -567,7 +566,7 @@ class YtDlpSource(Source):
             info = cached[1]
             return LinkPreview(
                 title=info.get("title") or url, image_url=_thumbnail(info),
-                author_name=info.get("uploader") or info.get("channel"), site=_site(info),
+                author_name=info.get("uploader") or info.get("channel"), site=_site(info, self._implementation(url).site),
                 kind=LinkKind.VIDEO, slug=video_slug(info), url=info.get("webpage_url") or url,
             )
         video_id = _youtube_video_id(url)
@@ -623,7 +622,7 @@ class YtDlpSource(Source):
                 info = None
         if info is None:
             return None
-        site = _site(info)
+        site = _site(info, implementation.site)
         if info.get("_type") == "playlist":
             # Named and pictured as Add collection will name and picture it, such as by a SoundCloud artist's own.
             collection = implementation.complete_collection(self._collection(info, url), url)

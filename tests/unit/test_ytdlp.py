@@ -158,7 +158,8 @@ def test_other_sites_are_prefixed_and_unknown_pages_are_best_effort(lookups):
     source = YtDlpSource()
 
     vimeo = source.resolve("https://vimeo.com/1")
-    assert (vimeo.slug, vimeo.site) == ("vimeo-1", "vimeo.com")
+    # A link is on its Site, named as the Site's contract names it.
+    assert (vimeo.slug, vimeo.site) == ("vimeo-1", "Vimeo")
     assert source.video_details("https://vimeo.com/1").published_at == datetime(1970, 1, 1, tzinfo=timezone.utc)
     generic = source.resolve("https://example.com/clip.mp4")
     assert (generic.slug, generic.site) == ("generic-clip", GENERIC_SITE)

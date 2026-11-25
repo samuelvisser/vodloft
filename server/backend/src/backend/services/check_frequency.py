@@ -62,9 +62,10 @@ _SUGGEST_AFTER = timedelta(days=21)
 
 
 def check_suggestion(session: Session, collection: Collection) -> Optional[str]:
-    """A hint on the edit page, once VODLoft has seen the Collection post for about three weeks."""
+    """A hint on the edit page, once VODLoft has seen the Collection post for about three weeks. A video in two
+    seasons, such as the channel's and a playlist's, is one post."""
     rows = session.scalars(
-        select(Episode.published_date)
+        select(Episode.published_date).distinct()
         .where(Episode.collection_id == collection.id, Episode.published_date.is_not(None))
         .order_by(Episode.published_date.desc())
         .limit(30)

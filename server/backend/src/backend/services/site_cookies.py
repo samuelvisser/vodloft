@@ -23,15 +23,11 @@ from backend.db.core import get_session, run_write_transaction
 from backend.db.models import Site as SiteRecord
 from backend.services.errors import ServiceError
 from backend.services.sites import SiteLinkError, add_suggested_sites, remove_site, site_choices, site_of_link, site_record, site_removable, sites_kept
-from sources import ANY_DOMAIN, CookiesStatus, Feature, Site, SiteApi, SiteApiStatus, Source, all_sources, site_of, sources_for
+from sources import ANY_DOMAIN, GENERIC_PREFIX, CookiesStatus, Feature, Site, SiteApi, SiteApiStatus, Source, all_sources, site_of, sources_for
 from sources import cookies as cookie_files
 from sources import site_api_keys
 
 logger = logging.getLogger(__name__)
-
-GENERIC_PREFIX = "generic:"
-"""The start of the key of a Site no Source knows, named after its domain."""
-
 
 class SiteNotKnownError(LookupError):
     pass

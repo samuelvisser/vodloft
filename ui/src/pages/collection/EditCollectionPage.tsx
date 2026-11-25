@@ -63,6 +63,7 @@ export default function EditCollectionPage() {
   const [urlCopied, setUrlCopied] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [optionsError, setOptionsError] = useState<string | null>(null)
+  const [nameError, setNameError] = useState<string | null>(null)
   const {data: collection} = useCollection(id)
   // A Music collection that is one album, such as one made from an album, has no albums to group its tracks by.
   const {data: seasons} = useCollectionSeasons(id)
@@ -134,6 +135,11 @@ export default function EditCollectionPage() {
   const onCancel = () => navigate(`/collection/${id ?? ''}`)
   const onSave = async () => {
     if (!id || !collection) return
+    if (!form.name.trim()) {
+      setNameError('Give the collection a name.')
+      document.getElementById('collection-name')?.focus()
+      return
+    }
     const payload = {
       title: form.name,
       description: collection.description,
@@ -167,6 +173,12 @@ export default function EditCollectionPage() {
       const problemAt = (...names: string[]) => (body?.detail ?? []).find(
         (item: any) => Array.isArray(item?.loc) && names.some((name) => item.loc.includes(name)),
       )
+      const titleProblem = problemAt('title')
+      if (titleProblem) {
+        setNameError(String(titleProblem.msg).replace(/^Value error, /, ''))
+        document.getElementById('collection-name')?.focus()
+        return
+      }
       const problem = problemAt('ytdlpOptions')
       if (problem) {
         setOptionsError(String(problem.msg).replace(/^Value error, /, ''))
@@ -325,7 +337,8 @@ export default function EditCollectionPage() {
 
         <CollectionForm
           value={form}
-          onChange={(v: CollectionFormValue) => setForm((prev) => ({ ...prev, ...v }))}
+          onChange={(v: CollectionFormValue) => { setForm((prev) => ({ ...prev, ...v })); setNameError(null) }}
+          nameError={nameError}
           creator={collection?.creatorSlug && collection.creatorTitle && collection.creatorNames ? {
             slug: collection.creatorSlug,
             title: collection.creatorTitle,
@@ -380,7 +393,7 @@ export default function EditCollectionPage() {
           />
           {typeError && <div id="collection-type-error" className="error" role="alert">{typeError}</div>}
           <div className="help" id="collection-type-help">
-            {CollectionTypeReg.getHelp(form.type) ?? ''} The Local Media Profiles offered for this collection depend on
+            {CollectionTypeReg.getHelp(form.type) ? `${CollectionTypeReg.getHelp(form.type)}. ` : ''}The Local Media Profiles offered for this collection depend on
             its type: a Music collection takes profiles available for Music.
           </div>
         </div>
