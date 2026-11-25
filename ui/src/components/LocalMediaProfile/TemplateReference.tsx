@@ -29,6 +29,8 @@ type Props = {
     metadata: readonly ReferenceEntry[]
     /** Puts text at the editor's cursor; left out when the template is read only. */
     onInsert?: (text: string) => void
+    /** Opens the editor for the profile's own Indexing values; left out when they cannot be changed here. */
+    indexingValuesButton?: ReactNode
     onClose: () => void
 }
 
@@ -163,7 +165,7 @@ function FunctionRow({fn, open, onToggle, onInsert}: {
  * Every variable, Indexing value and function a template can use. It docks beside the page on a wide screen,
  * so the editor and its example output stay in view, and slides up as a sheet on a phone.
  */
-export default function TemplateReference({mode, variables, builtInIndexes, customIndexes, metadata, onInsert, onClose}: Props) {
+export default function TemplateReference({mode, variables, builtInIndexes, customIndexes, metadata, onInsert, indexingValuesButton, onClose}: Props) {
     const [tab, setTab] = useState<TabKey>('variables')
     const [query, setQuery] = useState('')
     const [openFunction, setOpenFunction] = useState<string | null>(null)
@@ -203,7 +205,9 @@ export default function TemplateReference({mode, variables, builtInIndexes, cust
 
     useEffect(() => {
         const close = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') onClose()
+            // An Escape meant for a dialog opened from the reference, such as the Indexing values editor, is its own.
+            if (event.key !== 'Escape' || (event.target instanceof Element && event.target.closest('[aria-modal="true"]'))) return
+            onClose()
         }
         document.addEventListener('keydown', close)
         document.body.classList.add(bodyClass)
@@ -272,10 +276,15 @@ export default function TemplateReference({mode, variables, builtInIndexes, cust
                     <EntryList entries={builtInIndexes} onInsert={onInsert}/>
                 </section>
                 <section className="template-reference__group">
-                    <h4>Your Indexing values</h4>
+                    <div className="template-reference__group-heading">
+                        <h4>Your Indexing values</h4>
+                        {indexingValuesButton}
+                    </div>
                     {customIndexes.length > 0
                         ? <EntryList entries={customIndexes} onInsert={onInsert}/>
-                        : <p className="template-reference__note">None yet. Add them with the Indexing values button.</p>}
+                        : <p className="template-reference__note">
+                            {indexingValuesButton ? 'None yet. Add your own with Edit.' : 'None yet.'}
+                        </p>}
                 </section>
             </>
         )
