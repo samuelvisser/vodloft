@@ -555,7 +555,7 @@ def test_an_imported_tv_show_collection_has_its_playlists_as_seasons_in_ytdl_sub
     # Its files are named by ytdl-sub's numbers, so those stay.
     assert (guitar.link_seasons, guitar.custom_season_order) == ("selected", True)
     # As in ytdl-sub, the channel's season holds what is in no playlist, and a video is in one season.
-    assert (guitar.channel_season, guitar.repeat_videos) == ("unlisted", "one_season")
+    assert (guitar.loose_videos, guitar.repeat_videos) == ("one_season", "one_season")
 
 
 def _artist_import(monkeypatch):

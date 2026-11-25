@@ -138,7 +138,6 @@ def test_the_migration_leaves_a_channel_collections_settings_and_gives_a_list_it
         for collection in w.scalars(select(Collection)):
             collection.kind = "channel"
             collection.link_seasons = "off"
-            collection.channel_season = "unlisted"
             for season in collection.seasons:
                 season.origin = "vodloft"
     run_write_transaction(as_in_0_9_1)
@@ -146,7 +145,7 @@ def test_the_migration_leaves_a_channel_collections_settings_and_gives_a_list_it
     _migrate()
 
     workshop, cabin = _collection(session, "workshop"), _collection(session, "cabin")
-    assert (workshop.kind, workshop.link_seasons, workshop.channel_season) == ("channel", "off", "unlisted")
+    assert (workshop.kind, workshop.link_seasons) == ("channel", "off")
     assert cabin.kind == "list"
     assert [season.origin for season in cabin.seasons] == ["list"]
 

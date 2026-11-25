@@ -57,10 +57,16 @@ class ListLayout(StrEnum):
 
 
 class LooseVideos(StrEnum):
-    """Where a collection whose playlists are seasons puts the videos that are in none of them."""
+    """How a collection groups its own videos into seasons: a channel collection the videos of its feeds, beside the
+    seasons of its playlists, and a collection made from one list the videos of that list."""
 
+    EVERYTHING = "everything"
+    """Only for a channel collection: every video of its feeds in one season, also the ones a playlist that is a season
+    has, so the season is the whole channel. It is named after the Site's channel collections, such as Channel."""
     ONE_SEASON = "one_season"
-    """All in one season, named as the Site calls it, such as Videos, shown before the playlists."""
+    """All in one season. In a channel collection whose playlists are seasons, only the videos in none of them, named
+    as the Site calls them, such as Videos, shown before the playlists; with no playlists as seasons, that season holds
+    the whole channel, as with ``EVERYTHING``. In a collection made from one list, the list's own season."""
     BY_YEAR = "by_year"
     """A season per upload year, between the playlists by date."""
 

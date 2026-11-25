@@ -13,7 +13,7 @@ from backend.db.mixins.CreatedByMixin import CreatedByMixin
 from backend.types.collection_types import EpisodeOrder
 from backend.types.collection_health_types import HealthIssueKind
 from backend.types.collection_contracts import collection_contract
-from backend.types.link_season_types import ChannelSeason, CollectionKind, ListLayout, LooseVideos, LinkSeasons, OutsideVideos
+from backend.types.link_season_types import CollectionKind, ListLayout, LooseVideos, LinkSeasons, OutsideVideos
 
 if TYPE_CHECKING:
     from backend.db.models.media_item import Episode
@@ -82,11 +82,9 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     )
     loose_videos: Mapped[str] = mapped_column(
         default=LooseVideos.ONE_SEASON.value, server_default=LooseVideos.ONE_SEASON.value,
-        comment="Where the channel's own videos go: one_season, the channel season, or by_year",
-    )
-    channel_season: Mapped[str] = mapped_column(
-        default=ChannelSeason.EVERYTHING.value, server_default=ChannelSeason.UNLISTED.value,
-        comment="What the channel season holds: everything, every video of the feeds, or unlisted, those in no list",
+        comment="How the collection groups its own videos: everything, one channel season with every video of its "
+                "feeds; one_season, one season of those in none of its playlists that are seasons, or of the list it "
+                "is made from; or by_year",
     )
     repeat_videos: Mapped[str] = mapped_column(
         default=_default_repeat_videos, server_default="one_season",

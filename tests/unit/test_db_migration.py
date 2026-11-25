@@ -33,7 +33,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "b7e4c1a9d052"
+HEAD_REVISION = "1620d5023d82"
 
 
 @pytest.fixture
@@ -1551,10 +1551,11 @@ def test_0_10_0_seasons_of_sites_with_their_own_seasons_came_from_the_site(migra
             (1, "site"), (2, "vodloft"), (3, "vodloft"), (4, "vodloft"),
         ]
         collection = connection.execute(text(
-            "SELECT kind, link_seasons, channel_season, repeat_videos, new_lists, creator_id FROM collections WHERE id = 2"
+            "SELECT kind, link_seasons, loose_videos, repeat_videos, new_lists, creator_id FROM collections WHERE id = 2"
         )).one()
-    # Every collection starts as a channel collection without lists; a background migration tells its kind.
-    assert tuple(collection) == ("channel", "off", "unlisted", "one_season", "{}", None)
+    # Every collection starts as a channel collection without lists, its videos in a season per year; a background
+    # migration tells its kind.
+    assert tuple(collection) == ("channel", "off", "by_year", "one_season", "{}", None)
 
 
 def test_0_10_0_downgrades_to_0_9_1_and_upgrades_again(migration_database):
@@ -1686,3 +1687,47 @@ def test_downloads_get_the_time_of_their_first_download(migration_database):
     with engine.connect() as connection:
         first = dict(connection.execute(text("SELECT id, first_downloaded_at FROM media_downloads")).all())
     assert first == {1: "2026-11-04 10:00:00", 2: "2026-11-01 10:00:00", 3: None}
+
+
+def test_what_the_channel_season_holds_and_where_videos_in_no_list_go_become_one_setting(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "b7e4c1a9d052")
+    waiting = [
+        {"origin": "seasons", "setting": "channel_season", "before": "unlisted", "after": "everything",
+         "subject_id": None, "subject_title": None},
+        {"origin": "seasons", "setting": "repeat_videos", "before": "one_season", "after": "each_season",
+         "subject_id": None, "subject_title": None},
+    ]
+    rows = (
+        # Playlists off: a season per year, whatever the channel season would have held.
+        (1, "channel", "off", "one_season", "everything", []),
+        (2, "channel", "all", "one_season", "everything", waiting),
+        (3, "channel", "selected", "one_season", "unlisted", []),
+        (4, "channel", "all", "by_year", "everything", []),
+        (5, "list", "off", "one_season", "everything", []),
+    )
+    with engine.begin() as connection:
+        for collection_id, kind, link_seasons, loose, channel, causes in rows:
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key, episode_order, kind, link_seasons, loose_videos, channel_season, "
+                "move_causes) VALUES (:id, 'uuid-' || :id, 'c' || :id, 'C', 'https://example.test/' || :id, 'free', "
+                "'series', 'seasonal', 'Host', 'host', 'ytdlp', 'oldest_first', :kind, :link_seasons, :loose, :channel, "
+                ":causes)"
+            ), {"id": collection_id, "kind": kind, "link_seasons": link_seasons, "loose": loose, "channel": channel,
+                "causes": json.dumps(causes)})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        grouping = dict(connection.execute(text("SELECT id, loose_videos FROM collections")).all())
+        causes = json.loads(connection.execute(text("SELECT move_causes FROM collections WHERE id = 2")).scalar_one())
+    assert grouping == {1: "by_year", 2: "everything", 3: "one_season", 4: "by_year", 5: "one_season"}
+    # The waiting change of what the channel season holds is a change of the one setting.
+    assert [(cause["setting"], cause["before"], cause["after"]) for cause in causes] == [
+        ("repeat_videos", "one_season", "each_season"), ("loose_videos", "one_season", "everything"),
+    ]
+    assert "channel_season" not in {column["name"] for column in inspect(engine).get_columns("collections")}

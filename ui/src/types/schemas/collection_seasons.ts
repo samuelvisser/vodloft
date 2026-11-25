@@ -6,11 +6,13 @@ export const LinkSeasonModeValues = ['all', 'selected'] as const
 export const NewLinkSeasonValues = ['ask', 'add', 'ignore'] as const
 export type NewLinkSeason = typeof NewLinkSeasonValues[number]
 export const ListLayoutValues = ['season_each', 'by_year'] as const
-export const LooseVideosValues = ['one_season', 'by_year'] as const
+/** How the collection groups its own videos: for a channel collection, every video of its feeds in one season, the
+ *  ones in no list that is a season in one season, or a season per year; for a collection made from one list, the
+ *  list's one season or a season per year. */
+export const LooseVideosValues = ['everything', 'one_season', 'by_year'] as const
+export type LooseVideos = typeof LooseVideosValues[number]
 export const OutsideVideosValues = ['leave_out', 'add', 'only'] as const
 export const RepeatVideosValues = ['one_season', 'each_season'] as const
-export const ChannelSeasonValues = ['everything', 'unlisted'] as const
-export type ChannelSeason = typeof ChannelSeasonValues[number]
 
 export const CollectionSeasonReadSchema = z.object({
     id: z.number(),
@@ -77,9 +79,10 @@ export const CollectionSeasonsReadSchema = z.object({
     madeFromList: z.boolean().default(false),
     /** For a channel collection: the feeds of its channel, and whether it takes each. */
     feeds: z.array(z.object({ref: z.string(), names: NamesSchema, on: z.boolean()})),
-    /** What the season of the channel's own videos holds: everything, or only the videos in no list. */
-    channelSeason: z.enum(ChannelSeasonValues),
-    /** What that season is called with each choice, such as Channel and Videos. */
+    /** The videos of the channel's feeds can be in one season of their own, rather than a season per year. */
+    channelSeasonOffered: z.boolean().default(false),
+    /** What that season is called by how the collection groups its videos, such as Channel while it holds everything
+     *  and Videos while it holds what is in no list. */
     channelSeasonNames: z.record(z.string(), z.string()),
     /** What the collection's Site calls a channel, such as channel, or account on SoundCloud. */
     channelNames: NamesSchema,
@@ -132,7 +135,6 @@ export const CollectionSeasonsFormSchema = z.object({
     customSeasonOrder: z.boolean().default(false),
     /** For a channel collection: the refs of the feeds it takes. */
     feeds: z.array(z.string()).default([]),
-    channelSeason: z.enum(ChannelSeasonValues).default('everything'),
     linkSeasonsOn: z.boolean().default(false),
     linkSeasonMode: z.enum(LinkSeasonModeValues).default('all'),
     /** What happens with a new list, by the key of its kind. */
@@ -171,7 +173,6 @@ export function seasonsFormValues(view: CollectionSeasonsRead): CollectionSeason
         seasons: view.seasons.map((season) => ({id: season.id, name: season.name})),
         customSeasonOrder: view.customSeasonOrder,
         feeds: view.feeds.filter((feed) => feed.on).map((feed) => feed.ref),
-        channelSeason: view.channelSeason,
         linkSeasonsOn: view.linkSeasons !== 'off',
         linkSeasonMode: view.linkSeasons === 'off' ? 'all' : view.linkSeasons,
         newLists: Object.fromEntries(view.newLists.map((setting) => [setting.key, setting.action])),
