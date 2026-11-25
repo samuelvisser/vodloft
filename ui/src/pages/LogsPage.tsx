@@ -8,7 +8,7 @@ import {ClearInputButton} from '../components/common/ClearInputButton'
 import PageSubtitle from '../components/common/PageSubtitle'
 import SimpleSelect from '../components/common/SimpleSelect'
 import {usePageActive} from '../lib/pageActivity'
-import {ApplicationLogPageReadSchema, type ApplicationLogEntryRead} from '../types/schemas/log'
+import {ApplicationLogPageReadSchema} from '../types/schemas/log'
 import {createSelectRegistry} from '../utils/selectRegistry'
 import './LogsPage.css'
 import {apiUrl} from '../lib/api'
@@ -22,10 +22,8 @@ const LogLevelReg = createSelectRegistry('LogLevelFilter', {
     CRITICAL: {label: 'Critical'},
 })
 
-function isPullRequestLog(entry: ApplicationLogEntryRead): boolean {
-    return entry.logger === 'uvicorn.access'
-        && /"\w+ \/api\/pull[?\s]/.test(entry.message)
-}
+// The page shows the newest records only: drawing all 20,000 retained records every poll froze the browser.
+const SHOWN_LIMIT = 1000
 
 function formatTimestamp(value: string): string {
     const date = new Date(value)
@@ -40,15 +38,18 @@ export default function LogsPage() {
     const panelRef = useRef<HTMLDivElement | null>(null)
     const stickToBottomRef = useRef(true)
 
+    const canShowPullRequests = level === '' || level === 'INFO'
+    const hidePulls = canShowPullRequests && hidePullRequests
     const params = useMemo(() => {
-        const query = new URLSearchParams({limit: '20000'})
+        const query = new URLSearchParams({limit: String(SHOWN_LIMIT)})
         if (level) query.set('level', level)
         if (search.trim()) query.set('search', search.trim())
+        if (hidePulls) query.set('hidePullRequests', 'true')
         return query.toString()
-    }, [level, search])
+    }, [level, search, hidePulls])
 
     const logs = useQuery({
-        queryKey: ['applicationLogs', level, search.trim()],
+        queryKey: ['applicationLogs', level, search.trim(), hidePulls],
         queryFn: async ({signal}) => {
             const response = await fetch(
                 `${apiUrl()}/logs?${params}`,
@@ -64,13 +65,8 @@ export default function LogsPage() {
         refetchIntervalInBackground: false,
     })
 
-    const canShowPullRequests = level === '' || level === 'INFO'
-    const items = useMemo(() => {
-        const entries = logs.data?.items ?? []
-        if (!canShowPullRequests || !hidePullRequests) return entries
-        return entries.filter((entry) => !isPullRequestLog(entry))
-    }, [canShowPullRequests, hidePullRequests, logs.data?.items])
-    const total = items.length
+    const items = useMemo(() => logs.data?.items ?? [], [logs.data?.items])
+    const total = logs.data?.total ?? 0
 
     useEffect(() => {
         const panel = panelRef.current
@@ -85,7 +81,8 @@ export default function LogsPage() {
                 <PageSubtitle summary={<>Application-wide VODLoft log output.</>}>
                     <p>
                         Logs from the backend, scheduler, task workers, downloads and web server are collected here.
-                        The latest 20,000 records from the current server process are retained.
+                        The latest 20,000 records from the current server process are retained, and the newest
+                        1,000 that match the filters are shown. Very long messages are cut short here.
                     </p>
                 </PageSubtitle>
             </div>
@@ -127,7 +124,10 @@ export default function LogsPage() {
                         />
                     </div>
                 )}
-                <strong className="logs-count">{total.toLocaleString()} {total === 1 ? 'entry' : 'entries'}</strong>
+                <strong className="logs-count">
+                    {total > items.length && <>Newest {items.length.toLocaleString()} of </>}
+                    {total.toLocaleString()} {total === 1 ? 'entry' : 'entries'}
+                </strong>
             </div>
 
             <div
