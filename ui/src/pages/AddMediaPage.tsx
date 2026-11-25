@@ -208,10 +208,10 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
     const firstLookImage = toImageUrl(firstLook?.imageUrl)
     const actionLabel = (() => {
         if (!target) return null
-        if (target.kind === 'video') return localVideo ? 'Open video' : addingVideo ? 'Adding video…' : 'Add this video'
-        if (target.kind === 'movie') return localMovie ? 'Open movie' : 'Continue with this movie'
+        if (target.kind === 'video') return localVideo ? 'Open video' : addingVideo ? 'Adding to library…' : 'Add to library'
+        if (target.kind === 'movie') return localMovie ? 'Open movie' : 'Add to library'
         if (localCollection) return 'Open collection'
-        return known?.kind === 'episode' ? 'Add its collection' : 'Continue with this collection'
+        return known?.kind === 'episode' ? 'Add its collection' : 'Add to library'
     })()
 
     const actions = target && (
