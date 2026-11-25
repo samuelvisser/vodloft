@@ -110,6 +110,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     // What the Site calls its lists, such as playlists on YouTube, also in a Music collection, whose seasons are albums.
     const linkSeasonsOn = watch('linkSeasonsOn') ?? false
     const mode = watch('linkSeasonMode') ?? 'all'
+    const listsAsSeasons = watch('listsAsSeasons') ?? true
     const playlistChoices = watch('playlists') ?? []
     // Bulk edit of the lists: which ones are chosen, by id, while it is on.
     const [bulk, setBulk] = useState(false)
@@ -126,13 +127,15 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     const removedLinks = watch('removedLinks') ?? []
     const newLinks = watch('addedLinks') ?? []
     const removedSeasons = watch('removedSeasons') ?? []
-    const listsByYear = linkSeasonsOn && listLayout === 'by_year'
+    // Whether lists can be seasons: they are on, and not every one is included as contents only, as a feed is.
+    const listsSeasons = linkSeasonsOn && (mode === 'selected' || listsAsSeasons || outsideVideos === 'only')
+    const listsByYear = listsSeasons && listLayout === 'by_year'
     // A channel collection's own videos can be in one season of their own, the channel season, as the form is set now.
     const channelSeasonOffered = !!view && view.kind === 'channel' && view.listsPlaylists && view.hasOwnLink
         && outsideVideos !== 'only' && feeds.length > 0
-    // With no lists as seasons, nothing is in a list: the channel season holds the whole channel, whichever way the
+    // With no lists as seasons, nothing is in a list that is a season: the channel season holds the whole channel, whichever way the
     // videos in no list were grouped.
-    const grouping: LooseVideos = channelSeasonOffered && !linkSeasonsOn && looseVideos === 'one_season' ? 'everything' : looseVideos
+    const grouping: LooseVideos = channelSeasonOffered && !listsSeasons && looseVideos === 'one_season' ? 'everything' : looseVideos
     // The channel season is called Channel while it holds the whole channel, as the form is set now, so the names
     // follow the form before it is saved.
     const holdsWholeChannel = channelSeasonOffered && grouping === 'everything' && !listsByYear
@@ -140,7 +143,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     const names = useMemo(() => view ? namesOf(view, looseSeason!) : undefined, [view, looseSeason])
     const words = dialogWords(collectionWordsGiven ?? (view ? wordsOf(view.words) : collectionWords(null)), view)
     // Laid out by year, a video has one upload year, so it never belongs in several seasons.
-    const repeatByYear = linkSeasonsOn && listLayout === 'by_year'
+    const repeatByYear = listsByYear
     const repeatByYearReason = names
         ? `The ${names.plural} are laid out by year, so this setting does nothing: ${words.episode.a} has one upload year, and is ${words.inSeason} the ${words.season.singular} of that year.`
         : undefined
@@ -183,6 +186,8 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
             feeds: view.feeds.every((feed) => data.feeds.includes(feed.ref)) ? null : data.feeds,
         } : {}),
         linkSeasons: data.linkSeasonsOn || data.outsideVideos === 'only' ? data.linkSeasonMode : 'off',
+        // A collection that holds only what its lists have has them as seasons.
+        listsAsSeasons: data.outsideVideos === 'only' || data.listsAsSeasons,
         newLists: data.newLists,
         looseVideos: data.looseVideos,
         repeatVideos: data.repeatVideos,
@@ -356,7 +361,8 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     const playlistsById = new Map((view?.playlists ?? []).map((playlist) => [playlist.id, playlist]))
     // A list's season leaves the list below as soon as no list in it is a season any more, as saving would leave it.
     const stillSeasons = new Set(playlistChoices
-        .filter((choice) => linkSeasonsOn && (mode === 'all' || choice.enabled) && choice.asSeason && !removedLinks.includes(choice.id))
+        .filter((choice) => linkSeasonsOn && (mode === 'all' || choice.enabled) && !removedLinks.includes(choice.id)
+            && (mode === 'all' && !playlistsById.get(choice.id)?.addedByUser ? listsAsSeasons || only : choice.asSeason))
         .map((choice) => choice.seasonId))
     const going = new Set((view?.playlists ?? [])
         .map((playlist) => playlist.seasonId)
@@ -560,6 +566,15 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                         <div className="help">{regs.mode.getHelp(mode)}</div>
                                                     </div>}
 
+                                                    {mode === 'all' && !only && view.listsPlaylists && <div className="form-row">
+                                                        <label htmlFor="seasons-lists-as">How the {names.plural} are included</label>
+                                                        <SimpleSelect
+                                                            inputId="seasons-lists-as" registry={regs.listsAs} value={listsAsSeasons ? 'season' : 'contents'}
+                                                            onChange={(value) => setValue('listsAsSeasons', value !== 'contents', {shouldDirty: true})}
+                                                        />
+                                                        <div className="help">{regs.listsAs.getHelp(listsAsSeasons ? 'season' : 'contents')}</div>
+                                                    </div>}
+
                                                     {mode === 'selected' && view.listsPlaylists && (
                                                         <div className="form-row">
                                                             <div className="seasons-dialog-list-header">
@@ -690,14 +705,14 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                         </div>
                                                     )}
 
-                                                    <div className="form-row">
+                                                    {(mode === 'selected' || listsAsSeasons || only) && <div className="form-row">
                                                         <label htmlFor="seasons-layout">Where the {names.plural} go</label>
                                                         <SimpleSelect
                                                             inputId="seasons-layout" registry={regs.layout} value={listLayout}
                                                             onChange={(value) => setValue('listLayout', value as CollectionSeasonsFormIn['listLayout'], {shouldDirty: true})}
                                                         />
                                                         <div className="help">{regs.layout.getHelp(listLayout)}</div>
-                                                    </div>
+                                                    </div>}
 
                                                     {view.listsPlaylists ? (
                                                         <div className="form-row">
@@ -828,7 +843,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                         {regs && (view.madeFromList || (channelSeasonOffered && !listsByYear)) && (() => {
                                             // A list's one season or a season per year; for a channel, the whole channel in
                                             // one season, or what is in no list that is a season in one, or a season per year.
-                                            const registry: SelectRegistry = view.madeFromList ? regs.listSeasons : linkSeasonsOn ? regs.channelWithLists : regs.channel
+                                            const registry: SelectRegistry = view.madeFromList ? regs.listSeasons : listsSeasons ? regs.channelWithLists : regs.channel
                                             return (
                                                 <div className="form-row">
                                                     <label htmlFor="seasons-list-seasons">How VODLoft groups the {words.videos}</label>

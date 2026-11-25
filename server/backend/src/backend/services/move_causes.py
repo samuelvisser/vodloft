@@ -37,7 +37,10 @@ def _seasons_settings(collection: Collection) -> Settings:
     }
     if collection.kind == CollectionKind.CHANNEL.value:
         settings[("feeds", None)] = (list(collection.feeds) if collection.feeds is not None else None, None)
-    if collection.link_seasons != LinkSeasons.OFF.value:
+    if collection.link_seasons == LinkSeasons.ALL.value:
+        # Every list is in, and each one is a season of its own or contents only, as the collection says.
+        settings[("lists_as_seasons", None)] = ("season" if collection.lists_as_seasons else "contents", None)
+    elif collection.link_seasons != LinkSeasons.OFF.value:
         # What each list is: off, a season of its own, or only adding its videos to the other seasons.
         chosen = collection.link_seasons == LinkSeasons.SELECTED.value
         for link in collection.lists:

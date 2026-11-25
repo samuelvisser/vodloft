@@ -76,6 +76,11 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
         comment="What happens with a list the channel adds, by the kind of list, when only selected lists are seasons: "
                 "ask, add or ignore",
     )
+    lists_as_seasons: Mapped[bool] = mapped_column(
+        default=True, server_default=true(),
+        comment="While every list is in (link_seasons all): whether each list is a season of its own, or only adds its "
+                "videos to the channel's own seasons, as a feed does",
+    )
     list_layout: Mapped[str] = mapped_column(
         default=ListLayout.SEASON_EACH.value, server_default=ListLayout.SEASON_EACH.value,
         comment="How the lists that are seasons are laid out: season_each, or by_year in a season per upload year",

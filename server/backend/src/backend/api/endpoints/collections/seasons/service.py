@@ -288,7 +288,7 @@ def update_seasons(
             f"A collection that holds only what its {lists.plural} have needs its {lists.plural} as "
             f"{collection_contract(collection.type).words.season.plural}", field="link_seasons",
         )
-    if only and any(not change.as_season for change in body.playlists):
+    if only and (body.lists_as_seasons is False or any(not change.as_season for change in body.playlists)):
         raise ServiceError(
             f"A collection that holds only what its {lists.plural} have has no other "
             f"{collection_contract(collection.type).words.season.plural} to add a {lists.singular}'s contents to",
@@ -367,6 +367,8 @@ def update_seasons(
     for link_id in body.removed_links:
         s.delete(playlists.pop(link_id))
     collection.link_seasons = body.link_seasons
+    if body.lists_as_seasons is not None:
+        collection.lists_as_seasons = body.lists_as_seasons
     collection.outside_videos = body.outside_videos
     collection.feeds = feeds
     current = {setting.key: setting.action for setting in collection_new_lists(collection)}
@@ -392,6 +394,11 @@ def update_seasons(
         playlists[change.id].status = ListStatus.KNOWN.value
         playlists[change.id].as_season = change.as_season
         playlists[change.id].is_default = change.is_default
+    if collection.link_seasons == LinkSeasons.ALL.value:
+        # Every list is in, each a season of its own or contents only, as the collection says.
+        for playlist in playlists.values():
+            if not playlist.added_by_user:
+                playlist.as_season = collection.lists_as_seasons
     # Choosing another default, or removing it, leaves one default: the first link that stays, if the user chose none.
     collection.keep_a_default_link(playlists.values())
     removed_slugs = let_go_of_seasons(collection, removed) if removed else {}

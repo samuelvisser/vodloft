@@ -379,7 +379,7 @@ def test_a_contents_only_list_adds_its_videos_to_the_other_seasons_and_can_be_a_
         one = next(playlist for playlist in view.playlists if playlist.ref == "PLone")
         body = CollectionSeasonsAPIUpdate(
             seasons=[{"id": season.id, "name": season.name} for season in view.seasons], custom_season_order=False,
-            link_seasons="all", playlists=[{"id": one.id, "enabled": True, "as_season": as_season}],
+            link_seasons="selected", playlists=[{"id": one.id, "enabled": True, "as_season": as_season}],
         )
         run_write_transaction(lambda s: update_seasons(s, "creator", body))
         return view
@@ -1647,3 +1647,43 @@ def test_a_channel_season_of_everything_holds_only_the_channels_own_videos(sourc
     assert seasons["Collabs"] == ["a", "guest"]
     assert "guest" not in next(episodes for name, episodes in seasons.items() if name != "Collabs")
     assert session.scalar(select(func.count()).select_from(Episode).where(Episode.source_slug.like("guest%"))) == 1
+
+
+def test_every_list_can_be_included_as_contents_only_part_of_the_channel(source, session):
+    from backend.api.endpoints.collections.seasons import service
+    from backend.api.models.collection_seasons import CollectionSeasonsAPIUpdate
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Collection, CollectionList
+
+    source.videos = [_video("a", 2024), _video("b", 2025)]
+    source.lists = [_list("PLone", "One")]
+    source.items = {"PLone": ("guest", "a")}
+    source.outside = {"guest": _video("guest", 2023)}
+    collection = _collection(session, mode="all", loose="one_season")
+    collection.outside_videos = "add"
+    session.commit()
+    _index(session, collection, source)
+    assert "One" in [name for name, _number, episodes in _seasons(session) if episodes]
+
+    view = service.seasons_view(session, "creator")
+    assert view.lists_as_seasons
+    body = CollectionSeasonsAPIUpdate(
+        seasons=[{"id": x.id, "name": x.name} for x in view.seasons], custom_season_order=False,
+        link_seasons="all", lists_as_seasons=False, loose_videos="one_season", outside_videos="add",
+    )
+    session.rollback()
+    run_write_transaction(lambda s: update_seasons_call(service, s, body))
+    session.expire_all()
+
+    # The list is part of the channel, as a feed is: its videos, also another creator's, are in the channel's season,
+    # which holds the whole channel now that no list is a season of its own.
+    assert [(name, episodes) for name, _number, episodes in _seasons(session) if episodes] == [
+        (view.channel_season_names["everything"], ["a", "b", "guest"])]
+    assert not any(link.as_season for link in session.scalars(select(CollectionList)))
+
+    # A list the channel adds later is included as the others are.
+    source.lists = [_list("PLone", "One"), _list("PLtwo", "Two")]
+    source.items = {"PLone": ("guest", "a"), "PLtwo": ("b",)}
+    _index(session, session.get(Collection, collection.id), source)
+    session.expire_all()
+    assert {link.ref: link.as_season for link in session.scalars(select(CollectionList))} == {"PLone": False, "PLtwo": False}
