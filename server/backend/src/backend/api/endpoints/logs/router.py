@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from bisect import bisect_left, bisect_right
 from dataclasses import replace
 
 from fastapi import APIRouter, Query
@@ -13,8 +14,8 @@ from backend.security.deps import requires
 
 router = APIRouter(prefix="/logs", tags=["Logs"])
 
-# The UI polls this endpoint every few seconds, so it only takes the newest records and cuts very long
-# messages (a dumped API response, say).
+# The UI reads the log a page at a time: the newest records first, older ones while the user scrolls up,
+# and new ones as they come in. It cuts very long messages (a dumped API response, say).
 _MAX_TEXT_LENGTH = 10_000
 _PULL_REQUEST = re.compile(r'"\w+ /api/pull[?\s]')
 
@@ -35,9 +36,14 @@ def application_logs(
     level: str | None = None,
     search: str | None = None,
     hide_pull_requests: bool = Query(default=False, alias="hidePullRequests"),
+    before: int | None = Query(default=None, description="Only records older than this record id."),
+    after: int | None = Query(default=None, description="Only records newer than this record id."),
     limit: int = Query(default=1_000, ge=1, le=5_000),
 ):
-    """Return the newest retained application-wide log records in chronological order."""
+    """Return one page of retained application-wide log records in chronological order.
+
+    Without ``before`` or ``after`` it is the newest page. ``before`` gives the page just before that record and
+    ``after`` the page just after it, so following ``hasNewer`` never skips a record."""
 
     entries = get_application_logs()
     if level:
@@ -56,16 +62,23 @@ def application_logs(
         ]
 
     total = len(entries)
-    if len(entries) > limit:
-        entries = entries[-limit:]
+    ids = [entry.id for entry in entries]
+    if after is not None:
+        start = bisect_right(ids, after)
+        end = min(start + limit, total)
+    else:
+        end = bisect_left(ids, before) if before is not None else total
+        start = max(0, end - limit)
 
     return ApplicationLogPageRead(
         items=[
             ApplicationLogEntryRead.model_validate(
                 replace(entry, message=_shortened(entry.message), exception=_shortened(entry.exception))
             )
-            for entry in entries
+            for entry in entries[start:end]
         ],
         total=total,
+        has_older=start > 0,
+        has_newer=end < total,
         retained_limit=max_application_log_entries(),
     )

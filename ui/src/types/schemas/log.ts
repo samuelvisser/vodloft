@@ -14,6 +14,8 @@ export type ApplicationLogEntryRead = z.infer<typeof ApplicationLogEntryReadSche
 export const ApplicationLogPageReadSchema = z.looseObject({
   items: z.array(ApplicationLogEntryReadSchema),
   total: z.int(),
+  hasOlder: z.boolean(),
+  hasNewer: z.boolean(),
   retainedLimit: z.int(),
 })
 export type ApplicationLogPageRead = z.infer<typeof ApplicationLogPageReadSchema>

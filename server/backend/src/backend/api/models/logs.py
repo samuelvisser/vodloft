@@ -17,4 +17,6 @@ class ApplicationLogEntryRead(ResponseBase):
 class ApplicationLogPageRead(ResponseBase):
     items: list[ApplicationLogEntryRead]
     total: int
+    has_older: bool
+    has_newer: bool
     retained_limit: int
