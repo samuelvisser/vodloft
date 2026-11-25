@@ -147,6 +147,15 @@ export function sourceShown(source: SourceRead): boolean {
 /** The links of a description that are on a Site VODLoft knows for media. */
 export const MediaLinksReadSchema = z.object({urls: z.array(z.string())})
 
+/** What a link shows: its title, description, picture and maker. A lookup may send one early from a quicker look. */
+export const LinkPreviewReadSchema = z.object({
+    title: z.string(),
+    description: z.string().nullable(),
+    imageUrl: z.string().nullable(),
+    authorName: z.string().nullable(),
+})
+export type LinkPreviewRead = z.infer<typeof LinkPreviewReadSchema>
+
 export const ResolvedLinkReadSchema = z.object({
     source: SourceReadSchema,
     /** A creator link, such as a Daily Wire host's page, can't be added: add one of their shows instead. */
@@ -161,12 +170,7 @@ export const ResolvedLinkReadSchema = z.object({
     accessLabel: z.string().nullable().optional().default(null),
     accessDescription: z.string().nullable().optional().default(null),
     accessLocked: z.boolean().optional().default(false),
-    preview: z.object({
-        title: z.string(),
-        description: z.string().nullable(),
-        imageUrl: z.string().nullable(),
-        authorName: z.string().nullable(),
-    }),
+    preview: LinkPreviewReadSchema,
     /** For a collection: whether it is a channel or one list. */
     collectionKind: z.enum(['channel', 'list']).nullable().optional().default(null),
     /** For a collection on a Site with creators, which can be in one: what its Site calls the creator behind it, such
@@ -176,6 +180,18 @@ export const ResolvedLinkReadSchema = z.object({
     candidates: z.array(SourceReadSchema),
 })
 export type ResolvedLinkRead = z.infer<typeof ResolvedLinkReadSchema>
+
+/** A quick first look at a link while the full lookup runs, with what the link is when its Source can already tell
+ * from the link alone, so the user can go on with it. */
+export const LinkFirstLookReadSchema = LinkPreviewReadSchema.extend({
+    /** None for a link that says what it is without a quick title, such as a YouTube channel's. */
+    title: z.string().nullable(),
+    source: SourceReadSchema,
+    kind: z.enum(['collection', 'movie', 'episode', 'video', 'creator']).nullable().optional().default(null),
+    slug: z.string().nullable().optional().default(null),
+    url: z.string().nullable().optional().default(null),
+})
+export type LinkFirstLookRead = z.infer<typeof LinkFirstLookReadSchema>
 
 export const SearchResultReadSchema = z.object({
     kind: z.enum(['collection', 'movie', 'episode', 'video']),

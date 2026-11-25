@@ -217,6 +217,16 @@ class ResolvedLinkPreviewAPIRead(ResponseBase):
     author_name: Optional[str] = None
 
 
+class LinkFirstLookAPIRead(ResolvedLinkPreviewAPIRead):
+    """A quick first look at a link while the full lookup runs, with what the link is when the Source can already
+    tell, so the user can go on with it."""
+    title: Optional[str] = None
+    source: SourceAPIRead
+    kind: Optional[Literal["collection", "movie", "episode", "video", "creator"]] = None
+    slug: Optional[str] = None
+    url: Optional[str] = None
+
+
 class ProgramStatusAPIRead(ResponseBase):
     name: str
     version: Optional[str] = None

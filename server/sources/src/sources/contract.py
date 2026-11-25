@@ -548,12 +548,18 @@ class CreatorDetails:
 
 @dataclass(frozen=True)
 class LinkPreview:
-    """A first look at a link, from a faster lookup than ``resolve``: enough to show while the rest loads."""
+    """A first look at a link, from a faster lookup than ``resolve``: enough to show while the rest loads. ``kind``,
+    ``slug`` and ``url`` say what the link is when the Source can tell, as ``resolve`` will, so the user can go on with
+    it before the full lookup is done. A link that says what it is but has no quick title, such as a channel's,
+    has no ``title``."""
 
-    title: str
+    title: str | None
     image_url: str | None = None
     author_name: str | None = None
     site: str | None = None
+    kind: LinkKind | None = None
+    slug: str | None = None
+    url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1311,8 +1317,9 @@ class Source(ABC):
         return combined_tags(site.episode_tags for site in self.sites) or VIDEO_TAGS
 
     @abstractmethod
-    def resolve(self, url: str) -> ResolvedLink | None:
-        """Say what a link points to, or None when this Source does not recognise it."""
+    def resolve(self, url: str, plan: PlanTracker | None = None) -> ResolvedLink | None:
+        """Say what a link points to, or None when this Source does not recognise it. Each request to the Site goes in
+        ``plan`` as a step of its own, such as reading the show, so the lookup can show what it is doing."""
 
     def preview(self, url: str) -> LinkPreview | None:
         """A title and image for a link, faster than ``resolve``, or None when this Source has no faster way."""

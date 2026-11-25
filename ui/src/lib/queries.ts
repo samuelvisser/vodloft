@@ -4,6 +4,7 @@ import {
     type InfiniteData,
     keepPreviousData,
     QueryClient,
+    queryOptions,
     useInfiniteQuery,
     useMutation,
     useQueries,
@@ -79,7 +80,7 @@ import {VideoRead, VideoReadSchema} from "../types/schemas/video";
 import {
     ApiKeyNoteRead, ApiKeyNoteReadSchema, ApiStatusRead, ApiStatusReadSchema, EpisodeTagRead, EpisodeTagReadSchema, PublishStatusLabelRead, PublishStatusLabelReadSchema, ProgramStatusRead, SourceProblemRead,
     SourceProblemReadSchema, ProgramStatusReadSchema, ResolvedLinkRead,
-    ResolvedLinkReadSchema, MediaLinksReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SiteReadSchema, SourceRead, SiteAuthenticationRead, SiteAuthenticationReadSchema, SiteChoiceRead, SiteChoiceReadSchema,
+    ResolvedLinkReadSchema, LinkFirstLookRead, LinkFirstLookReadSchema, MediaLinksReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SiteReadSchema, SourceRead, SiteAuthenticationRead, SiteAuthenticationReadSchema, SiteChoiceRead, SiteChoiceReadSchema,
     SourceReadSchema,
     YtdlpOptionsReadSchema,
 } from "../types/schemas/source";
@@ -853,8 +854,10 @@ export function useMediaLinks(urls: string[]) {
 }
 
 /** A collection to add, at a Source that lists its episodes. */
-export function useListedCollectionDetails(sourceId: string | undefined, url: string | undefined) {
-    return useQuery<CollectionDetailsRead, Error, CollectionDetailsRead, readonly ['listedCollection', string | undefined, string | undefined]>({
+/** The query of a collection as a Source lists it, as the first page of Add collection asks for it. Add media
+ * starts it as soon as it knows the collection, so that page has it ready, or nearly so, when it opens. */
+export function listedCollectionQuery(sourceId: string | undefined, url: string | undefined) {
+    return queryOptions<CollectionDetailsRead, Error, CollectionDetailsRead, readonly ['listedCollection', string | undefined, string | undefined]>({
         queryKey: ['listedCollection', sourceId, url] as const,
         enabled: !!sourceId && !!url,
         queryFn: async ({signal}) => {
@@ -871,11 +874,15 @@ export function useListedCollectionDetails(sourceId: string | undefined, url: st
     })
 }
 
-/** Ask the backend which Source recognises a link, and what it points to. ``sourceKey`` asks only that Source. */
-/** Reads a creator lookup's answer, sent a line of JSON at a time: tells ``onPlan`` the steps of the lookup's plan each
- * time it changes, and returns the result line after them. */
+export function useListedCollectionDetails(sourceId: string | undefined, url: string | undefined) {
+    return useQuery(listedCollectionQuery(sourceId, url))
+}
+
+/** Reads a lookup's answer, such as a creator's or a link's, sent a line of JSON at a time: tells ``onPlan`` the steps of the lookup's plan each
+ * time it changes, and ``onPreview`` a quick first look at what it is finding when one comes, and returns the result
+ * line after them. */
 async function readLookup(
-    response: Response, {onPlan}: {onPlan: (steps: ProgressStep[]) => void},
+    response: Response, {onPlan, onPreview}: {onPlan: (steps: ProgressStep[]) => void, onPreview?: (preview: unknown) => void},
 ): Promise<Record<string, unknown>> {
     if (!response.ok || !response.body) throw await responseError(response)
     const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
@@ -888,6 +895,7 @@ async function readLookup(
         for (const line of lines.filter((item) => item.trim())) {
             const message = JSON.parse(line) as Record<string, unknown>
             if (message.plan) onPlan(lookupSteps(PlanSchema.parse(message.plan)))
+            else if (message.preview) onPreview?.(message.preview)
             else if (typeof message.error === 'string') throw new ApiError(message.error, 502)
             else return message
         }
@@ -1086,7 +1094,13 @@ export async function addCollectionToCreator(slug: string, creatorSlug: string):
     if (!response.ok) throw await responseError(response)
 }
 
-export async function resolveLink(url: string, signal?: AbortSignal, sourceKey?: string): Promise<ResolvedLinkRead> {
+/** Ask the backend which Source recognises a link, and what it points to. ``sourceKey`` asks only that Source.
+ * ``onPlan`` hears the steps of the lookup as it goes, such as asking yt-dlp, and ``onPreview`` a quick first look
+ * at the link, such as a YouTube video's title and thumbnail, when one comes before the lookup is done. */
+export async function resolveLink(
+    url: string, signal?: AbortSignal, sourceKey?: string,
+    {onPlan = () => {}, onPreview = () => {}}: {onPlan?: (steps: ProgressStep[]) => void, onPreview?: (preview: LinkFirstLookRead) => void} = {},
+): Promise<ResolvedLinkRead> {
     const response = await fetch(`${apiUrl()}/resolve`, {
         method: 'POST',
         credentials: 'include',
@@ -1094,8 +1108,8 @@ export async function resolveLink(url: string, signal?: AbortSignal, sourceKey?:
         body: JSON.stringify(sourceKey ? {url, sourceKey} : {url}),
         signal,
     })
-    if (!response.ok) throw await responseError(response)
-    return ResolvedLinkReadSchema.parse(await response.json())
+    const result = await readLookup(response, {onPlan, onPreview: (preview) => onPreview(LinkFirstLookReadSchema.parse(preview))})
+    return ResolvedLinkReadSchema.parse(result.link)
 }
 
 export function useDailywireCatalog() {

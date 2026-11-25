@@ -26,7 +26,7 @@ class ClipSource(Source):
     domains = ("clips.example",)
     features = frozenset({Feature.VIDEOS})
 
-    def resolve(self, url):
+    def resolve(self, url, plan=None):
         slug = url.rstrip("/").rsplit("/", 1)[-1]
         kind = LinkKind.COLLECTION if slug.startswith("channel") else LinkKind.VIDEO
         return ResolvedLink(
@@ -69,7 +69,7 @@ class WireSource(ClipSource):
     def __init__(self):
         self.media_requests: list[bool] = []
 
-    def resolve(self, url):
+    def resolve(self, url, plan=None):
         slug = url.rstrip("/").rsplit("/", 1)[-1]
         return ResolvedLink(kind=LinkKind.EPISODE, slug=slug, url=url, title=f"Episode {slug}")
 
