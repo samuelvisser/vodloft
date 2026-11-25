@@ -100,20 +100,17 @@ export default function EditCreatorPage() {
     }
 
     return (
-        <section className="view creator-view" aria-labelledby="edit-creator-title">
-            {/* One block, so the page's gap does not push the breadcrumb and the title apart. */}
-            <div className="creator-edit-head">
-                <Breadcrumb className="page-breadcrumb" items={[
-                    {label: 'Library', to: '/library'},
-                    {label: `${capitalized(creator.creatorNames.singular)} ${creator.title}`, to: `/creator/${creator.slug}`},
-                ]}/>
-                <PageHeader
-                    title="Edit creator" titleId="edit-creator-title"
-                    subtitle={<p className="view-description"><Link className="quiet-link" to={`/creator/${creator.slug}`}>{creator.title}</Link> · {creatorKindText(creator)}</p>}
-                />
-            </div>
-            <form className="form form-fluid creator-setup" onSubmit={onSubmit} noValidate>
-                <div className="form-row creator-membership">
+        <section className="view" aria-labelledby="edit-creator-title">
+            <Breadcrumb className="page-breadcrumb" items={[
+                {label: 'Library', to: '/library'},
+                {label: `${capitalized(creator.creatorNames.singular)} ${creator.title}`, to: `/creator/${creator.slug}`},
+            ]}/>
+            <PageHeader
+                title="Edit creator" titleId="edit-creator-title"
+                subtitle={<p className="view-description"><Link className="quiet-link" to={`/creator/${creator.slug}`}>{creator.title}</Link> · {creatorKindText(creator)}</p>}
+            />
+            <form className="form" onSubmit={onSubmit} noValidate>
+                <div className="form-row">
                     <label htmlFor="creator-title">Name</label>
                     <input id="creator-title" className="input" {...register('title')} aria-invalid={!!errors.title}/>
                     {errors.title && <div className="error" role="alert">{errors.title.message}</div>}
@@ -123,7 +120,7 @@ export default function EditCreatorPage() {
                     </div>
                 </div>
 
-                <div className="form-row creator-membership">
+                <div className="form-row">
                     <label htmlFor="creator-genre">Genre</label>
                     <input id="creator-genre" className="input" placeholder="Such as DIY, Woodworking" {...register('genre')}
                            aria-invalid={!!errors.genre}/>
@@ -131,7 +128,7 @@ export default function EditCreatorPage() {
                     <div className="help">Written to the NFO file of each collection of this {creator.creatorNames.singular} that has no genre of its own.</div>
                 </div>
 
-                <div className="form-row creator-membership">
+                <div className="form-row">
                     <label htmlFor="creator-rating">Content rating</label>
                     <input id="creator-rating" className="input" placeholder="Such as TV-G" {...register('contentRating')}
                            aria-invalid={!!errors.contentRating}/>
@@ -139,7 +136,7 @@ export default function EditCreatorPage() {
                 </div>
 
                 {creator.takesYtdlpOptions && (
-                    <div className="form-row creator-membership">
+                    <div className="form-row">
                         <label htmlFor="creator-ytdlp-options">Your own yt-dlp options</label>
                         <OptionsEditor
                             id="creator-ytdlp-options"
