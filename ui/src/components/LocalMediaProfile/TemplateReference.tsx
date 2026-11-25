@@ -31,6 +31,8 @@ type Props = {
     onInsert?: (text: string) => void
     /** Opens the editor for the profile's own Indexing values; left out when they cannot be changed here. */
     indexingValuesButton?: ReactNode
+    /** Opens the editor for a collection's metadata values; left out when they cannot be changed here. */
+    metadataValuesButton?: ReactNode
     onClose: () => void
 }
 
@@ -165,7 +167,7 @@ function FunctionRow({fn, open, onToggle, onInsert}: {
  * Every variable, Indexing value and function a template can use. It docks beside the page on a wide screen,
  * so the editor and its example output stay in view, and slides up as a sheet on a phone.
  */
-export default function TemplateReference({mode, variables, builtInIndexes, customIndexes, metadata, onInsert, indexingValuesButton, onClose}: Props) {
+export default function TemplateReference({mode, variables, builtInIndexes, customIndexes, metadata, onInsert, indexingValuesButton, metadataValuesButton, onClose}: Props) {
     const [tab, setTab] = useState<TabKey>('variables')
     const [query, setQuery] = useState('')
     const [openFunction, setOpenFunction] = useState<string | null>(null)
@@ -197,7 +199,7 @@ export default function TemplateReference({mode, variables, builtInIndexes, cust
     const tabs: {key: TabKey, label: string, count: number}[] = [
         {key: 'variables', label: 'Variables', count: variables.length},
         ...(offersCustomIndex ? [{key: 'indexing' as const, label: 'Indexing', count: builtInIndexes.length + customIndexes.length}] : []),
-        ...(metadata.length > 0 ? [{key: 'metadata' as const, label: 'Metadata', count: metadata.length}] : []),
+        {key: 'metadata', label: 'Metadata', count: metadata.length},
         {key: 'functions', label: 'Functions', count: functions.length},
         {key: 'jinja', label: 'Jinja', count: jinjaEntries.length},
     ]
@@ -289,7 +291,19 @@ export default function TemplateReference({mode, variables, builtInIndexes, cust
             </>
         )
     } else if (shownTab === 'metadata') {
-        content = <EntryList entries={metadata} onInsert={onInsert}/>
+        content = (
+            <section className="template-reference__group">
+                <div className="template-reference__group-heading">
+                    <h4>Your metadata fields</h4>
+                    {metadataValuesButton}
+                </div>
+                {metadata.length > 0
+                    ? <EntryList entries={metadata} onInsert={onInsert}/>
+                    : <p className="template-reference__note">
+                        {metadataValuesButton ? 'None yet. Add your own with Define values.' : 'None yet.'}
+                    </p>}
+            </section>
+        )
     } else if (shownTab === 'functions') {
         content = (
             <>
