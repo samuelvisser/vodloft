@@ -1635,7 +1635,7 @@ def test_a_channel_season_of_everything_holds_only_the_channels_own_videos(sourc
     source.lists = [_list("PLcollab", "Collabs")]
     source.items = {"PLcollab": ("guest", "a")}
     source.outside = {"guest": _video("guest", 2023)}
-    collection = _collection(session, channel_season="everything")
+    collection = _collection(session, loose="everything")
     collection.outside_videos = "add"
     collection.repeat_videos = "each_season"
     session.commit()
