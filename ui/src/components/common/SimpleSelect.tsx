@@ -1,5 +1,5 @@
 import type {SelectRegistry} from '../../utils/selectRegistry'
-import Select, {type SingleSelectProps} from './Select'
+import Select, {type SelectOptions, type SingleSelectProps} from './Select'
 
 type SimpleSelectOption = {
     value: string
@@ -11,6 +11,8 @@ type SimpleSelectProps = Omit<
     'options' | 'value' | 'onChange' | 'isMulti' | 'isSearchable' | 'isClearable'
 > & {
     registry: SelectRegistry
+    /** Splits the registry's values into parts shown apart, with a line between them. */
+    sections?: readonly (readonly string[])[]
     value?: string | null
     onChange?: (value: string) => void
 }
@@ -23,12 +25,15 @@ type SimpleSelectProps = Omit<
  * multi-select or custom option rendering, use Select directly instead of
  * expanding this intentionally simple component.
  */
-export default function SimpleSelect({registry, value, onChange, ...props}: SimpleSelectProps) {
+export default function SimpleSelect({registry, sections, value, onChange, ...props}: SimpleSelectProps) {
     const selectedOption = registry.options.find((option) => option.value === value) ?? null
+    const options: SelectOptions<SimpleSelectOption> = sections
+        ? sections.map((values) => ({options: registry.options.filter((option) => values.includes(option.value))}))
+        : registry.options
     return (
         <Select<SimpleSelectOption>
             {...props}
-            options={registry.options}
+            options={options}
             value={selectedOption}
             onChange={(option) => {
                 if (option) onChange?.(option.value)

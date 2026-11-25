@@ -183,10 +183,16 @@ export default function CollectionPage() {
     isLoading: seasonsLoading,
     isPlaceholderData: seasonsPlaceholder,
   } = useCollectionSeasons(collection ? id : undefined)
+  // The channel season, or Singles, comes first, set apart from the seasons of the lists.
   const seasons = useMemo(
-    () => [...(seasonsData ?? [])].sort((a, b) => b.index - a.index),
+    () => [...(seasonsData ?? [])].sort((a, b) => Number(b.loose) - Number(a.loose) || b.index - a.index),
     [seasonsData],
   )
+  const seasonSections = useMemo(() => {
+    const loose = seasons.filter((season) => season.loose).map((season) => String(season.id))
+    const others = seasons.filter((season) => !season.loose).map((season) => String(season.id))
+    return loose.length && others.length ? [loose, others] : undefined
+  }, [seasons])
   const seasonReg = useMemo(() => {
     const spec: Record<string, {label: string}> = {}
     const values: string[] = []
@@ -807,6 +813,7 @@ export default function CollectionPage() {
               inputId="collection-season"
               className="collection-season-select"
               registry={seasonReg}
+              sections={seasonSections}
               value={selectedSeasonId === null ? null : String(selectedSeasonId)}
               onChange={(value) => {
                 const season = seasons.find((item) => item.id === Number(value))

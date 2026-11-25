@@ -17,7 +17,8 @@ import {
 import './Select.css'
 
 export type SelectOption = {value: string; label: string}
-export type SelectGroup<O> = {label: string; options: readonly O[]}
+/** Options shown together under a heading, or, without a label, set apart from the others by a line. */
+export type SelectGroup<O> = {label?: string; options: readonly O[]}
 export type SelectOptions<O> = readonly (O | SelectGroup<O>)[]
 export type SelectOptionState = {isSelected: boolean; isFocused: boolean; isDisabled: boolean}
 export type SelectInputAction = 'input-change' | 'input-blur' | 'menu-close' | 'set-value'
@@ -89,7 +90,7 @@ export type MultiSelectProps<O extends SelectOption> = BaseProps<O> & {
 
 export type SelectProps<O extends SelectOption> = SingleSelectProps<O> | MultiSelectProps<O>
 
-type Section<O> = {label?: string; options: O[]}
+type Section<O> = {label?: string; options: O[]; group?: boolean}
 
 const PAGE_SIZE = 5
 
@@ -228,10 +229,10 @@ export default function Select<O extends SelectOption>(props: SelectProps<O>) {
         for (const item of options) {
             if (isGroup(item)) {
                 const kept = item.options.filter(keep)
-                if (kept.length) result.push({label: item.label, options: kept})
+                if (kept.length) result.push({label: item.label, options: kept, group: true})
             } else if (keep(item)) {
                 const last = result[result.length - 1]
-                if (last && last.label === undefined) last.options.push(item)
+                if (last && !last.group) last.options.push(item)
                 else result.push({options: [item]})
             }
         }
@@ -508,7 +509,15 @@ export default function Select<O extends SelectOption>(props: SelectProps<O>) {
             >
                 {sections.map((section, index) => {
                     if (section.label === undefined) {
-                        return <Fragment key={`options-${index}`}>{section.options.map(renderMenuOption)}</Fragment>
+                        // A group without a heading is set apart from the options beside it by a line.
+                        const previous = sections[index - 1]
+                        const divided = previous && (section.group || (previous.group && previous.label === undefined))
+                        return (
+                            <Fragment key={`options-${index}`}>
+                                {divided && <div className="select__divider" aria-hidden="true"/>}
+                                {section.options.map(renderMenuOption)}
+                            </Fragment>
+                        )
                     }
                     const headingId = `${listboxId}-group-${index}`
                     return (
