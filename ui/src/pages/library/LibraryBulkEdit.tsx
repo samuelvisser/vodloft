@@ -1,4 +1,4 @@
-import {useState} from 'react'
+import {useRef, useState} from 'react'
 import {useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {toast} from '../../lib/toast'
@@ -83,6 +83,8 @@ export default function LibraryBulkEdit({kind, selection, items, creatorNoun}: L
     const [syncing, setSyncing] = useState(false)
     // Deleting creators keeps their collections, unless this says to delete those too.
     const [withCollections, setWithCollections] = useState(false)
+    // Whether the open dialog changed or deleted anything: closing it then ends bulk edit.
+    const applied = useRef(false)
     const collectionNoun: [string, string] = ['collection', 'collections']
 
     const chosen = selection.ids
@@ -90,7 +92,12 @@ export default function LibraryBulkEdit({kind, selection, items, creatorNoun}: L
     const open = (which: 'change' | 'delete') => {
         setKeys(chosen)
         setWithCollections(false)
+        applied.current = false
         setDialog(which)
+    }
+    const close = () => {
+        setDialog(null)
+        if (applied.current) selection.stop()
     }
 
     /** What the chosen ones are called together: their own word when they are all one kind, or items. */
@@ -134,6 +141,7 @@ export default function LibraryBulkEdit({kind, selection, items, creatorNoun}: L
         setSyncing(true)
         try {
             const result = await bulkAction('collections', 'sync', chosenCollections)
+            selection.stop()
             if (result.skipped.length) {
                 toast(`Started a sync of ${countOf(result.done, collectionNoun)}; ${countOf(result.skipped.length, collectionNoun)} could not start`)
             } else {
@@ -209,8 +217,9 @@ export default function LibraryBulkEdit({kind, selection, items, creatorNoun}: L
                     noun={collectionNoun}
                     names={idsOf(keys, 'collection').flatMap((id) => items.get(bulkKey('collection', id))?.title ?? [])}
                     fields={COLLECTION_FIELDS}
-                    onClose={() => setDialog(null)}
+                    onClose={close}
                     onChanged={(result) => {
+                        applied.current = true
                         // A new order leaves the episodes this browser keeps in the old one.
                         forget(collectionSlugs(idsOf(keys, 'collection')), false)
                         void refresh()
@@ -226,14 +235,14 @@ export default function LibraryBulkEdit({kind, selection, items, creatorNoun}: L
                     names={keys.flatMap((key) => items.get(key)?.title ?? [])}
                     note={deleteNote}
                     remove={removeAll}
-                    onClose={() => setDialog(null)}
+                    onClose={close}
                     onDeleted={() => {
+                        applied.current = true
                         forget(collectionSlugs(idsOf(keys, 'collection')), true)
                         for (const id of idsOf(keys, 'creator')) {
                             const slug = items.get(bulkKey('creator', id))?.slug
                             if (slug) queryClient.removeQueries({queryKey: ['creator', slug]})
                         }
-                        selection.clear()
                         void refresh()
                     }}
                 >
