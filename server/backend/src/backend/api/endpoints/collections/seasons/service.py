@@ -372,7 +372,10 @@ def update_seasons(
     collection.outside_videos = body.outside_videos
     collection.feeds = feeds
     current = {setting.key: setting.action for setting in collection_new_lists(collection)}
-    collection.new_lists = checked_new_link_seasons(collection_list_kinds(collection), {**current, **body.new_lists})
+    collection.new_lists = checked_new_link_seasons(
+        collection_list_kinds(collection), {**current, **body.new_lists},
+        albums_only=collection_contract(collection.type).album_lists,
+    )
     collection.loose_videos = body.loose_videos
     # Only a collection of nothing but its lists lays them out by year; one with videos of its own includes them as
     # contents only instead.
