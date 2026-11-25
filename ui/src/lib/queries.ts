@@ -1588,7 +1588,7 @@ function syntheticDownload(operation: TaskOperationRead): MediaDownloadDomainVie
         downloadedBytes: null,
         formatDownloaded: null,
         downloadedAt: null,
-        firstSuccessfulDownloadAt: null,
+        firstDownloadedAt: null,
         canDelete: true,
         createdAt,
         updatedAt: operationDate(operation.updatedAt) || createdAt,

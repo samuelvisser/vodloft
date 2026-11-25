@@ -143,7 +143,7 @@ def _commit_abandoned_replacement(
         download.automatic_retry_suppressed = False
         download.downloaded_bytes = record["downloaded_bytes"]
         download.format_downloaded = record["format_downloaded"]
-        download.downloaded_at = replacement_time
+        download.mark_downloaded(replacement_time)
         if isinstance(download, EpisodeMediaDownload):
             download.downloaded_publish_status = record["downloaded_publish_status"]
 

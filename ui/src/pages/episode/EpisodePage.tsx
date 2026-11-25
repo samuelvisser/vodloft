@@ -212,11 +212,12 @@ export default function EpisodePage() {
     const downloadByProfileId = new Map<number, MediaDownloadViewRead>(
         (downloads ?? []).map((d) => [d.localMediaProfileId, d]),
     )
-    const latestDownloadedAt = (downloads ?? []).reduce<Date | null>((latest, download) => {
-        if (download.artifactStatus !== 'available' || !download.downloadedAt) return latest
-        return latest === null || download.downloadedAt.getTime() > latest.getTime()
-            ? download.downloadedAt
-            : latest
+    // When the episode was first downloaded, by any profile that still has its file.
+    const firstDownloadedAt = (downloads ?? []).reduce<Date | null>((first, download) => {
+        if (download.artifactStatus !== 'available' || !download.firstDownloadedAt) return first
+        return first === null || download.firstDownloadedAt.getTime() < first.getTime()
+            ? download.firstDownloadedAt
+            : first
     }, null)
     const siteLabel = collection.site?.name ?? (episode.sharingUrl ? siteName(episode.sharingUrl) : null) ?? sourceName
     const detailsChecked = episode.metadataRefreshedAt
@@ -324,13 +325,13 @@ export default function EpisodePage() {
                                 placement="below-start"
                             />
                         )}
-                        {latestDownloadedAt && (
+                        {firstDownloadedAt && (
                             <>
                                 <span className="episode-summary-separator" aria-hidden="true"/>
                                 <SummaryDate
                                     label="Downloaded"
                                     icon={faIcon('fass', 'circle-down')}
-                                    value={latestDownloadedAt}
+                                    value={firstDownloadedAt}
                                     placement="below"
                                 />
                             </>

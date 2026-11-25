@@ -33,7 +33,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "7b3c683c941f"
+HEAD_REVISION = "b7e4c1a9d052"
 
 
 @pytest.fixture
@@ -1658,3 +1658,31 @@ def test_downloads_to_move_become_an_issue_of_the_collections_health(migration_d
     command.downgrade(config, "6ab9362820f3")
     with engine.connect() as connection:
         assert connection.execute(text("SELECT id, moves_waiting FROM collections ORDER BY id")).all() == [(1, 0), (2, 3)]
+
+
+def test_downloads_get_the_time_of_their_first_download(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "7b3c683c941f")
+    with engine.begin() as connection:
+        connection.execute(text("PRAGMA foreign_keys = OFF"))
+        # 1 was downloaded twice, 2 is an adopted file without a completed attempt, 3 has no file.
+        for download_id, downloaded_at in ((1, "2026-11-20 10:00:00"), (2, "2026-11-01 10:00:00"), (3, None)):
+            connection.execute(text(
+                "INSERT INTO media_downloads (id, type, media_item_id, local_media_profile_id, file_path, "
+                "artifact_status, automatic_retry_suppressed, downloaded_at) "
+                "VALUES (:id, 'episode', :id, 1, '', 'absent', 0, :downloaded_at)"
+            ), {"id": download_id, "downloaded_at": downloaded_at})
+        for history_id, occurred_at in ((1, "2026-11-04 10:00:00"), (2, "2026-11-20 10:00:00")):
+            connection.execute(text(
+                "INSERT INTO media_download_history (id, media_download_id, action, metadata, occurred_at) "
+                "VALUES (:id, 1, 'completed', '{}', :occurred_at)"
+            ), {"id": history_id, "occurred_at": occurred_at})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        first = dict(connection.execute(text("SELECT id, first_downloaded_at FROM media_downloads")).all())
+    assert first == {1: "2026-11-04 10:00:00", 2: "2026-11-01 10:00:00", 3: None}

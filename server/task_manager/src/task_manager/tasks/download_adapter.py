@@ -251,7 +251,7 @@ def _record_download(
         if plan.source.ytdlp_command else None
     )
     finished = datetime.now(timezone.utc)
-    download.downloaded_at = finished
+    download.mark_downloaded(finished)
     if isinstance(download.media, Episode):
         download.downloaded_publish_status = publish_status
         schedule_first_upgrade_check(download, episode_site(download.media), finished)
