@@ -27,6 +27,7 @@ import OutputTemplateStartFields, {FilenameModeField} from './OutputTemplateStar
 import CollectionRootNote from './CollectionRootNote'
 import {JINJA_FILTERS, TEMPLATE_FUNCTIONS} from './outputTemplateFunctions'
 import IndexingValuesEditorButton, {IndexingValuesError} from './IndexingValuesEditorButton'
+import MetadataValuesEditorButton from './MetadataValuesEditorButton'
 import TemplateReference, {SHEET_QUERY, type ReferenceEntry} from './TemplateReference'
 import {useSetExampleEpisode} from './ExampleEpisodeContext'
 import {useProfileFit} from './ProfileFit'
@@ -1148,6 +1149,9 @@ export default function OutputTemplateEditor({form, mode, placeholder, readOnly 
                         metadata={metadataEntries}
                         onInsert={readOnly ? undefined : insertIntoTemplate}
                         indexingValuesButton={mode === 'collection' && !readOnly ? <IndexingValuesEditorButton form={form}/> : undefined}
+                        metadataValuesButton={mode === 'collection' && !readOnly
+                            ? <MetadataValuesEditorButton collectionScope={collectionScope} siteKeys={siteKeys}/>
+                            : undefined}
                         onClose={closeReference}
                     />
                 )}
