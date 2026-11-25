@@ -142,10 +142,12 @@ export default function QualityField({form, mode, isCreating}: Props) {
         setCodecs(next)
     }
 
+    // A profile for Music that downloads video keeps music videos.
+    const videoUpTo = music ? 'Music video, up to' : 'Video, up to'
     const option = (value: string): DownloadOption => ({value, label: QualityDownloadReg.getLabelLoose(value)})
     const downloadGroups = tracksLocked ? [{label: 'Music', options: [option('format_audio_only')]}] : [
         {
-            label: 'Video, up to',
+            label: videoUpTo,
             options: LADDER_STEPS.filter((step) => !offered || offered.videoHeights.includes(FORMAT_HEIGHTS[step])).map(option),
         },
         {
@@ -183,7 +185,7 @@ export default function QualityField({form, mode, isCreating}: Props) {
                     onChange={(choice) => choice && chooseFormat(choice.value)}
                     isOptionDisabled={(choice) => tracksBlocked && choice.value === 'format_audio_only'}
                     formatOptionLabel={(choice, {context}) => {
-                        if (isLadderStep(choice.value)) return context === 'value' ? `Video, up to ${choice.label}` : choice.label
+                        if (isLadderStep(choice.value)) return context === 'value' ? `${videoUpTo} ${choice.label}` : choice.label
                         // A profile for Music keeps tracks, not podcasts, when it downloads audio only, and music videos
                         // otherwise.
                         const help = !music ? QualityDownloadReg.getHelp(choice.value as any)
