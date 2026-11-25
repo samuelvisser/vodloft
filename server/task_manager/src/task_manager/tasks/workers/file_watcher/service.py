@@ -14,6 +14,7 @@ from backend.db.core import is_read_session, is_write_session, run_write_transac
 from backend.db.models.media_download import MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
+from backend.services.download_relocation import relocations_held_off
 from backend.services.media_download_history import record_media_download_history
 from downloader.storage.identity import ArtifactIdentity, inspect_artifact
 from config import get_settings
@@ -507,6 +508,27 @@ CHANGES_PER_TRANSACTION = 200
 
 
 def _apply_reconciliations(
+    s: Session,
+    changes: list[tuple[MediaDownloadBase, _ArtifactUpdates]],
+) -> int:
+    if not changes:
+        return 0
+    # Moved files are only recorded at their new place once the whole move is done. While a move runs, a file
+    # gone from its recorded place may be on its way, so it waits for the next scan; holding the lock keeps
+    # a move from starting before these changes are stored.
+    with relocations_held_off() as no_move_running:
+        if not no_move_running:
+            kept = [change for change in changes if change[1].get("artifact_status") != MediaDownloadArtifactStatus.MISSING.value]
+            if len(kept) != len(changes):
+                logger.info(
+                    "file_watcher: %s file(s) not found while VODLoft is moving files; checking again on the next scan",
+                    len(changes) - len(kept),
+                )
+            changes = kept
+        return _store_reconciliations(s, changes)
+
+
+def _store_reconciliations(
     s: Session,
     changes: list[tuple[MediaDownloadBase, _ArtifactUpdates]],
 ) -> int:

@@ -21,7 +21,7 @@ from backend.services.collection_assets import (
     collection_asset_sources, collection_assets_enabled, collection_profile_is_managed, collection_profile_roots,
 )
 from backend.utils.collection_asset_files import (
-    ArtworkConflict, PreparedCollectionAsset, asset_file_hash, asset_file_lock,
+    ArtworkConflict, PreparedCollectionAsset, UserArtworkKept, asset_file_hash, asset_file_lock,
     download_collection_asset, publish_collection_asset, safe_asset_path,
 )
 from config import get_settings
@@ -31,6 +31,11 @@ from task_manager.tasks.helpers.progress import update_progress
 logger = logging.getLogger(__name__)
 _REFRESH_AFTER = timedelta(days=1)
 _SUPPORTED_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
+
+
+def _log_level(exc: ArtworkConflict) -> int:
+    """A file the user keeps is expected and comes up on every run; other conflicts need a look."""
+    return logging.INFO if isinstance(exc, UserArtworkKept) else logging.WARNING
 
 
 @dataclass(frozen=True)
@@ -140,11 +145,11 @@ def _owned_file(session, plan: AssetPlan, target: Path):
             and alternate_digest in (row.content_hash, row.pending_hash)
             for row in alternate_rows
         ):
-            raise ArtworkConflict(f"Existing alternate-format artwork was left untouched: {alternate}")
+            raise UserArtworkKept(f"Existing alternate-format artwork was left untouched: {alternate}")
 
     digest = asset_file_hash(target)
     if digest is not None and not any(digest in (row.content_hash, row.pending_hash) for row in rows):
-        raise ArtworkConflict(f"User-supplied or edited artwork was left untouched: {target}")
+        raise UserArtworkKept(f"User-supplied or edited artwork was left untouched: {target}")
     return rows, digest
 
 
@@ -212,7 +217,7 @@ def _claim_fresh_asset(
                     owned_by_profile.content_hash,
                     owned_by_profile.pending_hash,
                 ):
-                    raise ArtworkConflict(f"User-supplied or edited artwork was left untouched: {target}")
+                    raise UserArtworkKept(f"User-supplied or edited artwork was left untouched: {target}")
                 fresh = next((
                     row for row in rows
                     if row.collection_id == plan.collection_id
@@ -296,7 +301,7 @@ def _cleanup_obsolete_variants(
 
                 run_write_transaction(work)
         except ArtworkConflict as exc:
-            logger.warning("Old collection artwork variant was left untouched: %s", exc)
+            logger.log(_log_level(exc), "Old collection artwork variant was left untouched: %s", exc)
 
 
 def _refresh_asset(plan: AssetPlan, check_canceled: Callable[[], None]) -> bool:
@@ -490,7 +495,7 @@ def _cleanup_unwanted_nfos(
 
                 run_write_transaction(work)
         except ArtworkConflict as exc:
-            logger.warning("An old show or season NFO file was left untouched: %s", exc)
+            logger.log(_log_level(exc), "An old show or season NFO file was left untouched: %s", exc)
     remove_folders_left_empty(emptied)
 
 
@@ -569,7 +574,7 @@ def _cleanup_old_roots(
 
                 run_write_transaction(work)
         except ArtworkConflict as exc:
-            logger.warning("Old collection artwork was left untouched: %s", exc)
+            logger.log(_log_level(exc), "Old collection artwork was left untouched: %s", exc)
     # The artwork was the last managed file in the folder the Collection's files were renamed out of.
     remove_folders_left_empty(emptied, keep=[current_root])
 
@@ -578,6 +583,7 @@ def run_reconcile_collection_assets(
     *, resource_id=None, resource_type=None, progress=None, check_canceled: Callable[[], None],
 ) -> None:
     warnings = []
+    user_files = []
     plans = []
     cleanup = []
     nfo_plans: list[NfoPlan] = []
@@ -645,7 +651,7 @@ def run_reconcile_collection_assets(
         except DownloadCanceled:
             raise
         except ArtworkConflict as exc:
-            warnings.append(str(exc))
+            (user_files if isinstance(exc, UserArtworkKept) else warnings).append(str(exc))
             failed_pairs.add((plan.collection_id, plan.profile_id))
         except Exception as exc:
             logger.exception("Collection %s artwork %s could not be refreshed", plan.collection_id, plan.kind)
@@ -663,7 +669,7 @@ def run_reconcile_collection_assets(
         except DownloadCanceled:
             raise
         except ArtworkConflict as exc:
-            warnings.append(str(exc))
+            (user_files if isinstance(exc, UserArtworkKept) else warnings).append(str(exc))
             failed_nfo_pairs.add((plan.collection_id, plan.profile_id))
         except Exception as exc:
             logger.exception("Collection %s NFO file %s could not be written", plan.collection_id, plan.file.path)
@@ -674,6 +680,8 @@ def run_reconcile_collection_assets(
             _cleanup_unwanted_nfos(collection_id, profile_id, wanted_paths, download_root, check_canceled)
     for warning in warnings:
         logger.warning("Collection artwork: %s", warning)
+    for kept in user_files:
+        logger.info("Collection artwork: %s", kept)
     if errors:
         raise RuntimeError(f"Could not refresh {len(errors)} collection artwork or NFO file(s): {errors[0]}")
-    update_progress(progress, 100, f"Reconciled collection artwork; {len(warnings)} skipped or ambiguous destination(s)")
+    update_progress(progress, 100, f"Reconciled collection artwork; {len(warnings) + len(user_files)} skipped or ambiguous destination(s)")

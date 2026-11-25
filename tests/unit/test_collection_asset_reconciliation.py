@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
 from backend.db.models.CollectionLocalAsset import CollectionLocalAsset
-from backend.utils.collection_asset_files import ArtworkConflict, PreparedCollectionAsset, asset_file_hash
+from backend.utils.collection_asset_files import ArtworkConflict, PreparedCollectionAsset, UserArtworkKept, asset_file_hash
 from task_manager.tasks.workers.reconcile_collection_assets import service
 
 
@@ -181,8 +181,9 @@ def test_profiles_sharing_one_collection_directory_share_artwork_without_redownl
 
 def test_other_collections_cannot_claim_existing_artwork(writer):
     service._refresh_asset(writer.plan, _active)
-    with pytest.raises(ArtworkConflict, match="Another collection"):
+    with pytest.raises(ArtworkConflict, match="Another collection") as conflict:
         service._refresh_asset(replace(writer.plan, collection_id=2), _active)
+    assert not isinstance(conflict.value, UserArtworkKept)
     assert writer.requests == 2
 
 
@@ -190,7 +191,8 @@ def test_preexisting_custom_artwork_is_never_adopted(writer):
     target = _target(writer)
     target.parent.mkdir()
     target.write_bytes(b"custom poster")
-    with pytest.raises(ArtworkConflict, match="User-supplied"):
+    # A file the user keeps is expected on every run, so it is logged as info rather than a warning.
+    with pytest.raises(UserArtworkKept, match="User-supplied"):
         service._refresh_asset(writer.plan, _active)
     assert writer.requests == 1
     assert not _rows(writer)
