@@ -1220,7 +1220,7 @@ def _add_link_seasons(session: Session, collection: Collection, plan: Collection
     if added:
         collection.keep_a_default_link()
         if collection.link_seasons == LinkSeasons.OFF.value:
-            collection.link_seasons = LinkSeasons.SELECTED.value
+            collection.link_seasons = LinkSeasons.ON.value
             if collection.loose_videos == LooseVideos.BY_YEAR.value:
                 collection.loose_videos = LooseVideos.ONE_SEASON.value
         # The other program kept every video of these links, also another channel's.

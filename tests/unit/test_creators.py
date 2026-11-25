@@ -145,9 +145,9 @@ def test_a_collection_of_a_channel_is_a_channel_with_the_channel_defaults(tube, 
 
     collection = _collection(session, "workshop")
     assert collection.kind == "channel"
-    # Every list is a season, whole, and the channel season holds the whole channel, as a channel shows itself.
+    # Its lists are on, each whole, and the channel season holds the whole channel, as a channel shows itself.
     assert (collection.link_seasons, collection.outside_videos, collection.repeat_videos, collection.loose_videos) == (
-        "all", "add", "each_season", "everything",
+        "on", "add", "each_season", "everything",
     )
 
 
@@ -293,13 +293,13 @@ def test_deleting_a_creator_keeps_its_collections(client, session):
     assert collection is not None and collection.creator_id is None
 
 
-def test_a_site_can_have_a_channel_collection_make_only_the_lists_picked_seasons(tube, session, monkeypatch):
+def test_a_site_can_have_a_channel_collection_put_a_video_in_the_first_of_its_lists_only(tube, session, monkeypatch):
     from dataclasses import replace
 
-    monkeypatch.setattr(CreatorSource, "sites", (replace(CreatorSource.sites[0], every_list_a_season=False, whole_lists=False),))
+    monkeypatch.setattr(CreatorSource, "sites", (replace(CreatorSource.sites[0], whole_lists=False),))
     _add("workshop", ROOT)
     collection = _collection(session, "workshop")
-    assert (collection.link_seasons, collection.repeat_videos) == ("selected", "one_season")
+    assert (collection.link_seasons, collection.repeat_videos) == ("on", "one_season")
 
 
 def test_a_channel_collection_on_a_site_without_list_seasons_keeps_its_seasons_as_they_are(tube, session, monkeypatch):

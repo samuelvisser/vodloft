@@ -197,3 +197,76 @@
 .seasons-dialog-season.is-new { cursor: default; box-shadow: inset 3px 0 0 #22c55e; }
 .seasons-dialog-season.is-new .seasons-dialog-grip { visibility: hidden; }
 .seasons-dialog-season.is-new .input { font-style: italic; }
+
+/* What's in the collection: a box for each group of sources, the parts of the channel and its lists and links, with
+   one choice each. */
+.seasons-dialog-box {
+    border: 1px solid rgba(100, 116, 139, 0.24);
+    border-radius: 12px;
+    overflow: hidden;
+}
+.seasons-dialog-box-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: .75rem;
+    flex-wrap: wrap;
+    padding: .75rem .875rem .625rem;
+}
+.seasons-dialog-box-head h4 { margin: 0; font-size: .9375rem; }
+.seasons-dialog-box-head .seasons-dialog-muted { font-size: .8125rem; }
+.seasons-dialog-with-switch { display: flex; align-items: flex-start; gap: .625rem; }
+.seasons-dialog-with-switch > :first-child { flex: none; margin-top: 2px; }
+.seasons-dialog-kind {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    flex-wrap: wrap;
+    padding: .375rem .875rem;
+    border-top: 1px solid rgba(100, 116, 139, 0.18);
+    background: rgba(148, 163, 184, 0.08);
+    font-size: .75rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--muted);
+}
+.seasons-dialog-all { display: flex; align-items: center; gap: .4rem; text-transform: none; letter-spacing: 0; font-size: .75rem; font-weight: 400; color: var(--muted); }
+.seasons-dialog-sources { list-style: none; margin: 0; padding: 0; }
+.seasons-dialog-source {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    flex-wrap: wrap;
+    padding: .5rem .875rem;
+    border-top: 1px solid rgba(100, 116, 139, 0.18);
+}
+.seasons-dialog-source .seasons-dialog-link-copy { flex: 1 1 14rem; }
+.seasons-dialog-source .seasons-dialog-link-copy > span { overflow-wrap: anywhere; }
+.seasons-dialog-source.is-off .seasons-dialog-link-copy b { opacity: .6; }
+.seasons-dialog-source.is-removed b { text-decoration: line-through; opacity: .6; }
+.seasons-dialog-source-actions { display: flex; align-items: center; gap: .4rem; }
+.seasons-dialog-source-actions .seasons-dialog-default { font-size: .85em; opacity: .75; }
+.seasons-dialog-box-note { padding: .5rem .875rem; border-top: 1px solid rgba(100, 116, 139, 0.18); margin: 0; }
+.seasons-dialog-box-settings {
+    display: grid;
+    gap: .75rem;
+    padding: .75rem .875rem;
+    border-top: 1px solid rgba(100, 116, 139, 0.24);
+}
+.seasons-dialog-box-title { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+/* The compact choices of a source, and of all sources in a group. */
+.segmented-options.seasons-dialog-role,
+.segmented-options.seasons-dialog-rest { flex: none; border-radius: 8px; flex-wrap: wrap; }
+.segmented-options.seasons-dialog-role .segmented-content { padding: 4px 10px; }
+.segmented-options.seasons-dialog-role .segmented-label { font-size: .8125rem; font-weight: 500; white-space: nowrap; }
+.seasons-dialog-all .segmented-options.seasons-dialog-role .segmented-content { padding: 2px 8px; }
+.seasons-dialog-all .segmented-options.seasons-dialog-role .segmented-label { font-size: .75rem; }
+.segmented-options.seasons-dialog-rest { justify-self: start; align-self: start; }
+.segmented-options.seasons-dialog-rest .segmented-content { padding: 6px 14px; }
+.segmented-options.seasons-dialog-rest .segmented-label { font-weight: 500; white-space: nowrap; }
+/* The chosen option stands out, as each row has one. */
+.segmented-options.seasons-dialog-role .segmented-selection,
+.segmented-options.seasons-dialog-rest .segmented-selection { background: #2563eb; border-right: 0; }
+.segmented-options.seasons-dialog-role .segmented-option.is-checked,
+.segmented-options.seasons-dialog-rest .segmented-option.is-checked { color: #fff; }
