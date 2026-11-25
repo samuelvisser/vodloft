@@ -21,6 +21,7 @@ from .service import run_access_checks
     allowed_resource_types=("system",),
     default_max_retries=1,
     tracks_progress=False,
+    findings=("opened",),
 )
 async def check_locked_media(*, resource_id: int | None = None, progress=None) -> TaskResult:
     del resource_id, progress

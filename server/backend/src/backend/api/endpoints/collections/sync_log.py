@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from sqlalchemy import and_, exists, func, literal, or_, select
 from sqlalchemy.orm import Session
 
-from backend.db.json_sql import json_array_items
+from backend.db.json_sql import json_array_items, json_count
 from backend.db.models import Collection
 from task_manager.scheduler.db import TaskDefinition, TaskRun
 from task_manager.scheduler.types import ResourceType, TaskStatus
@@ -18,12 +18,22 @@ _QUICK_CHECK_TASK_KEY = "quick_check_new_videos"
 _SCAN_TASK_KEYS = ("fetch_new_episodes", "rescan_quick_checked_collections", _QUICK_CHECK_TASK_KEY)
 _FINISHED = (TaskStatus.SUCCEEDED, TaskStatus.FAILED, TaskStatus.CANCELED)
 
-def _lists_collection(collection_id: int):
-    """A scan of several collections lists each collection it looked at in its result."""
+def _lists_collection(collection_id: int, *, found_something: bool = False):
+    """A scan of several collections lists each collection it looked at in its result.
+
+    With ``found_something``, only a scan that found new episodes in the collection, or could not check it.
+    """
     scanned = json_array_items(TaskRun.result, "data", "collections").alias("scanned")
-    return exists(
-        select(literal(1)).select_from(scanned).where(scanned.c.value["collection_id"].as_integer() == collection_id)
-    )
+    entry = scanned.c.value["collection_id"].as_integer() == collection_id
+    if found_something:
+        entry = and_(
+            entry,
+            or_(
+                json_count(scanned.c.value, "episodes_found") > 0,
+                json_count(scanned.c.value, "failed") > 0,
+            ),
+        )
+    return exists(select(literal(1)).select_from(scanned).where(entry))
 
 
 @dataclass(frozen=True)
@@ -57,8 +67,13 @@ def _scan(run: TaskRun, collection_id: int) -> CollectionScan:
     )
 
 
-def collection_scans(s: Session, collection_slug: str, *, offset: int, limit: int) -> tuple[list[CollectionScan], int]:
-    """Finished scans that included this Collection, newest first, and how many there are."""
+def collection_scans(
+    s: Session, collection_slug: str, *, offset: int, limit: int, hide_empty: bool = False,
+) -> tuple[list[CollectionScan], int]:
+    """Finished scans that included this Collection, newest first, and how many there are.
+
+    ``hide_empty`` leaves out the scans that succeeded without finding a new episode in it.
+    """
     collection = s.scalars(select(Collection).where(Collection.slug == collection_slug)).one_or_none()
     if collection is None:
         raise HTTPException(status_code=404, detail="Collection not found")
@@ -67,7 +82,9 @@ def collection_scans(s: Session, collection_slug: str, *, offset: int, limit: in
         and_(TaskRun.resource_type == ResourceType.COLLECTION, TaskRun.resource_id == collection.id),
         _lists_collection(collection.id),
     )
-    where = (TaskDefinition.key.in_(_SCAN_TASK_KEYS), TaskRun.status.in_(_FINISHED), included)
+    where = [TaskDefinition.key.in_(_SCAN_TASK_KEYS), TaskRun.status.in_(_FINISHED), included]
+    if hide_empty:
+        where.append(or_(TaskRun.status != TaskStatus.SUCCEEDED, _lists_collection(collection.id, found_something=True)))
     total = s.scalar(select(func.count()).select_from(TaskRun).join(TaskRun.definition).where(*where)) or 0
     runs = s.scalars(
         select(TaskRun)

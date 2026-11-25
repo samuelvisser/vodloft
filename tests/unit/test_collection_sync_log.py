@@ -65,3 +65,29 @@ def test_sync_now_runs_the_scan_the_regular_checks_give_the_collection(quick, li
 
     assert CollectionSyncOperation(_collection(session, "UC1")).task == "rescan_quick_checked_collections"
     assert CollectionSyncOperation(_collection(session, "PL1", source_key="listed")).task == "fetch_new_episodes"
+
+def test_the_sync_log_can_leave_out_the_syncs_that_found_nothing(quick, listed_too, session):
+    from backend.api.endpoints.collections.sync_log import collection_scans
+
+    channel = _collection(session, "UC1")
+    tasks = _definitions(session)
+    _run(session, tasks["fetch_new_episodes"], minute=0, resource_id=channel.id,
+         collections=[{"collection_id": channel.id, "episodes_found": 0}])
+    found = _run(session, tasks["fetch_new_episodes"], minute=1, resource_id=channel.id,
+                 collections=[{"collection_id": channel.id, "episodes_found": 2}])
+    failed = _run(session, tasks["fetch_new_episodes"], minute=2, status="FAILED", resource_id=channel.id)
+    failed_check = _run(
+        session, tasks["quick_check_new_videos"], minute=3, resource_type="system", resource_id=0,
+        collections=[{"collection_id": channel.id, "episodes_found": None, "failed": True}],
+    )
+    # Another collection's new videos are nothing new in this one.
+    _run(
+        session, tasks["quick_check_new_videos"], minute=4, resource_type="system", resource_id=0,
+        collections=[{"collection_id": channel.id, "episodes_found": 0}, {"collection_id": channel.id + 1, "episodes_found": 4}],
+    )
+
+    scans, total = collection_scans(session, "UC1", offset=0, limit=10, hide_empty=True)
+
+    assert total == 3
+    assert [scan.id for scan in scans] == [failed_check.id, failed.id, found.id]
+    assert collection_scans(session, "UC1", offset=0, limit=10)[1] == 5

@@ -3,7 +3,7 @@ import {useInfiniteQuery, useQueryClient} from '@tanstack/react-query'
 import ProgressButton from '../common/ProgressButton'
 import {useActiveOperation} from '../OperationNotifier/OperationNotifier'
 import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
-import LedgerModal, {formatLedgerDate} from '../common/LedgerModal'
+import LedgerModal, {formatLedgerDate, useLedgerHideEmpty} from '../common/LedgerModal'
 import {faIcon} from '../../icons/faIcon'
 import {apiUrl, responseError} from '../../lib/api'
 
@@ -50,9 +50,10 @@ export default function CollectionSyncLogModal({
   const queryClient = useQueryClient()
   const scanOperation = useActiveOperation('collection.sync', 'collection', collectionId)
   const scanning = starting || scanOperation !== undefined
+  const [hideEmpty, setHideEmpty] = useLedgerHideEmpty()
 
   const log = useInfiniteQuery({
-    queryKey: ['collection', collectionSlug, 'syncLog'],
+    queryKey: ['collection', collectionSlug, 'syncLog', {hideEmpty}],
     enabled: open,
     initialPageParam: 0,
     getNextPageParam: (last: CollectionSyncLog, pages: CollectionSyncLog[]) => {
@@ -61,6 +62,7 @@ export default function CollectionSyncLogModal({
     },
     queryFn: async ({signal, pageParam}): Promise<CollectionSyncLog> => {
       const params = new URLSearchParams({offset: String(pageParam), limit: String(PAGE_SIZE)})
+      if (hideEmpty) params.set('hide_empty', 'true')
       const r = await fetch(
         `${apiUrl()}/collections/${encodeURIComponent(collectionSlug)}/sync-log?${params}`,
         {signal, credentials: 'include'},
@@ -101,6 +103,7 @@ export default function CollectionSyncLogModal({
           cell: (entry) => <span className={entry.status === 'FAILED' ? 'is-failed' : undefined}>{episodeCount(entry)}</span>,
         },
       ]}
+      hideEmpty={{checked: hideEmpty, onChange: setHideEmpty, label: 'Only syncs that found episodes'}}
       onClose={onClose}
       actions={
         <ProgressButton

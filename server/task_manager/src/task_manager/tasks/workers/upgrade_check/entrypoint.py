@@ -21,6 +21,7 @@ from .service import run_upgrade_checks
     allowed_resource_types=("system",),
     default_max_retries=1,
     tracks_progress=False,
+    findings=("upgraded",),
 )
 async def upgrade_check(*, resource_id: int | None = None, progress=None) -> TaskResult:
     del resource_id, progress

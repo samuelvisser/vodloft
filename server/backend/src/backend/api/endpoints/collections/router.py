@@ -375,10 +375,11 @@ def collection_sync_log(
     collection_slug: str,
     offset: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
+    hide_empty: bool = False,
 ):
     """The scans that looked at this Collection for new episodes, newest first."""
     with db_session() as s:
-        scans, total = collection_scans(s, collection_slug, offset=offset, limit=limit)
+        scans, total = collection_scans(s, collection_slug, offset=offset, limit=limit, hide_empty=hide_empty)
         return CollectionSyncLogAPIRead(items=scans, total=total)
 
 
