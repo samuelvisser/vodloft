@@ -8,9 +8,11 @@ first and the checks share after that.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+from dataclasses import replace
 from typing import TypeVar
 
 from ...contract import CollectionDetails
+from ..thumbnails import first_served
 from . import mapping, quota
 from .client import MAX_RESULTS, NotFoundError, QuotaExceededError, YouTubeApiClient
 from .mapping import YouTubeRef
@@ -54,7 +56,10 @@ class Catalogue:
 
     def collection(self, ref: YouTubeRef, url: str) -> CollectionDetails:
         if ref.kind == "playlist":
-            return mapping.playlist_collection(self.playlist(ref.value), url)
+            item = self.playlist(ref.value)
+            # A playlist's own picture is listed in sizes YouTube never made: it gets the largest one YouTube serves.
+            served = first_served(mapping.pictures((item.get("snippet") or {}).get("thumbnails")))
+            return replace(mapping.playlist_collection(item, url), image_url=served)
         return mapping.channel_collection(self.channel(ref), url)
 
     def playlist_id(self, ref: YouTubeRef) -> str:
@@ -63,6 +68,13 @@ class Catalogue:
             return ref.value
         channel_id = ref.value if ref.kind == "channel" else self.channel(ref)["id"]
         return ref.uploads_playlist(channel_id)
+
+    def playlist_ids(self, ref: YouTubeRef, feeds: frozenset[str] | None) -> list[str]:
+        """The playlists that list the collection's videos, of only ``feeds`` when given."""
+        if ref.kind == "playlist":
+            return [ref.value]
+        channel_id = ref.value if ref.kind == "channel" else self.channel(ref)["id"]
+        return ref.feed_playlists(channel_id, feeds)
 
     def video_ids(self, playlist_id: str) -> list[str]:
         """Every video ID in the playlist, in its order, which is newest first for uploads."""

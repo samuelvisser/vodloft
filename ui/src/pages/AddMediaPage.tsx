@@ -9,27 +9,23 @@ import SourceBadge from '../components/Source/SourceBadge'
 import {useQueryClient} from '@tanstack/react-query'
 import {addVideo, resolveLink, useMovies, useCollections, useSources, useVideos} from '../lib/queries'
 import {linkTarget, type MediaLinkTarget} from '../lib/sourceControls'
-import {ResolvedLinkRead, SourceFeature, SourceRead, kindName, searchName, sourceHas} from '../types/schemas/source'
+import {ResolvedLinkRead, SearchSiteRead, SourceFeature, SourceRead, kindNames, sourceHas} from '../types/schemas/source'
+import {capitalized} from '../types/creator'
 import {DrmNotice} from '../components/common/DrmProtected'
 import {AccessNotice} from '../components/common/AccessLocked'
 import {ClearInputButton} from '../components/common/ClearInputButton'
+import AddEmptyCollectionDialog from '../components/AddEmptyCollection/AddEmptyCollectionDialog'
 
 type AddMediaPageProps = {
     onboarding?: boolean
     onCollection?: (target: MediaLinkTarget) => void
     onMovie?: (target: MediaLinkTarget) => void
-    onBrowse?: (sourceId: string) => void
+    /** Browse a Source's catalogue, or search one of its Sites when a Site is given. */
+    onBrowse?: (sourceId: string, siteKey?: string) => void
     onBack?: () => void
     onSkip?: () => void
     /** The link to look up right away, when it does not come from the page's own address. */
     initialUrl?: string
-}
-
-const KIND_LABEL: Record<ResolvedLinkRead['kind'], string> = {
-    collection: 'Collection',
-    movie: 'Movie',
-    episode: 'Episode',
-    video: 'Video',
 }
 
 export default function AddMediaPage({onboarding = false, onCollection, onMovie, onBrowse, onBack, onSkip, initialUrl}: AddMediaPageProps = {}) {
@@ -150,16 +146,26 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
         else navigate(`/add-collection?url=${encodeURIComponent(target.url)}`)
     }
 
-    // A Source with a catalogue is browsed; one without is searched.
-    const browseSources = (sources ?? []).filter((source) => canUseSource(source.id) && (sourceHas(source, SourceFeature.BROWSE) || sourceHas(source, SourceFeature.SEARCH)))
-    const browse = (source: SourceRead) => {
-        if (onBrowse) onBrowse(source.id)
-        else if (!sourceHas(source, SourceFeature.BROWSE)) navigate(`/browse/${encodeURIComponent(source.id)}`)
+    // A Source with a catalogue is browsed; one without is searched, each of its search Sites on its own. Only the
+    // Sites added to VODLoft are offered.
+    const browseChoices = (sources ?? []).filter((source) => canUseSource(source.id)).flatMap((source): {source: SourceRead, site?: SearchSiteRead}[] => (
+        sourceHas(source, SourceFeature.BROWSE) ? (source.sites.some((site) => site.added) ? [{source}] : [])
+            : sourceHas(source, SourceFeature.SEARCH) ? source.searchSites.filter((site) => site.added && site.ready).map((site) => ({source, site}))
+            : []
+    ))
+    const browse = (source: SourceRead, site?: SearchSiteRead) => {
+        if (onBrowse) onBrowse(source.id, site?.key)
+        else if (site) navigate(`/browse/${encodeURIComponent(source.id)}/${encodeURIComponent(site.key)}`)
         else navigate('/browse')
     }
 
+    // A custom collection starts empty and holds only what the lists added to it have, at a Source that allows it.
+    const [emptyOpen, setEmptyOpen] = useState(false)
+    const emptyCollections = !onboarding && !onCollection
+        && (sources ?? []).some((source) => canUseSource(source.id) && sourceHas(source, SourceFeature.LINK_COLLECTIONS))
+
     // Hand the link to the Quick download page: one video, episode or movie that can be downloaded.
-    const quickDownloadable = !!link && link.kind !== 'collection' && !link.drmProtected && !link.accessLocked
+    const quickDownloadable = !!link && link.kind !== 'collection' && link.kind !== 'creator' && !link.drmProtected && !link.accessLocked
     const quickDownload = () => {
         if (!link) return
         navigate(`/quick-download?url=${encodeURIComponent(link.url)}&source=${encodeURIComponent(link.source.id)}`)
@@ -245,7 +251,7 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                     )}
                     <div className="add-media-preview-copy">
                         <SourceBadge sourceKey={link.source.id}/>
-                        <p>{[kindName(link.source, link.kind, KIND_LABEL[link.kind]), link.site, link.preview.authorName].filter(Boolean).join(' · ')}</p>
+                        <p>{[capitalized(kindNames(link.source, link.kind)?.singular ?? ''), link.site, link.preview.authorName].filter(Boolean).join(' · ')}</p>
                         <h2>{link.preview.title}</h2>
                         {link.preview.description && (
                             <p className="add-media-preview-description">{link.preview.description}</p>
@@ -266,9 +272,16 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                                     </button>
                                 )}
                             </div>
+                        ) : link.kind === 'creator' ? (
+                            <p role="alert">
+                                This is the page of {kindNames(link.source, 'creator')?.a}. Paste the link to one of
+                                their {kindNames(link.source, 'collection')?.plural} instead. Once it is in your
+                                library, its page can add it to the {kindNames(link.source, 'creator')?.singular}, whose
+                                page then offers the rest of their work.
+                            </p>
                         ) : collectionsUnsupported ? (
                             <p role="alert">
-                                VODLoft cannot add channels or playlists from {link.source.name} yet. Paste the link to one video instead.
+                                VODLoft cannot add creators or playlists from {link.source.name} yet. Paste the link to one video instead.
                             </p>
                         ) : (
                             <p role="alert">
@@ -279,19 +292,35 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                 </article>
             )}
 
-            {browseSources.length > 0 && (
+            {browseChoices.length > 0 && (
                 <div className="add-media-browse">
                     <h2>Or browse</h2>
                     <div className="add-media-browse-list">
-                        {browseSources.map((source) => (
-                            <button key={source.id} className="btn" type="button" onClick={() => browse(source)}>
-                                <FontAwesomeIcon icon={faIcon('fass', sourceHas(source, SourceFeature.BROWSE) ? 'compass' : 'magnifying-glass')}/>
-                                {sourceHas(source, SourceFeature.BROWSE) ? `Browse ${source.name}` : `Search ${searchName(source)}`}
+                        {browseChoices.map(({source, site}) => (
+                            <button key={`${source.id}-${site?.key ?? ''}`} className="btn" type="button" onClick={() => browse(source, site)}>
+                                <FontAwesomeIcon icon={faIcon('fass', site ? 'magnifying-glass' : 'compass')}/>
+                                {site ? `Search ${site.name}` : `Browse ${source.name}`}
                             </button>
                         ))}
                     </div>
                 </div>
             )}
+
+            {emptyCollections && (
+                <div className="add-media-browse">
+                    <h2>Or create a custom collection</h2>
+                    <p className="view-description add-media-browse-text">
+                        Make a collection of your own from playlists, creators and videos on any site.
+                    </p>
+                    <div className="add-media-browse-list">
+                        <button className="btn" type="button" onClick={() => setEmptyOpen(true)}>
+                            <FontAwesomeIcon icon={faIcon('fass', 'folder-plus')}/>
+                            Add custom collection
+                        </button>
+                    </div>
+                </div>
+            )}
+            {emptyOpen && <AddEmptyCollectionDialog onDismiss={() => setEmptyOpen(false)}/>}
         </section>
     )
 }

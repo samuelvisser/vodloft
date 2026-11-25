@@ -165,6 +165,13 @@ const DEFINITIONS: Record<SiteSettingKey, Definition> = {
         summary: (value: number) => value === 0 ? 'None' : `${value} ${value === 1 ? 'minute' : 'minutes'}`,
         control: (props) => <NumberControl {...props} min={0} max={7 * 24 * 60} unit="minutes"/>,
     },
+    dailyDownloadLimit: {
+        label: 'Automatic downloads per day',
+        kind: 'value',
+        system: (draft) => draft.downloadSettings.dailyDownloadLimit,
+        summary: (value: number) => value === 0 ? 'No limit' : `${value} a day`,
+        control: (props) => <NumberControl {...props} min={0} max={10000} unit="a day"/>,
+    },
     upgradeCheck: {
         label: 'Upgrade check',
         kind: 'toggle',
@@ -217,6 +224,11 @@ const DEFINITIONS: Record<SiteSettingKey, Definition> = {
     },
     sponsorblock: {
         label: 'SponsorBlock',
+        kind: 'toggle',
+        summary: onOff,
+    },
+    chapters: {
+        label: "Keep the video's chapters",
         kind: 'toggle',
         summary: onOff,
     },
@@ -309,7 +321,10 @@ function SiteSettingsRow({site, group, groupKeys, draft, updateDraft, errorFor}:
 
     return (
         // An error opens the Site, so a refused save shows why.
-        <SiteRow name={site.name} domains={site.domains} badges={badges(group, settings)} forceOpen={errors.some(Boolean)}>
+        <SiteRow
+            siteKey={site.key} name={site.name} domains={site.domains} badges={badges(group, settings)}
+            removable={site.removable} forceOpen={errors.some(Boolean)}
+        >
             {shown.map((setting, index) => (
                 <SettingRow
                     key={setting.offered.key} site={site} setting={setting} error={errors[index]}

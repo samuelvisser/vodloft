@@ -273,6 +273,23 @@ def test_sponsorblock_segments_the_download_cut_out_are_not_a_different_length(d
     assert [value.value for value in _findings(download, UpgradeOffer(duration=19 * 60), youtube).improvements] == ["length"]
 
 
+def test_chapters_the_download_cut_out_are_not_a_different_length(db_session):
+    youtube = Site("youtube", "YouTube", upgrade_checks=UpgradeChecks((UpgradeImprovement.LENGTH,)))
+    download = _download(db_session, profile_values={"upgrade_improvements": ["length"], "upgrade_length_minutes": 3}, download_values={
+        "duration": 20 * 60,
+        "sponsorblock_segments": [{"category": "sponsor", "start": 60.0, "end": 180.0, "action": "cut"}],
+        # The sponsor chapter is the same stretch as the SponsorBlock segment: it counts once.
+        "cut_chapters": [
+            {"title": "Sponsor", "start": 60.0, "end": 180.0},
+            {"title": "Intro", "start": 0.0, "end": 60.0},
+        ],
+    })
+
+    # The video was 23 minutes; the file is 20 because 3 minutes were cut out.
+    assert _findings(download, UpgradeOffer(duration=23 * 60), youtube).improvements == ()
+    assert [value.value for value in _findings(download, UpgradeOffer(duration=27 * 60), youtube).improvements] == ["length"]
+
+
 def test_only_what_the_site_offers_counts(db_session):
     from backend.services.upgrade_check import checks_profile
 
@@ -345,7 +362,7 @@ def test_a_refresh_that_finds_a_change_starts_the_upgrade_check(db_session, monk
     from task_manager.tasks.helpers import refreshed_metadata
 
     queued = []
-    monkeypatch.setattr(refreshed_metadata, "collection_site", lambda collection: DAILY_WIRE)
+    monkeypatch.setattr(refreshed_metadata, "episode_site", lambda episode: DAILY_WIRE)
     monkeypatch.setattr(refreshed_metadata, "queue_task_after_commit", lambda s, **kwargs: queued.append(kwargs))
     download = _download(db_session, profile_values={"upgrade_improvements": ["length"]}, download_values={
         # The refresh compares with the real clock, so the next check has to be ahead of it rather than of NOW.

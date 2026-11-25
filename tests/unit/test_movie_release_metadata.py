@@ -152,7 +152,7 @@ def test_movie_and_extra_downloads_share_one_persisted_release_lookup(tmp_path, 
     from backend.services import movies as movie_service
     from backend.api.models.media_download import MediaDownloadAPICreate
     from backend.db.core import Base
-    from backend.db.models import Movie, MovieLocalMediaProfile
+    from backend.db.models import Movie, VideoLocalMediaProfile
     from backend.integrations.tmdb import MovieReleaseLookupResult
     from config import get_settings
     from sources.dailywire.api.records import DwMovieExtraRecord, DwMovieRecord
@@ -176,7 +176,7 @@ def test_movie_and_extra_downloads_share_one_persisted_release_lookup(tmp_path, 
 
     monkeypatch.setattr(movie_service, "lookup_movie_release_metadata", fake_lookup)
 
-    profile = MovieLocalMediaProfile(
+    profile = VideoLocalMediaProfile(
         slug="plex-movies",
         name="Plex movies",
         output_template=(
@@ -272,7 +272,7 @@ def test_collection_date_component_placeholders_use_episode_publish_datetime(tmp
 
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
     episode = SimpleNamespace(
-        collection=SimpleNamespace(slug="collection", title="Collection", author_name="", meta_items=[]),
+        collection=SimpleNamespace(slug="collection", title="Collection", author_name="", meta_items=[], creator=None, lists=[], sharing_url="", kind="list"),
         season=SimpleNamespace(slug="season", name="Season", index=1, season_type="normal", season_number=1),
         slug="episode",
         source_slug="episode",
@@ -281,7 +281,7 @@ def test_collection_date_component_placeholders_use_episode_publish_datetime(tmp
         index=1,
         extra_index=None,
         title="Episode",
-        dw_episode_number="1",
+        source_number="1",
         episode_identifier="ep.1",
         published_date=datetime(2026, 8, 30, 12, 34, 56, tzinfo=timezone.utc),
     )

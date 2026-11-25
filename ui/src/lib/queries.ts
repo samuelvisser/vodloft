@@ -10,8 +10,9 @@ import {
     useQuery,
     useQueryClient,
 } from '@tanstack/react-query'
-import {useEffect, useMemo, useRef} from 'react'
+import {useEffect, useMemo, useRef, useState} from 'react'
 import {saveEpisodePreviewToStorage, saveProfilesToStorage, saveCollectionsToStorage} from './cache'
+import {forgetDeletedCollection} from './deletedCollection'
 import {
     type LazyCollectionPage,
     type LazyCollectionPageRequest,
@@ -21,7 +22,15 @@ import {
     useLazyCollection,
 } from './lazyCollection'
 import {useFrontendPuller} from './puller'
+import {lookupSteps} from './progressPlan'
+import {PlanSchema} from '../types/schemas/progress_plan'
+import type {ProgressStep} from '../types/progress'
 import {SitesSettingsReadSchema, type SitesSettingsRead} from '../types/schemas/siteSettings'
+import {
+    CreatorEpisodePageReadSchema, CreatorOfferingsSchema, CreatorPageReadSchema, CreatorReadSchema, type CreatorPageRead, type CreatorRead,
+    CollectionCreatorMatchSchema, type CollectionCreatorMatch,
+} from '../types/schemas/creator'
+import {MovePreviewSchema, type MovePreview, ReconcileResultSchema, type ReconcileResult, MovesWaitingSchema} from '../types/schemas/reconcile'
 import {downloadStatusesForApi} from './downloadStatusFilters'
 import {
     episodeQueryKeys,
@@ -67,9 +76,9 @@ import {TaskOperationRead} from "../types/schemas/operation";
 import {MovieRead, MovieReadSchema} from "../types/schemas/movie";
 import {VideoRead, VideoReadSchema} from "../types/schemas/video";
 import {
-    ApiStatusRead, ApiStatusReadSchema, EpisodeTagRead, EpisodeTagReadSchema, PublishStatusLabelRead, PublishStatusLabelReadSchema, ProgramStatusRead, SourceProblemRead,
+    ApiKeyNoteRead, ApiKeyNoteReadSchema, ApiStatusRead, ApiStatusReadSchema, EpisodeTagRead, EpisodeTagReadSchema, PublishStatusLabelRead, PublishStatusLabelReadSchema, ProgramStatusRead, SourceProblemRead,
     SourceProblemReadSchema, ProgramStatusReadSchema, ResolvedLinkRead,
-    ResolvedLinkReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SiteReadSchema, SourceRead, SiteAuthenticationRead, SiteAuthenticationReadSchema,
+    ResolvedLinkReadSchema, MediaLinksReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SiteReadSchema, SourceRead, SiteAuthenticationRead, SiteAuthenticationReadSchema,
     SourceReadSchema,
     YtdlpOptionsReadSchema,
 } from "../types/schemas/source";
@@ -81,7 +90,7 @@ import {
     DailywireMovieRead,
     DailywireMovieReadSchema,
 } from "../types/schemas/dailywire_catalog";
-import {apiJson, apiUrl, responseError} from './api'
+import {ApiError, apiJson, apiUrl, responseError} from './api'
 import {z} from 'zod'
 import {profilePageSchema} from '../types/schemas/profile_page'
 import {KeepQuestionReadSchema, type KeepQuestionRead} from '../types/schemas/media_download'
@@ -445,6 +454,14 @@ export function useSources() {
     })
 }
 
+/** The ids of the Sources the Library has media from. */
+export function useSourcesInUse() {
+    return useQuery<string[], Error, string[], readonly ['sourcesInUse']>({
+        queryKey: ['sourcesInUse'] as const,
+        queryFn: ({signal}) => fetchParsed(`${apiUrl()}/sources/in-use`, z.string().array(), signal),
+    })
+}
+
 /** The Sources by id, with a name fallback for items whose Source is no longer registered. */
 export function useSourceLookup() {
     const {data: sources} = useSources()
@@ -503,6 +520,46 @@ export async function saveSiteCookies(siteKey: string, content: string | null): 
     return SiteAuthenticationReadSchema.parse(await response.json())
 }
 
+/** Save and test the values of a Site's own API ('save'), test the stored ones ('test') or remove them ('remove'). */
+export async function changeSiteApi(
+    siteKey: string, action: 'save' | 'test' | 'remove', values?: Record<string, string>,
+): Promise<SiteAuthenticationRead> {
+    const base = `${apiUrl()}/sources/authentication/${encodeURIComponent(siteKey)}/api`
+    const response = await fetch(action === 'test' ? `${base}/test` : base, {
+        method: {save: 'PUT', test: 'POST', remove: 'DELETE'}[action],
+        credentials: 'include',
+        headers: action === 'save' ? {'Content-Type': 'application/json'} : undefined,
+        body: action === 'save' ? JSON.stringify({values}) : undefined,
+    })
+    if (response.status === 422) {
+        const body = await response.json().catch(() => null)
+        const detail = body?.detail
+        if (typeof detail?.message === 'string') throw new ApiKeyRejectedError(detail.message, detail.fixUrl ?? null)
+    }
+    if (!response.ok) throw await responseError(response)
+    return SiteAuthenticationReadSchema.parse(await response.json())
+}
+
+/** Remove a Site that has nothing in VODLoft, with its cookies file, from every list of Sites. */
+export function useRemoveSite() {
+    const queryClient = useQueryClient()
+    return async (siteKey: string) => {
+        const response = await fetch(`${apiUrl()}/sources/sites/${encodeURIComponent(siteKey)}`, {
+            method: 'DELETE',
+            credentials: 'include',
+        })
+        if (!response.ok) throw await responseError(response)
+        await Promise.all([
+            queryClient.invalidateQueries({queryKey: ['siteAuthentication']}),
+            queryClient.invalidateQueries({queryKey: ['sitesSettings']}),
+            queryClient.invalidateQueries({queryKey: ['sourceSites']}),
+            queryClient.invalidateQueries({queryKey: ['localMediaProfileSites']}),
+            // Add Media only offers the search of a Site that is added.
+            queryClient.invalidateQueries({queryKey: ['sources']}),
+        ])
+    }
+}
+
 /** The yt-dlp options a Source gives every download. */
 export function useSourceYtdlpOptions(sourceId: string) {
     return useQuery<string, Error, string, readonly ['sourceYtdlpOptions', string]>({
@@ -533,14 +590,16 @@ export async function saveSourceYtdlpOptions(sourceId: string, text: string): Pr
 }
 
 /** The tags a Source gives episodes of the show at ``url``, or of any of its shows without one. */
-export function useEpisodeTags(sourceKey?: string | null, url?: string | null) {
-    return useQuery<EpisodeTagRead[], Error, EpisodeTagRead[], readonly ['episodeTags', string, string | null]>({
-        queryKey: ['episodeTags', sourceKey ?? '', url ?? null] as const,
+/** A Source's episode tags for the collection at ``url``; with ``collectionType``, the main one is named as a collection
+ *  of that type names its episodes. */
+export function useEpisodeTags(sourceKey?: string | null, url?: string | null, collectionType?: string | null) {
+    return useQuery<EpisodeTagRead[], Error, EpisodeTagRead[], readonly ['episodeTags', string, string | null, string | null]>({
+        queryKey: ['episodeTags', sourceKey ?? '', url ?? null, collectionType ?? null] as const,
         enabled: !!sourceKey,
         staleTime: Infinity,
         queryFn: ({signal}) => fetchParsed(
-            `${apiUrl()}/sources/${encodeURIComponent(sourceKey ?? '')}/episode-tags`
-            + (url ? `?url=${encodeURIComponent(url)}` : ''),
+            `${apiUrl()}/sources/${encodeURIComponent(sourceKey ?? '')}/episode-tags?`
+            + new URLSearchParams({...(url ? {url} : {}), ...(collectionType ? {collection_type: collectionType} : {})}),
             EpisodeTagReadSchema.array(),
             signal,
         ),
@@ -570,7 +629,7 @@ export function useCollectionEpisodeTags({collectionId, collectionSlug, sourceKe
     const collection = collectionId !== undefined
         ? collections?.find((item) => item.id === collectionId)
         : collectionSlug ? collections?.find((item) => item.slug === collectionSlug) : undefined
-    return useEpisodeTags(collection?.sourceKey ?? sourceKey, collection?.sharingUrl ?? url)
+    return useEpisodeTags(collection?.sourceKey ?? sourceKey, collection?.sharingUrl ?? url, collection?.type)
 }
 
 /** The episode tags that a saved collection's episodes actually have, in its Source's order. */
@@ -661,6 +720,24 @@ export function useKeepQuestions() {
 }
 
 /** What the user should fix about any Source, for Needs attention on Home. */
+/** The Sites whose API key would speed up what is in the Library while there is none, for the note on Home. */
+export function useApiKeyNotes() {
+    return useQuery<ApiKeyNoteRead[], Error, ApiKeyNoteRead[], readonly ['apiKeyNotes']>({
+        queryKey: ['apiKeyNotes'] as const,
+        enabled: can('sources', 'manage'),
+        queryFn: ({signal}) => fetchParsed(`${apiUrl()}/sources/api-key-notes`, ApiKeyNoteReadSchema.array(), signal),
+    })
+}
+
+/** Put the note on Home that asks for an API key off for a week, or never show it again. */
+export async function putOffApiKeyNotes(action: 'later' | 'never'): Promise<void> {
+    const response = await fetch(`${apiUrl()}/sources/api-key-notes`, {
+        method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action}),
+    })
+    if (!response.ok) throw await responseError(response)
+}
+
 export function useSourceProblems() {
     return useQuery<SourceProblemRead[], Error, SourceProblemRead[], readonly ['sourceProblems']>({
         queryKey: ['sourceProblems'] as const,
@@ -708,13 +785,13 @@ export async function saveSourceSite(key: string, preferredSourceKey: string | n
     return SourceSiteReadSchema.parse(await response.json())
 }
 
-/** Shows and videos at a Source whose name matches the query. */
-export function useSourceSearch(sourceId: string | undefined, query: string) {
-    return useQuery<SearchResultsRead, Error, SearchResultsRead, readonly ['sourceSearch', string | undefined, string]>({
-        queryKey: ['sourceSearch', sourceId, query] as const,
-        enabled: !!sourceId && !!query,
+/** Collections and videos on a Site a Source searches, whose name matches the query. */
+export function useSourceSearch(sourceId: string | undefined, siteKey: string | undefined, query: string) {
+    return useQuery<SearchResultsRead, Error, SearchResultsRead, readonly ['sourceSearch', string | undefined, string | undefined, string]>({
+        queryKey: ['sourceSearch', sourceId, siteKey, query] as const,
+        enabled: !!sourceId && !!siteKey && !!query,
         queryFn: async ({signal}) => {
-            const params = new URLSearchParams({q: query})
+            const params = new URLSearchParams({site: siteKey!, q: query})
             const response = await fetch(
                 `${apiUrl()}/sources/${encodeURIComponent(sourceId!)}/search?${params}`,
                 {signal, credentials: 'include'},
@@ -734,6 +811,28 @@ export function useResolvedLink(url: string | undefined) {
         enabled: !!url,
         queryFn: ({signal}) => resolveLink(url!, signal),
         staleTime: 5 * 60 * 1000,
+        retry: false,
+    })
+}
+
+/** Which of the links are on a Site VODLoft knows for media, so a description links only those to Add media. */
+export function useMediaLinks(urls: string[]) {
+    const enabled = urls.length > 0 && can('add_media')
+    return useQuery<Set<string>, Error, Set<string>, readonly ['mediaLinks', string[]]>({
+        queryKey: ['mediaLinks', urls] as const,
+        enabled,
+        queryFn: async ({signal}) => {
+            const response = await fetch(`${apiUrl()}/media-links`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({urls}),
+                signal,
+            })
+            if (!response.ok) throw await responseError(response)
+            return new Set(MediaLinksReadSchema.parse(await response.json()).urls)
+        },
+        staleTime: 30 * 60 * 1000,
         retry: false,
     })
 }
@@ -758,6 +857,183 @@ export function useListedCollectionDetails(sourceId: string | undefined, url: st
 }
 
 /** Ask the backend which Source recognises a link, and what it points to. ``sourceKey`` asks only that Source. */
+/** Reads a creator lookup's answer, sent a line of JSON at a time: tells ``onPlan`` the steps of the lookup's plan each
+ * time it changes, and returns the result line after them. */
+async function readLookup(
+    response: Response, {onPlan}: {onPlan: (steps: ProgressStep[]) => void},
+): Promise<Record<string, unknown>> {
+    if (!response.ok || !response.body) throw await responseError(response)
+    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
+    let buffered = ''
+    for (;;) {
+        const {value, done} = await reader.read()
+        buffered += value ?? ''
+        const lines = buffered.split('\n')
+        buffered = done ? '' : lines.pop() ?? ''
+        for (const line of lines.filter((item) => item.trim())) {
+            const message = JSON.parse(line) as Record<string, unknown>
+            if (message.plan) onPlan(lookupSteps(PlanSchema.parse(message.plan)))
+            else if (typeof message.error === 'string') throw new ApiError(message.error, 502)
+            else return message
+        }
+        if (done) throw new ApiError('The lookup stopped before it was done', 502)
+    }
+}
+
+export function useCreators() {
+    return useQuery<CreatorRead[], Error, CreatorRead[], readonly ['creators']>({
+        queryKey: ['creators'] as const,
+        enabled: can('library'),
+        queryFn: ({signal}) => fetchParsed(`${apiUrl()}/creators`, CreatorReadSchema.array(), signal),
+        // Opening a creator or one of its collections changes the Library's Recently used order.
+        refetchOnMount: 'always',
+    })
+}
+
+export function useCreator(slug: string | undefined) {
+    return useQuery<CreatorPageRead, Error, CreatorPageRead, readonly ['creator', string | undefined]>({
+        queryKey: ['creator', slug] as const,
+        enabled: !!slug && can('library'),
+        queryFn: ({signal}) => fetchParsed(`${apiUrl()}/creators/${encodeURIComponent(slug ?? '')}`, CreatorPageReadSchema, signal),
+    })
+}
+
+const CREATOR_EPISODE_PAGE_SIZE = 12
+
+/** The episodes of all of a creator's collections, newest first, a page at a time. */
+export function useCreatorEpisodes(slug: string | undefined) {
+    return useInfiniteQuery({
+        queryKey: ['creator', slug, 'episodes'] as const,
+        enabled: !!slug && can('library'),
+        initialPageParam: null as string | null,
+        queryFn: ({pageParam, signal}) => {
+            const params = new URLSearchParams({limit: String(CREATOR_EPISODE_PAGE_SIZE)})
+            if (pageParam) params.set('cursor', pageParam)
+            return fetchParsed(`${apiUrl()}/creators/${encodeURIComponent(slug ?? '')}/episodes?${params}`, CreatorEpisodePageReadSchema, signal)
+        },
+        getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    })
+}
+
+/** What the creator has at their Sites beside their channel, such as a Daily Wire host's shows and movies, with what
+ * the Library has of it. Slow: asks each Site. */
+export function useCreatorOfferings(slug: string | undefined, enabled: boolean) {
+    return useQuery({
+        queryKey: ['creator', slug, 'offerings'] as const,
+        enabled: enabled && !!slug && can('library'),
+        staleTime: 5 * 60 * 1000,
+        retry: false,
+        queryFn: ({signal}) => fetchParsed(`${apiUrl()}/creators/${encodeURIComponent(slug ?? '')}/offerings`, CreatorOfferingsSchema, signal),
+    })
+}
+
+/** Add movies of one of a creator's accounts to the Library, when they aren't in it yet, and to the creator. Answers
+ * with the creator's page. */
+export async function addCreatorMovies(slug: string, accountId: number, refs: string[]): Promise<CreatorPageRead> {
+    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/accounts/${accountId}/movies`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({refs}),
+    })
+    if (!response.ok) throw await responseError(response)
+    return CreatorPageReadSchema.parse(await response.json())
+}
+
+/** What the Move action of a collection or episode does, by its API path such as `/collections/<slug>`: moving its
+ * Moved episodes to the seasons they belong in now. Changes nothing. */
+export async function previewReconcile(path: string, signal?: AbortSignal): Promise<MovePreview> {
+    const response = await fetch(`${apiUrl()}${path}/reconcile/preview`, {method: 'POST', credentials: 'include', signal})
+    if (!response.ok) throw await responseError(response)
+    return MovePreviewSchema.parse(await response.json())
+}
+
+/** Move the Moved episodes of a collection or episode, with whether the collection numbers its episodes again. */
+export async function reconcile(path: string, renumber: Record<string, boolean>): Promise<ReconcileResult> {
+    const response = await fetch(`${apiUrl()}${path}/reconcile`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({renumber}),
+    })
+    if (!response.ok) throw await responseError(response)
+    return ReconcileResultSchema.parse(await response.json())
+}
+
+/** The collections whose Moved episodes wait to be moved. */
+export function useMovesWaiting(enabled = true) {
+    return useQuery({
+        queryKey: ['movesWaiting'],
+        enabled,
+        queryFn: ({signal}) => apiJson('/collections/moves-waiting', (data) => z.array(MovesWaitingSchema).parse(data), {signal}),
+    })
+}
+
+/** Make one of a creator's accounts a creator of their own again, with its collections. Answers with the new
+ * creator's page. */
+export async function splitCreatorAccount(slug: string, accountId: number): Promise<CreatorPageRead> {
+    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/accounts/${accountId}/split`, {
+        method: 'POST',
+        credentials: 'include',
+    })
+    if (!response.ok) throw await responseError(response)
+    return CreatorPageReadSchema.parse(await response.json())
+}
+
+/** Make another creator in the Library, who is the same person or group, a part of this one. Answers with this
+ * creator's page. */
+export async function combineCreators(slug: string, otherSlug: string): Promise<CreatorPageRead> {
+    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/combine`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({otherSlug}),
+    })
+    if (!response.ok) throw await responseError(response)
+    return CreatorPageReadSchema.parse(await response.json())
+}
+
+function collectionCreatorPath(slug: string, rest = ''): string {
+    return `${apiUrl()}/collections/${encodeURIComponent(slug)}/creator${rest}`
+}
+
+/** The creator behind a channel collection's link, with the steps of looking it up so far. Slow: asks the Site. */
+export function useCollectionCreatorMatch(slug: string, enabled: boolean) {
+    const [steps, setSteps] = useState<ProgressStep[]>([])
+    const query = useQuery<CollectionCreatorMatch, Error>({
+        queryKey: ['collection-creator-match', slug] as const,
+        enabled,
+        retry: false,
+        staleTime: 60_000,
+        queryFn: async ({signal}) => {
+            setSteps([])
+            const response = await fetch(collectionCreatorPath(slug, '/match'), {credentials: 'include', signal})
+            const result = await readLookup(response, {onPlan: setSteps})
+            return CollectionCreatorMatchSchema.parse(result.match)
+        },
+    })
+    return {...query, steps}
+}
+
+/** Add the channel collection to the creator behind its link, adding the creator when they aren't in the Library,
+ * or take it out of its creator. ``lookupId`` uses what a match found instead of asking the Site again. */
+export async function setCollectionCreator(slug: string, inCreator: boolean, lookupId?: string | null): Promise<void> {
+    const response = await fetch(collectionCreatorPath(slug), inCreator
+        ? {method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({lookupId})}
+        : {method: 'DELETE', credentials: 'include'})
+    if (!response.ok) throw await responseError(response)
+}
+
+/** Add a collection to a creator in the Library that its link is not on, such as an artist whose music videos are
+ * on their label's channel. */
+export async function addCollectionToCreator(slug: string, creatorSlug: string): Promise<void> {
+    const response = await fetch(collectionCreatorPath(slug), {
+        method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({creatorSlug}),
+    })
+    if (!response.ok) throw await responseError(response)
+}
+
 export async function resolveLink(url: string, signal?: AbortSignal, sourceKey?: string): Promise<ResolvedLinkRead> {
     const response = await fetch(`${apiUrl()}/resolve`, {
         method: 'POST',
@@ -854,10 +1130,18 @@ export function useDailywireMovie(slug?: string) {
 
 export function useCollection(id?: string) {
     const qc = useQueryClient()
-    return useQuery({
+    const result = useQuery({
         ...collectionQueryOptions(id, qc),
         enabled: !!id,
     })
+    // A collection deleted elsewhere, such as by a creator's Edit page, another tab or another device, can still be
+    // in the cached collection list it starts from. When the server says it is gone, the caches that list it forget
+    // it; the page itself is left as it is.
+    const gone = result.error instanceof ApiError && result.error.status === 404
+    useEffect(() => {
+        if (gone && id) void forgetDeletedCollection(qc, id, {keepCollectionQuery: true})
+    }, [gone, id, qc])
+    return result
 }
 
 export function useEpisodePages(
@@ -1224,6 +1508,8 @@ function syntheticDownload(operation: TaskOperationRead): MediaDownloadDomainVie
         accessGranted: false,
         accessLabel: null,
         accessDescription: null,
+        removedByRetention: false,
+        removedBy: null,
         type: contextString(operation, 'media_type') || 'episode',
         mediaItemId,
         localMediaProfileId,

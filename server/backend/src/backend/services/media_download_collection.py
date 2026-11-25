@@ -60,8 +60,6 @@ _BULK_RETRYABLE_STATUSES = (
     "corrupted",
     "canceled",
 )
-_MEDIA = aliased(MediaItemBase, name="download_media")
-"""The download's media, for whether a Source locked it."""
 _CANCELABLE_STATUSES = (
     "pending",
     "preparing",
@@ -276,7 +274,7 @@ def _active_download_status(active_operation, progress_meta, execution):
     )
 
 
-def _persistent_download_status():
+def _persistent_download_status(media):
     """UI status when no active media.download operation owns the download."""
     return case(
         (
@@ -299,7 +297,7 @@ def _persistent_download_status():
         ),
         (TaskRun.status == TaskStatus.RUNNING, "preparing"),
         # Media the Source keeps for members or subscribers is not an error.
-        (locked_clause(_MEDIA), "locked"),
+        (locked_clause(media), "locked"),
         (TaskRun.status == TaskStatus.FAILED, "error"),
         (
             or_(
@@ -312,7 +310,7 @@ def _persistent_download_status():
     )
 
 
-def _effective_download_status(active_operation):
+def _effective_download_status(active_operation, media):
     progress_meta = TaskRun.meta["_progress_meta"]
     execution = progress_meta["download"]
     return case(
@@ -324,7 +322,7 @@ def _effective_download_status(active_operation):
                 execution,
             ),
         ),
-        else_=_persistent_download_status(),
+        else_=_persistent_download_status(media),
     ).label("status")
 
 
@@ -351,6 +349,11 @@ def _download_status_source() -> CTE:
     active_operation_ids = _latest_active_download_operation_ids()
     operation = aliased(TaskOperation, name="active_operation")
     active_operation = _ActiveOperation.of(operation)
+    # The download's media, for whether a Source locked it. Made for each statement and never shared:
+    # SQLAlchemy fills in an alias's columns the first time they are used, and two requests doing that at
+    # once could leave a column unmatched for good. The statement then named media_items itself, which
+    # joined every download to every media item and filled the disk with SQLite's temporary table.
+    media = aliased(MediaItemBase, name="download_media")
     queue = media_download_queue_position_subquery()
     # Delayed downloads sort where they will dispatch once their wait ends.
     sort_queue = media_download_queue_position_subquery(include_admission_waits=True)
@@ -371,9 +374,9 @@ def _download_status_source() -> CTE:
             queue.c.queue_position.label("queue_position"),
             sort_queue.c.queue_position.label("sort_queue_position"),
             _awaiting_admission(active_operation),
-            _effective_download_status(active_operation),
+            _effective_download_status(active_operation, media),
         )
-        .outerjoin(_MEDIA, _MEDIA.id == MediaDownloadBase.media_item_id)
+        .outerjoin(media, media.id == MediaDownloadBase.media_item_id)
         .outerjoin(
             latest_run_ids,
             latest_run_ids.c.media_download_id == MediaDownloadBase.id,

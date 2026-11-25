@@ -53,6 +53,7 @@ export const AudioFormatReg = createSelectRegistry('AudioFormat', {
     m4a: {label: 'M4A (AAC)', help: 'Plays everywhere, including podcast apps and older Apple devices.'},
     opus: {label: 'Opus', help: 'Smallest at the same quality. Not every podcast app plays it.'},
     mp3: {label: 'MP3', help: 'For very old players. Converted, so a little quality is lost.'},
+    flac: {label: 'FLAC', help: 'Lossless, for the tracks of a profile for Music. Keeps what the site sends, but is no better than it.'},
 })
 
 export type CodecChoice = {codec: VideoCodec; allowed: boolean}

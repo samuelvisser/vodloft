@@ -1,0 +1,2 @@
+.dialog-switch { display: flex; align-items: flex-start; gap: .6rem; margin: .75rem 0; font-weight: normal; cursor: pointer; }
+.dialog-switch > span { display: flex; flex-direction: column; gap: 2px; }

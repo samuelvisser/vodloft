@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Video
-from backend.services.sites import collection_site
+from backend.services.sites import episode_site
 from backend.services.thumbnails import is_own_thumbnail
 from backend.services.upgrade_check import check_refreshed_changes_now
 from sources import VideoDetails
@@ -48,5 +48,5 @@ def apply_refreshed_details(item: Episode | Video, details: VideoDetails, *, now
 def check_upgrades_after_refresh(s: Session, episode: Episode) -> None:
     """Start the upgrade check once the refresh commits, when the refreshed metadata shows that something an
     episode's downloads count as better changed. When a refresh cannot tell, the check keeps its own schedule."""
-    if check_refreshed_changes_now(episode, collection_site(episode.collection), datetime.now(timezone.utc)):
+    if check_refreshed_changes_now(episode, episode_site(episode), datetime.now(timezone.utc)):
         queue_task_after_commit(s, def_key=_UPGRADE_CHECK_TASK_KEY, resource_type="system", resource_id=0)

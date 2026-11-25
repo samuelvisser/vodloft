@@ -10,7 +10,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db.models import Collection, Episode
+from backend.services.link_seasons import lists_own_link, own_feeds
 from backend.types.collection_types import CheckFrequency
+from sources import QuickCheckCollection
 
 LESS_OFTEN_MINUTES = 6 * 60
 """A Collection checked less often is looked at no more than every six hours."""
@@ -38,11 +40,22 @@ def full_scan_done(collection_id: int) -> None:
     _last_full_scan[collection_id] = time.monotonic()
 
 
-def quick_check_minutes(collection: Collection, minutes: int) -> int:
-    """The minutes between quick checks of this Collection, given what its Source would use."""
-    if collection.check_frequency == CheckFrequency.LESS_OFTEN:
-        return max(minutes, LESS_OFTEN_MINUTES)
-    return minutes
+LISTS_ONLY_MINUTES = 60
+"""A Collection that only holds the seasons of its lists reads every one of them again each check, so it is checked
+no more than every hour."""
+
+
+def quick_check_plan(collection: Collection, episode_count: int) -> QuickCheckCollection:
+    """The Collection as its Source needs it to tell what quick-checking it costs and how often it can."""
+    lists_only = not lists_own_link(collection)
+    least = LESS_OFTEN_MINUTES if collection.check_frequency == CheckFrequency.LESS_OFTEN else 0
+    return QuickCheckCollection(
+        url=collection.sharing_url or "",
+        episode_count=episode_count,
+        feeds=own_feeds(collection),
+        lists_only=lists_only,
+        least_minutes=max(least, LISTS_ONLY_MINUTES if lists_only else 0),
+    )
 
 
 _SUGGEST_AFTER = timedelta(days=21)

@@ -25,6 +25,8 @@ def test_artwork_source_priorities_and_missing_variants():
         thumbnail_landscape_path='https://example.invalid/landscape',
         background_image_path='https://example.invalid/background',
         logo_image_path='https://example.invalid/logo',
+        link_image_path=None,
+        lists=[],
     )
     assert {
         source.kind: (source.url, source.forced_format)
@@ -44,6 +46,29 @@ def test_artwork_source_priorities_and_missing_variants():
     collection.thumbnail_landscape_path = 'file:///not-a-remote-image'
     collection.logo_image_path = None
     assert assets.collection_asset_sources(collection) == ()
+
+
+def test_each_season_a_playlist_fills_gets_the_playlists_picture_as_its_poster():
+    def playlist(number, url, *, position=0, enabled=True):
+        season = SimpleNamespace(season_number=number) if number is not None else None
+        return SimpleNamespace(season=season, image_path=url, site_position=position, enabled=enabled)
+
+    collection = SimpleNamespace(
+        thumbnail_portrait_path=None, thumbnail_square_path=None, thumbnail_landscape_path=None,
+        background_image_path=None, logo_image_path=None, link_image_path=None,
+        lists=[
+            playlist(2, 'https://example.invalid/two', position=1),
+            playlist(1, 'https://example.invalid/one-later', position=5),
+            playlist(1, 'https://example.invalid/one', position=0),
+            playlist(3, 'https://example.invalid/off', enabled=False),
+            playlist(None, 'https://example.invalid/no-season'),
+            playlist(4, None),
+        ],
+    )
+    assert [(source.kind, source.url) for source in assets.collection_asset_sources(collection)] == [
+        ('season01-poster', 'https://example.invalid/one'),
+        ('season02-poster', 'https://example.invalid/two'),
+    ]
 
 
 def test_artwork_metadata_refresh_preserves_absent_variants():
@@ -96,3 +121,13 @@ def test_preview_rejects_another_collections_root_but_allows_same_collection_pro
     result = assets.get_collection_asset_root_preview(session, **arguments)
     assert result.path is None
     assert 'another collection' in result.reason
+
+
+def test_a_collection_of_links_takes_its_poster_from_its_link():
+    collection = SimpleNamespace(
+        thumbnail_portrait_path=None, thumbnail_square_path=None, thumbnail_landscape_path=None,
+        background_image_path=None, logo_image_path=None, link_image_path='https://example.invalid/playlist', lists=[],
+    )
+    assert [(source.kind, source.url) for source in assets.collection_asset_sources(collection)] == [
+        ('poster', 'https://example.invalid/playlist'),
+    ]

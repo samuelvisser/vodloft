@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useRef, useState, type ComponentProps, type CSSProperties, type ReactNode} from 'react'
+import {useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type CSSProperties, type ReactNode} from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import {
     autocompletion,
@@ -8,10 +8,10 @@ import {
     type CompletionContext,
 } from '@codemirror/autocomplete'
 import {indentUnit} from '@codemirror/language'
+import type {Extension} from '@codemirror/state'
 import {EditorView, type ViewUpdate} from '@codemirror/view'
 import {Controller, type UseFormReturn, useWatch} from 'react-hook-form'
 
-import ReadMore from '../../utils/ReadMore'
 import {useLocalMediaProfilePreview} from '../../lib/localMediaProfilePreview'
 import {
     type LocalMediaProfileTemplateSource,
@@ -25,6 +25,10 @@ import CustomIndexAdvisories from './CustomIndexAdvisories'
 import OpaqueOutputTemplateCode from './OpaqueOutputTemplateCode'
 import OutputTemplateStartFields, {FilenameModeField} from './OutputTemplateStartFields'
 import CollectionRootNote from './CollectionRootNote'
+import {JINJA_FILTERS, TEMPLATE_FUNCTIONS} from './outputTemplateFunctions'
+import TemplateReference, {SHEET_QUERY, type ReferenceEntry} from './TemplateReference'
+import {useSetExampleEpisode} from './ExampleEpisodeContext'
+import {useProfileFit} from './ProfileFit'
 import {outputTemplateSyntaxExtensions} from './outputTemplateCodeMirror'
 import {
     analyzeJinjaStatement,
@@ -42,6 +46,7 @@ import {
     type OutputTemplateVariable,
 } from './outputTemplateVariables'
 import type {IndexingValueEntry} from '../../types/schemas/custom_metadata'
+import {musicKind} from '../../types/local_media_profile'
 import {isExampleSource, useCollectionExamples} from '../../lib/collectionExamples'
 import './OutputTemplateEditor.css'
 import './OutputTemplateEditorIde.css'
@@ -50,7 +55,6 @@ type Props = {
     form: UseFormReturn<any>
     mode: LocalMediaProfileMode
     placeholder: string
-    help: ReactNode
     /** Shows a saved profile's template and its examples without letting it be changed here. */
     readOnly?: boolean
     /** A new profile, which starts with the presets open. */
@@ -72,6 +76,8 @@ type TemplateCodeEditorProps = {
     ariaLabel?: string
     /** The help and error text, when they are not the profile form's own. */
     describedBy?: string
+    /** Hears the editor once it exists, so text can be inserted at its cursor. */
+    onCreateEditor?: (view: EditorView) => void
 }
 
 type JinjaStatement = {
@@ -109,96 +115,13 @@ function filterCompletion(label: string, detail: string, info: string): Completi
     return {label, type: 'function', detail, info}
 }
 
-const vodloftFilterCompletionOptions: Completion[] = [
-    filterCompletion(
-        'strftime',
-        'strftime(format)',
-        'Format a VODLoft date or time value using Python strftime directives.',
-    ),
-    filterCompletion(
-        'regex_replace',
-        'regex_replace(pattern, replacement, count=0)',
-        'Replace regex matches. count=0 replaces all matches.',
-    ),
-    filterCompletion(
-        'regex_search',
-        'regex_search(pattern)',
-        'Return true when the regex matches anywhere in the value.',
-    ),
-    filterCompletion(
-        'regex_groups',
-        'regex_groups(pattern)',
-        'Return the groups of the first regex match as a list, or an empty list when nothing matches.',
-    ),
-    filterCompletion(
-        'as_typed',
-        'as_typed',
-        'Name the value as if it were typed into the template: in Restricted mode it keeps its spaces. Use it last.',
-    ),
-    filterCompletion(
-        'custom_index',
-        "'key' | custom_index(per=None, start=1, step=1)",
-        'Use this episode\'s number from a defined Indexing Value. per counts separately for each value, ' +
-        'start and step set the first number and how it changes.',
-    ),
-]
+const vodloftFilterCompletionOptions: Completion[] = TEMPLATE_FUNCTIONS.map(
+    ({name, usage, description}) => filterCompletion(name, usage, description),
+)
 
-const jinjaNativeFilterCompletionOptions: Completion[] = [
-    filterCompletion('abs', 'abs', 'Return the absolute value of a number.'),
-    filterCompletion('attr', 'attr(name)', 'Get an attribute from an object.'),
-    filterCompletion('batch', 'batch(linecount, fill_with=None)', 'Group items into rows with up to linecount items each.'),
-    filterCompletion('capitalize', 'capitalize', 'Capitalize the first character and lowercase the rest.'),
-    filterCompletion('center', 'center(width=80)', 'Center text in a field of the given width.'),
-    filterCompletion('count', 'count', 'Return the number of items in a value.'),
-    filterCompletion('d', "d(default_value='', boolean=False)", 'Alias for the default filter.'),
-    filterCompletion('default', "default(default_value='', boolean=False)", 'Use a fallback when the value is undefined, or optionally false-like.'),
-    filterCompletion('dictsort', "dictsort(case_sensitive=False, by='key', reverse=False)", 'Sort a dictionary and return key/value pairs.'),
-    filterCompletion('e', 'e', 'Alias for the escape filter.'),
-    filterCompletion('escape', 'escape', 'Escape HTML-special characters.'),
-    filterCompletion('filesizeformat', 'filesizeformat(binary=False)', 'Format a number as a human-readable file size.'),
-    filterCompletion('first', 'first', 'Return the first item in a sequence.'),
-    filterCompletion('float', 'float(default=0.0)', 'Convert a value to a floating-point number.'),
-    filterCompletion('forceescape', 'forceescape', 'Apply HTML escaping even to values already marked safe.'),
-    filterCompletion('format', 'format(*args, **kwargs)', 'Apply printf-style formatting to a string.'),
-    filterCompletion('groupby', 'groupby(attribute, default=None, case_sensitive=False)', 'Group items by an attribute.'),
-    filterCompletion('indent', 'indent(width=4, first=False, blank=False)', 'Indent lines in a string.'),
-    filterCompletion('int', 'int(default=0, base=10)', 'Convert a value to an integer.'),
-    filterCompletion('items', 'items', 'Iterate over the key/value pairs in a mapping.'),
-    filterCompletion('join', "join(d='', attribute=None)", 'Join items into a string, optionally using an attribute from each item.'),
-    filterCompletion('last', 'last', 'Return the last item in a sequence.'),
-    filterCompletion('length', 'length', 'Return the number of items in a value.'),
-    filterCompletion('list', 'list', 'Convert a value to a list.'),
-    filterCompletion('lower', 'lower', 'Convert text to lowercase.'),
-    filterCompletion('map', 'map(*args, **kwargs)', 'Transform a sequence by applying a filter or reading an attribute.'),
-    filterCompletion('max', 'max(case_sensitive=False, attribute=None)', 'Return the largest item in a sequence.'),
-    filterCompletion('min', 'min(case_sensitive=False, attribute=None)', 'Return the smallest item in a sequence.'),
-    filterCompletion('pprint', 'pprint', 'Format a value for debugging.'),
-    filterCompletion('random', 'random', 'Return a random item from a sequence.'),
-    filterCompletion('reject', 'reject(*args, **kwargs)', 'Keep sequence items that fail a Jinja test.'),
-    filterCompletion('rejectattr', 'rejectattr(*args, **kwargs)', 'Keep items whose selected attribute fails a Jinja test.'),
-    filterCompletion('replace', 'replace(old, new, count=None)', 'Replace occurrences of a substring.'),
-    filterCompletion('reverse', 'reverse', 'Reverse text or iterate over a sequence in reverse.'),
-    filterCompletion('round', "round(precision=0, method='common')", 'Round a number to the requested precision.'),
-    filterCompletion('safe', 'safe', 'Mark a string as safe from HTML escaping.'),
-    filterCompletion('select', 'select(*args, **kwargs)', 'Keep sequence items that pass a Jinja test.'),
-    filterCompletion('selectattr', 'selectattr(*args, **kwargs)', 'Keep items whose selected attribute passes a Jinja test.'),
-    filterCompletion('slice', 'slice(slices, fill_with=None)', 'Split a sequence into the requested number of slices.'),
-    filterCompletion('sort', 'sort(reverse=False, case_sensitive=False, attribute=None)', 'Sort a sequence.'),
-    filterCompletion('string', 'string', 'Convert a value to a string.'),
-    filterCompletion('striptags', 'striptags', 'Remove SGML or XML tags and normalize adjacent whitespace.'),
-    filterCompletion('sum', 'sum(attribute=None, start=0)', 'Add the values in a sequence.'),
-    filterCompletion('title', 'title', 'Convert text to title case.'),
-    filterCompletion('tojson', 'tojson(indent=None)', 'Serialize a value as JSON.'),
-    filterCompletion('trim', 'trim(chars=None)', 'Remove leading and trailing characters, or whitespace by default.'),
-    filterCompletion('truncate', "truncate(length=255, killwords=False, end='...', leeway=None)", 'Shorten text to a maximum length.'),
-    filterCompletion('unique', 'unique(case_sensitive=False, attribute=None)', 'Return unique items from a sequence.'),
-    filterCompletion('upper', 'upper', 'Convert text to uppercase.'),
-    filterCompletion('urlencode', 'urlencode', 'Encode a value for use in a URL path or query.'),
-    filterCompletion('urlize', 'urlize(trim_url_limit=None, nofollow=False, target=None, rel=None, extra_schemes=None)', 'Convert URLs in text to HTML links.'),
-    filterCompletion('wordcount', 'wordcount', 'Count words in a string.'),
-    filterCompletion('wordwrap', 'wordwrap(width=79, break_long_words=True, wrapstring=None, break_on_hyphens=True)', 'Wrap text to the requested width.'),
-    filterCompletion('xmlattr', 'xmlattr(autospace=True)', 'Build an SGML/XML attribute string from a mapping.'),
-]
+const jinjaNativeFilterCompletionOptions: Completion[] = JINJA_FILTERS.map(
+    ({name, usage, description}) => filterCompletion(name, usage, description),
+)
 
 type CompletionInfoRect = {
     top: number
@@ -431,6 +354,7 @@ export function TemplateCodeEditor({
                                 id = 'mp-path',
                                 ariaLabel = 'Output path template',
                                 describedBy,
+                                onCreateEditor,
                             }: TemplateCodeEditorProps) {
     const canonicalValue = value ?? ''
     const [editorValue, setEditorValue] = useState(() => (
@@ -474,206 +398,16 @@ export function TemplateCodeEditor({
             aria-label={ariaLabel}
             aria-invalid={invalid}
             aria-describedby={describedBy ?? (invalid ? 'mp-path-error' : 'mp-path-help')}
+            onCreateEditor={onCreateEditor}
         />
     )
 }
 
-function PreviewPathPart({part}: { part: string }) {
-    const leadingSpaceCount = part.match(/^ +/)?.[0].length ?? 0
-    return (
-        <>
-            {leadingSpaceCount > 0 && (
-                <span
-                    title={leadingSpaceCount === 1 ? 'Leading space' : `${leadingSpaceCount} leading spaces`}
-                    aria-label={leadingSpaceCount === 1 ? 'leading space' : `${leadingSpaceCount} leading spaces`}
-                >
-                    {'␣'.repeat(leadingSpaceCount)}
-                </span>
-            )}
-            {part.slice(leadingSpaceCount)}
-        </>
-    )
-}
-
-function PreviewLoadingIndicator() {
-    return (
-        <span
-            className="template-preview-loading-indicator"
-            role="status"
-            aria-label="Loading example"
-        >
-            <span/>
-            <span/>
-            <span/>
-        </span>
-    )
-}
-
-function PreviewPath({path}: { path: string }) {
-    const absolute = path.startsWith('/')
-    const parts = path.split('/').filter(Boolean)
-    if (!absolute || parts.length < 2) return <code>{path}</code>
-
-    return (
-        <code className="template-preview-path-tree" title={path}>
-            {parts.map((part, index) => (
-                <span
-                    key={`${part}-${index}`}
-                    className="template-preview-path-segment"
-                    style={{'--template-path-depth': index} as CSSProperties}
-                >
-                    <span className="template-preview-path-branch" aria-hidden="true">{index === 0 ? '' : '└─ '}</span>
-                    {index === 0 ? '/' : ''}<PreviewPathPart part={part}/>{index < parts.length - 1 ? '/' : ''}
-                </span>
-            ))}
-        </code>
-    )
-}
-
-const FILENAME_MODE_NAMES: Record<string, string> = {
-    unrestricted: 'Unrestricted',
-    windows: 'Windows',
-    restricted: 'Restricted',
-}
-
-const NO_SOURCES: LocalMediaProfileTemplateSource[] = []
-
-function describeTypedCharacter(char: string): string {
-    if (char === ' ') return 'space'
-    if (char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127) return 'control character'
-    return char
-}
-
-type ReferenceEntry = {
-    code: string
-    description: string
-    readMore?: OutputTemplateVariable['readMore']
-}
-
-function variableEntry(variable: OutputTemplateVariable): ReferenceEntry {
-    return {code: `{{ ${variable.name} }}`, description: variable.description, readMore: variable.readMore}
-}
-
-/** A list of what a template can use, each with what it is. */
-function VariableReference({entries}: {entries: readonly ReferenceEntry[]}) {
-    return (
-        <dl className="output-template-variable-reference">
-            {entries.map((entry) => (
-                <div key={entry.code}>
-                    <dt><code>{entry.code}</code></dt>
-                    <dd>
-                        {entry.readMore ? (
-                            <ReadMore summary={entry.readMore.summary ?? entry.description}>
-                                {entry.readMore.paragraphs.map((paragraph) => (
-                                    <p key={paragraph} dangerouslySetInnerHTML={{__html: paragraph}} />
-                                ))}
-                            </ReadMore>
-                        ) : entry.description}
-                    </dd>
-                </div>
-            ))}
-        </dl>
-    )
-}
-
-export default function OutputTemplateEditor({form, mode, placeholder, help, readOnly = false, isCreating = false, onCollectionRoot, headerActions}: Props) {
-    const {control, formState: {errors}} = form
-    const template = useWatch({control, name: 'outputTemplate'}) ?? ''
-    const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
-    const filenameRestrictionMode = useWatch({control, name: 'filenameRestrictionMode'})
-    const collectionScope = useWatch({control, name: 'collectionScope'}) ?? 'both'
-    const indexingValues = useWatch({control, name: 'indexingValues'}) ?? []
-    // Movies are only on The Daily Wire, so a movie profile has no Sites filter.
-    const watchedSiteKeys = useWatch({control, name: 'siteKeys'}) as string[] | null | undefined
-    const siteKeys = mode !== 'movie' && Array.isArray(watchedSiteKeys) ? watchedSiteKeys : undefined
-    const siteKeysKey = siteKeys ? [...siteKeys].sort().join(',') : null
-    const rawLocalMediaProfileId = useWatch({control, name: 'id'})
-    const localMediaProfileId = typeof rawLocalMediaProfileId === 'number'
-        ? rawLocalMediaProfileId
-        : null
-    const canonicalTemplate = useMemo(
-        () => renderCompactOutputTemplate(parseOutputTemplate(template, 'compact')),
-        [template],
-    )
-    const pathHasLeadingSpace = useMemo(
-        () => hasLeadingPathPartSpace(parseOutputTemplate(canonicalTemplate, 'compact')),
-        [canonicalTemplate],
-    )
-
-    useEffect(() => {
-        if (canonicalTemplate === template) return
-        form.setValue('outputTemplate', canonicalTemplate, {
-            shouldDirty: false,
-            shouldTouch: false,
-            shouldValidate: false,
-        })
-    }, [canonicalTemplate, form, template])
-
-    const [sourceSearch, setSourceSearch] = useState('')
-    const [selectedSource, setSelectedSource] = useState<LocalMediaProfileTemplateSource | null>(null)
-    const [testValues, setTestValues] = useState<Record<string, string>>({})
-    const [testValuesExpanded, setTestValuesExpanded] = useState(false)
-    // While a collection is added, its own newest episodes are the examples, and the preview starts on one.
-    const collectionExamples = useCollectionExamples()
-    const exampleSources = useMemo(
-        () => mode === 'collection' ? collectionExamples?.sources ?? NO_SOURCES : NO_SOURCES,
-        [collectionExamples?.sources, mode],
-    )
-    const chosenSource = useRef(false)
-    const sourceQuery = useLocalMediaProfileTemplateSources(mode, {
-        collectionScope,
-        search: sourceSearch,
-        anchorSourceId: isExampleSource(selectedSource) ? undefined : selectedSource?.id,
-        siteKeys,
-    })
-    const randomCollectionSourceQuery = useRandomCollectionTemplateSource(
-        collectionScope, mode === 'collection', localMediaProfileId, siteKeys,
-    )
-    const variableQuery = useLocalMediaProfileTemplateVariables(mode)
-    const customVariables = (variableQuery.data ?? []) as OutputTemplateVariable[]
-    const variables = useMemo(
-        () => getOutputTemplateVariables(mode, customVariables),
-        [customVariables, mode],
-    )
-    const metadataNames = useMemo(() => new Set(customVariables.map(({name}) => name)), [customVariables])
-    const variableEntries = useMemo(
-        () => variables
-            .filter(({name}) => !metadataNames.has(name) && (mode !== 'collection' || !BUILT_IN_INDEXING_VALUES.has(name)))
-            .map(variableEntry),
-        [metadataNames, mode, variables],
-    )
-    const builtInIndexEntries = useMemo(
-        () => variables.filter(({name}) => BUILT_IN_INDEXING_VALUES.has(name)).map(variableEntry),
-        [variables],
-    )
-    const customIndexEntries: ReferenceEntry[] = (indexingValues as IndexingValueEntry[]).map(({key, name, keepNumbers}) => ({
-        code: `{{ '${key}' | custom_index }}`,
-        description: keepNumbers ? `${name}. Keeps the numbers it gave out.` : name,
-    }))
-    const metadataEntries = useMemo(
-        () => variables.filter(({name}) => metadataNames.has(name)).map(variableEntry),
-        [metadataNames, variables],
-    )
-    const [usedVariableNames, setUsedVariableNames] = useState<string[]>([])
-    const [provisionalIndexingValueNames, setProvisionalIndexingValueNames] = useState<string[]>([])
-    const [replacedTyped, setReplacedTyped] = useState<{mode: string, characters: string[]}>({mode: '', characters: []})
-    const usedVariables = useMemo(
-        () => {
-            const used = new Set(usedVariableNames)
-            return variables.filter(({name}) => used.has(name))
-        },
-        [usedVariableNames, variables],
-    )
-    const usedVariablesKey = usedVariables.map(({name}) => name).join('|')
-    const missingMetadataVariables = useMemo(() => {
-        if (mode === 'video') return []
-        const prefix = mode === 'movie' ? 'meta_movie_' : 'meta_collection_'
-        const available = new Set(customVariables.map(({name}) => name))
-        return [...new Set(
-            usedVariableNames.filter((name) => name.startsWith(prefix) && !available.has(name)),
-        )].sort()
-    }, [customVariables, mode, usedVariableNames])
-
+/**
+ * Completes variables, filters and Jinja statements as a template is typed: the menu opens after `{{`, `{%` and `|`.
+ * Only Collection output templates offer custom_index.
+ */
+export function useJinjaCompletions(variables: readonly OutputTemplateVariable[], offersCustomIndex: boolean): Extension[] {
     const variableCompletionOptions = useMemo<Completion[]>(
         () => variables.map((variable) => ({
             label: variable.name,
@@ -717,7 +451,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
             })),
         [],
     )
-    const editorExtensions = useMemo(() => {
+    return useMemo(() => {
         const filterCompletionSource = (context: CompletionContext) => {
             const beforeCursor = context.state.sliceDoc(0, context.pos)
             const expression = activeJinjaExpression(beforeCursor)
@@ -732,7 +466,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
                 from: context.pos - currentWord.length,
                 options: [
                     ...vodloftFilterCompletionOptions
-                        .filter((option) => mode === 'collection' || option.label !== 'custom_index')
+                        .filter((option) => offersCustomIndex || option.label !== 'custom_index')
                         .map((option) => currentWord ? option : {...option, boost: 99}),
                     ...jinjaNativeFilterCompletionOptions,
                 ],
@@ -818,14 +552,218 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
             }
         })
         return [
-            ...templateEditorExtensions,
             autocompletion({
                 override: [filterCompletionSource, variableCompletionSource, statementCompletionSource],
                 positionInfo: (_view, list, _option, info, space) => positionCompletionInfo(list, info, space),
             }),
             openCompletionsAfterJinjaDelimiter,
         ]
-    }, [mode, printVariableCompletionOptions, statementCompletionOptions, variableCompletionOptions])
+    }, [offersCustomIndex, printVariableCompletionOptions, statementCompletionOptions, variableCompletionOptions])
+}
+
+function PreviewPathPart({part}: { part: string }) {
+    const leadingSpaceCount = part.match(/^ +/)?.[0].length ?? 0
+    return (
+        <>
+            {leadingSpaceCount > 0 && (
+                <span
+                    title={leadingSpaceCount === 1 ? 'Leading space' : `${leadingSpaceCount} leading spaces`}
+                    aria-label={leadingSpaceCount === 1 ? 'leading space' : `${leadingSpaceCount} leading spaces`}
+                >
+                    {'␣'.repeat(leadingSpaceCount)}
+                </span>
+            )}
+            {part.slice(leadingSpaceCount)}
+        </>
+    )
+}
+
+function PreviewLoadingIndicator() {
+    return (
+        <span
+            className="template-preview-loading-indicator"
+            role="status"
+            aria-label="Loading example"
+        >
+            <span/>
+            <span/>
+            <span/>
+        </span>
+    )
+}
+
+function PreviewPath({path}: { path: string }) {
+    const absolute = path.startsWith('/')
+    const parts = path.split('/').filter(Boolean)
+    if (!absolute || parts.length < 2) return <code>{path}</code>
+
+    return (
+        <code className="template-preview-path-tree" title={path}>
+            {parts.map((part, index) => (
+                <span
+                    key={`${part}-${index}`}
+                    className="template-preview-path-segment"
+                    style={{'--template-path-depth': index} as CSSProperties}
+                >
+                    <span className="template-preview-path-branch" aria-hidden="true">{index === 0 ? '' : '└─ '}</span>
+                    {index === 0 ? '/' : ''}<PreviewPathPart part={part}/>{index < parts.length - 1 ? '/' : ''}
+                </span>
+            ))}
+        </code>
+    )
+}
+
+const FILENAME_MODE_NAMES: Record<string, string> = {
+    unrestricted: 'Unrestricted',
+    windows: 'Windows',
+    restricted: 'Restricted',
+}
+
+const NO_SOURCES: LocalMediaProfileTemplateSource[] = []
+
+function describeTypedCharacter(char: string): string {
+    if (char === ' ') return 'space'
+    if (char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127) return 'control character'
+    return char
+}
+
+function referenceEntry(variable: OutputTemplateVariable): ReferenceEntry {
+    return {
+        code: variable.name, insert: `{{ ${variable.name} }}`,
+        description: variable.description, short: variable.short, readMore: variable.readMore,
+    }
+}
+
+export default function OutputTemplateEditor({form, mode, placeholder, readOnly = false, isCreating = false, onCollectionRoot, headerActions}: Props) {
+    const {control, formState: {errors}} = form
+    const template = useWatch({control, name: 'outputTemplate'}) ?? ''
+    const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
+    const filenameRestrictionMode = useWatch({control, name: 'filenameRestrictionMode'})
+    const collectionScope = useWatch({control, name: 'collectionScope'}) ?? 'podcast-and-series'
+    const videoScope = useWatch({control, name: 'videoScope' as any}) ?? 'both'
+    const sourceLabel = mode !== 'collection'
+        ? ({videos: 'Example video', movies: 'Example movie'} as Record<string, string>)[videoScope] ?? 'Example video or movie'
+        : ({tracks: 'Example track', music_videos: 'Example music video'} as Record<string, string>)[musicKind(collectionScope, preferredFormat) ?? ''] ?? 'Example episode'
+    const indexingValues = useWatch({control, name: 'indexingValues'}) ?? []
+    const watchedSiteKeys = useWatch({control, name: 'siteKeys'}) as string[] | null | undefined
+    const siteKeys = Array.isArray(watchedSiteKeys) ? watchedSiteKeys : undefined
+    const siteKeysKey = siteKeys ? [...siteKeys].sort().join(',') : null
+    // A Collection profile's own episode title and description render for the same example as the path.
+    const [episodeTitleTemplate, episodeDescriptionTemplate] = useWatch({
+        control, name: ['episodeTitleTemplate', 'episodeDescriptionTemplate'],
+    }) as [string | null | undefined, string | null | undefined]
+    const setExampleEpisode = useSetExampleEpisode()
+    const rawLocalMediaProfileId = useWatch({control, name: 'id'})
+    const localMediaProfileId = typeof rawLocalMediaProfileId === 'number'
+        ? rawLocalMediaProfileId
+        : null
+    const canonicalTemplate = useMemo(
+        () => renderCompactOutputTemplate(parseOutputTemplate(template, 'compact')),
+        [template],
+    )
+    const pathHasLeadingSpace = useMemo(
+        () => hasLeadingPathPartSpace(parseOutputTemplate(canonicalTemplate, 'compact')),
+        [canonicalTemplate],
+    )
+
+    useEffect(() => {
+        if (canonicalTemplate === template) return
+        form.setValue('outputTemplate', canonicalTemplate, {
+            shouldDirty: false,
+            shouldTouch: false,
+            shouldValidate: false,
+        })
+    }, [canonicalTemplate, form, template])
+
+    const [sourceSearch, setSourceSearch] = useState('')
+    const [selectedSource, setSelectedSource] = useState<LocalMediaProfileTemplateSource | null>(null)
+    const [testValues, setTestValues] = useState<Record<string, string>>({})
+    const [testValuesExpanded, setTestValuesExpanded] = useState(false)
+    // While a collection is added, its own newest episodes are the examples, and the preview starts on one.
+    const collectionExamples = useCollectionExamples()
+    const exampleSources = useMemo(
+        () => mode === 'collection' ? collectionExamples?.sources ?? NO_SOURCES : NO_SOURCES,
+        [collectionExamples?.sources, mode],
+    )
+    const chosenSource = useRef(false)
+    const sourceQuery = useLocalMediaProfileTemplateSources(mode, {
+        collectionScope,
+        search: sourceSearch,
+        anchorSourceId: isExampleSource(selectedSource) ? undefined : selectedSource?.id,
+        siteKeys,
+    })
+    // Opened from a collection's page, the first example is always one of that collection's episodes.
+    const {collectionId: fitCollectionId} = useProfileFit('collection')
+    const randomCollectionSourceQuery = useRandomCollectionTemplateSource(
+        collectionScope, mode === 'collection', localMediaProfileId, siteKeys, fitCollectionId,
+    )
+    const variableQuery = useLocalMediaProfileTemplateVariables(mode)
+    const customVariables = (variableQuery.data ?? []) as OutputTemplateVariable[]
+    const variables = useMemo(
+        () => getOutputTemplateVariables(mode, customVariables, collectionScope),
+        [customVariables, mode, collectionScope],
+    )
+    const metadataNames = useMemo(() => new Set(customVariables.map(({name}) => name)), [customVariables])
+    const referenceVariables = useMemo(
+        () => variables.filter(({name}) => (
+            !metadataNames.has(name) && (mode !== 'collection' || !BUILT_IN_INDEXING_VALUES.has(name))
+        )),
+        [metadataNames, mode, variables],
+    )
+    const builtInIndexEntries = useMemo(
+        () => variables.filter(({name}) => BUILT_IN_INDEXING_VALUES.has(name)).map(referenceEntry),
+        [variables],
+    )
+    const customIndexEntries: ReferenceEntry[] = (indexingValues as IndexingValueEntry[]).map(({key, name, keepNumbers}) => ({
+        code: `'${key}' | custom_index`,
+        insert: `{{ '${key}' | custom_index }}`,
+        description: keepNumbers ? `${name}. Keeps the numbers it gave out.` : name,
+    }))
+    const metadataEntries = useMemo(
+        () => variables.filter(({name}) => metadataNames.has(name)).map(referenceEntry),
+        [metadataNames, variables],
+    )
+    const [referenceOpen, setReferenceOpen] = useState(false)
+    const closeReference = useCallback(() => setReferenceOpen(false), [])
+    const editorView = useRef<EditorView | null>(null)
+    const insertIntoTemplate = useCallback((text: string) => {
+        const view = editorView.current
+        if (!view) return
+        const {main} = view.state.selection
+        if (main.empty && main.head === 0 && view.state.doc.length > 0) {
+            // The cursor was never placed, so add to the end of the template, before its .ext.
+            const doc = view.state.doc.toString()
+            const end = doc.endsWith('.ext') ? doc.length - '.ext'.length : doc.length
+            view.dispatch({changes: {from: end, insert: text}, selection: {anchor: end + text.length}, scrollIntoView: true})
+        } else {
+            view.dispatch(view.state.replaceSelection(text), {scrollIntoView: true})
+        }
+        // On a phone the reference covers the editor, so close it to show where the text went.
+        if (window.matchMedia(SHEET_QUERY).matches) setReferenceOpen(false)
+        else view.focus()
+    }, [])
+    const [usedVariableNames, setUsedVariableNames] = useState<string[]>([])
+    const [provisionalIndexingValueNames, setProvisionalIndexingValueNames] = useState<string[]>([])
+    const [replacedTyped, setReplacedTyped] = useState<{mode: string, characters: string[]}>({mode: '', characters: []})
+    const [shortenedNames, setShortenedNames] = useState<string[]>([])
+    const usedVariables = useMemo(
+        () => {
+            const used = new Set(usedVariableNames)
+            return variables.filter(({name}) => used.has(name))
+        },
+        [usedVariableNames, variables],
+    )
+    const usedVariablesKey = usedVariables.map(({name}) => name).join('|')
+    const missingMetadataVariables = useMemo(() => {
+        const prefix = mode === 'video' ? 'meta_movie_' : 'meta_collection_'
+        const available = new Set(customVariables.map(({name}) => name))
+        return [...new Set(
+            usedVariableNames.filter((name) => name.startsWith(prefix) && !available.has(name)),
+        )].sort()
+    }, [customVariables, mode, usedVariableNames])
+
+    const completions = useJinjaCompletions(variables, mode === 'collection')
+    const editorExtensions = useMemo(() => [...templateEditorExtensions, ...completions], [completions])
 
     const sources = useMemo(() => {
         const byId = new Map<string, LocalMediaProfileTemplateSource>()
@@ -897,7 +835,15 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
         sourceId: selectedSource.id,
         localMediaProfileId: mode === 'collection' ? localMediaProfileId : null,
         indexingValues: mode === 'collection' ? indexingValues : null,
+        ...(mode === 'collection' && setExampleEpisode ? {
+            episodeTitleTemplate: episodeTitleTemplate || null,
+            episodeDescriptionTemplate: episodeDescriptionTemplate || null,
+        } : {}),
     } : null)
+    const exampleLabel = selectedSource?.label ?? null
+    useEffect(() => {
+        setExampleEpisode?.({label: exampleLabel, metadata: preview.result?.metadata ?? null, loading: preview.loading})
+    }, [exampleLabel, preview.loading, preview.result, setExampleEpisode])
     const previewPath = preview.result?.output.outputPath ?? ''
     // Only an example of the collection being added tells its root: an episode of another collection has its own.
     const collectionRootPath = isExampleSource(selectedSource) ? preview.result?.collectionRoot?.path : null
@@ -931,6 +877,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
             mode: output.filenameMode,
             characters: output.replacedTypedCharacters,
         } : {mode: '', characters: []})
+        setShortenedNames(output?.outputPath ? output.shortenedNames : [])
     }, [preview.loading, preview.result])
 
     function chooseSource(source: LocalMediaProfileTemplateSource) {
@@ -948,11 +895,19 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
                         <div>
                             <label id="template-editor-heading" htmlFor={readOnly ? undefined : 'mp-path'}>Output path template</label>
                             {readOnly
-                                ? <p>Read only. Edit the media profile to change it.</p>
-                                : <p>Type <code>{'{{'}</code> for variables or <code>{'{%'}</code> for Jinja statements.</p>}
+                                ? <p id="mp-path-help">Read only. Edit the media profile to change it.</p>
+                                : <p id="mp-path-help">Type <code>{'{{'}</code> for variables or <code>{'{%'}</code> for Jinja statements.</p>}
                         </div>
                         <div className="template-editor-heading__actions">
                             {!readOnly && headerActions}
+                            <button
+                                type="button"
+                                className={`btn btn-small template-reference-toggle${referenceOpen ? ' is-active' : ''}`}
+                                aria-expanded={referenceOpen}
+                                onClick={() => setReferenceOpen((open) => !open)}
+                            >
+                                {referenceOpen ? 'Hide reference' : 'Reference'}
+                            </button>
                             <span className="template-language-badge">Jinja</span>
                         </div>
                     </div>
@@ -973,6 +928,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
                                         form.clearErrors('outputTemplate')
                                     }}
                                     onBlur={field.onBlur}
+                                    onCreateEditor={(view) => { editorView.current = view }}
                                 />
                             )}
                         />
@@ -1044,6 +1000,14 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
                             {' '}will be replaced in file names. The preview shows the result.
                         </div>
                     )}
+                    {shortenedNames.length > 0 && (
+                        <div className="template-metadata-warning" role="status">
+                            {shortenedNames.length === 1 ? 'A name is' : `${shortenedNames.length} names are`} too
+                            long for the file system, which allows 255 bytes per file or folder name. VODLoft shortens
+                            the values the template fills in, and leaves room for subtitle and NFO files beside the
+                            media. The preview shows the result.
+                        </div>
+                    )}
                     {pathHasLeadingSpace && (
                         <div className="template-metadata-warning" role="status">
                             One or more path parts begins with a space. This is usually not intentional.
@@ -1055,12 +1019,13 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
                         <div className="template-playground-heading">
                             <div>
                                 <h3 id="template-preview-heading">Example output</h3>
-                                <p>{readOnly ? 'Pick an episode to see where its file would go.' : 'Try different values here. Your profile is not changed.'}</p>
+                                <p>{readOnly ? `Pick ${sourceLabel === 'Example track' ? 'a track' : sourceLabel === 'Example music video' ? 'a music video' : 'an episode'} to see where its file would go.` : 'Try different values here. Your profile is not changed.'}</p>
                             </div>
                             <label className="template-source-label" htmlFor="template-example-source">
-                                <span>Example episode</span>
+                                <span>{sourceLabel}</span>
                                 <TemplateSourceSelect
                                     mode={mode}
+                                    label={sourceLabel}
                                     sources={sources}
                                     selectedSource={selectedSource}
                                     isLoading={
@@ -1089,7 +1054,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
                             <p className="error" role="alert">Examples could not be loaded. Try refreshing the page.</p>
                         )}
                         {selectedSource?.fallback && (
-                            <p className="template-preview-status">No {({collection: 'episodes', movie: 'movies', video: 'videos'} as const)[mode]} found yet, so example values are
+                            <p className="template-preview-status">No {({collection: 'episodes', video: 'videos or movies'} as const)[mode]} found yet, so example values are
                                 being used.</p>
                         )}
 
@@ -1175,35 +1140,17 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
                     </div>
                 </section>
 
-                <div className="help output-template-help" id="mp-path-help">
-                    <ReadMore summary="Jinja syntax and all available variables.">
-                        <div className="output-template-guidance">{help}</div>
-                        <h4>Available variables</h4>
-                        <VariableReference entries={variableEntries} />
-                        {mode === 'collection' && (
-                            <>
-                                <hr className="output-template-help-divider" />
-                                <h4>Indexing values</h4>
-                                <p>Numbers for episodes. VODLoft keeps the built-in ones for every collection.</p>
-                                <h5>Built-in</h5>
-                                <VariableReference entries={builtInIndexEntries} />
-                                <h5>Custom</h5>
-                                {customIndexEntries.length > 0 ? (
-                                    <VariableReference entries={customIndexEntries} />
-                                ) : (
-                                    <p>This profile has no custom Indexing values yet. Add them with the Indexing values button.</p>
-                                )}
-                            </>
-                        )}
-                        {metadataEntries.length > 0 && (
-                            <>
-                                <hr className="output-template-help-divider" />
-                                <h4>{mode === 'movie' ? 'Movie metadata' : 'Collection metadata'}</h4>
-                                <VariableReference entries={metadataEntries} />
-                            </>
-                        )}
-                    </ReadMore>
-                </div>
+                {referenceOpen && (
+                    <TemplateReference
+                        mode={mode}
+                        variables={referenceVariables}
+                        builtInIndexes={mode === 'collection' ? builtInIndexEntries : []}
+                        customIndexes={customIndexEntries}
+                        metadata={metadataEntries}
+                        onInsert={readOnly ? undefined : insertIntoTemplate}
+                        onClose={closeReference}
+                    />
+                )}
             </div>
         </>
     )

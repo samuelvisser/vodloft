@@ -8,9 +8,12 @@ import LocalMediaProfileForm from '../LocalMediaProfile/LocalMediaProfileForm'
 import {useLocalMediaProfiles} from '../../lib/queries'
 import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {
-    MovieLocalMediaProfileCreateIn,
-    MovieLocalMediaProfileCreateSchema,
-} from '../../types/schemas/movie_local_media_profile'
+    DEFAULT_MOVIE_OUTPUT_TEMPLATE,
+    VideoLocalMediaProfileCreateIn,
+    VideoLocalMediaProfileCreateSchema,
+} from '../../types/schemas/video_local_media_profile'
+import {DAILYWIRE_SOURCE_KEY} from '../../types/schemas/source'
+import {isLocalMediaProfileAvailableForSite, videoProfileKeeps} from '../../types/local_media_profile'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {apiUrl} from '../../lib/api'
@@ -22,9 +25,17 @@ type Props = {
     onContinue: (profile: LocalMediaProfileRead) => void
 }
 
-const NEW_PROFILE_DEFAULTS: MovieLocalMediaProfileCreateIn = {
-    ...getZodDefaults(MovieLocalMediaProfileCreateSchema),
+// Movies come from The Daily Wire, whose Site has its Source's key. A profile made here is only for its movies.
+const MOVIE_SITE_KEY = DAILYWIRE_SOURCE_KEY
+
+const NEW_PROFILE_DEFAULTS: VideoLocalMediaProfileCreateIn = {
+    ...getZodDefaults(VideoLocalMediaProfileCreateSchema),
     name: 'My Movies',
+    videoScope: 'movies',
+    outputTemplate: DEFAULT_MOVIE_OUTPUT_TEMPLATE,
+    subtitleMode: 'sidecar',
+    siteKeys: [MOVIE_SITE_KEY],
+    includeUpcomingSites: false,
 }
 
 export default function OnboardingMovieProfileStep({movieTitle, onBack, onContinue}: Props) {
@@ -33,27 +44,32 @@ export default function OnboardingMovieProfileStep({movieTitle, onBack, onContin
     const initialized = useRef(false)
     const [selectedSlug, setSelectedSlug] = useState<string | null>(null)
 
-    const form = useForm<MovieLocalMediaProfileCreateIn>({
-        resolver: zodResolver(MovieLocalMediaProfileCreateSchema) as any,
+    const form = useForm<VideoLocalMediaProfileCreateIn>({
+        resolver: zodResolver(VideoLocalMediaProfileCreateSchema) as any,
         mode: 'onBlur',
         shouldFocusError: true,
         defaultValues: NEW_PROFILE_DEFAULTS,
     })
 
     const movieProfiles = useMemo(
-        () => profilesQuery.data?.filter((profile) => profile.type === 'movie') ?? [],
+        () => profilesQuery.data?.filter((profile) => (
+            profile.type === 'video' && videoProfileKeeps(profile, 'movies') && isLocalMediaProfileAvailableForSite(profile, MOVIE_SITE_KEY)
+        )) ?? [],
         [profilesQuery.data],
     )
 
     const selectProfile = useCallback((profile: LocalMediaProfileRead) => {
-        if (profile.type !== 'movie') return
+        if (profile.type !== 'video') return
         setSelectedSlug(profile.slug)
         form.reset({
-            ...getZodDefaults(MovieLocalMediaProfileCreateSchema),
+            ...getZodDefaults(VideoLocalMediaProfileCreateSchema),
             name: profile.name,
+            videoScope: profile.videoScope,
             outputTemplate: profile.outputTemplate,
-            preferredFormat: profile.preferredFormat as MovieLocalMediaProfileCreateIn['preferredFormat'],
+            preferredFormat: profile.preferredFormat as VideoLocalMediaProfileCreateIn['preferredFormat'],
             subtitleMode: profile.subtitleMode,
+            siteKeys: profile.siteKeys,
+            includeUpcomingSites: profile.includeUpcomingSites,
         })
     }, [form])
 
@@ -72,13 +88,13 @@ export default function OnboardingMovieProfileStep({movieTitle, onBack, onContin
     const submit = form.handleSubmit(async (input) => {
         form.clearErrors('root')
         try {
-            const data = MovieLocalMediaProfileCreateSchema.parse(input)
+            const data = VideoLocalMediaProfileCreateSchema.parse(input)
             const base = apiUrl()
             const isUpdating = selectedSlug !== null
             const response = await fetch(
                 isUpdating
-                    ? `${base}/movie-local-media-profiles/${encodeURIComponent(selectedSlug)}`
-                    : `${base}/movie-local-media-profiles`,
+                    ? `${base}/video-local-media-profiles/${encodeURIComponent(selectedSlug)}`
+                    : `${base}/video-local-media-profiles`,
                 {
                     method: isUpdating ? 'PATCH' : 'POST',
                     credentials: 'include',
@@ -91,7 +107,7 @@ export default function OnboardingMovieProfileStep({movieTitle, onBack, onContin
                 const {error} = await getErrorMessageFromResponse(response)
                 form.setError('root', {
                     type: 'server',
-                    message: error || 'Could not save the Movie Local Media Profile.',
+                    message: error || 'Could not save the Local Media Profile.',
                 })
                 return
             }
@@ -102,7 +118,7 @@ export default function OnboardingMovieProfileStep({movieTitle, onBack, onContin
         } catch {
             form.setError('root', {
                 type: 'server',
-                message: 'Could not save the Movie Local Media Profile. Check the connection and try again.',
+                message: 'Could not save the Local Media Profile. Check the connection and try again.',
             })
         }
     })
@@ -121,7 +137,7 @@ export default function OnboardingMovieProfileStep({movieTitle, onBack, onContin
             <form className="form form-fluid onboarding-profile-form" onSubmit={submit} noValidate>
                 <div className="form-row">
                     <div className="onboarding-profile-list-heading">
-                        <label>Movie Local Media Profile</label>
+                        <label>Local Media Profile</label>
                         <button className="btn" type="button" onClick={createNew}>Create a new profile</button>
                     </div>
                     <div className="card-grid" role="list">
@@ -130,7 +146,7 @@ export default function OnboardingMovieProfileStep({movieTitle, onBack, onContin
                         ) : profilesQuery.isError ? (
                             <div role="listitem" className="card">Could not load profiles: {profilesQuery.error.message}</div>
                         ) : movieProfiles.length === 0 ? (
-                            <div role="listitem" className="card selected">Create your first Movie Local Media Profile below.</div>
+                            <div role="listitem" className="card selected">Create your first Local Media Profile for movies below.</div>
                         ) : (
                             movieProfiles.map((profile) => (
                                 <LocalMediaProfileCard
@@ -149,7 +165,7 @@ export default function OnboardingMovieProfileStep({movieTitle, onBack, onContin
                     {selectedSlug ? 'Edit selected profile' : 'Create a new profile'}
                 </div>
 
-                <LocalMediaProfileForm form={form} mode="movie" isCreating={selectedSlug === null}/>
+                <LocalMediaProfileForm form={form} mode="video" isCreating={selectedSlug === null}/>
 
                 <div className="actions">
                     <button className="btn" type="button" onClick={onBack}>Back</button>

@@ -44,11 +44,11 @@ def examples(monkeypatch, tmp_path):
         monkeypatch.setattr(module, "get_settings", lambda: settings)
     monkeypatch.setattr(collection_assets, "collection_profile_roots", lambda *_args, **_kwargs: {})
     collections = [SimpleNamespace(
-        id=number, title=f"Saved Show {number}", slug=f"collection-{number}",
+        id=number, title=f"Saved Show {number}", slug=f"collection-{number}", author_name="",
         seasons=[SimpleNamespace(slug="season-1", name="First season", index=1, season_number=1)],
-        meta_items=[SimpleNamespace(key="custom.folder", value="Saved Folder")],
+        meta_items=[SimpleNamespace(key="custom.folder", value="Saved Folder")], creator=None,
     ) for number in (1, 2)]
-    episodes = [SimpleNamespace(id=number, collection=collection, values={
+    episodes = [SimpleNamespace(id=number, collection=collection, description=f"About episode {number}.", values={
         "collection": collection.slug, "collection_title": collection.title,
         "title": f"Episode {number}", "episode_title": f"Episode {number}",
         "episode": f"episode-{number}", "episode_label": str(number),
@@ -97,6 +97,39 @@ def test_edited_values_drive_both_paths_without_mutating_source(examples):
         examples.collections[0], body.output_template, filename_mode=body.filename_restriction_mode,
     )
     assert actual.path == str(examples.root / "TV/Saved Show 1")
+
+
+def test_the_metadata_templates_render_for_the_same_example(examples):
+    result = preview.get_local_media_profile_preview(examples.session, _body(
+        values={"title": "Edited Episode"},
+        episode_title_template="{{ year }} -\n  {{ title }}",
+        episode_description_template="{{ description }}\n\nFrom {{ collection_title }}",
+    ))
+    # A title is one line, and a description keeps its lines; both use the example's edited values.
+    assert result.metadata.title == "2026 - Edited Episode"
+    assert result.metadata.description == "About episode 1.\n\nFrom Saved Show 1"
+    assert result.metadata.title_error is None and result.metadata.description_error is None
+
+
+def test_the_metadata_keeps_the_sites_text_without_a_template_and_says_why_one_cannot_render(examples):
+    kept = preview.get_local_media_profile_preview(examples.session, _body(episode_title_template="{{ '' }}"))
+    assert (kept.metadata.title, kept.metadata.description) == ("Episode 1", "About episode 1.")
+
+    fallback = preview.get_local_media_profile_preview(examples.session, _body(source_id=None))
+    assert fallback.metadata.description == preview._EXAMPLE_DESCRIPTION
+
+    broken = preview.get_local_media_profile_preview(examples.session, _body(
+        episode_title_template="{{ nonsense }}", episode_description_template="{% if %}",
+    ))
+    assert "nonsense" in broken.metadata.title_error and broken.metadata.title == "Episode 1"
+    assert broken.metadata.description_error
+    # The path does not suffer for it.
+    assert broken.output.error is None
+
+    video = preview.get_local_media_profile_preview(examples.session, _body(
+        type="video", source_id="movie:3", output_template="/downloads/{{ title }}.ext",
+    ))
+    assert video.metadata is None
 
 
 def test_a_collection_directory_is_worked_out_once_until_what_decides_it_changes(examples, monkeypatch):
@@ -198,7 +231,7 @@ def test_missing_or_wrong_source_does_not_mix_in_fallback_values(examples, sourc
 @pytest.mark.parametrize("source,title", [("movie:3", "Saved Movie"), ("movie-extra:4", "Trailer"), ("example:movie", "Example Movie")])
 def test_generic_endpoint_supports_movies_and_extras(examples, source, title):
     result = preview.get_local_media_profile_preview(examples.session, _body(
-        type="movie", source_id=source,
+        type="video", source_id=source,
         output_template="/downloads/Movies/{{ movie_title }}/{{ title }}.ext",
         values={"movie_title": "Edited Movie"},
     ))
@@ -265,3 +298,20 @@ def test_item_specific_directory_segment_has_no_shared_collection_root(examples)
     )
     assert result.collection_root.path is None
     assert "No shared collection-specific directory" in result.collection_root.reason
+
+
+def test_a_folder_per_creator_is_above_the_collections_own_folder(examples):
+    creator = SimpleNamespace(
+        title="Northwind Workshop", collections=[], sections=[], main_collection_ids=set(),
+        accounts=[SimpleNamespace(handle="@northwind", source_key="ytdlp", site_key="youtube")],
+    )
+    collection = SimpleNamespace(
+        title="Tool Reviews", slug="tool-reviews", seasons=[], meta_items=[], creator=creator,
+    )
+
+    resolution = collection_assets.resolve_collection_media_directory(
+        collection, "/downloads/YouTube/{{ creator_title }}/{{ collection_title }}/{{ season_name }}/{{ title }}.ext",
+        filename_mode=FilenameRestrictionMode.WINDOWS,
+    )
+
+    assert resolution.path == str(examples.root / "YouTube" / "Northwind Workshop" / "Tool Reviews")

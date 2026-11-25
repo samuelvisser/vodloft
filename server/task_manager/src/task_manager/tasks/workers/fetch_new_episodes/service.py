@@ -30,7 +30,6 @@ from ...helpers.episodes.mapper import (
     fetch_episodes_until_slug,
     get_dw_episodes_since_ep,
 )
-from ...helpers.episodes.quarantine import vacated_canonical_identifiers_for_collection
 from ...helpers.episodes.same_episode import (
     reconcile_single_pending_episode_slug,
 )
@@ -323,7 +322,6 @@ async def _fetch_collection(
     latest_final_episode_id = latest_final_episode.id if latest_final_episode is not None else None
     latest_final_episode_slug = latest_final_episode.slug if latest_final_episode is not None else None
     latest_final_season_id = latest_final_episode.season_id if latest_final_episode is not None else None
-    vacated_identifiers = vacated_canonical_identifiers_for_collection(s, collection_id)
 
     # The local snapshot is complete. Release its transaction before the first
     # Daily Wire request so an outage cannot pin a DB connection per worker.
@@ -376,13 +374,9 @@ async def _fetch_collection(
     ]
 
     # Normal incremental scans only need records newer than the latest settled
-    # local episode. A first index or vacated-identifier recovery still uses the
-    # complete snapshot because it intentionally needs historical records.
-    full_history_scan = (
-        initial_index
-        or latest_final_episode_slug is None
-        or bool(vacated_identifiers)
-    )
+    # local episode. A first index still uses the complete snapshot because it
+    # intentionally needs historical records.
+    full_history_scan = initial_index or latest_final_episode_slug is None
     prefetched: dict[int, list[DwEpisodeRecord]] = {}
     for season_id, _season_slug, remote_id in season_requests:
         if remote_id is None:
@@ -481,7 +475,6 @@ async def _fetch_collection(
         progress_bounds=ProgressBounds(1, upper),
         order=RecordOrder.ASC,
         prefetched_by_season=prefetched,
-        vacated_identifiers=vacated_identifiers,
         occupied_identifiers=occupied_identifiers,
     )
 

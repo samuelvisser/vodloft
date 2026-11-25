@@ -27,11 +27,11 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from backend.services.site_settings import download_profile_defaults, local_media_profile_defaults
-from backend.services.sites import CollectionAlreadyAddedError, collection_site
+from backend.services.sites import CollectionAlreadyAddedError, collection_site, site_record
 
 import importer.pinchflat  # noqa: F401  (registers the importer)
 import importer.wireloft  # noqa: F401  (registers the importer)
@@ -46,18 +46,18 @@ from sources.ytdlp_options import check_ytdlp_options
 
 from backend.db.core import get_session, run_write_transaction
 from backend.db.models import (
-    Collection, CollectionLocalMediaProfile, DownloadProfile, Episode, ExistingFileScan, ImportLink, ImportRun, ImportStep,
-    LocalMediaProfileBase, MediaDownloadBase, MovieLocalMediaProfile,
+    Collection, CollectionLocalMediaProfile, Creator, DownloadProfile, Episode, ExistingFileScan, ImportLink, ImportRun,
+    ImportStep, LocalMediaProfileBase, MediaDownloadBase, VideoLocalMediaProfile,
 )
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.adoption import AdoptionError, FoundFile, adopt, download_root, find_file, real_path
 from backend.services.episode_filters import set_profile_filters
 from backend.services.import_filters import filters_from_plan
 from backend.services.local_media_profile_changes import (
-    create_collection_local_media_profile, create_movie_local_media_profile, update_collection_local_media_profile,
+    create_collection_local_media_profile, create_video_local_media_profile, update_collection_local_media_profile,
 )
 from backend.services.local_media_profile_inputs import (
-    CollectionLocalMediaProfileInput, MovieLocalMediaProfileInput, NewCollectionLocalMediaProfile,
+    CollectionLocalMediaProfileInput, VideoLocalMediaProfileInput, NewCollectionLocalMediaProfile,
 )
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.custom_index import (
@@ -65,27 +65,31 @@ from backend.utils.custom_index import (
     set_episode_index_assignment,
 )
 from backend.utils.custom_metadata import CUSTOM_METADATA_DB_PREFIX, custom_metadata_storage_key, get_custom_metadata
+from backend.utils.name_length import tracking_output_names
 from backend.utils.output_template import (
     COLLECTION_OUTPUT_TEMPLATE_FIELDS, COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES, _date_substitutions,
     _sanitize_rendered_path, prepare_output_template, rendering_with_filename_mode, replace_output_extension,
 )
 from task_manager.events.transactional import queue_event
 
-from .import_uploads import UploadError, remove_secrets, uploaded_at, work_location
+from .import_uploads import remove_secrets, uploaded_at, work_location
 
 logger = logging.getLogger(__name__)
 
 RUNNING, WAITING, FINISHED, FAILED = "running", "waiting", "finished", "failed"
+STOPPED = "The import stopped before it finished"
+CANCELLED = "Cancelled"
 STEP_WAITING, STEP_DONE, STEP_FAILED = "waiting", "done", "failed"
 _SAMPLES = 40
 _PROFILE_FIELDS = (
     "output_template", "preferred_format", "subtitle_mode", "thumbnail_mode", "metadata_mode",
     "collection_scope", "download_collection_assets", "indexing_values",
     "subtitle_languages", "subtitle_language_mode", "quality_goal", "video_codecs", "container", "audio_codec",
-    "audio_language", "audio_format", "show_nfo", "kodi_safe_nfo",
+    "audio_language", "audio_format", "show_nfo", "kodi_safe_nfo", "save_info_json", "episode_nfo",
+    "episode_title_template", "episode_description_template",
 )
 _DOWNLOAD_PROFILE_FIELDS = ("delete_older_episodes",)
-_SITE_CHOICE_FIELDS = ("auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments")
+_SITE_CHOICE_FIELDS = ("auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments", "keep_chapters", "cut_chapters")
 """What the other program had per Download Profile, which VODLoft keeps on the Local Media Profile per Site."""
 _OPTIONAL_DOWNLOAD_PROFILE_FIELDS = ("upgrade_check", "upgrade_after_days", "upgrade_repeat")
 """Download Profile fields an importer only sends when the other program had the setting."""
@@ -425,6 +429,7 @@ def _matching_profile(session: Session, plan: ProfilePlan) -> CollectionLocalMed
     if plan.output_template is None:
         return None
     return session.scalar(select(CollectionLocalMediaProfile).where(
+        CollectionLocalMediaProfile.type == plan.settings.get("type", "collection"),
         CollectionLocalMediaProfile.output_template == plan.output_template,
         CollectionLocalMediaProfile.preferred_format == plan.settings.get("preferred_format"),
     ).limit(1))
@@ -488,11 +493,11 @@ def path_proof(
         }
         extension = PurePosixPath(file.path).suffix.removeprefix(".")
         try:
-            with rendering_with_filename_mode(mode):
+            with rendering_with_filename_mode(mode), tracking_output_names():
                 rendered = prepared.render(
                     values, custom_index_resolver=lambda key, _group=(), file=file: file.custom_index_values.get(key, 1),
                 )
-            rendered = _sanitize_rendered_path(replace_output_extension(rendered, extension), mode=mode, extension=extension)
+                rendered = _sanitize_rendered_path(replace_output_extension(rendered, extension), mode=mode, extension=extension)
         except ValueError as exc:
             rendered = f"(could not render: {exc})"
         rendered = rendered.replace(_UPLOADER, "(uploader)")
@@ -727,11 +732,18 @@ def start_run(session: Session, importer: Importer, options: ImportOptions) -> I
     """Record the run and queue the task that applies it."""
     from backend.operations.imports import ImportRunOperation
 
-    running = session.scalar(select(ImportRun.id).where(
+    for running in session.scalars(select(ImportRun).where(
         ImportRun.importer == importer.key, ImportRun.status == RUNNING,
-    ).limit(1))
-    if running is not None:
-        raise ImportServiceError("An import from this program is already running")
+    )):
+        if _run_operation_ids(session, running.id):
+            raise ImportServiceError("An import from this program is already running")
+        # Its task is gone, as when VODLoft stopped while it ran: it will never finish.
+        _fail(running, STOPPED)
+    for waiting in session.scalars(select(ImportRun).where(
+        ImportRun.importer == importer.key, ImportRun.status == WAITING,
+    )):
+        # One whose collections are all done or gone is finished.
+        _finish_run_if_done(session, waiting.id)
     stamp = uploaded_at(importer)
     if stamp is None:
         raise ImportServiceError(f"Upload {importer.name}'s config folder first")
@@ -930,6 +942,7 @@ def _upsert_profile(
             profile = create_collection_local_media_profile(session, NewCollectionLocalMediaProfile.model_validate({
                 **{name: value for name, value in wanted.items() if value is not None},
                 "name": _unique_name(session, plan.name),
+                "type": plan.settings.get("type", "collection"),
                 # The files were named in the other program's mode, as the path proof showed them.
                 "filename_restriction_mode": filename_mode,
             }))
@@ -1035,30 +1048,182 @@ def _settle_field_keys(session: Session, plan: ImportPlan, links, library: Mappi
     return replace(plan, profiles=profiles, collections=tuple(collections))
 
 
-def _create_collection(session: Session, plan: CollectionPlan) -> Collection:
-    """A new yt-dlp Collection for the plan, looked up the way Add Collection does."""
+def _create_collection(session: Session, plan: CollectionPlan, creators: dict[str, Creator]) -> Collection:
+    """A new yt-dlp Collection for the plan, looked up the way Add Collection does. ``creators`` are the creators this
+    import has already put another collection of a group in, by the name the other program gives the group, such as
+    an artist's."""
     from backend.services.collections import add_collection, index_new_collection
     from backend.types.collection_types import CollectionType, EpisodeIdentifier
+    from backend.types.link_season_types import ChannelSeason, LinkSeasons, RepeatVideos
     from backend.utils.helpers import generate_uuid, slugify
     from sources import get_source
 
     source = get_source("ytdlp")
+    if plan.links_only:
+        collection = _create_links_only_collection(session, plan)
+        if plan.creator:
+            _join_group(session, collection, plan, creators)
+        return collection
     details = source.collection_details(plan.url)
-    author = details.author_name or details.title
+    # Music is by the artist the other program names, whoever uploaded it.
+    author = plan.artist or details.author_name or details.title
     collection = Collection(
         uuid=generate_uuid(), slug=details.slug, source_key=source.id, title=plan.title or details.title,
-        description=details.description, sharing_url=details.url,
+        description=details.description, sharing_url=details.url, list_type=details.list_type,
         membership_level="FREE", type=CollectionType(plan.settings.get("type", "series")).value,
         episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")).value,
         author_name=author, author_slug=slugify(author) or details.slug,
-        thumbnail_landscape_path=details.image_url,
+        thumbnail_landscape_path=details.image_url, split_chapters=bool(plan.settings.get("split_chapters", False)),
     )
+    if not plan.artist_page:
+        # A channel keeps what the other program had: its playlists only where the plan names them, the channel's
+        # season of what is in none of them, and a video in one season. A channel collection's own defaults would add
+        # every playlist. An artist's page keeps those defaults: every album a season, the ones to come too.
+        collection.link_seasons = LinkSeasons.OFF.value
+        collection.channel_season = ChannelSeason.UNLISTED.value
+        collection.repeat_videos = RepeatVideos.ONE_SEASON.value
+        # A link to one tab of a channel, such as its Videos, lists only that feed, as the other program did.
+        feeds = plan.settings.get("feeds")
+        collection.feeds = list(feeds) if isinstance(feeds, list) else None
     add_collection(session, collection)
+    _add_link_seasons(session, collection, plan)
+    if plan.creator:
+        _join_group(session, collection, plan, creators)
     index_new_collection(session, collection)
     return collection
 
 
-def _upsert_collection(session: Session, plan: CollectionPlan, library, links, run: ImportRun, report: _Report) -> tuple[Collection | None, bool]:
+def _join_group(session: Session, collection: Collection, plan: CollectionPlan, creators: dict[str, Creator]) -> None:
+    """Group a new Collection with the other collections of its group, such as an artist's albums and music videos,
+    or a subscription's links on another Site. It joins the creator the import already put another one of them in,
+    also from another Site. Otherwise it joins the creator behind its link, the channel that made a playlist, or for a
+    collection of only playlists, behind its first one; a creator the import adds there takes the group's name."""
+    from backend.services.creators import can_join, join_creator, rename_creator
+
+    if not can_join(collection):
+        return
+    creator = creators.get(plan.creator) if plan.creator else None
+    if creator is not None:
+        join_creator(session, collection, creator)
+        return
+    creator, made = _join_creator(session, collection, collection.sharing_url or plan.url)
+    if creator is not None and made and plan.creator and creator.title != plan.creator:
+        rename_creator(creator, plan.creator)
+
+
+def _create_links_only_collection(session: Session, plan: CollectionPlan) -> Collection:
+    """A Collection without a link of its own, which holds only what the plan's playlists have."""
+    from backend.services.collections import add_links_only_collection, reindex_collection
+    from backend.types.collection_types import CollectionType, EpisodeIdentifier
+
+    collection = add_links_only_collection(
+        session, title=plan.title, collection_type=CollectionType(plan.settings.get("type", "series")),
+        episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")),
+    )
+    collection.split_chapters = bool(plan.settings.get("split_chapters", False))
+    if plan.artist:
+        collection.author_name = plan.artist
+    _add_link_seasons(session, collection, plan)
+    reindex_collection(session, collection)
+    return collection
+
+
+def _join_creator(session: Session, collection: Collection, url: str) -> tuple[Creator | None, bool]:
+    """Group a new Collection under the creator behind ``url``, as Add to creator does, when it has one. Returns the
+    creator, and whether it was added to the library for it."""
+    from backend.services.creators import account_of, join_creator, new_creator
+    from sources import Feature, get_source
+
+    source = get_source(collection.source_key)
+    if not source.has(Feature.CREATORS):
+        return None, False
+    try:
+        ref = source.creator_of(url)
+        if ref is None:
+            return None, False
+        details = source.creator_details(ref)
+        with session.begin_nested():
+            account = account_of(session, source.id, details)
+            creator = account.creator if account is not None else new_creator(session, source.id, details, added_by_id=None)
+            join_creator(session, collection, creator)
+        return creator, account is None
+    except Exception as exc:  # noqa: BLE001  (a creator that can't be looked up leaves a plain collection)
+        logger.info("Imported %s without its creator: %s", collection.title, exc)
+        return None, False
+
+
+def _add_link_seasons(session: Session, collection: Collection, plan: CollectionPlan) -> int:
+    """Make the plan's playlists seasons of the Collection it does not have yet, each with the season the other
+    program gave it, and keep the seasons in the other program's numbering. Returns how many it added."""
+    from urllib.parse import parse_qs, urlsplit
+
+    from backend.db.models import CollectionList
+    from backend.services.seasons import create_season_record
+    from backend.types.link_season_types import LinkSeasons, ListStatus, OutsideVideos
+    from backend.types.season_types import SeasonOrigin
+    from backend.utils.helpers import slugify
+    from sources import get_source
+
+    if not plan.link_seasons:
+        return 0
+    session.flush()
+    have = {playlist.ref for playlist in collection.lists}
+    seasons = {season.season_number: season for season in collection.seasons}
+
+    def season_of(number: int | None, title: str | None, origin: SeasonOrigin):
+        """The season with the other program's number, made when the Collection has none yet."""
+        if number is None:
+            return None
+        if number not in seasons:
+            name = title or f"Season {number}"
+            slug = slugify(name) or str(number)
+            if any(existing.slug == slug for existing in seasons.values()):
+                slug = f"{slug}-{number}"
+            seasons[number] = create_season_record(
+                session, collection_id=collection.id, index=max((x.index for x in seasons.values()), default=0) + 1,
+                slug=slug, name=name, season_number=number, origin=origin,
+            )
+        return seasons[number]
+
+    loose = plan.loose_season
+    if loose is not None and not any(season.loose for season in seasons.values()):
+        # The channel's videos in none of the playlists keep the season the other program had them in.
+        if (season := season_of(loose.season_number, loose.title, SeasonOrigin.VODLOFT)) is not None:
+            season.loose = True
+    added = 0
+    for position, wanted in enumerate(sorted(plan.link_seasons, key=lambda p: (p.season_number is None, p.season_number or 0))):
+        # A playlist is known by its id, as its Site lists it; another link, such as one video, by the link itself.
+        ref = next(iter(parse_qs(urlsplit(wanted.url).query).get("list") or []), None) or wanted.url
+        if ref in have:
+            continue
+        site = get_source(collection.source_key).site_for(wanted.url)
+        collection.lists.append(CollectionList(
+            ref=ref, url=wanted.url, title=wanted.title or ref, site_position=position, enabled=True,
+            # A collection without a link of its own lists no playlists: every link is one the user gave it, which
+            # they see and can remove under their links.
+            added_by_user=collection.sharing_url is None,
+            status=ListStatus.KNOWN.value, season=season_of(wanted.season_number, wanted.title, SeasonOrigin.LIST),
+            source_key=collection.source_key, site_key=site_record(session, site).key if site is not None else None,
+        ))
+        have.add(ref)
+        added += 1
+    if added:
+        collection.keep_a_default_link()
+        if collection.link_seasons == LinkSeasons.OFF.value:
+            collection.link_seasons = LinkSeasons.SELECTED.value
+        # The other program kept every video of these links, also another channel's.
+        if collection.outside_videos != OutsideVideos.ONLY.value:
+            collection.outside_videos = OutsideVideos.ADD.value
+        # The other program's season numbers stay, as its files are named by them.
+        collection.custom_season_order = True
+    session.flush()
+    return added
+
+
+def _upsert_collection(
+    session: Session, plan: CollectionPlan, library, links, run: ImportRun, report: _Report,
+    creators: dict[str, Creator],
+) -> tuple[Collection | None, bool]:
     """The Collection, and whether it was just created (and so is being indexed)."""
     link = links.get(("collection", plan.external_id))
     existing = session.get(Collection, link.entity_id) if link and link.entity_id else None
@@ -1071,7 +1236,7 @@ def _upsert_collection(session: Session, plan: CollectionPlan, library, links, r
     if existing is None:
         try:
             with session.begin_nested():
-                existing = _create_collection(session, plan)
+                existing = _create_collection(session, plan, creators)
         except CollectionAlreadyAddedError as exc:
             # The same collection, through another Source or under another link.
             existing = exc.existing
@@ -1082,9 +1247,13 @@ def _upsert_collection(session: Session, plan: CollectionPlan, library, links, r
             return None, False
         else:
             created = True
-            library[_normalise_url(existing.sharing_url)] = existing
+            if existing.sharing_url is not None:
+                library[_normalise_url(existing.sharing_url)] = existing
             report.add("created", plan.title, "Added to the Library", warnings=[_warning(warning) for warning in plan.warnings])
             report.counts["collections_created"] += 1
+    if plan.creator and existing.creator is not None:
+        # The group's other collections, such as an artist's music videos, join this creator.
+        creators.setdefault(plan.creator, existing.creator)
     if plan.added_at is not None and (existing.created_at is None or plan.added_at < existing.created_at):
         # The Collection has been in your library since the other program added it.
         existing.created_at = plan.added_at
@@ -1110,6 +1279,14 @@ def _upsert_collection(session: Session, plan: CollectionPlan, library, links, r
             setattr(existing, name, value)
     if not created:
         _report_changes(report, plan.title, changes)
+        if added := _add_link_seasons(session, existing, plan):
+            from backend.operations.collections import CollectionIndexOperation
+            from backend.services.link_seasons import section_list_names
+            from task_manager.scheduler.operation_factory import create_operation
+
+            names = section_list_names(existing)
+            report.add("updated", plan.title, f"Updated: {added} {names.singular if added == 1 else names.plural} added as seasons")
+            create_operation(session, CollectionIndexOperation(existing))
     if "check_frequency" in write or "check_cron" in write:
         session.flush()
         queue_event(session, "collection.updated", {"resource_id": existing.id, "id": existing.id, "slug": existing.slug})
@@ -1160,7 +1337,7 @@ def _upsert_download_profile(
 
 
 def _keep_site_choices(profile: CollectionLocalMediaProfile, fields: dict) -> None:
-    """Keep what the other program had for auto-generated subtitles and SponsorBlock on the profile, unless the
+    """Keep what the other program had for auto-generated subtitles, SponsorBlock and chapters on the profile, unless the
     profile already downloads a collection: the first collection it gets decides."""
     had = {name: fields[name] for name in _SITE_CHOICE_FIELDS if fields.get(name) is not None}
     if not had or profile.download_profiles:
@@ -1189,31 +1366,58 @@ def apply_run(run_id: int) -> dict[str, int]:
             return {}
         importer = get_importer(run.importer)
         options = ImportOptions.from_dict(run.options or {})
-    try:
-        loaded = load_plan(importer, options)
-    except (UploadError, ValueError, OSError) as exc:
-        error = str(exc)
-
-        def fail(session: Session) -> None:
-            failed = session.get(ImportRun, run_id)
-            if failed is not None:
-                failed.status, failed.error, failed.finished_at = FAILED, error, datetime.now(timezone.utc)
-
-        run_write_transaction(fail)
-        raise
+    loaded = load_plan(importer, options)
     # Applying a setting writes the settings file, and a second run would report it as already there.
     counts, cookies_imported = run_write_transaction(
         lambda session: _apply_loaded_plan(session, run_id, options, loaded), reserve=True,
     )
     if cookies_imported:
         remove_secrets(importer)
+    _picture_links(run_id)
     return counts
+
+
+def _picture_links(run_id: int) -> None:
+    """Look up the picture of each link season the run gave a collection of links, which shows it in the Library
+    and on media servers. The other program keeps none, and the lookups are slow, so they come after the run's
+    write. A link that can't be looked up keeps no picture."""
+    from sources import get_source
+
+    from backend.db.models import CollectionList
+
+    with get_session() as session:
+        links = session.execute(
+            select(CollectionList.id, CollectionList.url, CollectionList.source_key)
+            .join(Collection, Collection.id == CollectionList.collection_id)
+            .join(ImportStep, ImportStep.collection_id == Collection.id)
+            .where(ImportStep.run_id == run_id, Collection.sharing_url.is_(None), CollectionList.image_path.is_(None))
+        ).all()
+    pictures: dict[int, str] = {}
+    for link_id, url, source_key in links:
+        try:
+            image = get_source(source_key).collection_details(url).image_url
+        except Exception as exc:  # noqa: BLE001  (a picture is not worth failing the import for)
+            logger.info("No picture for the imported link %s: %s", url, exc)
+            continue
+        if image:
+            pictures[link_id] = image
+    if not pictures:
+        return
+
+    def store(session: Session) -> None:
+        for link in session.scalars(select(CollectionList).where(CollectionList.id.in_(pictures))):
+            link.image_path = link.image_path or pictures[link.id]
+
+    run_write_transaction(store, concurrent=True)
 
 
 def _apply_loaded_plan(
     session: Session, run_id: int, options: ImportOptions, loaded: LoadedPlan,
 ) -> tuple[dict[str, int], bool]:
     run = session.get(ImportRun, run_id)
+    if run is None or run.status != RUNNING:
+        # Cancelled while it waited for its turn to write.
+        return {}, False
     importer = get_importer(run.importer)
     report = _Report()
     links = _links(session, importer.key)
@@ -1247,11 +1451,15 @@ def _apply_loaded_plan(
         files_by_collection[file.collection_external_id].append(file)
     library = _library_collections(session)
     steps: list[ImportStep] = []
+    # The creators of the groups the import made, by the name the other program gives the group, such as an artist's.
+    creators: dict[str, Creator] = {}
     for collection_plan in selected:
         profile = profiles.get(collection_plan.profile_external_id or "")
         if profile is None:
             continue
-        collection, created = _upsert_collection(session, collection_plan, library, links, run, report)
+        collection, created = _upsert_collection(
+            session, collection_plan, library, links, run, report, creators,
+        )
         if collection is None:
             continue
         download_profile = _upsert_download_profile(session, collection_plan, collection, profile, links, run, report)
@@ -1274,7 +1482,7 @@ def _apply_loaded_plan(
         steps.append(step)
         session.flush()
         if not created:
-            known = set(session.scalars(select(Episode.source_slug).where(Episode.collection_id == collection.id)))
+            known = set(session.scalars(select(Episode.video_slug).where(Episode.collection_id == collection.id)))
             missing = {file["media_site_id"] for file in step.files} - known
             if missing and not _index_running(session, collection.id):
                 from backend.operations.collections import CollectionSyncOperation
@@ -1291,14 +1499,15 @@ def _apply_loaded_plan(
 
 
 def _upsert_movie_profile(session: Session, plan: ProfilePlan, links, run: ImportRun, report: _Report) -> LocalMediaProfileBase | None:
-    """A movie Local Media Profile: one that names files the same way is used instead of a copy."""
+    """A movie profile becomes a Video Local Media Profile: one that names files the same way is used instead of a
+    copy."""
     link = links.get(("profile", plan.external_id))
-    existing = session.get(MovieLocalMediaProfile, link.entity_id) if link and link.entity_id else None
+    existing = session.get(VideoLocalMediaProfile, link.entity_id) if link and link.entity_id else None
     if existing is not None:
         return existing
-    reused = session.scalar(select(MovieLocalMediaProfile).where(
-        MovieLocalMediaProfile.output_template == plan.output_template,
-        MovieLocalMediaProfile.preferred_format == plan.settings.get("preferred_format"),
+    reused = session.scalar(select(VideoLocalMediaProfile).where(
+        VideoLocalMediaProfile.output_template == plan.output_template,
+        VideoLocalMediaProfile.preferred_format == plan.settings.get("preferred_format"),
     ).limit(1))
     if reused is not None:
         _remember(session, links, run.importer, "profile", plan.external_id, reused.id, {}, [], run.id)
@@ -1306,7 +1515,7 @@ def _upsert_movie_profile(session: Session, plan: ProfilePlan, links, run: Impor
         return reused
     fields = ("preferred_format", "download_mode", "thumbnail_mode", "metadata_mode", "subtitle_mode")
     try:
-        profile = create_movie_local_media_profile(session, MovieLocalMediaProfileInput.model_validate({
+        profile = create_video_local_media_profile(session, VideoLocalMediaProfileInput.model_validate({
             **{name: plan.settings[name] for name in fields if plan.settings.get(name) is not None},
             "name": _unique_name(session, plan.name), "output_template": plan.output_template,
         }))
@@ -1376,7 +1585,7 @@ def _seed_indexes(session: Session, step: ImportStep, profile: CollectionLocalMe
     seeded = 0
     numbered: dict[int, dict[str, int]] = {}
     for file in step.files:
-        episode = episodes.get(file["media_site_id"])
+        episode = episodes.get(_file_key(file))
         values = {key: value for key, value in (file.get("custom_index_values") or {}).items() if key in keys}
         if episode is not None and values:
             numbered[episode.id] = values
@@ -1424,17 +1633,35 @@ class _StepFiles:
     numbers: int
 
 
+def _file_key(file: Mapping[str, Any]) -> str:
+    """Which episode a recorded file is: its video, or the numbered part of its video."""
+    part = file.get("part")
+    return file["media_site_id"] if part is None else f"{file['media_site_id']}#{part}"
+
+
+def _episodes_by_file_key(session: Session, collection_id: int) -> dict[str, Episode]:
+    """The Collection's episodes by the key ``_file_key`` gives their files. The parts of a split video are numbered
+    from 1 in the order they play in."""
+    episodes: dict[str, Episode] = {}
+    parts: dict[str, list[Episode]] = {}
+    for episode in session.scalars(select(Episode).where(Episode.collection_id == collection_id)):
+        if episode.part_of is not None:
+            parts.setdefault(episode.part_of, []).append(episode)
+        elif episode.source_slug:
+            episodes[episode.source_slug] = episode
+    for video, of_video in parts.items():
+        for number, episode in enumerate(sorted(of_video, key=lambda part: part.part_start or 0.0), start=1):
+            episodes[f"{video}#{number}"] = episode
+    return episodes
+
+
 def _start_step(session: Session, step_id: int) -> _StepFiles | None:
     step = session.get(ImportStep, step_id)
     if step is None or step.status != STEP_WAITING:
         return None
     profile = session.get(CollectionLocalMediaProfile, step.local_media_profile_id)
     run = session.get(ImportRun, step.run_id)
-    episodes = {
-        episode.source_slug: episode
-        for episode in session.scalars(select(Episode).where(Episode.collection_id == step.collection_id))
-        if episode.source_slug
-    }
+    episodes = _episodes_by_file_key(session, step.collection_id)
     return _StepFiles(
         local_media_profile_id=profile.id,
         episode_ids={slug: episode.id for slug, episode in episodes.items()},
@@ -1510,7 +1737,7 @@ def run_step(step_id: int) -> dict[str, int]:
             problems.append({"path": path, "error": error})
 
     for file in started.files:
-        episode_id = started.episode_ids.get(file["media_site_id"])
+        episode_id = started.episode_ids.get(_file_key(file))
         if episode_id is None:
             if file["kind"] == "file":
                 counts["not_indexed"] += 1
@@ -1537,6 +1764,92 @@ def run_step(step_id: int) -> dict[str, int]:
                 problem(file["path"], error)
     folder = _scan_folder(step_id)
     return run_write_transaction(lambda session: _finish_step(session, step_id, counts, problems, folder))
+
+
+def _fail(run: ImportRun, error: str) -> None:
+    run.status, run.error, run.finished_at = FAILED, error, datetime.now(timezone.utc)
+
+
+def fail_run(run_id: int, error: str) -> None:
+    """Record that a run stopped before it applied its plan, so it does not stay running."""
+
+    def fail(session: Session) -> None:
+        run = session.get(ImportRun, run_id)
+        if run is not None and run.status == RUNNING:
+            _fail(run, error)
+
+    run_write_transaction(fail)
+
+
+def _run_operation_ids(session: Session, run_id: int) -> tuple[str, ...]:
+    """The run's operations that are still active."""
+    from task_manager.scheduler.db import TaskOperation
+    from task_manager.scheduler.operation_control import active_operation_ids
+
+    from backend.operations.imports import ImportRunOperation
+
+    operations = session.execute(select(TaskOperation.id, TaskOperation.context).where(
+        TaskOperation.kind == ImportRunOperation.kind,
+    ))
+    return active_operation_ids(session, [
+        operation_id for operation_id, context in operations if (context or {}).get("import_run_id") == run_id
+    ])
+
+
+def _step_operation_ids(session: Session, run_id: int) -> tuple[str, ...]:
+    """The operations still adopting the files of the run's collections."""
+    from task_manager.scheduler.db import TaskOperation
+    from task_manager.scheduler.operation_control import active_operation_ids
+
+    from backend.operations.imports import ImportStepOperation
+
+    step_ids = set(session.scalars(select(ImportStep.id).where(ImportStep.run_id == run_id)))
+    operations = session.execute(select(TaskOperation.id, TaskOperation.context).where(
+        TaskOperation.kind == ImportStepOperation.kind,
+    ))
+    return active_operation_ids(session, [
+        operation_id for operation_id, context in operations if (context or {}).get("import_step_id") in step_ids
+    ])
+
+
+def cancel_run(run_id: int) -> None:
+    """Stop a run that is still starting, or still waiting to adopt the files of its collections. The collections
+    it added stay, as does each one's indexing, which is cancelled in Downloads like any other; the files it did not
+    adopt yet stay where they are, and the Download Profiles it held off stay off."""
+    from task_manager.scheduler.operation_control import cancel_operation
+
+    with get_session() as session:
+        run = session.get(ImportRun, run_id)
+        if run is None or run.status not in (RUNNING, WAITING):
+            raise ImportServiceError("Only an import that has not finished can be cancelled")
+        operation_ids = (*_run_operation_ids(session, run_id), *_step_operation_ids(session, run_id))
+    for operation_id in operation_ids:
+        cancel_operation(operation_id)
+
+    def cancel(session: Session) -> None:
+        cancelled = session.get(ImportRun, run_id)
+        if cancelled is None or cancelled.status not in (RUNNING, WAITING):
+            raise ImportServiceError("The import finished before it could be cancelled")
+        for step in session.scalars(select(ImportStep).where(
+            ImportStep.run_id == run_id, ImportStep.status == STEP_WAITING,
+        )):
+            step.result = {"counts": {}, "problems": [{"path": None, "error": CANCELLED}]}
+            step.status = STEP_FAILED
+        _fail(cancelled, CANCELLED)
+
+    run_write_transaction(cancel)
+
+
+def let_go_of_collection(session: Session, collection_id: int) -> None:
+    """Before a Collection is deleted: the imports that waited to adopt its files stop waiting for it, and finish
+    when it was the last one they waited for.
+
+    ``session`` is a write transaction's session."""
+    run_ids = set(session.scalars(select(ImportStep.run_id).where(ImportStep.collection_id == collection_id)))
+    session.execute(delete(ImportStep).where(ImportStep.collection_id == collection_id))
+    session.flush()
+    for run_id in run_ids:
+        _finish_run_if_done(session, run_id)
 
 
 def fail_step(step_id: int, error: str) -> None:

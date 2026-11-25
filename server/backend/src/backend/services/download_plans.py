@@ -13,24 +13,24 @@ from sqlalchemy.orm import Session
 from backend.services.collection_cookies import uses_cookies
 from backend.services.playback import resolve_playback
 from backend.services.local_media_profile_sites import format_for_site
-from backend.services.sites import collection_site, video_site
+from backend.services.sites import episode_site, video_site
 from backend.services.no_ascii_names import settle_no_ascii_name
 from backend.services.media_access import link_access
 from backend.db.core import run_write_transaction
 from backend.db.models import Episode, Movie, MovieExtra, Video
 from backend.services.site_settings import local_media_profile_site_choices
 from backend.db.models.media_download import MediaDownloadBase
-from backend.services.download_metadata import build_episode_metadata, build_movie_metadata, build_video_metadata, publish_time, select_thumbnail
+from backend.services.download_metadata import build_episode_metadata, build_track_metadata, build_movie_metadata, build_video_metadata, publish_time, select_thumbnail
 from backend.services.download_options import effective_download_mode, effective_filename_mode, effective_metadata_mode, effective_thumbnail_mode
 from backend.services.download_quality import (
-    chosen_subtitle_tracks, custom_ytdlp_options, default_subtitle_languages, ytdlp_quality, ytdlp_sponsorblock, ytdlp_subtitles,
+    chosen_subtitle_tracks, custom_ytdlp_options, default_subtitle_languages, ytdlp_chapters, ytdlp_quality, ytdlp_sponsorblock, ytdlp_subtitles,
 )
 from backend.types.download_profile_types import AutoSubtitles
 from backend.services.source_options import ytdlp_source_options
 from backend.services.throttle_guard import refuses_throttled
 from backend.services.movies import update_movie_extra_source_metadata
 from backend.types.dailywire_user_info import DwMembershipLevel
-from backend.types.local_media_profile_types import LocalMediaProfileSubtitleMode, LocalMediaProfileType, PreferredFormat
+from backend.types.local_media_profile_types import LocalMediaProfileSubtitleMode, LocalMediaProfileType, PreferredFormat, keeps_tracks
 from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path, resolve_video_output_path
 from config import get_settings
 from config.network import is_no_internet_error
@@ -40,7 +40,7 @@ from downloader import (
 )
 from downloader.lifecycle import DownloadTracker
 from downloader.metadata import render_nfo
-from downloader.plan import DownloadPlan, SidecarSpec, YtdlpSponsorBlock, build_download_plan
+from downloader.plan import EMBEDS_ARTWORK, EMBEDS_METADATA, DownloadPlan, SidecarSpec, YtdlpChapters, YtdlpSponsorBlock, build_download_plan
 from downloader.source import resolve_download_source
 from downloader.ytdlp import resolve_ytdlp_source
 from sources import Feature, PlaybackKind, Source, get_source
@@ -60,24 +60,17 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     is_extra = isinstance(media, MovieExtra)
     if episode is None and movie is None and video is None:
         raise DownloadError("Unsupported media type")
-    expected_type = (
-        LocalMediaProfileType.COLLECTION.value if episode is not None
-        else LocalMediaProfileType.VIDEO.value if video is not None
-        else LocalMediaProfileType.MOVIE.value
-    )
-    if profile.type != expected_type:
+    if LocalMediaProfileType(profile.type).for_collections != (episode is not None):
         raise DownloadError("The Local Media Profile does not match the media type")
     preferred = profile.preferred_format
     media_site = None
     if episode is not None or video is not None:
-        media_site = collection_site(episode.collection) if episode is not None else video_site(video)
+        media_site = episode_site(episode) if episode is not None else video_site(video)
         # The profile may be offered for Sites that cannot give what it chose, such as an HLS bundle.
         preferred = format_for_site(media_site, preferred)
     audio_only = preferred == PreferredFormat.FORMAT_AUDIO_ONLY.value
-    if movie is not None and preferred in (PreferredFormat.FORMAT_AUDIO_ONLY.value, PreferredFormat.FORMAT_HLS.value):
-        raise DownloadError("Movies and extras require a normal video Local Media Profile")
-    if video is not None and preferred == PreferredFormat.FORMAT_HLS.value:
-        raise DownloadError("Videos cannot be kept as an HLS bundle")
+    if episode is None and preferred == PreferredFormat.FORMAT_HLS.value:
+        raise DownloadError("Videos and movies cannot be kept as an HLS bundle")
 
     # Snapshot configuration before network I/O; later setting edits apply only
     # to later attempts. ORM reads are released before every remote call.
@@ -86,12 +79,18 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     thumbnail_mode = effective_thumbnail_mode(profile)
     metadata_mode, kodi_safe_nfo = effective_metadata_mode(profile), profile.kodi_safe_nfo
     subtitle_mode = LocalMediaProfileSubtitleMode(profile.subtitle_mode)
+    # A part of a split video is just its stretch of the video, which the video's subtitles and SponsorBlock
+    # segments do not line up with.
+    section = (episode.part_start, episode.part_end) if episode is not None and episode.part_start is not None else None
+    if section is not None:
+        subtitle_mode = LocalMediaProfileSubtitleMode.NO_SUBTITLES
     quality = ytdlp_quality(profile)
     site_choices = local_media_profile_site_choices(profile, media_site) if media_site is not None else None
     auto_subtitles = AutoSubtitles(site_choices["auto_subtitles"]) if site_choices else AutoSubtitles.NEVER
     sponsorblock = ytdlp_sponsorblock(
         site_choices["sponsorblock_enabled"], dict(site_choices["sponsorblock_segments"]),
-    ) if site_choices else YtdlpSponsorBlock()
+    ) if site_choices and section is None else YtdlpSponsorBlock()
+    chapters = ytdlp_chapters(site_choices) if site_choices else YtdlpChapters()
     option_texts = [("the yt-dlp Source", ytdlp_source_options(session))]
     if episode is not None:
         option_texts.append((f"the Collection '{episode.collection.title}'", episode.collection.ytdlp_options))
@@ -99,7 +98,9 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     default_languages = default_subtitle_languages(profile)
     remux, ffmpeg_path, temporary_root = settings.remux_video_to_mp4, settings.ffmpeg_path, str(settings.temporary_download_root)
     output_template, filename_mode = profile.output_template, effective_filename_mode(profile)
+    music = keeps_tracks(profile)
     file_date_from_publish_date = profile.file_date_from_publish_date
+    save_info_json = profile.save_info_json
     title, slug, media_id = media.title, media.slug, media.id
     thumbnail = select_thumbnail(media)
     media_source = get_source(media.source_key)
@@ -120,10 +121,12 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
             source = resolve_ytdlp_source(
                 playback.url, command=playback.command, preferred_format=preferred, audio_only=audio_only,
                 quality=quality, subtitles=subtitle_request,
-                sponsorblock=sponsorblock,
+                sponsorblock=sponsorblock, chapters=chapters,
                 custom_options=custom_ytdlp_options(*option_texts) if media_source.has(Feature.YTDLP_OPTIONS) else (),
-                ffmpeg_path=ffmpeg_path, throttle_guard=throttle_guard,
+                ffmpeg_path=ffmpeg_path, throttle_guard=throttle_guard, section=section,
             )
+        elif section is not None:
+            raise DownloadError(f"{media_source.name} can only download '{title}' whole, not as a part of its video")
         else:
             tracker.preparing("inspect_stream")
             source = resolve_download_source(playback.url, preferred_format=preferred, audio_only=audio_only, remux_video_to_mp4=remux, cancellation=tracker.is_canceled)
@@ -200,7 +203,11 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
             if playback.metadata.model_fields_set & {"thumbnail_landscape_path", "thumbnail_portrait_path", "thumbnail_square_path", "background_image_path"}:
                 thumbnail = select_thumbnail(playback.metadata)
         tracker.preparing("inspect_stream")
-        source = resolve_download_source(playback.url, preferred_format=preferred, audio_only=False, remux_video_to_mp4=remux, cancellation=tracker.is_canceled)
+        # A movie only comes as video, so an audio only profile keeps the video's sound.
+        source = resolve_download_source(
+            playback.url, preferred_format=preferred, audio_only=audio_only, remux_video_to_mp4=remux,
+            video_fallback_for_audio=audio_only, cancellation=tracker.is_canceled,
+        )
 
     tracker.ensure_active()
     tracker.preparing("plan_outputs")
@@ -211,7 +218,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     media = download.media
     if isinstance(media, Episode):
         destination = resolve_episode_output_path(output_template, episode=media, local_media_profile=download.local_media_profile, media_download=download, filename_mode=filename_mode, extension=source.extension)
-        metadata = build_episode_metadata(media, media.collection)
+        metadata = (build_track_metadata if music else build_episode_metadata)(media, media.collection, download.local_media_profile)
     elif isinstance(media, Video):
         destination = resolve_video_output_path(output_template, video=media, filename_mode=filename_mode, extension=source.extension)
         metadata = build_video_metadata(media, source_name=media_source.name)
@@ -225,8 +232,9 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
 
     assets: list[SidecarSpec] = []
     artwork_id = None
-    # VODLoft embeds into MP4, M4A, MP3 and MKV; an Opus file only gets sidecars.
-    embeddable = not source.hls_bundle and source.extension != "opus"
+    # VODLoft embeds into MP4, M4A, MP3, MKV and FLAC; an Opus file takes tags, but artwork only as a sidecar.
+    embeddable = not source.hls_bundle and source.extension in EMBEDS_ARTWORK
+    takes_tags = not source.hls_bundle and source.extension in EMBEDS_METADATA
     if thumbnail is not None and thumbnail_mode is not ThumbnailMode.NO_THUMBNAIL:
         publish_artwork = thumbnail_mode in (ThumbnailMode.SIDECAR, ThumbnailMode.EMBED_AND_SIDECAR)
         embed_artwork = thumbnail_mode in (ThumbnailMode.EMBED, ThumbnailMode.EMBED_AND_SIDECAR) and embeddable
@@ -239,7 +247,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
         if embed_artwork:
             artwork_id = "artwork"
     tags = ()
-    if metadata_mode in (MetadataMode.EMBED, MetadataMode.EMBED_AND_NFO) and embeddable:
+    if metadata_mode in (MetadataMode.EMBED, MetadataMode.EMBED_AND_NFO) and takes_tags:
         tags = tuple(metadata.ffmpeg_tags().items())
     if metadata_mode in (MetadataMode.NFO, MetadataMode.EMBED_AND_NFO):
         assets.append(SidecarSpec("nfo", "nfo", content=render_nfo(metadata, kodi_safe=kodi_safe_nfo), extension="nfo", target_suffix=".nfo"))
@@ -255,6 +263,12 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
         and (source.hls_bundle or source.extension in {"mp4", "m4v", "mkv"})
     )
     embedded_subtitle_ids: list[str] = []
+    if save_info_json and source.ytdlp_command and not source.hls_bundle:
+        # yt-dlp writes the video's info file while it downloads the media.
+        assets.append(SidecarSpec(
+            "info_json", "info_json", url=source.url, extension="json", target_suffix=".info.json",
+            source_format="ytdlp", required=False,
+        ))
     if (publish_subtitles or embed_subtitles) and source.ytdlp_command:
         # yt-dlp writes the subtitles itself while it downloads the media.
         assets.append(SidecarSpec(
@@ -281,7 +295,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
         subtitle_asset_ids=tuple(embedded_subtitle_ids),
         default_subtitle_languages=default_languages,
         attempt_id=tracker.attempt_id,
-        file_date=file_date,
+        file_date=file_date, square_artwork=music,
         media_lane=(f"source:{media_source.id}", streams) if (streams := media_source.download_streams) else None,
     )
 

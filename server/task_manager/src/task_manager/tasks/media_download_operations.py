@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from collections.abc import Callable, Sequence
 from typing import Optional
 
@@ -11,14 +11,17 @@ from sqlalchemy.orm import Session, selectinload
 
 from backend.db.core import get_session, run_write_transaction, take_write_turn
 from backend.db.core import write_when_changed
-from backend.db.models import Episode, Movie, MovieExtra
+from backend.db.models import Episode, Movie, MovieExtra, Site
 from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.types.media_types import MediaType
 from backend.services.episode_download_delay import episode_download_delay_ready_at
+from backend.services.media_access import media_site_key
+from backend.services.site_settings import site_setting
 from backend.services.throttle_guard import last_throttled, site_paused
+from config.settings.site_settings import SiteSetting
 from backend.services.media_download_history import (
     record_media_download_history,
     record_media_download_operation_history_once,
@@ -69,6 +72,8 @@ MEDIA_DOWNLOAD_PUBLICATION_DELAY_MESSAGE = "Waiting for the post-publication dow
 MEDIA_DOWNLOAD_COUNTDOWN_WAIT_REASON = "publication_countdown"
 MEDIA_DOWNLOAD_COUNTDOWN_WAIT_MESSAGE = "Waiting for the episode countdown to finish"
 MEDIA_DOWNLOAD_SITE_THROTTLED_REASON = "site_throttled"
+MEDIA_DOWNLOAD_DAILY_LIMIT_REASON = "site_daily_limit"
+_DAILY_LIMIT_WINDOW = timedelta(hours=24)
 _PUBLICATION_DELAY_BYPASSED_CONTEXT_KEY = "publication_delay_bypassed"
 _DOWNLOAD_TASK_KEYS = ("download_episode", "download_movie")
 # Quick downloads share the transfer slots without being media downloads.
@@ -1333,6 +1338,7 @@ def dispatch_queued_media_download_operations(
     # dispatcher only materializes operations that can actually claim a slot.
     dispatched = 0
     now = datetime.now(timezone.utc)
+    daily_starts = _DailyStarts(session, now)
     while dispatched < effective_budget:
         operations = _ordered_queued_media_download_operations(
             session,
@@ -1341,9 +1347,10 @@ def dispatch_queued_media_download_operations(
         progressed = False
         for operation in operations:
             # An operation that starts waiting leaves the queue, so the next round takes another one.
-            if _wait_for_throttled_site(session, operation, now):
+            if _wait_for_throttled_site(session, operation, now) or daily_starts.wait(operation):
                 progressed = True
             elif _reserve_target_dispatch(session, operation):
+                daily_starts.started(operation)
                 dispatched += 1
                 progressed = True
         if not progressed:
@@ -1368,6 +1375,78 @@ def _wait_for_throttled_site(session: Session, operation: TaskOperation, now: da
     refresh_operation(session, operation.id)
     _schedule_delayed_media_download_dispatch(operation.id, run_at=site.downloads_paused_until)
     return True
+
+
+class _DailyStarts:
+    """The automatic downloads each Site started in the last 24 hours, to hold the next one back at its daily
+    limit. A download asked for in the UI neither counts nor waits."""
+
+    def __init__(self, session: Session, now: datetime):
+        self._session = session
+        self._now = now
+        self._by_site: dict[str, list[datetime]] | None = None
+
+    def _site_key(self, operation: TaskOperation) -> str | None:
+        download = self._session.get(MediaDownloadBase, operation.resource_id)
+        return media_site_key(download.media) if download is not None else None
+
+    def _starts(self) -> dict[str, list[datetime]]:
+        if self._by_site is None:
+            first_start = (
+                select(TaskRun.resource_id, func.min(TaskRun.created_at))
+                .join(TaskOperationRun, TaskOperationRun.task_run_id == TaskRun.id)
+                .join(TaskOperation, TaskOperation.id == TaskOperationRun.operation_id)
+                .where(
+                    TaskOperation.kind == MEDIA_DOWNLOAD_OPERATION_KIND,
+                    TaskOperation.source == OperationSource.SYSTEM.value,
+                    TaskRun.resource_type == ResourceType.MEDIA_DOWNLOAD,
+                    TaskRun.created_at >= self._now - _DAILY_LIMIT_WINDOW,
+                )
+                .group_by(TaskRun.resource_id)
+            )
+            self._by_site = {}
+            for media_download_id, started_at in self._session.execute(first_start):
+                download = self._session.get(MediaDownloadBase, media_download_id)
+                site_key = media_site_key(download.media) if download is not None else None
+                if site_key is not None and started_at is not None:
+                    started = started_at if started_at.tzinfo else started_at.replace(tzinfo=timezone.utc)
+                    self._by_site.setdefault(site_key, []).append(started)
+        return self._by_site
+
+    def wait(self, operation: TaskOperation) -> bool:
+        """Hold the operation back while its Site already started its daily number of automatic downloads."""
+        if operation.source != OperationSource.SYSTEM.value or not isinstance(operation.resource_id, int):
+            return False
+        site_key = self._site_key(operation)
+        limit = site_setting(site_key, SiteSetting.DAILY_DOWNLOAD_LIMIT) if site_key else 0
+        if not limit:
+            return False
+        starts = sorted(self._starts().get(site_key, ()))
+        if len(starts) < limit:
+            return False
+        # The next one starts when enough of the oldest downloads are more than a day old.
+        until = starts[len(starts) - limit] + _DAILY_LIMIT_WINDOW
+        site = self._session.get(Site, site_key)
+        name = site.name if site is not None else site_key
+        set_operation_admission_wait(
+            operation,
+            reason=MEDIA_DOWNLOAD_DAILY_LIMIT_REASON,
+            message=f"{name} started its {limit} automatic {'download' if limit == 1 else 'downloads'} for today",
+            until=until,
+        )
+        refresh_operation(self._session, operation.id)
+        _schedule_delayed_media_download_dispatch(operation.id, run_at=until)
+        return True
+
+    def started(self, operation: TaskOperation) -> None:
+        """Count a download the dispatcher just started."""
+        if operation.source != OperationSource.SYSTEM.value or not isinstance(operation.resource_id, int):
+            return
+        if self._by_site is None:
+            return  # Counted from its TaskRun once the starts are read.
+        site_key = self._site_key(operation)
+        if site_key is not None:
+            self._by_site.setdefault(site_key, []).append(self._now)
 
 
 def queue_throttled_download_again(session: Session, media_download_id: int) -> None:

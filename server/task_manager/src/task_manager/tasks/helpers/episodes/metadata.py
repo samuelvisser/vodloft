@@ -24,8 +24,9 @@ def ensure_utc(value: datetime) -> datetime:
 
 def episode_refresh_offsets(episode: Episode) -> tuple[int, ...]:
     """The refresh schedule of the episode's Site, in seconds after publication."""
-    collection = episode.collection
-    return site_refresh_offsets(collection.site_key if collection is not None else None)
+    from backend.services.sites import episode_site_key
+
+    return site_refresh_offsets(episode_site_key(episode) if episode.collection is not None else None)
 
 
 def metadata_is_final_for_new_episode(
@@ -68,7 +69,7 @@ def update_episode_from_dailywire(
     for field, value in dw_episode.model_dump(mode="python", by_alias=False).items():
         if field in model_fields and field not in protected_fields:
             setattr(episode, field, value)
-    episode.dw_episode_number = dw_episode.episode_number or None
+    episode.source_number = dw_episode.episode_number or None
     # The membership levels it is for may have changed, or VODLoft added it before it kept them.
     # A record without them says nothing about them.
     if dw_episode.available_for:

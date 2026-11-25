@@ -88,7 +88,7 @@ def test_authoritative_live_can_move_final_episode_back_to_pending():
     assert resolved.status is EpisodePublishStatus.LIVE
 
 
-def test_unusable_remote_snapshot_can_move_final_episode_to_quarantine(monkeypatch):
+def test_unusable_remote_snapshot_leaves_a_final_episode_without_status(monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
     from task_manager.tasks.helpers.episodes import status
 
@@ -102,5 +102,5 @@ def test_unusable_remote_snapshot_can_move_final_episode_to_quarantine(monkeypat
         snapshot=observed,
     )
 
-    assert observed.status is EpisodePublishStatus.NO_USABLE_MEDIA
-    assert resolved.status is EpisodePublishStatus.NO_USABLE_MEDIA
+    assert observed.status is None
+    assert resolved.status is None

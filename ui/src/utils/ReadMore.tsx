@@ -50,7 +50,7 @@ export default function ReadMore({
                 onClick={handleClick}
                 aria-expanded={expanded}
                 aria-controls={detailsId}
-                style={{background: 'none', border: 'none', padding: 0, color: 'inherit', textDecoration: 'underline', cursor: 'pointer'}}
+                className="read-more-toggle"
             >
         {expanded ? 'Show less' : 'Read more'}
       </button>

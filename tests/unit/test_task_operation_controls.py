@@ -828,6 +828,39 @@ def test_progress_updater_honors_late_operation_cancellation(task_database):
     assert updater() is True
 
 
+def test_a_worker_says_its_step_cannot_measure_itself(task_database):
+    """A worker that reports no percentage for a step makes its operation show no percentage until the next one."""
+    from task_manager.scheduler.db import TaskOperation
+    from task_manager.scheduler.executor import ProgressUpdater
+    from task_manager.scheduler.operations import OperationTargetSpec, create_operation, link_run_to_operations
+    from task_manager.scheduler.types import TaskStatus
+
+    session = task_database()
+    definition = _definition(session, "test_unmeasured_step_worker")
+    operation = create_operation(
+        session, kind="collection.test_unmeasured", resource_type="collection", resource_id=93, title="Collection 93",
+        targets=[OperationTargetSpec(task_key=definition.key, resource_type="episode", resource_id=903)],
+    )
+    run = _run(session, definition, resource_id=903, status=TaskStatus.RUNNING, progress=0)
+    link_run_to_operations(session, run=run, task_key=definition.key, operation_ids=(operation.id,))
+    session.commit()
+    run_id, operation_id = run.id, operation.id
+    session.close()
+
+    def progress():
+        s = task_database()
+        try:
+            return s.get(TaskOperation, operation_id).progress
+        finally:
+            s.close()
+
+    updater = ProgressUpdater(run_id)
+    updater.set(None, "Numbering the episodes")
+    assert progress() is None
+    updater.set(5, "Renaming the files")
+    assert progress() == 5
+
+
 def test_executor_rechecks_operation_ownership_after_link(task_database, monkeypatch):
     import task_manager.scheduler.executor as executor_module
     from task_manager.scheduler.db import TaskOperation, TaskRun
@@ -1091,3 +1124,47 @@ def test_canceled_queued_media_download_does_not_resurrect(task_database, monkey
     assert refreshed is not None
     assert refreshed.status == OperationStatus.CANCELED.value
     assert refreshed.finished_at is not None
+
+
+def test_an_operation_that_may_not_be_canceled_refuses_unless_its_work_stopped(task_database, monkeypatch):
+    from task_manager.scheduler.db import TaskOperation
+    from task_manager.scheduler.operation_control import cancel_operation
+    from task_manager.scheduler.operation_factory import OperationDefinition, create_operation
+    from task_manager.scheduler.operations import OperationTargetSpec, get_operation
+    from task_manager.scheduler.types import OperationStatus
+    from backend.api.models.operations import TaskOperationRead
+    from backend.operations.collections import CollectionIdentificationChangeOperation, CollectionRenumberOperation
+    import task_manager.scheduler.scheduler as scheduler_module
+
+    monkeypatch.setattr(scheduler_module, "cancel_pending_operation_jobs", lambda **_: None)
+    assert not CollectionIdentificationChangeOperation.cancelable and not CollectionRenumberOperation.cancelable
+
+    session = task_database()
+    definition = _definition(session, "test_uncancelable_worker")
+
+    class Renumber(OperationDefinition):
+        kind = "collection.test_renumber"
+        resource_type = "collection"
+        task = definition.key
+        cancelable = False
+
+        def targets(self):
+            return (OperationTargetSpec(task_key=definition.key, resource_type="collection", resource_id=3),)
+
+    operation = create_operation(session, Renumber(SimpleNamespace(id=3, title="Videos")))
+    operation_id = operation.id
+    session.commit()
+    session.close()
+
+    assert TaskOperationRead.model_validate(get_operation(operation_id)).cancelable is False
+    try:
+        cancel_operation(operation_id)
+    except ValueError as exc:
+        assert "cannot be canceled" in str(exc)
+    else:
+        raise AssertionError("A person canceled an operation that may not be canceled")
+    assert task_database().get(TaskOperation, operation_id).status != OperationStatus.CANCELED.value
+
+    # The watchdog stops work that stalled anyway.
+    cancel_operation(operation_id, reason="Stalled", acknowledge=False, force=True)
+    assert task_database().get(TaskOperation, operation_id).status == OperationStatus.CANCELED.value

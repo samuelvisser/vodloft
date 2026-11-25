@@ -1,5 +1,5 @@
 .confirm-dialog-content {
-    margin: 8px 0 16px;
+    margin: 0 0 16px;
 }
 
 .confirm-dialog-content p {
@@ -19,4 +19,32 @@
 
 .safe-delay-confirm-dialog {
     max-width: 560px;
+}
+
+/* A consequence the user must not miss, such as a download that can't come back once deleted. */
+.confirm-dialog-content .confirm-dialog-warning {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid #fcd34d; /* amber-300 */
+    background: #fffbeb; /* amber-50 */
+    color: #78350f; /* amber-900 */
+}
+
+.confirm-dialog-content .confirm-dialog-warning svg {
+    color: #d97706; /* amber-600 */
+    flex: none;
+}
+
+@media (prefers-color-scheme: dark) {
+    .confirm-dialog-content .confirm-dialog-warning {
+        border-color: rgba(245, 158, 11, 0.4);
+        background: rgba(245, 158, 11, 0.12);
+        color: #fde68a; /* amber-200 */
+    }
+    .confirm-dialog-content .confirm-dialog-warning svg {
+        color: #fbbf24;
+    }
 }

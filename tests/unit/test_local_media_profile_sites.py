@@ -13,9 +13,14 @@ def _new_session() -> tuple[Session, object]:
     import backend.db.models  # noqa: F401
     from backend.db import Base
 
+    from backend.db.initial_seed import _seed_sites
+
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
-    return Session(engine), engine
+    session = Session(engine)
+    # A new VODLoft starts with the Sites a Source is made for or takes an API key for.
+    _seed_sites(session)
+    return session, engine
 
 
 def _create(**values):
@@ -35,20 +40,21 @@ def _see_site(session: Session, key: str, name: str) -> None:
 
 def test_a_new_profile_starts_with_every_known_site_and_upcoming_sites() -> None:
     from backend.api.endpoints.collection_local_media_profiles.service import create_collection_local_media_profile
-    from backend.api.endpoints.movie_local_media_profiles.service import create_movie_local_media_profile
-    from backend.api.models.movie_local_media_profile import MovieLocalMediaProfileAPICreate
+    from backend.api.endpoints.video_local_media_profiles.service import create_video_local_media_profile
+    from backend.api.models.video_local_media_profile import VideoLocalMediaProfileAPICreate
 
     session, engine = _new_session()
     _see_site(session, "vimeo", "Vimeo")
     created = create_collection_local_media_profile(session, _create())
-    assert created.site_keys == ["dailywire", "npo", "vimeo", "youtube"]
+    assert created.site_keys == ["dailywire", "soundcloud", "tiktok", "twitch", "vimeo", "youtube"]
     assert created.include_upcoming_sites is True
 
-    # Only The Daily Wire has movies.
-    movies = create_movie_local_media_profile(session, MovieLocalMediaProfileAPICreate(
-        name="Movies", output_template="/downloads/movies/{{ title }}.ext", preferred_format="format_1080p",
+    # A Video profile keeps single videos and movies, so it starts with every Site too.
+    videos = create_video_local_media_profile(session, VideoLocalMediaProfileAPICreate(
+        name="Videos", output_template="/downloads/videos/{{ title }}.ext", preferred_format="format_1080p",
     ))
-    assert movies.site_keys == ["dailywire"]
+    assert videos.site_keys == ["dailywire", "soundcloud", "tiktok", "twitch", "vimeo", "youtube"]
+    assert videos.include_upcoming_sites is True
 
     session.close()
     engine.dispose()
@@ -64,14 +70,15 @@ def test_a_profile_needs_a_site_or_upcoming_sites() -> None:
         _create(site_keys=[], include_upcoming_sites=False)
 
 
-def test_a_site_must_be_able_to_use_the_profile_type() -> None:
-    from backend.api.models.movie_local_media_profile import MovieLocalMediaProfileAPICreate
+def test_only_the_daily_wire_has_movies() -> None:
+    from backend.services.local_media_profile_sites import movie_site_keys
 
-    with pytest.raises(ValidationError, match="youtube"):
-        MovieLocalMediaProfileAPICreate(
-            name="Movies", output_template="/downloads/movies/{{ title }}.ext",
-            preferred_format="format_1080p", site_keys=["youtube"],
-        )
+    session, engine = _new_session()
+    _see_site(session, "vimeo", "Vimeo")
+    assert movie_site_keys(session) == ["dailywire"]
+
+    session.close()
+    engine.dispose()
 
 
 def test_an_update_without_sites_keeps_them() -> None:
@@ -141,7 +148,7 @@ def test_the_sites_listing_says_which_profile_types_each_site_takes() -> None:
     session, engine = _new_session()
     read = LocalMediaProfileSitesAPIRead.model_validate(profile_sites(session)).model_dump(by_alias=True)
     by_key = {site["key"]: site for site in read["sites"]}
-    assert by_key["dailywire"]["profileTypes"] == ["collection", "movie", "video"]
+    assert by_key["dailywire"]["profileTypes"] == ["collection", "video"]
     assert by_key["youtube"]["profileTypes"] == ["collection", "video"]
     assert by_key["youtube"]["downloadOptions"]["hlsBundle"] is True
     assert read["upcomingProfileTypes"] == ["collection", "video"]

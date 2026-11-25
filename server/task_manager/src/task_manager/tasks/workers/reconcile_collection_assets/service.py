@@ -194,7 +194,7 @@ def _claim_fresh_asset(
 
     for target in dict.fromkeys(candidates):
         check_canceled()
-        with asset_file_lock(plan.download_root, target):
+        with asset_file_lock(plan.download_root, target, check_canceled):
             def work(session):
                 if not _current(session, plan):
                     return False, None
@@ -267,7 +267,7 @@ def _cleanup_obsolete_variants(
     for record_id, path in obsolete:
         check_canceled()
         try:
-            with asset_file_lock(plan.download_root, path):
+            with asset_file_lock(plan.download_root, path, check_canceled):
                 def work(session):
                     row = session.get(CollectionLocalAsset, record_id)
                     if row is None or not _current(session, plan):
@@ -353,7 +353,7 @@ def _publish_owned_file(
     if new_hash is None:
         raise ValueError("Prepared collection file disappeared before publication")
     check_canceled()
-    with asset_file_lock(plan.download_root, target):
+    with asset_file_lock(plan.download_root, target, check_canceled):
         def claim(session) -> tuple[list[int], str | None] | None:
             """Mark the file as being replaced; None when the plan is no longer current."""
             if not current(session):
@@ -472,7 +472,7 @@ def _cleanup_unwanted_nfos(
     for record_id, path in unwanted:
         check_canceled()
         try:
-            with asset_file_lock(download_root, path):
+            with asset_file_lock(download_root, path, check_canceled):
                 def work(session):
                     row = session.get(CollectionLocalAsset, record_id)
                     if row is None:
@@ -524,7 +524,7 @@ def _cleanup_old_roots(
         if any(media.is_relative_to(path.parent) and not media.is_relative_to(current_root) for media in media_paths):
             continue
         try:
-            with asset_file_lock(download_root, path):
+            with asset_file_lock(download_root, path, check_canceled):
                 def work(session):
                     row = session.get(CollectionLocalAsset, record_id)
                     profile = session.get(CollectionLocalMediaProfile, profile_id)

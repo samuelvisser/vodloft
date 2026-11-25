@@ -1,6 +1,6 @@
 [project]
 name = "task-manager"
-version = "0.9.0"
+version = "0.10.0"
 description = "Task scheduling and event management system for VODLoft."
 authors = [{ name = "Samuël Visser", email = "samuvisser@gmail.com" }]
 requires-python = ">=3.13,<3.14"
@@ -11,6 +11,7 @@ dependencies = [
   "SQLAlchemy>=2.0.43,<3.0",
   "backend",
   "downloader",
+  "progress-plan",
   "sources",
   "config",
   "controller",

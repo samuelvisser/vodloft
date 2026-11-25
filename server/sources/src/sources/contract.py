@@ -6,14 +6,17 @@ caller today; methods are added together with the feature that needs them.
 """
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass, field, replace
+from datetime import datetime, timedelta
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Any, ClassVar
 from urllib.parse import urlsplit
+
+from progress_plan import PlanTracker
 
 from config.settings.site_settings import SITE_SETTINGS, SiteSetting, UpgradeImprovement
 
@@ -34,10 +37,7 @@ class Feature(StrEnum):
     """Collections whose episodes the Source lists with ``list_episodes``. VODLoft
     keeps the Source's own seasons, or makes one season per upload year."""
     SEARCH = "search"
-    """Finding collections and videos at the Source by name, with ``search``."""
-    COSTLY_SEARCH = "costly_search"
-    """Each search costs the Source something, such as API quota, so the search
-    page searches when asked instead of while the user types."""
+    """Finding collections and videos by name on each of the Source's ``search_sites``, with ``search``."""
     PROGRAM_UPDATES = "program_updates"
     COOKIES = "cookies"
     """The Source signs in on a Site with the Site's own cookies file (``sources.cookies``)."""
@@ -46,6 +46,12 @@ class Feature(StrEnum):
     ``needs_cookies`` tells from a failed download that the cookies file would help."""
     API_KEY = "api_key"
     """An optional key for the service's own API, which makes catalogue lookups faster."""
+    SITE_API = "site_api"
+    """A Site's own free API, set up with credentials the user registers there (``Site.site_api``), with
+    ``site_api_status``, ``save_site_api``, ``test_site_api`` and ``remove_site_api``."""
+    OWN_SEASONS = "own_seasons"
+    """The Source's collections have seasons of the Site's own, such as a show's seasons, which the user can't remove.
+    The seasons VODLoft makes, such as a season per year, the user can."""
     QUICK_CHECK = "quick_check"
     """Cheaply finding a listed collection's newest items, with ``latest_items`` and
     ``item_details``, between full scans of the collection."""
@@ -75,10 +81,20 @@ class Feature(StrEnum):
     OWN_STUDIO = "own_studio"
     """The service makes its own shows and movies, so VODLoft names it as the studio of what it
     downloads. Without it the studio is left to the media itself."""
+    CREATORS = "creators"
+    """Looking up a creator, with ``creator_details``: who they are and the sections
+    their page offers. Only a Site with ``creators`` offers them."""
     PENDING_CHECKS = "pending_checks"
     """Listing upcoming and live videos with their publish status, and looking them up again
     with ``check_pending`` until they are published. VODLoft shows them, but never records one
     while it is live."""
+    LINK_COLLECTIONS = "link_collections"
+    """A collection can hold only what lists the user picks have, from any of the Source's Sites, as its link seasons:
+    the Source lists them with ``list_items`` and looks their videos up with ``item_details``, and such a collection
+    needs no link of its own."""
+    CHAPTERS = "chapters"
+    """A video's chapters come with its details (``VideoDetails.chapters``), and a download can keep one
+    stretch of a video, so a collection can split each video into a part per chapter."""
 
 
 class StreamMethod(StrEnum):
@@ -102,6 +118,112 @@ class UpgradeChecks:
 
     improvements: tuple[UpgradeImprovement, ...] = ()
     """What can count as a better version, in the order a Download Profile shows them."""
+
+    def for_audio_only(self) -> UpgradeChecks:
+        """The same checks for a Site with sound only, which has no resolution, video codec or subtitles."""
+        video = {UpgradeImprovement.RESOLUTION, UpgradeImprovement.CODEC, UpgradeImprovement.SUBTITLES}
+        return UpgradeChecks(tuple(improvement for improvement in self.improvements if improvement not in video))
+
+
+@dataclass(frozen=True)
+class Names:
+    """A word in its singular and plural forms, in lower case and without an article, such as album and albums.
+    ``article`` is only set where the first letter does not tell it, as for an hour."""
+
+    singular: str
+    plural: str
+    article: str = ""
+
+    @property
+    def a(self) -> str:
+        """The word with its article, such as an album or a playlist."""
+        return f"{self.article or ('an' if self.singular[:1] in 'aeiou' else 'a')} {self.singular}"
+
+    @classmethod
+    def joined(cls, names: Iterable[Names]) -> Names:
+        """One name for several, such as "album or playlist" and "albums and playlists" for SoundCloud's lists, or
+        "album, playlist or list" for three. It starts with the first one, and so takes its article."""
+        names = list(names)
+        return cls(_joined([name.singular for name in names], "or"), _joined([name.plural for name in names], "and"),
+                   names[0].article if names else "")
+
+
+def _joined(words: list[str], conjunction: str) -> str:
+    words = list(dict.fromkeys(words))
+    return words[0] if len(words) == 1 else f"{', '.join(words[:-1])} {conjunction} {words[-1]}"
+
+
+class SectionKind(StrEnum):
+    """What one part of a creator is, whatever the Site calls it."""
+
+    FEED = "feed"
+    """Grows forever, ordered by date: Videos, Shorts, Live, Reels."""
+    LIST = "list"
+    """Finite and curated, with a title and artwork of its own, that can be a season of a collection: a playlist or
+    an album. Each Source names lists in its own words."""
+    SHOW = "show"
+    """A show with seasons of its own, such as a Daily Wire show: it grows like a feed, has a title and artwork of its
+    own, and is always a collection of its own."""
+    ITEM = "item"
+    """One movie or video, such as a movie on a Daily Wire host's page."""
+
+
+SECTION_KIND_NAMES = {
+    SectionKind.FEED: Names("feed", "feeds"),
+    SectionKind.LIST: Names("list", "lists"),
+    SectionKind.SHOW: Names("show", "shows"),
+    SectionKind.ITEM: Names("video", "videos"),
+}
+"""VODLoft's own word for each kind of section, for a kind a Site names no section type for."""
+
+
+class SectionRole(StrEnum):
+    """What a section holds, which only steers the defaults when a creator is added."""
+
+    MAIN = "main"
+    SHORT = "short"
+    LIVE = "live"
+
+
+LIST_TYPE = "list"
+"""The key of VODLoft's own kind of list, the playlist, which most Sites have."""
+
+
+MAIN_TAG = "ep"
+
+
+@dataclass(frozen=True)
+class SectionType:
+    """One type of section a Site's creators have, such as a feed, an album or a playlist on SoundCloud, and what
+    the Site calls it. ``key`` is stored with each section and with the settings for what happens with a new list or
+    show, so it never changes."""
+
+    key: str
+    kind: SectionKind
+    names: Names
+    """What the Site calls a section of the type. A channel has one section of each type of feed, which is named
+    after its type, such as Shorts, and holds what it names, such as "12 shorts"."""
+    albums: bool = False
+    """The type of list that best describes an artist's albums. A new channel collection on a Site with such types
+    adds new lists of those types and skips the others; on any other Site, it adds every type."""
+    role: SectionRole = SectionRole.MAIN
+    """What a feed of the type holds: a channel's main videos, or its Shorts or livestreams."""
+    episode_tag: str = MAIN_TAG
+    """The key of the Site's episode tag that the videos of a feed of the type get, such as YouTube's short, by which
+    VODLoft tells a feed's videos apart in a collection that lists several feeds. The main feed's videos get the
+    main tag."""
+
+    @property
+    def title(self) -> str:
+        """The name of the one section of a feed type, such as Shorts."""
+        plural = self.names.plural
+        return plural[:1].upper() + plural[1:]
+
+    @property
+    def feed_ref(self) -> str:
+        """The ref of the one section of a feed of the type, by which a collection's feeds setting names it: its
+        key, unless its Source names it otherwise."""
+        return self.key
 
 
 @dataclass(frozen=True)
@@ -138,11 +260,18 @@ class DownloadOptions:
     """Codecs, container, quality goal, audio format and audio language pick the version that is
     downloaded. Only a Site downloaded with a program that chooses among versions, such as yt-dlp, turns it
     on; a Site with fixed versions, such as The Daily Wire, has nothing to choose."""
+    info_file: bool = False
+    """The program that downloads the Site's media writes an info file about each video, as yt-dlp does, which a
+    profile can save beside the media."""
 
     @property
     def hls_bundle(self) -> bool:
         """Whether a profile can keep the Site's media as an HLS bundle."""
         return bool(self.hls_heights)
+
+    def for_audio_only(self) -> DownloadOptions:
+        """The same options for a Site with sound only: no resolutions, HLS bundle or subtitles, only its audio."""
+        return replace(self, video_heights=(), hls_heights=(), subtitles=False)
 
     @classmethod
     def combined(cls, options: Iterable[DownloadOptions]) -> DownloadOptions:
@@ -156,6 +285,7 @@ class DownloadOptions:
             hls_heights=tuple(sorted({height for option in options for height in option.hls_heights})),
             subtitles=any(option.subtitles for option in options),
             quality_choices=any(option.quality_choices for option in options),
+            info_file=any(option.info_file for option in options),
         )
 
 
@@ -167,8 +297,6 @@ class RssEpisodeType(StrEnum):
     BONUS = "bonus"
 
 
-MAIN_TAG = "ep"
-
 
 @dataclass(frozen=True)
 class EpisodeTag:
@@ -177,17 +305,24 @@ class EpisodeTag:
     The key is the first part of an episode's identifier (``short.12``) and what
     Download and RSS profiles select. Episodes with the ``main`` tag follow the
     collection's numbering scheme; every other tag counts on its own across the collection.
-    ``singular`` and ``plural`` name a count of them, such as "1 livestream" or "726 livestreams".
+    ``names`` name a count of them, such as "1 livestream" or "726 livestreams"; ``label`` is the tag itself, such as
+    Ep. Extra.
     """
 
     key: str
     label: str
     help: str
-    singular: str
-    plural: str
+    names: Names
     selected_by_default: bool = True
     rss_episode_type: RssEpisodeType = RssEpisodeType.FULL
     main: bool = False
+
+
+VIDEO_TAGS = (EpisodeTag(MAIN_TAG, "Video", "A normal video", Names("video", "videos"), main=True),)
+"""VODLoft's own episode tags: every video is a normal one."""
+TRACK_TAGS = (EpisodeTag(MAIN_TAG, "Track", "A normal track", Names("track", "tracks"), main=True),)
+"""VODLoft's own episode tags on a Site with sound only."""
+_VIDEO_DOWNLOADS = DownloadOptions()
 
 
 class EpisodePublishStatus(StrEnum):
@@ -206,8 +341,6 @@ class EpisodePublishStatus(StrEnum):
     a Daily Wire episode that still opens with its countdown."""
     PUBLISHED_FINAL = "published_final"
     """Published for good."""
-    NO_USABLE_MEDIA = "no_usable_media"
-    """The Source has nothing usable for it right now; VODLoft keeps checking for a while."""
 
 
 class ReleaseDate(StrEnum):
@@ -242,10 +375,6 @@ DEFAULT_PUBLISH_STATUS_LABELS: tuple[PublishStatusLabel, ...] = (
         "Published, but the source will still replace the media with a final version.",
     ),
     PublishStatusLabel(EpisodePublishStatus.PUBLISHED_FINAL, "Published", "Published for good."),
-    PublishStatusLabel(
-        EpisodePublishStatus.NO_USABLE_MEDIA, "No usable media",
-        "The source has nothing usable for it right now. VODLoft keeps checking for a while.",
-    ),
 )
 
 
@@ -342,6 +471,79 @@ class LinkKind(StrEnum):
     MOVIE = "movie"
     EPISODE = "episode"
     VIDEO = "video"
+    CREATOR = "creator"
+
+
+LINK_KIND_NAMES = {
+    LinkKind.COLLECTION: Names("collection", "collections"),
+    LinkKind.MOVIE: Names("movie", "movies"),
+    LinkKind.EPISODE: Names("episode", "episodes"),
+    LinkKind.VIDEO: Names("video", "videos"),
+    LinkKind.CREATOR: Names("creator", "creators"),
+}
+"""VODLoft's own word for each kind of media a link can be."""
+
+
+@dataclass(frozen=True)
+class SectionRef:
+    """One section of a creator. ``ref`` is the Site's own id for it, which stays the same when it is renamed.
+    ``type`` is one of the Site's section types, which says what kind of section it is and what it holds; a feed is
+    named after its type, and only a list, show or item has a ``title`` of its own."""
+
+    ref: str
+    url: str
+    type: SectionType
+    title: str = ""
+    item_count: int | None = None
+    image_url: str | None = None
+    description: str | None = None
+    access: str | None = None
+    """The key of the ``Access`` the section needs, as for videos."""
+    """A list with seasons of its own, such as a Daily Wire show, keeps them."""
+    year: str | None = None
+    """The year an album came out."""
+
+    def __post_init__(self) -> None:
+        if self.kind is SectionKind.FEED or not self.title:
+            object.__setattr__(self, "title", self.type.title)
+
+    @property
+    def kind(self) -> SectionKind:
+        return self.type.kind
+
+    @property
+    def role(self) -> SectionRole:
+        return self.type.role
+
+
+@dataclass(frozen=True)
+class CreatorDetails:
+    """A creator on one Site: who they are, and the sections their page offers.
+
+    ``ref`` is the Site's own id for the creator. ``url`` is None for a creator the Site has no page of its own for,
+    such as a Daily Wire host, which is only found through VODLoft's Browse page.
+    """
+
+    ref: str
+    url: str | None
+    title: str
+    handle: str | None = None
+    description: str | None = None
+    avatar_url: str | None = None
+    banner_url: str | None = None
+    links: tuple[str, ...] = ()
+    """The creator's own links, such as their website."""
+    facts: tuple[str, ...] = ()
+    """Short facts, such as "1.2M subscribers"."""
+    sections: tuple[SectionRef, ...] = ()
+    music: bool = False
+    """A music artist, whose lists are albums: their collections are Music collections. Where the Site can't be sure,
+    it is the Source's guess, which the user can change before the creator is added."""
+    music_known: bool = False
+    """The Site makes ``music`` certain: Bandcamp only has artists, and The Daily Wire only hosts."""
+    music_reason: str | None = None
+    """Why the Source took the creator for a music artist, when it guessed so, such as "It has releases on YouTube
+    Music"."""
 
 
 @dataclass(frozen=True)
@@ -461,6 +663,15 @@ class UpgradeOffer:
 
 
 @dataclass(frozen=True)
+class Chapter:
+    """A stretch of a video the uploader named, in seconds from its start."""
+
+    title: str
+    start: float
+    end: float
+
+
+@dataclass(frozen=True)
 class VideoDetails:
     """Everything VODLoft stores about a single video.
 
@@ -496,6 +707,9 @@ class VideoDetails:
     live video has nothing to download yet."""
     scheduled_at: datetime | None = None
     """When an upcoming video is due to start."""
+    chapters: tuple[Chapter, ...] | None = None
+    """The video's chapters, for a Source with ``Feature.CHAPTERS``: empty when it has none, and None when the
+    listing did not say, so ``video_details`` has to be asked."""
 
 
 @dataclass(frozen=True)
@@ -540,6 +754,9 @@ class CollectionDetails:
     seasons: tuple[SeasonRef, ...] = ()
     """The collection's own seasons, for a Source that has them, so they can be picked
     before the episodes are indexed."""
+    list_type: str | None = None
+    """The key of the Site's type of list the link is, such as an album or a playlist on SoundCloud, for a Site whose
+    lists come in several types that their links don't tell apart."""
 
 
 MIN_NEWEST_EPISODES = 5
@@ -585,6 +802,30 @@ class ApiQuotaShare:
 
 
 @dataclass(frozen=True)
+class QuickCheckCollection:
+    """A collection that gets quick checks, as a Source needs it to tell what checking it costs."""
+
+    url: str
+    episode_count: int = 0
+    feeds: frozenset[str] | None = None
+    """The feeds of its channel the collection lists, or None for all that its link lists."""
+    lists_only: bool = False
+    """It holds only the seasons of its lists, so each check reads every one of its lists again."""
+    least_minutes: int = 0
+    """How long the collection waits between two checks anyway, such as six hours when it is checked less often."""
+
+
+@dataclass(frozen=True)
+class QuickCheckCost:
+    """What one quick check of a collection costs, and how long the collection waits between checks anyway."""
+
+    units: int
+    least_minutes: int = 0
+    feeds: int = 0
+    """The feeds a check reads, each a call; a collection that follows all of its channel's feeds reads them as one."""
+
+
+@dataclass(frozen=True)
 class ApiStatus:
     """The API key of a Source with ``Feature.API_KEY``, and how much of today's quota it spent."""
 
@@ -601,6 +842,8 @@ class ApiStatus:
     """The collections the key speeds up."""
     rescan_units: int = 0
     """What one full re-scan of those collections costs, so the settings can say how often each gets checked."""
+    check_costs: tuple[QuickCheckCost, ...] = ()
+    """What a quick check of each of those collections costs."""
 
 
 @dataclass(frozen=True)
@@ -619,15 +862,108 @@ class Access:
     """One sentence on who can watch what needs it, such as "Only NPO Plus subscribers can watch this"."""
 
 
-class ApiKeyRejected(ValueError):
-    """The service does not accept the key; the message says what to do about it."""
+@dataclass(frozen=True)
+class ApiField:
+    """One value a Site's API takes, such as its client ID, and whether it is a secret that is never shown again."""
 
-    def __init__(self, message: str, fix_url: str | None = None):
+    key: str
+    label: str
+    secret: bool = False
+
+
+@dataclass(frozen=True)
+class GuideStep:
+    """One step of how to get something, with a button to the page it is done on."""
+
+    text: str
+    button: str | None = None
+    url: str | None = None
+
+
+@dataclass(frozen=True)
+class SiteApi:
+    """A free API of a Site's own that the user can register VODLoft with, such as Twitch's, and what it makes
+    better. VODLoft works on the Site without it."""
+
+    name: str
+    """What the Site calls it, such as Twitch API."""
+    fields: tuple[ApiField, ...]
+    benefits: str
+    """What it makes better, as a sentence."""
+    steps: tuple[GuideStep, ...] = ()
+    """How to register VODLoft there and get the values of its ``fields``."""
+    searches: bool = False
+    """The Site's search goes through the API, so VODLoft only searches the Site once it is set up."""
+
+
+@dataclass(frozen=True)
+class Retention:
+    """A Site that removes its media itself after a while, such as Twitch its past broadcasts."""
+
+    kept_for: timedelta
+    """The least time the Site keeps media after it is published. Media that leaves the Site sooner is missing, as
+    on any other Site."""
+    description: str
+    """How the Site removes its media, as a sentence."""
+
+
+@dataclass(frozen=True)
+class SiteApiStatus:
+    """Which values of a Site's API are set, each by its last few characters or, for one that is not secret, as it
+    is; and the last problem the Site reported with them."""
+
+    hints: Mapping[str, str]
+    problem: str | None = None
+
+    @property
+    def set_up(self) -> bool:
+        return bool(self.hints)
+
+
+class ApiKeyRejected(ValueError):
+    """The service does not accept the key; the message says what to do about it, and ``field`` which of a Site's
+    API values it is about, when it is about one."""
+
+    def __init__(self, message: str, fix_url: str | None = None, field: str | None = None):
         super().__init__(message)
         self.fix_url = fix_url
+        self.field = field
 
 
 ANY_DOMAIN = "*"
+
+
+class ChannelSeason(StrEnum):
+    """What the one season of a channel collection's own videos holds, beside the seasons of its lists."""
+
+    EVERYTHING = "everything"
+    """Every video of its feeds, also the ones a list has, so the season is the whole channel. It is named after the
+    Site's channel collections, such as Channel on YouTube."""
+    UNLISTED = "unlisted"
+    """Only the videos of its feeds that none of its lists has, named as the Site calls such videos
+    (``Site.loose_season``), such as Videos, or Singles in a Music collection."""
+
+
+class ProfileSeasons(StrEnum):
+    """Which seasons a new Download Profile of a seasonal collection picks, beside the upcoming ones."""
+
+    NEWEST = "newest"
+    """The newest season only, as for a show whose seasons are the Site's own."""
+    ALL = "all"
+    """Every season, as for an artist whose albums VODLoft makes seasons of."""
+
+
+def initials_of(name: str) -> str:
+    """A Site's name in at most two capitals, for a Site whose contract names none: the first letters of its first two
+    words, such as SC for SoundCloud or DW for The Daily Wire, or the first two letters of a one-word name. A name that
+    is a domain, such as example.com, goes by the part before its ending: EX."""
+    if "." in name and " " not in name.strip():
+        name = name.strip().lower().removeprefix("www.").split(".")[0]
+    words = [word for part in re.findall(r"[A-Za-z0-9]+", name) for word in re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|[0-9]+", part)]
+    if len(words) > 2 and words[0].lower() == "the":
+        words = words[1:]
+    letters = "".join(word[0] for word in words[:2]) if len(words) > 1 else "".join(words)[:2]
+    return letters.upper()
 
 
 @dataclass(frozen=True)
@@ -641,6 +977,14 @@ class Site:
     key: str
     name: str
     domains: tuple[str, ...] = ()
+    icon: str | None = None
+    """The Font Awesome icon of the Site, as ``prefix:name``, such as ``fab:youtube``: Font Awesome's brand icon of the
+    Site where it has one, or a custom icon in VODLoft's Kit (``fak:``, drawn in ``ui/src/icons/custom``) where Font
+    Awesome has none. VODLoft shows it where the Site's name does not fit, such as a creator's links on a phone.
+    A Site without one shows a globe with its ``initials``."""
+    initials: str = ""
+    """The Site's name in at most two letters, such as YT for YouTube, shown beside a globe where the Site has no
+    ``icon``. Left out, they are made from its name (``initials_of``)."""
     stream_methods: frozenset[StreamMethod] = frozenset()
     """How RSS feeds can stream the Site's episodes straight from it, without downloading them
     first. A Site with none only serves downloads."""
@@ -655,8 +999,13 @@ class Site:
     video_output_help: Mapping[str, str] = field(default_factory=dict, hash=False)
     """What a feed's video output does on this Site, where it differs from the usual explanation, by
     the output's value (``audio_hls``, ``audio_mp4``, ``mp4`` or ``mp4_hls``)."""
-    downloads: DownloadOptions = DownloadOptions()
+    downloads: DownloadOptions = _VIDEO_DOWNLOADS
+    """What a Local Media Profile can choose for the Site's media. Left out on a Site that is ``audio_only``, it
+    offers only audio."""
     upgrade_checks: UpgradeChecks = UpgradeChecks()
+    episode_tags: tuple[EpisodeTag, ...] = VIDEO_TAGS
+    """Every tag the Site gives episodes, the main one first, such as YouTube's Videos, Shorts and Livestreams. Left
+    out, every episode is a normal video, or a track on a Site that is ``audio_only``."""
     settings: SiteSettings = field(default_factory=SiteSettings, hash=False)
     """Which settings the Site shows in Settings and on its Download Profiles, and its presets."""
     takes_cookies: bool = True
@@ -667,14 +1016,137 @@ class Site:
     takes_api_key: bool = False
     """A Source with ``Feature.API_KEY`` that fetches the Site uses its key there, such as yt-dlp's
     YouTube Data API key on YouTube."""
+    site_api: SiteApi | None = None
+    """The Site's own free API that the user can register VODLoft with, through a Source with ``Feature.SITE_API``,
+    such as Twitch's for its search."""
     accesses: tuple[Access, ...] = ()
     """What the Site only gives some of its videos with, such as NPO Plus or a channel membership,
     by the keys its Sources tell."""
+    creators: bool = False
+    """The Site has creators VODLoft can add, through a Source with ``Feature.CREATORS``."""
+    audio_only: bool = False
+    """The Site has sound only, such as Bandcamp's tracks. A Music collection on it holds tracks rather than music
+    videos, and what the Site leaves out of ``downloads`` and ``episode_tags`` is for sound: tracks, downloaded as
+    audio."""
+    creator_names: Names = Names("creator", "creators")
+    """What the Site calls a creator, such as host on The Daily Wire or artist on Bandcamp. VODLoft names the Site's
+    creators by it everywhere."""
+    channel_collection_names: Names = Names("collection", "collections")
+    """What the Site calls a collection of a channel, a creator's page of all their uploads, such as a channel on
+    YouTube or a show on The Daily Wire."""
+    list_collection_names: Names = Names("collection", "collections")
+    """What the Site calls a collection of one of its lists, such as a playlist on YouTube."""
+    channel_season_names: Names | None = None
+    """What the Site calls the seasons of a channel collection, such as playlists on YouTube. Left out, they are
+    named as the collection's type names its seasons."""
+    list_season_names: Names | None = None
+    """What the Site calls the seasons of a list collection, such as groups on SoundCloud. Left out, they are named as
+    the collection's type names its seasons."""
+    custom_season_names: Names = Names("list", "lists")
+    """What VODLoft calls the seasons of a custom collection on the Site, whose seasons are the lists the user gave
+    it, unless the collection's type names its seasons itself. A custom collection is on the Site of its first list."""
+    channel_season: ChannelSeason | None = None
+    """What a new channel collection's channel season holds. Left out, the whole channel, or on a Site that is
+    ``audio_only`` only what is in none of its lists, such as an artist's singles."""
+    section_types: tuple[SectionType, ...] = (
+        SectionType("videos", SectionKind.FEED, Names("video", "videos")),
+        SectionType(LIST_TYPE, SectionKind.LIST, Names("playlist", "playlists")),
+    )
+    """Every type of section the Site's creators have, in the order VODLoft shows them, such as YouTube's Videos,
+    Live and Shorts and its playlists, or The Daily Wire's shows and movies. Each section a Source finds is one of
+    them, by its key; VODLoft names sections and keeps settings by them everywhere."""
+    link_seasons: bool = False
+    """A collection made from a creator's channel can make the channel's lists, such as its playlists, its seasons:
+    link seasons, through its Source's ``is_creator_page``, ``season_lists`` and ``list_items``."""
+    every_list_a_season: bool = True
+    """A new channel collection makes every one of the channel's lists a season, as a channel shows all its lists.
+    A Site whose contract says False makes only the lists the user picks seasons."""
+    whole_lists: bool = True
+    """A new channel collection puts a video in every list season that has it, so each list is whole. A Site whose
+    contract says False puts a video in the first of them only, unless the collection's type says otherwise."""
+    profile_seasons: ProfileSeasons | None = None
+    """Which seasons a new Download Profile of a collection on the Site picks, beside the upcoming ones. Left out, it
+    follows where the seasons come from: the newest where they are the Site's own (a Source with
+    ``Feature.OWN_SEASONS``), every season where VODLoft makes them from lists, years or anything else."""
+    loose_season: str | None = None
+    """What VODLoft calls the season it makes itself of the videos in none of a collection's link seasons. Left out,
+    Videos, or on a Site that is ``audio_only`` Singles. A collection type can name it itself
+    (``CollectionContract.loose_season``)."""
+    share_hosts: tuple[str, ...] = ()
+    """The hosts of the short links the Site's apps share, such as SoundCloud's on.soundcloud.com, which redirect to
+    the Site's own pages. Their links are the Site's, and VODLoft follows them to the page they stand for."""
+    searchable: bool = False
+    """VODLoft can find the Site's collections and videos by name, through a Source with ``Feature.SEARCH``."""
+    costly_search: bool = False
+    """Each search of the Site costs something, such as API quota or a slow lookup, so the search page searches when
+    asked instead of while the user types."""
+    retention: Retention | None = None
+    """How the Site removes its media itself after a while, such as Twitch its past broadcasts. Media that leaves
+    such a Site once it is older than the Retention's ``kept_for`` is removed by its retention: VODLoft expects it to
+    go, so it does not ask on Home whether to keep its downloads, and says what deleting a download then means."""
     shows_locked: bool = True
     """A collection on the Site shows what VODLoft has no access to until the user hides it. On a Site
     whose collections mix locked videos among open ones, such as a YouTube channel's members-only
     videos, it starts hidden. Where a collection is locked as a whole, as on The Daily Wire, hiding it
     would empty the collection."""
+
+    def __post_init__(self) -> None:
+        if self.icon is not None and not re.fullmatch(r"[a-z]+:[a-z0-9-]+", self.icon):
+            raise ValueError(f"The icon of {self.name}, {self.icon!r}, is not a Font Awesome icon as prefix:name")
+        if not self.initials:
+            object.__setattr__(self, "initials", initials_of(self.name) or initials_of(self.key))
+        # Only a stand-in without a name, such as for "any Site", has none.
+        if self.initials and not re.fullmatch(r"[A-Z0-9]{1,2}", self.initials):
+            raise ValueError(f"The initials of {self.name}, {self.initials!r}, are not one or two capitals or digits")
+        # What a Site with sound only leaves out is for sound; whatever it sets itself stays as it is.
+        if self.audio_only and self.downloads is _VIDEO_DOWNLOADS:
+            object.__setattr__(self, "downloads", self.downloads.for_audio_only())
+        if self.audio_only and self.episode_tags is VIDEO_TAGS:
+            object.__setattr__(self, "episode_tags", TRACK_TAGS)
+        if self.loose_season is None:
+            object.__setattr__(self, "loose_season", "Singles" if self.audio_only else "Videos")
+        if self.channel_season is None:
+            object.__setattr__(
+                self, "channel_season", ChannelSeason.UNLISTED if self.audio_only else ChannelSeason.EVERYTHING,
+            )
+
+    @property
+    def media_names(self) -> Names:
+        """What the Site calls one of its videos, from its main episode tag: a video, or a track on a Site with sound
+        only, such as the items a playlist holds."""
+        return self.episode_tags[0].names
+
+    def episode_tag(self, key: str | None) -> EpisodeTag | None:
+        """One of the Site's episode tags by its key."""
+        return next((tag for tag in self.episode_tags if tag.key == key), None)
+
+    def types_of(self, *kinds: SectionKind) -> tuple[SectionType, ...]:
+        """The Site's section types of these kinds, such as its lists."""
+        return tuple(type_ for type_ in self.section_types if type_.kind in kinds)
+
+    @property
+    def section_list_names(self) -> Names:
+        """What the Site calls its lists, all its types of list together, such as "albums and playlists" on
+        SoundCloud; VODLoft's own word on a Site whose creators have none."""
+        return self.names_of(SectionKind.LIST)
+
+    def names_of(self, *kinds: SectionKind) -> Names:
+        """The Site's section types of these kinds named together, or VODLoft's word for the first kind."""
+        types = self.types_of(*kinds)
+        return Names.joined([type_.names for type_ in types]) if types else SECTION_KIND_NAMES[kinds[0]]
+
+    def list_collection_names_of(self, list_type: str | None) -> Names:
+        """What the Site calls a collection of one of its lists of this type, such as an album on SoundCloud, or its
+        ``list_collection_names`` while the type is not known."""
+        return self.section_type(list_type).names if list_type else self.list_collection_names
+
+    def section_type(self, key: str) -> SectionType:
+        """The Site's section type by its key. A section of a type the Site does not have is a mistake in its Source,
+        so it raises ``KeyError``."""
+        found = next((type_ for type_ in self.section_types if type_.key == key), None)
+        if found is None:
+            raise KeyError(f"{self.name} has no type of section {key!r}")
+        return found
 
     def access(self, key: str | None) -> Access | None:
         """One of ``accesses`` by its key."""
@@ -705,15 +1177,20 @@ def on_domain(host: str, domain: str) -> bool:
     return host == domain or host.endswith(f".{domain}")
 
 
+def combined_tags(tag_sets: Iterable[tuple[EpisodeTag, ...]]) -> tuple[EpisodeTag, ...]:
+    """The tags of several Sites, each key once, in their order: the first Site's main tag stays the main one."""
+    tags: dict[str, EpisodeTag] = {}
+    for tag_set in tag_sets:
+        for tag in tag_set:
+            tags.setdefault(tag.key, tag)
+    return tuple(tags.values())
+
+
 class Source(ABC):
     id: ClassVar[str]
     name: ClassVar[str]
     domains: ClassVar[tuple[str, ...]]
     features: ClassVar[frozenset[Feature]]
-    episode_tags: ClassVar[tuple[EpisodeTag, ...]] = (
-        EpisodeTag(MAIN_TAG, "Episode", "An episode of the collection", "episode", "episodes", main=True),
-    )
-    """Every tag the Source gives episodes, the main one first."""
     sites: ClassVar[tuple[Site, ...]] = ()
     """The Sites this Source is made for, such as The Daily Wire, with what this Source offers on
     each. A Source that serves many sites, as yt-dlp does, names none and tells them apart in
@@ -725,16 +1202,19 @@ class Source(ABC):
     sites_label: ClassVar[str | None] = None
     """What the Source downloads from, in a few words, when its name does not say so, such as
     "YouTube, and many more" for yt-dlp."""
-    search_label: ClassVar[str | None] = None
-    """What the search button names, when that is not the Source's name, such as YouTube for yt-dlp."""
     publish_status_labels: ClassVar[tuple[PublishStatusLabel, ...]] = DEFAULT_PUBLISH_STATUS_LABELS
     """What the Source calls each publish status, every status included."""
     release_date: ClassVar[ReleaseDate] = ReleaseDate.START
     """Which moment the release date the Source gives its items marks."""
-    kind_names: ClassVar[Mapping[LinkKind, str]] = MappingProxyType({})
+    kind_names: ClassVar[Mapping[LinkKind, Names]] = MappingProxyType({})
     """What the Source calls a kind of media where its own word differs from VODLoft's, such as
     Show for a Daily Wire collection. VODLoft uses these words only where it shows the Source's
     own catalogue, and a search result's ``kind_label`` still wins for that one result."""
+
+    @property
+    def named_kinds(self) -> dict[LinkKind, Names]:
+        """What the Source calls each kind of media: its own word (``kind_names``), or VODLoft's."""
+        return {kind: self.kind_names.get(kind, LINK_KIND_NAMES[kind]) for kind in LinkKind}
 
     def has(self, feature: Feature) -> bool:
         return feature in self.features
@@ -763,17 +1243,23 @@ class Source(ABC):
         that tells its Sites apart in ``site_for`` implements it."""
         return next((site for site in self.sites if site.key == site_key), None)
 
+    def has_site_contract(self, site_key: str) -> bool:
+        """Whether this Source has a contract of its own for the Site with the key, rather than only the
+        defaults it offers any site."""
+        return self.site_of(site_key) is not None
+
     def collection_ref(self, url: str) -> str | None:
         """The id one of this Source's ``sites`` gives the collection at the link, told from the
         link alone, or None when it is not a collection's link. A Source that names Sites implements it."""
         return None
 
     def episode_tags_for(self, url: str | None) -> tuple[EpisodeTag, ...]:
-        """The tags episodes of the collection at this link can get, or all of them without a link."""
-        return self.episode_tags
-
-    def episode_tag(self, key: str | None) -> EpisodeTag | None:
-        return next((tag for tag in self.episode_tags if tag.key == key), None)
+        """The tags the Site of the collection at this link gives episodes, or without a link, the tags of every Site
+        this Source fetches, each once."""
+        if url is not None:
+            site = self.site_for(url)
+            return site.episode_tags if site is not None else VIDEO_TAGS
+        return combined_tags(site.episode_tags for site in self.sites) or VIDEO_TAGS
 
     @abstractmethod
     def resolve(self, url: str) -> ResolvedLink | None:
@@ -846,8 +1332,53 @@ class Source(ABC):
         """Look up a collection. Only Sources with ``Feature.EPISODE_LISTS`` implement it."""
         raise NotImplementedError(f"{self.name} does not list episodes")
 
-    def list_episodes(self, url: str, *, known: frozenset[str]) -> Iterator[VideoDetails]:
+    def creator_details(self, ref: str, plan: PlanTracker | None = None) -> CreatorDetails:
+        """Look up a creator by its link, or by the ``ref`` it had before. Only Sources with ``Feature.CREATORS``
+        implement it.
+
+        A lookup can take a while, so it reports its progress by ``plan``: each Site adds the steps it takes to look a
+        creator up, such as reading each of its feeds or listing its playlists, labelled in words such as "Reading
+        the playlists", and runs them, counting how many of how many where a step goes through a known number."""
+        raise NotImplementedError(f"{self.name} has no creators")
+
+    def creator_of(self, url: str) -> str | None:
+        """The creator a collection's link belongs to, as ``creator_details`` takes it, or None when the link is not
+        one creator's. Slow: it may ask the Site. Only Sources with ``Feature.CREATORS`` implement it."""
+        raise NotImplementedError(f"{self.name} has no creators")
+
+    def music_reason(self, url: str, details: CollectionDetails) -> str | None:
+        """Why the collection behind a link, looked up as ``details``, is probably music, such as an album or a
+        channel of a music artist, or None when nothing says so. A guess the user can change; it may ask the Site.
+        Only Sources with ``Feature.EPISODE_LISTS`` implement it."""
+        return None
+
+    def is_creator_page(self, url: str) -> bool:
+        """Whether a collection's link is a creator's own page of all their uploads, such as a YouTube channel, whose
+        playlists can be its seasons, rather than one playlist. Told without asking the Site. Only Sources with a Site with ``link_seasons`` implement it."""
+        return False
+
+    def is_list(self, url: str) -> bool:
+        """Whether a collection's link is one list, such as a playlist or an album, rather than a channel: a creator's
+        page or one of its feeds. Told without asking the Site."""
+        return False
+
+    def season_lists(self, url: str) -> list[SectionRef]:
+        """The playlists of the channel at ``url``, as the Site lists them, newest first. Only Sources with a Site with
+        ``link_seasons`` implement it."""
+        raise NotImplementedError(f"{self.name} has no playlists to make seasons of")
+
+    def list_items(self, url: str) -> tuple[ItemRef, ...]:
+        """The videos a playlist lists, in the playlist's own order, such as an album's track order. Only Sources with
+        a Site with ``link_seasons`` implement it, and their ``item_details`` looks the videos up."""
+        raise NotImplementedError(f"{self.name} has no playlists to make seasons of")
+
+    def list_episodes(
+        self, url: str, *, known: frozenset[str], feeds: frozenset[str] | None = None,
+    ) -> Iterator[VideoDetails]:
         """The collection's episodes whose slugs are not in ``known``.
+
+        ``feeds`` are the refs of the creator's feeds, as ``creator_details`` names them, that a creator's own
+        collection takes, such as only a YouTube channel's Videos; None lists all that the link lists.
 
         An episode that cannot be looked up right now is left out, so a later
         scan tries it again.
@@ -861,8 +1392,9 @@ class Source(ABC):
         Only Sources with ``Feature.COLLECTIONS`` implement it."""
         raise NotImplementedError(f"{self.name} has no collections")
 
-    def latest_items(self, url: str) -> list[ItemRef]:
-        """The collection's newest items, newest first. Only Sources with ``Feature.QUICK_CHECK`` implement it."""
+    def latest_items(self, url: str, *, feeds: frozenset[str] | None = None) -> list[ItemRef]:
+        """The collection's newest items, newest first, of only ``feeds`` when given, as ``list_episodes`` takes them.
+        Only Sources with ``Feature.QUICK_CHECK`` implement it."""
         raise NotImplementedError(f"{self.name} has no quick check")
 
     def item_details(self, items: Sequence[ItemRef]) -> dict[str, VideoDetails | None]:
@@ -886,14 +1418,42 @@ class Source(ABC):
         Only Sources with ``Feature.PENDING_CHECKS`` implement it."""
         raise NotImplementedError(f"{self.name} cannot check pending items")
 
-    def quick_check_minutes(self, collections: Sequence[tuple[str, int]]) -> int:
-        """How often each of these collections, given as link and episode count, can
-        get a quick check. ``Feature.QUICK_CHECK`` only."""
+    def quick_check_minutes(self, collections: Sequence[QuickCheckCollection]) -> int:
+        """How often each of these collections can get a quick check, at most: a collection that waits longer
+        anyway keeps its own wait. ``Feature.QUICK_CHECK`` only."""
         raise NotImplementedError(f"{self.name} has no quick check")
 
-    def search(self, query: str) -> SearchResults:
-        """Collections and videos whose name matches the query. Only Sources with ``Feature.SEARCH`` implement it."""
+    @property
+    def search_sites(self) -> tuple[Site, ...]:
+        """The Sites the Source finds things on by name, each ``searchable``: those of its ``sites``. A Source of many
+        sites names its own."""
+        return tuple(site for site in self.sites if site.searchable)
+
+    def search(self, site: Site, query: str) -> SearchResults:
+        """Collections and videos on one of the ``search_sites`` whose name matches the query. Only Sources with
+        ``Feature.SEARCH`` implement it."""
         raise NotImplementedError(f"{self.name} cannot be searched")
+
+    def search_ready(self, site: Site) -> bool:
+        """Whether the Source can search the Site now: one whose search goes through its own API
+        (``SiteApi.searches``) only once that API is set up."""
+        return site.site_api is None or not site.site_api.searches or self.site_api_status(site).set_up
+
+    def site_api_status(self, site: Site) -> SiteApiStatus:
+        """Which values of the Site's own API are set. Only Sources with ``Feature.SITE_API`` implement it."""
+        raise NotImplementedError(f"{self.name} uses no API of {site.name}")
+
+    def save_site_api(self, site: Site, values: Mapping[str, str]) -> None:
+        """Test the values of the Site's API with one call and store them. Raises ApiKeyRejected when the Site does
+        not accept them."""
+        raise NotImplementedError(f"{self.name} uses no API of {site.name}")
+
+    def test_site_api(self, site: Site) -> None:
+        """Test the stored values with one call. Raises ApiKeyRejected when the Site does not accept them."""
+        raise NotImplementedError(f"{self.name} uses no API of {site.name}")
+
+    def remove_site_api(self, site: Site) -> None:
+        raise NotImplementedError(f"{self.name} uses no API of {site.name}")
 
     def program_status(self) -> ProgramStatus:
         """The program this Source runs. Only Sources with ``Feature.PROGRAM_UPDATES`` implement it."""
@@ -961,9 +1521,9 @@ class Source(ABC):
         """What the user should fix about this Source right now."""
         return []
 
-    def api_status(self, collections: Sequence[tuple[str, int]] = ()) -> ApiStatus:
-        """The API key and today's quota. ``collections`` are the link and episode count of
-        each of this Source's collections. Only Sources with ``Feature.API_KEY`` implement it."""
+    def api_status(self, collections: Sequence[QuickCheckCollection] = ()) -> ApiStatus:
+        """The API key and today's quota, and what checking ``collections``, this Source's collections, costs.
+        Only Sources with ``Feature.API_KEY`` implement it."""
         raise NotImplementedError(f"{self.name} takes no API key")
 
     def save_api_key(self, key: str) -> None:

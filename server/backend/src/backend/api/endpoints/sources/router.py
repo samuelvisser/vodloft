@@ -2,26 +2,30 @@ from fastapi import APIRouter, HTTPException, Query
 
 from backend.api.models.source import (
     DownloadOptionsAPIRead, DownloadProfileDefaultsAPIRead, SiteOptionsAPIRead, YtdlpOptionLineAPIRead, YtdlpOptionsAPIRead, YtdlpOptionsAPIUpdate, YtdlpOptionsCheckAPIRequest,
-    ApiKeyAPIUpdate, ApiStatusAPIRead, EpisodeTagAPIRead, PublishStatusLabelAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, SearchResultsAPIRead,
+    ApiKeyAPIUpdate, ApiKeyNoteAPIIn, ApiKeyNoteAPIRead, ApiStatusAPIRead, EpisodeTagAPIRead, PublishStatusLabelAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, MediaLinksAPIRequest, MediaLinksAPIRead, SearchResultsAPIRead,
     CollectionDetailsAPIRead, SourceAPIRead, SourceSiteAPIRead, SourceSiteAPIUpdate, UpgradeChecksAPIRead,
-    SiteAddAPIRequest, SiteAddedAPIRead, SiteAuthenticationAPIRead,
+    SiteAddAPIRequest, SiteAddedAPIRead, SiteApiValuesAPIUpdate, SiteAuthenticationAPIRead,
 )
 from backend.app import db_session
 from sources import ApiKeyRejected, Feature, Source, UnknownSourceError, get_source, source_site
 from sources.ytdlp_options import check_ytdlp_options
 from backend.services.site_cookies import (
-    SiteAuthentication, SiteNotKnownError, list_site_authentication, remove_site_cookies, save_site_cookies,
+    SiteAuthentication, SiteNotKnownError, list_site_authentication, remove_known_site, remove_site_api, remove_site_cookies,
+    save_site_api, save_site_cookies, test_site_api,
 )
-from backend.services.sites import SiteLinkError, add_site, site_of_link
+from backend.services.errors import ServiceError
+from backend.services.sites import SiteLinkError, add_site, episode_tags_named, media_links, site_of_link
+from backend.types.collection_contracts import collection_contract
+from backend.types.collection_types import CollectionType
 from backend.services.access_checks import access_changed
-from backend.services.site_settings import download_profile_defaults, offered_settings
+from backend.services.site_settings import download_profile_defaults, offered_settings, profile_seasons
 from backend.services.source_options import save_ytdlp_source_options, ytdlp_source_options
 from config.settings.site_settings import SiteSettingGroup
 
 from .service import (
-    LinkNotRecognisedError, SourceFeatureMissingError, UnknownSiteError, get_api_status, get_program_status,
+    LinkNotRecognisedError, SourceFeatureMissingError, UnknownSiteError, api_key_notes, get_api_status, put_off_api_key_note, get_program_status,
     list_source_problems, list_source_sites,
-    list_sources, lookup_show_details, resolve_link, search_source, set_site_preference, source_with,
+    list_sources, lookup_show_details, sources_in_use, resolve_link, search_source, set_site_preference, source_with,
     update_source_program,
 )
 from backend.security.access import Access, Area, Level
@@ -42,13 +46,35 @@ def _source(source_id: str, feature: Feature) -> Source:
 @router.get("/sources", dependencies=[signed_in()], response_model=list[SourceAPIRead])
 def source_list():
     """List every Source with the Features it supports."""
-    return list_sources()
+    with db_session() as s:
+        return list_sources(s)
+
+
+@router.get("/sources/in-use", dependencies=[signed_in()], response_model=list[str])
+def source_in_use_list():
+    """The Sources the Library has media from, so the UI can leave out which Source an item comes from while there is one."""
+    with db_session() as s:
+        return sources_in_use(s)
 
 
 @router.get("/sources/problems", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=list[SourceProblemAPIRead])
 def source_problems():
     """What the user should fix about any Source, such as an API key that stopped working."""
     return list_source_problems()
+
+
+@router.get("/sources/api-key-notes", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=list[ApiKeyNoteAPIRead])
+def get_api_key_notes():
+    """The Sites whose API key would speed up collections or creators in the Library while there is none, for the note
+    on Home that asks for one."""
+    with db_session() as s:
+        return api_key_notes(s)
+
+
+@router.post("/sources/api-key-notes", dependencies=[requires(Area.SOURCES, Level.MANAGE)], status_code=204)
+def put_off_api_key_notes(body: ApiKeyNoteAPIIn):
+    """Remind me later, or never show the note on Home that asks for an API key again."""
+    run_write_transaction(lambda s: put_off_api_key_note(s, body.action), concurrent=True)
 
 
 @router.get("/sources/sites", dependencies=[signed_in()], response_model=list[SourceSiteAPIRead])
@@ -69,6 +95,17 @@ def add_site_by_link(body: SiteAddAPIRequest):
     return run_write_transaction(lambda s: SiteAddedAPIRead.model_validate(add_site(s, site)))
 
 
+@router.delete("/sources/sites/{key}", status_code=204, dependencies=[requires_any((Area.SOURCES, Level.MANAGE), (Area.SETTINGS, Level.MANAGE))])
+def remove_site_by_key(key: str):
+    """Remove a Site that has nothing in VODLoft, such as one added by a link, with its cookies file."""
+    try:
+        remove_known_site(key)
+    except SiteNotKnownError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ServiceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
 @router.put("/sources/sites/{key}", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SourceSiteAPIRead)
 def update_source_site(key: str, body: SourceSiteAPIUpdate):
     """Choose the Source to ask first for links on a Site."""
@@ -87,19 +124,34 @@ def resolve(body: ResolveAPIRequest, access: Access = signed_in()):
     """Find the Source that recognises a link, and what the link points to."""
     with db_session() as s:
         try:
-            return resolve_link(s, access, body.url, body.source_key)
+            link = resolve_link(s, access, body.url, body.source_key)
         except LinkNotRecognisedError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return link
+
+
+@router.post("/media-links", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=MediaLinksAPIRead)
+def known_media_links(body: MediaLinksAPIRequest, access: Access = signed_in()):
+    """Which links of a description are on a Site VODLoft knows for media, so the UI links only those to Add media."""
+    with db_session() as s:
+        return MediaLinksAPIRead(urls=media_links(s, access, body.urls))
 
 
 @router.get("/sources/{source_id}/episode-tags", dependencies=[requires_any((Area.LIBRARY, Level.VIEW), (Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW))], response_model=list[EpisodeTagAPIRead])
-def episode_tags(source_id: str, url: str | None = Query(default=None, max_length=2048)):
-    """The tags a Source gives episodes, such as Video, Short and Livestream, for the collection at ``url`` or for any collection."""
+def episode_tags(
+    source_id: str, url: str | None = Query(default=None, max_length=2048), collection_type: CollectionType | None = None,
+):
+    """The tags a Source gives episodes, such as Video, Short and Livestream, for the collection at ``url`` or for any
+    collection. With ``collection_type``, the main one is named as a collection of that type names its episodes."""
     try:
         source = get_source(source_id)
     except UnknownSourceError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return [EpisodeTagAPIRead.model_validate(tag) for tag in source.episode_tags_for(url)]
+    tags = source.episode_tags_for(url)
+    if collection_type is not None:
+        audio = source_site(url, source_id).audio_only if url else False
+        tags = episode_tags_named(tags, collection_contract(collection_type).words_for(audio))
+    return [EpisodeTagAPIRead.model_validate(tag) for tag in tags]
 
 
 @router.get("/sources/{source_id}/publish-statuses", dependencies=[signed_in()], response_model=list[PublishStatusLabelAPIRead])
@@ -123,9 +175,11 @@ def site_options(source_id: str, url: str = Query(min_length=1, max_length=2048)
     return SiteOptionsAPIRead(
         settings=offered_settings(site, SiteSettingGroup.DOWNLOAD_PROFILE),
         profile_defaults=DownloadProfileDefaultsAPIRead.model_validate(download_profile_defaults(site)),
+        profile_seasons=profile_seasons(site, source),
         upgrade_checks=UpgradeChecksAPIRead.model_validate(site.upgrade_checks), site_key=site.key, site_name=site.name,
         stream_methods=site.stream_methods,
-        stream_video_heights=site.stream_video_heights, stream_proxy_choice=site.stream_proxy_choice,
+        stream_video_heights=site.stream_video_heights, stream_file_height=site.stream_file_height,
+            stream_proxy_choice=site.stream_proxy_choice,
         video_output_help=site.video_output_help,
         downloads=DownloadOptionsAPIRead.model_validate(site.downloads),
     )
@@ -162,9 +216,15 @@ def collection_details(source_id: str, url: str = Query(min_length=1, max_length
 
 
 @router.get("/sources/{source_id}/search", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=SearchResultsAPIRead)
-def search(source_id: str, q: str = Query(min_length=1, max_length=200), access: Access = signed_in()):
-    """Find collections and videos at a Source by name."""
-    return search_source(access, _source(source_id, Feature.SEARCH), q)
+def search(
+    source_id: str, site: str = Query(min_length=1, max_length=100), q: str = Query(min_length=1, max_length=200),
+    access: Access = signed_in(),
+):
+    """Find collections and videos by name on one of the Sites a Source searches."""
+    try:
+        return search_source(access, _source(source_id, Feature.SEARCH), site, q)
+    except SourceFeatureMissingError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/sources/{source_id}/program", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=ProgramStatusAPIRead)
@@ -209,6 +269,42 @@ def remove_site_cookie_file(site_key: str):
             raise HTTPException(status_code=404, detail=str(exc)) from exc
     _sign_in_changed(listing)
     return SiteAuthenticationAPIRead.model_validate(listing)
+
+
+def _site_api_rejected(exc: ApiKeyRejected) -> HTTPException:
+    """Under the value it is about, or under the form as a whole."""
+    loc = ["body", "values", exc.field] if exc.field else ["body"]
+    return HTTPException(status_code=422, detail=[{"loc": loc, "msg": str(exc), "type": "value_error"}])
+
+
+@router.put("/sources/authentication/{site_key}/api", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SiteAuthenticationAPIRead)
+def save_site_api_values(site_key: str, body: SiteApiValuesAPIUpdate):
+    """Test the values of the Site's own API, such as Twitch's client ID and secret, and store them when the Site
+    accepts them."""
+    try:
+        return SiteAuthenticationAPIRead.model_validate(save_site_api(site_key, body.values))
+    except SiteNotKnownError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ApiKeyRejected as exc:
+        raise _site_api_rejected(exc) from exc
+
+
+@router.post("/sources/authentication/{site_key}/api/test", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SiteAuthenticationAPIRead)
+def test_site_api_values(site_key: str):
+    try:
+        return SiteAuthenticationAPIRead.model_validate(test_site_api(site_key))
+    except SiteNotKnownError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ApiKeyRejected as exc:
+        raise _api_key_rejected(exc) from exc
+
+
+@router.delete("/sources/authentication/{site_key}/api", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SiteAuthenticationAPIRead)
+def remove_site_api_values(site_key: str):
+    try:
+        return SiteAuthenticationAPIRead.model_validate(remove_site_api(site_key))
+    except SiteNotKnownError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 def _sign_in_changed(listing: SiteAuthentication) -> None:

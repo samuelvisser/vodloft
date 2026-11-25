@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from backend.types.link_season_types import OutsideVideos
+
 NOW = datetime.now(timezone.utc).replace(microsecond=0)
 
 
@@ -64,7 +66,7 @@ def test_each_site_can_have_a_download_delay_of_its_own_or_none(site_settings):
 
     def episode(site_key):
         return SimpleNamespace(
-            collection=SimpleNamespace(site_key=site_key), publish_status=EpisodePublishStatus.PUBLISHED_FINAL,
+            collection=SimpleNamespace(site_key=site_key, outside_videos=OutsideVideos.LEAVE_OUT), publish_status=EpisodePublishStatus.PUBLISHED_FINAL,
             published_date=published, safe_published_final=None, recorded_published_final=None,
             went_live_date=None, scheduled_date=None, last_known_pending=None,
         )
@@ -126,6 +128,55 @@ def test_a_throttled_download_is_queued_again_and_waits_for_its_site(throttled_d
         operation.status = OperationStatus.CANCELED.value
         w.flush()
         create_media_download_operation(w, w.get(MediaDownloadBase, download_id), source=OperationSource.UI.value)
+        return dispatch_queued_media_download_operations(w)
+
+    assert run_write_transaction(manual) == 1
+
+
+def test_a_site_starts_only_its_daily_number_of_automatic_downloads(throttled_download, site_settings):
+    from backend.db.core import run_write_transaction
+    from backend.db.models.media_download import MediaDownloadBase
+    from task_manager.scheduler.operations import operation_admission_wait_state
+    from task_manager.scheduler.types import OperationSource, OperationStatus
+    from task_manager.tasks.media_download_operations import (
+        MEDIA_DOWNLOAD_DAILY_LIMIT_REASON,
+        create_media_download_operation,
+        dispatch_queued_media_download_operations,
+        get_active_media_download_operation,
+    )
+    from test_media_download_operations import _make_download
+
+    factory, first_id = throttled_download
+    with factory() as session:
+        second = _make_download(session, slug="episode-2")
+        second.media.collection.site_key = "youtube"
+        session.commit()
+        second_id = second.id
+    site_settings(youtube={"daily_download_limit": 1})
+
+    def queue_both(w):
+        for download_id in (first_id, second_id):
+            create_media_download_operation(w, w.get(MediaDownloadBase, download_id))
+        return dispatch_queued_media_download_operations(w)
+
+    assert run_write_transaction(queue_both) == 1
+
+    def waiting(w):
+        operations = [get_active_media_download_operation(w, download_id) for download_id in (first_id, second_id)]
+        return [(operation.status, operation_admission_wait_state(operation)) for operation in operations]
+
+    (_started, _), (status, wait) = run_write_transaction(waiting)
+    assert status == OperationStatus.WAITING.value
+    assert wait["reason"] == MEDIA_DOWNLOAD_DAILY_LIMIT_REASON and "YouTube started its 1 automatic download" in wait["message"]
+    # It may start a day after the first one did.
+    assert wait["until"] > (NOW + timedelta(hours=23)).timestamp()
+
+    # A download asked for in the UI starts anyway.
+    def manual(w):
+        operation = get_active_media_download_operation(w, second_id)
+        operation.status = OperationStatus.CANCELED.value
+        w.flush()
+        create_media_download_operation(w, w.get(MediaDownloadBase, second_id), source=OperationSource.UI.value)
         return dispatch_queued_media_download_operations(w)
 
     assert run_write_transaction(manual) == 1

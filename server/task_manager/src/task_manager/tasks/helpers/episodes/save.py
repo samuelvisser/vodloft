@@ -10,6 +10,7 @@ from backend.db.model_mapping import update_database_fields, create_database_fie
 from backend.db.models import Collection, Season
 from backend.db.models.media_item import Episode
 from backend.services.media_access import apply_source_access
+from backend.services.removed_downloads import back_at_source, left_source
 from backend.services.metadata_refresh import site_refresh_offsets
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.helpers import generate_uuid
@@ -21,11 +22,6 @@ from .identifier import EpisodeWithIdentifier
 from .metadata import metadata_is_final_for_new_episode
 from .no_show import is_no_show_today_slug
 from .status import is_published_final, observe_episode_detail, resolve_episode_status
-from .unusable_media import (
-    NoUsableMediaReason,
-    clear_episode_no_usable_media_tracking,
-    mark_episode_no_usable_media,
-)
 
 
 logger = logging.getLogger(__name__)
@@ -42,9 +38,9 @@ class SavedEpisode:
 class ResolvedEpisode:
     episode_identifier: str
     record: DwEpisodeRecord
-    status: EpisodePublishStatus
+    status: EpisodePublishStatus | None
+    """None when The Daily Wire has nothing usable for it: VODLoft does not add it, and one it has left the Source."""
     detail_resolved: bool
-    unusable_media_reason: NoUsableMediaReason | None = None
 
 
 def upsert_episode(
@@ -68,7 +64,7 @@ def upsert_episode(
                 "season_id": season.id,
                 "index": index_value,
                 "episode_identifier": ep_id,
-                "dw_episode_number": ep.episode_number or None,
+                "source_number": ep.episode_number or None,
                 # The Daily Wire names no uploader per episode; the show's host uploads them all.
                 "author_name": collection.author_name or None,
                 "metadata_is_final": metadata_is_final_for_new_episode(
@@ -89,7 +85,7 @@ def upsert_episode(
         episode.season_id = season.id
         episode.index = index_value
         episode.episode_identifier = ep_id
-        episode.dw_episode_number = ep.episode_number or None
+        episode.source_number = ep.episode_number or None
         episode.author_name = episode.author_name or collection.author_name or None
         episode.publish_status = ep.publish_status
         episode.metadata_is_final = metadata_is_final_for_new_episode(
@@ -113,13 +109,11 @@ def resolve_dw_episodes(
     """Resolve remote snapshot + VODLoft transition policy before database writes."""
     resolved: list[ResolvedEpisode] = []
     for ep_id, ep in episodes:
-        reason: NoUsableMediaReason | None = None
-
+        status: EpisodePublishStatus | None
         if is_no_show_today_slug(ep.slug):
-            status = EpisodePublishStatus.NO_USABLE_MEDIA
+            status = None
             record: DwEpisodeRecord = ep
             detail_resolved = True
-            reason = NoUsableMediaReason.NO_SHOW_TODAY
         elif is_published_final(ep) and not always_resolve_details:
             status = EpisodePublishStatus.PUBLISHED_FINAL
             record = ep
@@ -135,9 +129,8 @@ def resolve_dw_episodes(
                     raise
                 logger.info("Daily Wire returned 404 while resolving new episode %s", ep.slug)
                 record = ep
-                status = EpisodePublishStatus.NO_USABLE_MEDIA
+                status = None
                 detail_resolved = True
-                reason = NoUsableMediaReason.NOT_FOUND
             else:
                 observed = observe_episode_detail(detail)
                 snapshot = resolve_episode_status(
@@ -148,20 +141,12 @@ def resolve_dw_episodes(
                 record = detail
                 status = snapshot.status
                 detail_resolved = True
-                if status is EpisodePublishStatus.NO_USABLE_MEDIA:
-                    if is_no_show_today_slug(detail.slug):
-                        reason = NoUsableMediaReason.NO_SHOW_TODAY
-                    elif observed.status is EpisodePublishStatus.SOURCE_PROCESSING:
-                        reason = NoUsableMediaReason.PROCESSING_TIMEOUT
-                    else:
-                        reason = NoUsableMediaReason.MEDIA_UNUSABLE
 
         resolved.append(ResolvedEpisode(
             episode_identifier=ep_id,
             record=record,
             status=status,
             detail_resolved=detail_resolved,
-            unusable_media_reason=reason,
         ))
     return resolved
 
@@ -173,7 +158,18 @@ def _upsert_resolved_episode(
         season: Season,
         resolved: ResolvedEpisode,
         index_value: int,
-) -> SavedEpisode:
+) -> SavedEpisode | None:
+    """Store one resolved episode. None when The Daily Wire has nothing usable for it."""
+    if resolved.status is None:
+        known = (
+            s.query(Episode)
+            .filter(Episode.collection_id == collection.id, Episode.slug == resolved.record.slug)
+            .one_or_none()
+        )
+        if known is not None:
+            left_source(s, known)
+        return None
+
     ep_to_save = resolved.record.model_copy(
         update={"publish_status": resolved.status.value},
         deep=True,
@@ -187,16 +183,7 @@ def _upsert_resolved_episode(
         ep_id=resolved.episode_identifier,
     )
 
-    if resolved.status is EpisodePublishStatus.NO_USABLE_MEDIA:
-        if resolved.unusable_media_reason is None:
-            raise ValueError("NO_USABLE_MEDIA episodes require an unusable-media reason")
-        mark_episode_no_usable_media(
-            s,
-            episode,
-            reason=resolved.unusable_media_reason,
-        )
-    else:
-        clear_episode_no_usable_media_tracking(episode)
+    back_at_source(episode)
     s.flush()
 
     return SavedEpisode(
@@ -219,13 +206,15 @@ def _save_resolved(
     current_index = start_index
     saved: list[SavedEpisode] = []
     for resolved in episodes:
-        saved.append(_upsert_resolved_episode(
+        stored = _upsert_resolved_episode(
             s,
             collection=collection,
             season=season,
             resolved=resolved,
             index_value=current_index,
-        ))
+        )
+        if stored is not None:
+            saved.append(stored)
         current_index += step
     s.flush()
     return current_index, saved

@@ -18,6 +18,11 @@ from sources import SiteSetting, StreamMethod, UpgradeImprovement, collection_on
     ("https://www.twitch.tv/videos/123", "ytdlp", "twitch", "Twitch"),
     ("https://rumble.com/c/someone", "ytdlp", "rumble", "Rumble"),
     ("https://www.example.com/clip.mp4", "ytdlp", "generic:example.com", "example.com"),
+    # A site's home page, which only yt-dlp's generic extractor handles, is still on the site whose domain it is.
+    ("https://instagram.com", "ytdlp", "instagram", "Instagram"),
+    ("https://www.twitch.tv/", "ytdlp", "twitch", "Twitch"),
+    ("https://x.com", "ytdlp", "twitter", "X"),
+    ("https://notinstagram.com", "ytdlp", "generic:notinstagram.com", "notinstagram.com"),
     # A Site a Source is made for wins, whichever Source fetches the link.
     ("https://www.dailywire.com/show/a-show", "ytdlp", "dailywire", "The Daily Wire"),
     ("https://www.dailywire.com/show/a-show", "dailywire", "dailywire", "The Daily Wire"),
@@ -180,3 +185,89 @@ def test_a_site_remembers_every_domain_it_was_seen_on(session):
         session.flush()
         assert video.site_key == "youtube"
     assert video.site.domains == ["youtube.com", "youtu.be"]
+
+
+def test_add_media_offers_only_the_search_and_catalogue_of_added_sites():
+    from backend.api.endpoints.sources.service import list_sources
+
+    class OnlyYouTubeAdded:
+        def scalars(self, _query):
+            return ["youtube"]
+
+    sources = {source.id: source for source in list_sources(OnlyYouTubeAdded())}
+    assert {site.key: site.added for site in sources["ytdlp"].search_sites} == {"youtube": True, "twitch": False, "soundcloud": False}
+    assert [(site.key, site.added) for site in sources["dailywire"].sites] == [("dailywire", False)]
+    assert [(site.key, site.added) for site in sources["npo"].search_sites] == [("npo", False)]
+
+
+def test_add_media_only_searches_twitch_once_its_api_is_set_up(monkeypatch, tmp_path):
+    from backend.api.endpoints.sources.service import list_sources
+    from sources import cookies, site_api_keys
+
+    monkeypatch.setattr(cookies, "cookies_directory", lambda: tmp_path / "cookies")
+
+    class TwitchAdded:
+        def scalars(self, _query):
+            return ["twitch"]
+
+    def twitch():
+        sources = {source.id: source for source in list_sources(TwitchAdded())}
+        return next(site for site in sources["ytdlp"].search_sites if site.key == "twitch")
+
+    assert twitch().added and not twitch().ready
+    site_api_keys.save("twitch", {"client_id": "an-id", "client_secret": "a-secret"})
+    assert twitch().ready
+
+
+def test_only_links_on_a_site_vodloft_knows_are_media_links(session):
+    from backend.db.models import Site as SiteRecord
+    from backend.security.access import Access
+    from backend.services.sites import media_links
+
+    links = [
+        "https://www.youtube.com/@Faith-May2005",  # A Site with a contract of its own
+        "https://www.dailywire.com/show/a-show",  # A Site a Source is made for
+        "https://streamyard.com/pal/d/5072102071074816",  # Only yt-dlp's generic extractor, and not added
+        "https://www.example.com/clip.mp4",  # Not added yet
+        "mailto:someone@example.com",
+    ]
+    assert media_links(session, Access.full(), links) == links[:2]
+
+    # A site the user added, or that VODLoft has media from, is in VODLoft's Sites.
+    session.add(SiteRecord(key="generic:example.com", name="example.com", domains=["example.com"]))
+    session.flush()
+    assert media_links(session, Access.full(), links) == [*links[:2], "https://www.example.com/clip.mp4"]
+
+
+@pytest.mark.parametrize(("list_type", "name"), [
+    ("album", "album"), ("playlist", "playlist"),
+    # A set VODLoft hasn't looked up is either.
+    (None, "album or playlist"),
+])
+def test_a_soundcloud_set_is_named_by_its_type_of_list(list_type, name):
+    from backend.db.models import Collection
+    from backend.services.sites import collection_names
+
+    collection = Collection(
+        sharing_url="https://soundcloud.com/flume/sets/palaces", source_key="ytdlp", kind="list", list_type=list_type,
+    )
+
+    assert collection_names(collection).singular == name
+
+
+def test_a_new_collection_of_a_set_keeps_only_a_type_of_list_its_site_has():
+    from backend.db.models import Collection
+    from backend.services.collections import set_kind
+    from backend.services.errors import ServiceError
+
+    album = Collection(sharing_url="https://soundcloud.com/flume/sets/palaces", source_key="ytdlp", list_type="album")
+    set_kind(album)
+    assert album.list_type == "album"
+
+    # A channel is no list.
+    account = Collection(sharing_url="https://soundcloud.com/flume", source_key="ytdlp", type="music", list_type="album")
+    set_kind(account)
+    assert account.list_type is None
+
+    with pytest.raises(ServiceError):
+        set_kind(Collection(sharing_url="https://soundcloud.com/flume/sets/palaces", source_key="ytdlp", list_type="tracks"))

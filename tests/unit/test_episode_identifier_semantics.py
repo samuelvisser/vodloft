@@ -629,9 +629,9 @@ def test_background_reindex_only_updates_raw_number_when_remote_record_exists():
     plan = _plan_collection(collection, {11: {"matched": remote}})
     by_id = {episode.episode_id: episode for episode in plan.episodes}
 
-    assert by_id[101].update_dw_episode_number is True
-    assert by_id[101].dw_episode_number is None
-    assert by_id[102].update_dw_episode_number is False
+    assert by_id[101].update_source_number is True
+    assert by_id[101].source_number is None
+    assert by_id[102].update_source_number is False
     assert by_id[102].identifier == "ep.2"
 
 
@@ -756,7 +756,7 @@ def test_episode_read_view_derives_identifier_fields_during_model_validation():
             "season_id": 3,
             "index": 4,
             "episode_identifier": "ep-extra.other.S03E42.10",
-            "dw_episode_number": "42.10",
+            "source_number": "42.10",
             "publish_status": "published_final",
             "title": "Episode",
             "duration": 0,
@@ -817,7 +817,7 @@ def test_compact_episode_view_includes_identifier_semantics():
         season=season,
         index=12,
         episode_identifier="ep-extra.trailer.S03E12.5",
-        dw_episode_number="12.05",
+        source_number="12.05",
         slug="season-3-episode-12-trailer",
         title="Episode 12 Trailer",
         description=None,
@@ -831,7 +831,7 @@ def test_compact_episode_view_includes_identifier_semantics():
 
     [view] = get_episode_views_by_collection_page(session, collection.slug, cursor=None, limit=10).items
 
-    assert view.dw_episode_number == "12.05"
+    assert view.source_number == "12.05"
     assert view.episode_type == "ep-extra"
     assert view.episode_extra_type == "trailer"
     assert view.episode_number == "12"

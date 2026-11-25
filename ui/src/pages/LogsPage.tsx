@@ -1,5 +1,4 @@
-import {useQuery} from '@tanstack/react-query'
-import {useEffect, useMemo, useRef, useState} from 'react'
+import {memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import Switch from 'react-switch'
 import {faIcon} from '../icons/faIcon'
@@ -8,7 +7,11 @@ import {ClearInputButton} from '../components/common/ClearInputButton'
 import PageSubtitle from '../components/common/PageSubtitle'
 import SimpleSelect from '../components/common/SimpleSelect'
 import {usePageActive} from '../lib/pageActivity'
-import {ApplicationLogPageReadSchema, type ApplicationLogEntryRead} from '../types/schemas/log'
+import {
+    ApplicationLogPageReadSchema,
+    type ApplicationLogEntryRead,
+    type ApplicationLogPageRead,
+} from '../types/schemas/log'
 import {createSelectRegistry} from '../utils/selectRegistry'
 import './LogsPage.css'
 import {apiUrl} from '../lib/api'
@@ -22,15 +25,51 @@ const LogLevelReg = createSelectRegistry('LogLevelFilter', {
     CRITICAL: {label: 'Critical'},
 })
 
-function isPullRequestLog(entry: ApplicationLogEntryRead): boolean {
-    return entry.logger === 'uvicorn.access'
-        && /"\w+ \/api\/pull[?\s]/.test(entry.message)
+// The log is read a page at a time: the newest records first, older ones while the user scrolls up, and new
+// ones as they arrive. Fetching and drawing all 20,000 retained records every poll froze the browser.
+const PAGE_SIZE = 500
+const POLL_MS = 2000
+// Start loading the previous page this close to the top, so scrolling up rarely has to wait.
+const LOAD_OLDER_MARGIN = 400
+
+type LogWindow = {
+    items: ApplicationLogEntryRead[]
+    total: number
+    hasOlder: boolean
+}
+
+async function fetchLogPage(
+    filters: string,
+    position: {before?: number, after?: number},
+    signal?: AbortSignal,
+): Promise<ApplicationLogPageRead> {
+    const query = new URLSearchParams(filters)
+    query.set('limit', String(PAGE_SIZE))
+    if (position.before !== undefined) query.set('before', String(position.before))
+    if (position.after !== undefined) query.set('after', String(position.after))
+    const response = await fetch(`${apiUrl()}/logs?${query}`, {signal, credentials: 'include'})
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    return ApplicationLogPageReadSchema.parse(await response.json())
 }
 
 function formatTimestamp(value: string): string {
     const date = new Date(value)
     return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
 }
+
+const LogEntryRow = memo(function LogEntryRow({entry}: {entry: ApplicationLogEntryRead}) {
+    return (
+        <div className="log-entry">
+            <time>{formatTimestamp(entry.timestamp)}</time>
+            <strong className={`log-level is-${entry.level.toLowerCase()}`}>{entry.level}</strong>
+            <span className="log-logger">[{entry.logger}]</span>
+            <span className="log-message">
+                {entry.message}
+                {entry.exception && <pre>{entry.exception}</pre>}
+            </span>
+        </div>
+    )
+})
 
 export default function LogsPage() {
     const [level, setLevel] = useState('')
@@ -39,43 +78,109 @@ export default function LogsPage() {
     const pageActive = usePageActive()
     const panelRef = useRef<HTMLDivElement | null>(null)
     const stickToBottomRef = useRef(true)
+    // The scroll height before older records were put on top, to keep the same records in view.
+    const heightBeforeOlderRef = useRef<number | null>(null)
 
-    const params = useMemo(() => {
-        const query = new URLSearchParams({limit: '20000'})
-        if (level) query.set('level', level)
-        if (search.trim()) query.set('search', search.trim())
-        return query.toString()
-    }, [level, search])
-
-    const logs = useQuery({
-        queryKey: ['applicationLogs', level, search.trim()],
-        queryFn: async ({signal}) => {
-            const response = await fetch(
-                `${apiUrl()}/logs?${params}`,
-                {signal, credentials: 'include'},
-            )
-            if (!response.ok) throw new Error(`HTTP ${response.status}`)
-            return ApplicationLogPageReadSchema.parse(await response.json())
-        },
-        enabled: pageActive,
-        refetchInterval: 2000,
-        refetchOnMount: 'always',
-        refetchOnWindowFocus: false,
-        refetchIntervalInBackground: false,
-    })
+    const [logWindow, setLogWindow] = useState<LogWindow | null>(null)
+    const windowRef = useRef<LogWindow | null>(null)
+    const [error, setError] = useState<string | null>(null)
+    const [loadingOlder, setLoadingOlder] = useState(false)
+    const loadingOlderRef = useRef(false)
 
     const canShowPullRequests = level === '' || level === 'INFO'
-    const items = useMemo(() => {
-        const entries = logs.data?.items ?? []
-        if (!canShowPullRequests || !hidePullRequests) return entries
-        return entries.filter((entry) => !isPullRequestLog(entry))
-    }, [canShowPullRequests, hidePullRequests, logs.data?.items])
-    const total = items.length
+    const hidePulls = canShowPullRequests && hidePullRequests
+    const filters = useMemo(() => {
+        const query = new URLSearchParams()
+        if (level) query.set('level', level)
+        if (search.trim()) query.set('search', search.trim())
+        if (hidePulls) query.set('hidePullRequests', 'true')
+        return query.toString()
+    }, [level, search, hidePulls])
+    const filtersRef = useRef(filters)
 
+    const updateWindow = useCallback((change: (current: LogWindow | null) => LogWindow | null) => {
+        windowRef.current = change(windowRef.current)
+        setLogWindow(windowRef.current)
+    }, [])
+
+    // New filters start again from the newest page.
+    if (filtersRef.current !== filters) {
+        filtersRef.current = filters
+        windowRef.current = null
+        stickToBottomRef.current = true
+        setLogWindow(null)
+        setError(null)
+    }
+
+    // Load the newest page, then keep adding what comes in after the last record shown.
     useEffect(() => {
+        if (!pageActive) return
+        const controller = new AbortController()
+        let timer: ReturnType<typeof setTimeout> | undefined
+        const poll = async () => {
+            let delay = POLL_MS
+            try {
+                const shown = windowRef.current?.items ?? []
+                const lastId = shown.length ? shown[shown.length - 1].id : undefined
+                const page = await fetchLogPage(
+                    filters,
+                    lastId === undefined ? {} : {after: lastId},
+                    controller.signal,
+                )
+                if (controller.signal.aborted) return
+                updateWindow((current) => current === null || lastId === undefined
+                    ? {items: page.items, total: page.total, hasOlder: page.hasOlder}
+                    : {...current, items: [...current.items, ...page.items], total: page.total})
+                setError(null)
+                if (page.hasNewer) delay = 0
+            } catch (caught) {
+                if (controller.signal.aborted) return
+                setError(caught instanceof Error ? caught.message : 'Could not load logs.')
+            }
+            timer = setTimeout(poll, delay)
+        }
+        void poll()
+        return () => {
+            controller.abort()
+            clearTimeout(timer)
+        }
+    }, [filters, pageActive, updateWindow])
+
+    const loadOlder = useCallback(async () => {
+        const firstId = windowRef.current?.items[0]?.id
+        if (firstId === undefined || !windowRef.current?.hasOlder || loadingOlderRef.current) return
+        const requestFilters = filters
+        loadingOlderRef.current = true
+        setLoadingOlder(true)
+        try {
+            const page = await fetchLogPage(requestFilters, {before: firstId})
+            if (filtersRef.current !== requestFilters) return
+            heightBeforeOlderRef.current = panelRef.current?.scrollHeight ?? null
+            updateWindow((current) => current && {
+                ...current,
+                items: [...page.items, ...current.items],
+                hasOlder: page.hasOlder,
+            })
+        } catch (caught) {
+            setError(caught instanceof Error ? caught.message : 'Could not load older logs.')
+        } finally {
+            loadingOlderRef.current = false
+            setLoadingOlder(false)
+        }
+    }, [filters, updateWindow])
+
+    const items = logWindow?.items ?? []
+    const total = logWindow?.total ?? 0
+
+    useLayoutEffect(() => {
         const panel = panelRef.current
-        if (!panel || !stickToBottomRef.current) return
-        panel.scrollTop = panel.scrollHeight
+        if (!panel) return
+        if (heightBeforeOlderRef.current !== null) {
+            panel.scrollTop += panel.scrollHeight - heightBeforeOlderRef.current
+            heightBeforeOlderRef.current = null
+        } else if (stickToBottomRef.current) {
+            panel.scrollTop = panel.scrollHeight
+        }
     }, [items])
 
     return (
@@ -85,7 +190,8 @@ export default function LogsPage() {
                 <PageSubtitle summary={<>Application-wide VODLoft log output.</>}>
                     <p>
                         Logs from the backend, scheduler, task workers, downloads and web server are collected here.
-                        The latest 20,000 records from the current server process are retained.
+                        The latest 20,000 records from the current server process are retained. The newest are shown
+                        first; scroll up to load older ones. Very long messages are cut short here.
                     </p>
                 </PageSubtitle>
             </div>
@@ -139,31 +245,30 @@ export default function LogsPage() {
                 onScroll={(event) => {
                     const panel = event.currentTarget
                     stickToBottomRef.current = panel.scrollHeight - panel.scrollTop - panel.clientHeight < 80
+                    if (panel.scrollTop < LOAD_OLDER_MARGIN) void loadOlder()
                 }}
             >
-                {logs.isPending ? (
+                {logWindow === null && error === null ? (
                     <div className="logs-message">
                         <FontAwesomeIcon className="vl-progress-icon" icon={faIcon('fass', 'spinner')}/>
                         Loading logs...
                     </div>
-                ) : logs.error ? (
-                    <div className="logs-message is-error">
-                        {logs.error instanceof Error ? logs.error.message : 'Could not load logs.'}
-                    </div>
+                ) : logWindow === null || (error !== null && items.length === 0) ? (
+                    <div className="logs-message is-error">{error}</div>
                 ) : items.length === 0 ? (
                     <div className="logs-message">No log entries match the current filters.</div>
                 ) : (
-                    items.map((entry) => (
-                        <div className="log-entry" key={entry.id}>
-                            <time>{formatTimestamp(entry.timestamp)}</time>
-                            <strong className={`log-level is-${entry.level.toLowerCase()}`}>{entry.level}</strong>
-                            <span className="log-logger">[{entry.logger}]</span>
-                            <span className="log-message">
-                                {entry.message}
-                                {entry.exception && <pre>{entry.exception}</pre>}
-                            </span>
-                        </div>
-                    ))
+                    <>
+                        {logWindow.hasOlder && (
+                            <div className="logs-message is-older">
+                                {loadingOlder && (
+                                    <FontAwesomeIcon className="vl-progress-icon" icon={faIcon('fass', 'spinner')}/>
+                                )}
+                                {loadingOlder ? 'Loading older logs...' : 'Scroll up for older logs'}
+                            </div>
+                        )}
+                        {items.map((entry) => <LogEntryRow key={entry.id} entry={entry}/>)}
+                    </>
                 )}
             </div>
         </section>

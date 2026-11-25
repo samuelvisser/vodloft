@@ -7,10 +7,11 @@ type PresetChoices = {
     kodiSafeNfo: boolean
     fileDateFromPublishDate: true
     downloadMode: 'temporary'
+    episodeNfo: 'episode' | 'music_video'
 }
 
 /** The fields a preset sets besides the output template. */
-export const PRESET_CHOICE_FIELDS = ['metadataMode', 'showNfo', 'kodiSafeNfo', 'fileDateFromPublishDate', 'downloadMode'] as const satisfies readonly (keyof PresetChoices)[]
+export const PRESET_CHOICE_FIELDS = ['metadataMode', 'showNfo', 'kodiSafeNfo', 'fileDateFromPublishDate', 'downloadMode', 'episodeNfo'] as const satisfies readonly (keyof PresetChoices)[]
 
 type Preset = {
     template: (base: string) => string
@@ -41,6 +42,13 @@ ${base}
 /{{ collection_title }} {{ episode_id }} {{ title }}.ext`
 
 const PRESETS: Record<string, Preset> = {
+    music: {
+        template: (base) => `${base}
+/{{ artist }}
+/{{ album }}
+/{{ track_number_padded }} - {{ title }}.ext`,
+        choices: {metadataMode: 'embed', showNfo: false, kodiSafeNfo: false, fileDateFromPublishDate: true, downloadMode: 'temporary', episodeNfo: 'episode'},
+    },
     plex: {
         template: (base) => `{# Variables #}
 ${NUMBERS}
@@ -60,21 +68,27 @@ ${base}
 /{{ collection_title }}
 /{{ plex_season }}
 /{{ collection_title }} - {{ plex_ep_id }} [{{ plex_title }}].ext`,
-        choices: {metadataMode: 'embed', showNfo: false, kodiSafeNfo: false, fileDateFromPublishDate: true, downloadMode: 'temporary'},
+        choices: {metadataMode: 'embed', showNfo: false, kodiSafeNfo: false, fileDateFromPublishDate: true, downloadMode: 'temporary', episodeNfo: 'episode'},
     },
     jellyfin: {
         template: nfoServerTemplate,
-        choices: {metadataMode: 'embed_and_nfo', showNfo: true, kodiSafeNfo: false, fileDateFromPublishDate: true, downloadMode: 'temporary'},
+        choices: {metadataMode: 'embed_and_nfo', showNfo: true, kodiSafeNfo: false, fileDateFromPublishDate: true, downloadMode: 'temporary', episodeNfo: 'episode'},
     },
     kodi: {
         template: nfoServerTemplate,
-        choices: {metadataMode: 'embed_and_nfo', showNfo: true, kodiSafeNfo: true, fileDateFromPublishDate: true, downloadMode: 'temporary'},
+        choices: {metadataMode: 'embed_and_nfo', showNfo: true, kodiSafeNfo: true, fileDateFromPublishDate: true, downloadMode: 'temporary', episodeNfo: 'episode'},
+    },
+    music_videos: {
+        template: (base) => `${base}
+/{{ artist }}
+/{{ title }}.ext`,
+        choices: {metadataMode: 'embed_and_nfo', showNfo: false, kodiSafeNfo: false, fileDateFromPublishDate: true, downloadMode: 'temporary', episodeNfo: 'music_video'},
     },
     audiobookshelf: {
         template: (base) => `${base}
 /{{ collection_title }}
 /{% if episode_published_date %}{{ episode_published_date }} - {% endif %}{{ title }}.ext`,
-        choices: {metadataMode: 'embed', showNfo: false, kodiSafeNfo: false, fileDateFromPublishDate: true, downloadMode: 'temporary'},
+        choices: {metadataMode: 'embed', showNfo: false, kodiSafeNfo: false, fileDateFromPublishDate: true, downloadMode: 'temporary', episodeNfo: 'episode'},
     },
 }
 
@@ -83,19 +97,30 @@ const PRESET_NAMES = {
     kodi: {label: 'Kodi'},
     audiobookshelf: {label: 'Audiobookshelf'},
     plex: {label: 'Plex'},
+    music: {label: 'Music library'},
+    music_videos: {label: 'Music videos'},
 } as const
 
 const VideoPresetReg = createSelectRegistry('OutputTemplatePreset', {
     jellyfin: PRESET_NAMES.jellyfin, kodi: PRESET_NAMES.kodi, plex: PRESET_NAMES.plex,
+    music_videos: PRESET_NAMES.music_videos,
 })
 const AudioPresetReg = createSelectRegistry('OutputTemplatePreset', {
     audiobookshelf: PRESET_NAMES.audiobookshelf, jellyfin: PRESET_NAMES.jellyfin, kodi: PRESET_NAMES.kodi,
     plex: PRESET_NAMES.plex,
 })
+const MusicPresetReg = createSelectRegistry('OutputTemplatePreset', {music: PRESET_NAMES.music})
+const AllPresetReg = createSelectRegistry('OutputTemplatePreset', PRESET_NAMES)
 
-/** The presets a profile can start from: Audiobookshelf only keeps audio. */
-export function outputTemplatePresetRegistry(audioOnly: boolean) {
+/** The presets a profile can start from: Audiobookshelf only keeps audio, and a profile for Music that keeps tracks files them by
+ *  artist and album. */
+export function outputTemplatePresetRegistry(audioOnly: boolean, music = false) {
+    if (music) return MusicPresetReg
     return audioOnly ? AudioPresetReg : VideoPresetReg
+}
+
+export function outputTemplatePresetLabel(key: string): string {
+    return AllPresetReg.getLabelLoose(key)
 }
 
 /** The folder a template keeps its files under, before the first part that changes per episode. */

@@ -43,5 +43,8 @@ export const SeasonReadSchema = z.looseObject({
     seasonNumber: z.int(),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,
+    newestPublishedAt: ApiDateTimeSchema.nullish(),
+    /** The channel season while it holds the whole channel, such as Channel on YouTube. */
+    wholeChannel: z.boolean().default(false),
 })
 export type SeasonRead = z.infer<typeof SeasonReadSchema>;

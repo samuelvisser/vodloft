@@ -42,7 +42,7 @@ def test_identifier_change_event_only_fires_after_initial_publication(monkeypatc
     monkeypatch.setattr(events, "queue_event", queued)
     monkeypatch.setattr(
         identifier_reconciliation,
-        "reconcile_episode_identifier_from_dailywire",
+        "refresh_episode_identifier",
         fake_reconcile,
     )
 

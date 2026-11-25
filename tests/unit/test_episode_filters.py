@@ -444,6 +444,19 @@ def test_episode_type_filters_skip_and_keep_types(db_session):
         DownloadProfileFilterAPIIn.model_validate({"action": "skip", "field": "types", "episodeTypes": []})
 
 
+def test_an_auxiliary_episode_is_a_video_on_a_site_without_that_type(db_session):
+    # A collection numbered by date gives a second video of one date, or a video's episode in a second playlist,
+    # an auxiliary identifier; on a yt-dlp Site, which has no such type, the Video type takes it.
+    collection, season = _collection(db_session)
+    _episode(db_session, collection, season, 1, "A video")
+    copy = _episode(db_session, collection, season, 2, "Its copy in a playlist")
+    copy.episode_identifier = "aux.1"
+    profile = _profile(db_session, collection, only_types("ep"))
+    db_session.flush()
+
+    assert _wanted_titles(db_session, profile) == {"A video", "Its copy in a playlist"}
+
+
 def test_without_a_seasons_line_every_season_is_downloaded(db_session):
     from backend.db.models import Season
 
@@ -464,6 +477,7 @@ def test_without_a_seasons_line_every_season_is_downloaded(db_session):
 
 def test_a_new_season_joins_seasons_lines_that_include_upcoming_seasons(db_session):
     from backend.services.seasons import create_season_record
+    from backend.types.season_types import SeasonOrigin
 
     collection, first = _collection(db_session)
     collection.episode_identifier = "seasonal"
@@ -471,7 +485,8 @@ def test_a_new_season_joins_seasons_lines_that_include_upcoming_seasons(db_sessi
     fixed = _profile(db_session, collection, only_seasons("which-s1"))
 
     create_season_record(
-        db_session, collection_id=collection.id, index=2, slug="which-s2", name="Two", update_collection_profiles=True,
+        db_session, collection_id=collection.id, index=2, slug="which-s2", name="Two", origin=SeasonOrigin.SITE,
+        update_collection_profiles=True,
     )
 
     assert upcoming.filters[0].season_slugs == ["which-s1", "which-s2"]

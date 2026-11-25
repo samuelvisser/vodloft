@@ -87,6 +87,8 @@ A **published** filter looks at when an episode came out:
 - **episodes published in the last … days**;
 - **episodes published since a date**: VODLoft starts archiving from that date and keeps downloading everything newer.
   Older downloads are never deleted because of it.
+- **episodes published between two dates**: from the first date up to and including the second, such as one season
+  of a show that ended.
 
 A **downloaded** filter keeps each download for a number of days, counted from the day it was downloaded, however old
 the episode already was. Only episodes published within that many days are downloaded. This is how Pinchflat's
@@ -103,6 +105,10 @@ published longer ago than the window; on **downloaded**, once it was downloaded 
 its download record and download history go as well, so it no longer appears on the Downloads page.
 
 Downloads you keep, and downloads a Keep filter matches, are never deleted.
+
+By default a profile only deletes its own downloads: episodes you downloaded by hand stay. Turn on **Also delete
+manual downloads**, below the delete switch, and the date filter also deletes the episodes of this collection you
+downloaded by hand to the same Local Media Profile, once they fall outside it. Pin one to keep it.
 
 When the Source removes an episode VODLoft already downloaded, your file may be the last copy. The Home page then asks
 whether to keep it, and the question stays until you answer. Until then no date filter deletes that download.
@@ -206,5 +212,11 @@ See [[Podcast-RSS-Feeds]].
 ## Global download controls
 
 Settings such as maximum simultaneous downloads, retry attempts, timeout, direct-versus-temporary download behavior, file verification, FFmpeg remuxing, and filename compatibility are configured globally under **Settings → Downloads**.
+
+**Automatic downloads per day** limits how many downloads VODLoft starts by itself on one Site within 24 hours, for a
+site such as YouTube that may slow down or block an address that downloads a lot at once. Once a Site reaches its
+number, its next automatic downloads wait in the queue until the oldest one is a day old, and the queue says so.
+Downloads you start yourself always start and don't count. `0`, the default, means no limit, and each Site can have a
+number of its own (see [[Settings#per-site-scheduling]]).
 
 A Local Media Profile can override the system-wide direct/temporary download behavior when needed. See [[Local-Media-Profiles]] and [[Settings#downloads]].

@@ -36,13 +36,14 @@ export function useSubtitleModeDefaults(
             const priorDefault = defaultSubtitleModeForProfile(
                 prior.mode,
                 prior.form.getValues('collectionScope') as CollectionLocalMediaProfileScope,
+                prior.form.getValues('preferredFormat'),
             )
             if (manuallySelected.current === null && priorValue && priorValue !== priorDefault) {
                 manuallySelected.current = priorValue
             }
 
             const nextValue = manuallySelected.current ?? defaultSubtitleModeForProfile(
-                mode, form.getValues('collectionScope') as CollectionLocalMediaProfileScope,
+                mode, form.getValues('collectionScope') as CollectionLocalMediaProfileScope, form.getValues('preferredFormat'),
             )
             form.setValue('subtitleMode', nextValue, {shouldDirty: true, shouldValidate: true})
         }
@@ -58,7 +59,7 @@ export function useSubtitleModeDefaults(
         if (manuallySelected.current === null) {
             const currentValue = form.getValues('subtitleMode') as LocalMediaProfileSubtitleMode | undefined
             const previousDefault = defaultSubtitleModeForProfile(
-                mode, form.getValues('collectionScope') as CollectionLocalMediaProfileScope,
+                mode, form.getValues('collectionScope') as CollectionLocalMediaProfileScope, form.getValues('preferredFormat'),
             )
             if (currentValue && currentValue !== previousDefault) {
                 manuallySelected.current = currentValue
@@ -66,7 +67,7 @@ export function useSubtitleModeDefaults(
         }
 
         if (manuallySelected.current === null) {
-            form.setValue('subtitleMode', defaultSubtitleModeForProfile('collection', nextScope), {
+            form.setValue('subtitleMode', defaultSubtitleModeForProfile('collection', nextScope, form.getValues('preferredFormat')), {
                 shouldDirty: true,
                 shouldValidate: true,
             })

@@ -1,7 +1,6 @@
 # Ensure base and referenced tables are imported before dependents
 from .local_media_profile import (
     LocalMediaProfileBase,
-    MovieLocalMediaProfile,
     CollectionLocalMediaProfile,
     VideoLocalMediaProfile,
 )
@@ -17,6 +16,8 @@ from .QuickDownloadHistory import QuickDownloadHistory
 from .user import User, UserAccess, UserSourceAccess
 from .Collection import Collection
 from .CollectionLocalAsset import CollectionLocalAsset
+from .Creator import Creator, CreatorAccount
+from .CollectionList import CollectionList, CollectionListItem
 from .Metadata import Metadata
 from .CustomIndexState import CustomIndexState
 from .ExistingFileScan import ExistingFileScan

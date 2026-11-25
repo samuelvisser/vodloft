@@ -31,6 +31,7 @@ def get_frontend_pull(access: Access) -> FrontendPullAPIRead:
     )
     return FrontendPullAPIRead(
         app_version=get_settings().app_version,
+        build_id=get_settings().build_id,
         mode="fast" if has_active_operation else "slow",
         data=FrontendPullData(operations=operations),
     )

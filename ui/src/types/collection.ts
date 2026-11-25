@@ -6,6 +6,7 @@ import {useMemo} from "react";
 export const CollectionTypeReg = createSelectRegistry("CollectionType", {
     podcast: {label: "Podcast", help: "Episodes identified by date or number"},
     series: {label: "Series", help: "Episodic series without podcast semantics"},
+    music: {label: "Music", help: "An artist's music: albums of tracks or music videos"},
 });
 export type CollectionTypeValue = (typeof CollectionTypeReg)["values"][number];
 
@@ -18,12 +19,62 @@ export const EpisodeIdentifierReg = createSelectRegistry("EpisodeIdentifier", {
 });
 export type EpisodeIdentifierValue = (typeof EpisodeIdentifierReg)["values"][number];
 
+/** The same choices for a Music collection, whose seasons are its albums. */
+const MusicEpisodeIdentifierReg = createSelectRegistry("MusicEpisodeIdentifier", {
+    numbered: {label: "Numbered", help: "Parse 'Ep. N' from the title"},
+    date_based: {label: "Date-based", help: "Use release date as identity"},
+    seasonal: {label: "By album", help: "Groups the tracks by album, numbered in the album's order"},
+});
+
+/** The episode identifications, in the words of a collection of the type: "By album" for Music. */
+export function episodeIdentifierRegFor(type: string | null | undefined): typeof EpisodeIdentifierReg {
+    return type === CollectionTypeReg.Enum.music ? MusicEpisodeIdentifierReg as typeof EpisodeIdentifierReg : EpisodeIdentifierReg;
+}
+
+/**
+ * Advice for a Music collection that isn't identified by album, which suits music of several albums better. A
+ * collection that is one album, such as one made from an album or a playlist, has nothing to group: ``oneAlbum``.
+ */
+export function musicIdentificationAdvice(
+    type: string | null | undefined, identifier: string | null | undefined, oneAlbum = false,
+): string | null {
+    return type === CollectionTypeReg.Enum.music && !oneAlbum && identifier && identifier !== EpisodeIdentifierReg.Enum.seasonal
+        ? "For a Music collection, By album is always the better choice: the tracks are grouped by album, in the album's order."
+        : null;
+}
+
 // EpisodeOrder: which way a collection lists its episodes, within each season for a seasonal collection
 export const EpisodeOrderReg = createSelectRegistry("EpisodeOrder", {
     newest_first: {label: "Newest first"},
     oldest_first: {label: "Oldest first"},
 });
 export type EpisodeOrderValue = (typeof EpisodeOrderReg)["values"][number];
+
+/** How often VODLoft looks for new episodes of a Collection. */
+export const CheckFrequencyReg = createSelectRegistry("CollectionCheckFrequency", {
+    default: {label: "Like other Collections"},
+    less_often: {label: "Less often"},
+    own: {label: "On its own schedule"},
+});
+export type CheckFrequency = (typeof CheckFrequencyReg)["values"][number];
+
+/** The choices a bulk edit offers: an own schedule is set on each Collection's Edit page. */
+export const BulkCheckFrequencyReg = createSelectRegistry("CollectionBulkCheckFrequency", {
+    default: {label: "Like other Collections"},
+    less_often: {label: "Less often"},
+});
+
+export const SplitChaptersReg = createSelectRegistry("CollectionSplitChapters", {
+    whole: {label: "Keep each video whole"},
+    split: {label: "A part per chapter"},
+});
+
+export const CookiesModeReg = createSelectRegistry("CollectionCookiesMode", {
+    automatic: {label: "Only when needed"},
+    never: {label: "Never"},
+    always: {label: "Always"},
+});
+export type CookiesMode = (typeof CookiesModeReg)["values"][number];
 
 /** How the Library lists its Collections. */
 export const LibraryCollectionSortReg = createSelectRegistry("LibraryCollectionSort", {

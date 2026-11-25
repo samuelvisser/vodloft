@@ -236,7 +236,7 @@ export default function ProgressButton({
                 </span>
             )}
         </span>
-        {isActive && resolved && <ProgressExplanation detail={resolved.detail}/>}
+        {isActive && resolved && <ProgressExplanation detail={resolved.detail} steps={resolved.steps}/>}
         </span>
     )
 }

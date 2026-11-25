@@ -8,7 +8,7 @@ import {
 import {apiUrl} from './api'
 
 type PreviewRequest = {
-    type: 'collection' | 'movie' | 'video'
+    type: 'collection' | 'video'
     outputTemplate: string
     preferredFormat: string
     filenameRestrictionMode: string
@@ -16,6 +16,8 @@ type PreviewRequest = {
     values: Record<string, string>
     localMediaProfileId: number | null
     indexingValues: {key: string, keepNumbers?: boolean}[] | null
+    episodeTitleTemplate?: string | null
+    episodeDescriptionTemplate?: string | null
 }
 
 export type LocalMediaProfilePreviewState = {

@@ -1,6 +1,10 @@
 import {z} from "zod";
 import {ApiDateTimeSchema} from "./datetime";
 
+/** A word as the backend names it: one, many, and one with its article, such as album, albums and an album. */
+export const NamesSchema = z.object({singular: z.string(), plural: z.string(), a: z.string()})
+export type Names = z.infer<typeof NamesSchema>
+
 /** Optional capabilities of a Source, as the backend names them. */
 export const SourceFeature = {
     COLLECTIONS: 'collections',
@@ -13,7 +17,6 @@ export const SourceFeature = {
     VIDEOS: 'videos',
     EPISODE_LISTS: 'episode_lists',
     SEARCH: 'search',
-    COSTLY_SEARCH: 'costly_search',
     PROGRAM_UPDATES: 'program_updates',
     COOKIES: 'cookies',
     OPTIONAL_COOKIES: 'optional_cookies',
@@ -25,6 +28,9 @@ export const SourceFeature = {
     EPISODE_LOOKUPS: 'episode_lookups',
     PAGE_STREAMS: 'page_streams',
     OWN_STUDIO: 'own_studio',
+    CREATORS: 'creators',
+    CHAPTERS: 'chapters',
+    LINK_COLLECTIONS: 'link_collections',
 } as const
 export type SourceFeatureValue = typeof SourceFeature[keyof typeof SourceFeature]
 
@@ -56,6 +62,15 @@ export const LockableFields = {
     accessDescription: z.string().nullable().optional().default(null),
 }
 
+/** Media on a Site that removes its media itself after a while, such as Twitch its past broadcasts. */
+export const RetentionFields = {
+    ...LockableFields,
+    /** The Site removed the media itself, so it is gone for good there and VODLoft did not ask about it on Home. */
+    removedByRetention: z.boolean().optional().default(false),
+    /** The Site that removed it, and how that Site removes its media. */
+    removedBy: z.object({siteName: z.string(), retention: z.string()}).nullable().optional().default(null),
+}
+
 
 export function hasSourceFeature(
     item: {sourceFeatures?: readonly string[] | null} | null | undefined,
@@ -77,8 +92,23 @@ export const DownloadOptionsSchema = z.object({
     subtitles: z.boolean(),
     /** Codecs, container, quality goal, audio format and audio language pick the version that is downloaded. */
     qualityChoices: z.boolean(),
+    /** The Site's downloader writes an info file about each video, which a profile can save. */
+    infoFile: z.boolean(),
 })
 export type DownloadOptions = z.infer<typeof DownloadOptionsSchema>
+
+/** A Site a Source finds things on by name. A costly search, such as one that uses API quota, runs when asked
+ *  instead of while the user types. */
+export const SearchSiteReadSchema = z.object({
+    key: z.string(),
+    name: z.string(),
+    costlySearch: z.boolean(),
+    /** The Site is added to VODLoft, so Add Media offers its search. */
+    added: z.boolean(),
+    /** The Source can search the Site now: one whose search goes through its own API once that is set up. */
+    ready: z.boolean().default(true),
+})
+export type SearchSiteRead = z.infer<typeof SearchSiteReadSchema>
 
 export const SourceReadSchema = z.object({
     id: z.string(),
@@ -87,9 +117,15 @@ export const SourceReadSchema = z.object({
     features: z.array(z.string()),
     /** What the Source downloads from, when its name does not say so, such as YouTube, and many more. */
     sitesLabel: z.string().nullable().optional(),
-    searchLabel: z.string().nullable().optional(),
-    /** What the Source calls a kind of media in its own catalogue, such as Show for a Daily Wire collection. */
-    kindNames: z.record(z.string(), z.string()).optional(),
+    /** The Sites the Source can search by name, such as YouTube and SoundCloud for yt-dlp, each searched on its own. */
+    searchSites: z.array(SearchSiteReadSchema).default([]),
+    /** The Sites the Source is made for, such as The Daily Wire, and whether each is added to VODLoft, so Add Media
+     *  offers to browse its catalogue. */
+    sites: z.array(z.object({key: z.string(), name: z.string(), added: z.boolean()})).default([]),
+    /** What the Source calls each kind of media, such as show for a Daily Wire collection, or VODLoft's word. */
+    kindNames: z.record(z.string(), NamesSchema),
+    /** The Sites the Source is made for, such as The Daily Wire; none for a Source of many sites. */
+    siteKeys: z.array(z.string()).default([]),
     /** Which moment the Source's release dates mark: when an item came out or began (Released), or when it was
      *  finished and put up, such as after a livestream ended (Published). */
     releaseDate: z.enum(['start', 'end']),
@@ -102,9 +138,13 @@ export function sourceHas(source: SourceRead | null | undefined, feature: Source
     return !!source?.features.includes(feature)
 }
 
+/** The links of a description that are on a Site VODLoft knows for media. */
+export const MediaLinksReadSchema = z.object({urls: z.array(z.string())})
+
 export const ResolvedLinkReadSchema = z.object({
     source: SourceReadSchema,
-    kind: z.enum(['collection', 'movie', 'episode', 'video']),
+    /** A creator link, such as a Daily Wire host's page, can't be added: add one of their shows instead. */
+    kind: z.enum(['collection', 'movie', 'episode', 'video', 'creator']),
     slug: z.string(),
     url: z.string(),
     collectionSlug: z.string().nullable(),
@@ -121,6 +161,11 @@ export const ResolvedLinkReadSchema = z.object({
         imageUrl: z.string().nullable(),
         authorName: z.string().nullable(),
     }),
+    /** For a collection: whether it is a channel or one list. */
+    collectionKind: z.enum(['channel', 'list']).nullable().optional().default(null),
+    /** For a collection on a Site with creators, which can be in one: what its Site calls the creator behind it, such
+     *  as host on The Daily Wire. */
+    creatorNames: NamesSchema.nullable().optional().default(null),
     /** Every Source that claims the link's site, preferred first. */
     candidates: z.array(SourceReadSchema),
 })
@@ -158,27 +203,46 @@ export const SearchResultsReadSchema = z.object({
 })
 export type SearchResultsRead = z.infer<typeof SearchResultsReadSchema>
 
-/** What a search button names: the Source's own label, such as YouTube for yt-dlp, or its name. */
-export function searchName(source: SourceRead | null | undefined): string | undefined {
-    return source?.searchLabel ?? source?.name
-}
-
-/** What the Source calls a kind of media where it shows its own catalogue, or VODLoft's word for it. */
-export function kindName(source: SourceRead | null | undefined, kind: string, vodloftName: string): string {
-    return source?.kindNames?.[kind] ?? vodloftName
-}
-
-/** The plural of a kind name, such as Shows for Show; Series stays Series. */
-export function pluralKindName(name: string): string {
-    return name.endsWith('s') ? name : `${name}s`
+/** What the Source calls a kind of media, such as show for a Daily Wire collection; none until the Source is known. */
+export function kindNames(source: SourceRead | null | undefined, kind: string): Names | undefined {
+    return source?.kindNames[kind]
 }
 
 /** The website a collection or video is on, such as YouTube, whichever Source fetches it. */
+/** One type of section a Site's creators have, such as a feed, or an album or a playlist on SoundCloud, and what the
+ * Site calls it. */
+export const SectionTypeSchema = z.object({
+    key: z.string(),
+    kind: z.enum(['feed', 'list', 'show', 'item']),
+    names: NamesSchema,
+})
+export type SectionType = z.infer<typeof SectionTypeSchema>
+
 export const SiteReadSchema = z.object({
     key: z.string(),
     name: z.string(),
+    /** The Site's Font Awesome icon as prefix:name, such as fab:youtube; see SiteIcon. */
+    icon: z.string().nullable().optional(),
+    /** The Site's name in at most two letters, such as YT, shown beside a globe where it has no icon. */
+    initials: z.string(),
     /** A collection on the Site shows what VODLoft has no access to until the user hides it. */
     showsLocked: z.boolean().optional().default(true),
+    /** The Site has sound only, such as Bandcamp: a Music collection on it holds tracks, not music videos. */
+    audioOnly: z.boolean().optional().default(false),
+    /** What the Site calls one of its videos: a video, or a track on a Site with sound only. */
+    mediaNames: NamesSchema,
+    /** What the Site calls a creator, in lower case, such as host on The Daily Wire. */
+    creatorNames: NamesSchema,
+    /** Every type of section the Site's creators have, such as YouTube's feeds and playlists. */
+    sectionTypes: z.array(SectionTypeSchema),
+    /** What the Site calls its lists, all its types of list together, such as albums and playlists. */
+    sectionListNames: NamesSchema,
+    /** What the Site calls a collection of a channel's uploads, such as a YouTube channel. */
+    channelCollectionNames: NamesSchema,
+    /** What the Site calls a collection of one list, such as a YouTube playlist. */
+    listCollectionNames: NamesSchema,
+    /** A channel's playlists or albums at the Site can be seasons of its collection. */
+    linkSeasons: z.boolean().default(false),
 })
 export type SiteRead = z.infer<typeof SiteReadSchema>
 
@@ -206,8 +270,7 @@ export const EpisodeTagReadSchema = z.object({
     label: z.string(),
     help: z.string(),
     /** Names a count of these episodes, such as "1 livestream" or "726 livestreams". */
-    singular: z.string(),
-    plural: z.string(),
+    names: NamesSchema,
     selectedByDefault: z.boolean(),
     rssEpisodeType: z.enum(['full', 'trailer', 'bonus']),
     /** Episodes with the main tag follow the collection's numbering. */
@@ -227,6 +290,13 @@ export function episodeTagLabel(tags: readonly EpisodeTagRead[] | undefined, key
     return tags?.find((tag) => tag.key === key)?.label ?? key
 }
 
+/** A Site whose API key would speed up collections or creators in the Library, while there is none. */
+export const ApiKeyNoteReadSchema = z.object({
+    sourceKey: z.string(),
+    siteName: z.string(),
+})
+export type ApiKeyNoteRead = z.infer<typeof ApiKeyNoteReadSchema>
+
 export const ApiStatusReadSchema = z.object({
     /** The last characters of the key, or null when no key is set. */
     keyHint: z.string().nullable(),
@@ -240,6 +310,8 @@ export const ApiStatusReadSchema = z.object({
     /** The collections the key speeds up, and what one full re-scan of them costs. */
     collectionCount: z.number(),
     rescanUnits: z.number(),
+    /** What one quick check of each of those collections costs, and how long it waits between checks anyway. */
+    checkCosts: z.array(z.object({units: z.number(), leastMinutes: z.number(), feeds: z.number()})),
 })
 export type ApiStatusRead = z.infer<typeof ApiStatusReadSchema>
 
@@ -251,6 +323,17 @@ export const SourceProblemReadSchema = z.object({
     fixUrl: z.string().nullable(),
 })
 export type SourceProblemRead = z.infer<typeof SourceProblemReadSchema>
+
+/** A Site's own free API that the user can register VODLoft with, such as Twitch's. */
+export const SiteApiReadSchema = z.object({
+    name: z.string(),
+    fields: z.array(z.object({key: z.string(), label: z.string(), secret: z.boolean()})),
+    benefits: z.string(),
+    steps: z.array(z.object({text: z.string(), button: z.string().nullable(), url: z.string().nullable()})),
+    /** The Site's search goes through the API, so Add Media only searches it once it is set up. */
+    searches: z.boolean(),
+})
+export type SiteApiRead = z.infer<typeof SiteApiReadSchema>
 
 export const SiteAuthenticationReadSchema = z.object({
     key: z.string(),
@@ -268,6 +351,16 @@ export const SiteAuthenticationReadSchema = z.object({
     cookiesStatus: z.object({label: z.string(), ok: z.boolean(), detail: z.string().nullable()}).nullable(),
     /** The Source whose API key is for the Site, such as yt-dlp's YouTube Data API key. */
     apiKeySourceKey: z.string().nullable(),
+    /** The Site's own API, on a Site that has one a Source uses. */
+    siteApi: SiteApiReadSchema.nullable().default(null),
+    /** Which values of the Site's API are set, a secret by its last few characters, and the last problem with them. */
+    siteApiStatus: z.object({
+        hints: z.record(z.string(), z.string()),
+        problem: z.string().nullable(),
+        setUp: z.boolean(),
+    }).nullable().default(null),
+    /** The user can remove the Site: VODLoft has nothing from it and no Source is made for it. */
+    removable: z.boolean(),
 })
 export type SiteAuthenticationRead = z.infer<typeof SiteAuthenticationReadSchema>
 
@@ -288,8 +381,18 @@ export const CollectionDetailsReadSchema = z.object({
     thumbnailLandscapePath: z.string().nullable(),
     /** The type VODLoft suggests from the collection's name. */
     probableCollectionType: z.string(),
+    /** Why the collection was taken for music, when it was, such as an album on YouTube Music. */
+    musicReason: z.string().nullable().optional(),
     /** The collection's own seasons, oldest first; empty when VODLoft makes a season per upload year. */
     seasons: z.array(z.object({slug: z.string(), name: z.string()})),
+    /** The collection's Site has sound only, such as SoundCloud: a Music collection there holds tracks. */
+    audioOnly: z.boolean().default(false),
+    /** What the link is: a channel, or one list, such as a playlist or an album, which is the collection's one season. */
+    kind: z.enum(['channel', 'list']),
+    /** Which of its Site's types of list the link is, such as an album or a playlist on SoundCloud, where its link doesn't tell. */
+    listType: z.string().nullable().default(null),
+    /** What the collection's seasons will be once added, by collection type, as its Site's defaults make them. */
+    seasonsPlans: z.record(z.string(), z.string()).default({}),
 })
 export type CollectionDetailsRead = z.infer<typeof CollectionDetailsReadSchema>
 

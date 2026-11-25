@@ -13,6 +13,7 @@ from backend.services.local_media_profile_inputs import CollectionLocalMediaProf
 from backend.types.local_media_profile_types import (
     LocalMediaProfileType,
     CollectionLocalMediaProfileScope,
+    EpisodeNfo,
 )
 
 
@@ -28,7 +29,10 @@ class CollectionLocalMediaProfileAPIRead(LocalMediaProfileAPIBaseOut):
     """Read a Collection Local Media Profile."""
 
     type: Literal["collection"] = LocalMediaProfileType.COLLECTION.value
-    collection_scope: Union[CollectionLocalMediaProfileScope, str] = CollectionLocalMediaProfileScope.BOTH
+    collection_scope: Union[CollectionLocalMediaProfileScope, str] = CollectionLocalMediaProfileScope.PODCAST_AND_SERIES
     download_collection_assets: bool | None = None
     show_nfo: bool
+    episode_nfo: EpisodeNfo = EpisodeNfo.EPISODE
+    episode_title_template: str | None = None
+    episode_description_template: str | None = None
     indexing_values: list[IndexingValueDefinitionAPI] = Field(default_factory=list)

@@ -1,9 +1,9 @@
 from types import SimpleNamespace
 
 
-def _episode(identifier: str, *, dw_episode_number: str | None = None):
+def _episode(identifier: str, *, source_number: str | None = None):
     return SimpleNamespace(
-        collection=SimpleNamespace(slug="chip-chilla", title="Chip Chilla", author_name="Daily Wire", meta_items=[]),
+        collection=SimpleNamespace(slug="chip-chilla", title="Chip Chilla", author_name="Daily Wire", meta_items=[], creator=None, lists=[], sharing_url="", kind="list"),
         season=SimpleNamespace(
             slug="season-1",
             name="Season 1",
@@ -17,7 +17,7 @@ def _episode(identifier: str, *, dw_episode_number: str | None = None):
         duration=1290.4,
         title="Chip's Odyssey",
         episode_identifier=identifier,
-        dw_episode_number=dw_episode_number,
+        source_number=source_number,
         published_date=None,
         index=42,
         extra_index=None,
@@ -32,12 +32,12 @@ def test_seasonal_episode_number_renders_as_numeric_episode_number() -> None:
         render_output_template,
     )
 
-    values = episode_output_template_values(_episode("ep.S01E07", dw_episode_number="7.00"))
+    values = episode_output_template_values(_episode("ep.S01E07", source_number="7.00"))
 
     assert values["season_index"] == "4"
     assert values["season_number"] == "1"
     assert values["season_type"] == "normal"
-    assert values["dw_episode_number"] == "7.00"
+    assert values["source_number"] == "7.00"
     assert values["episode_number"] == "7"
     assert values["episode_label"] == "S01E07"
     assert values["episode_identifier"] == "ep.S01E07"
@@ -63,7 +63,7 @@ def test_episode_identifier_semantics_are_exposed_to_templates() -> None:
     values = episode_output_template_values(
         _episode(
             "ep-extra.trailer.S03E12.5",
-            dw_episode_number="12.05",
+            source_number="12.05",
         )
     )
 
@@ -72,11 +72,11 @@ def test_episode_identifier_semantics_are_exposed_to_templates() -> None:
     assert values["episode_number"] == "12"
     assert values["episode_sub_number"] == "5"
     assert values["episode_label"] == "S03E12.5"
-    assert values["dw_episode_number"] == "12.05"
+    assert values["source_number"] == "12.05"
     assert {
         "season_type",
         "season_number",
-        "dw_episode_number",
+        "source_number",
         "episode_extra_type",
         "episode_sub_number",
     }.issubset(COLLECTION_OUTPUT_TEMPLATE_FIELDS)
@@ -128,11 +128,11 @@ def test_episode_index_does_not_require_custom_index_state_or_recount_gaps(monke
 
 def test_episode_index_is_not_available_to_movie_profiles() -> None:
     import pytest
-    from backend.utils.output_template import MOVIE_OUTPUT_TEMPLATE_FIELDS, validate_output_template_fields
+    from backend.utils.output_template import VIDEO_OUTPUT_TEMPLATE_FIELDS, validate_output_template_fields
 
     with pytest.raises(ValueError, match="Unsupported output template variable"):
         validate_output_template_fields(
-            "/downloads/{{ episode_index }}.ext", allowed_fields=MOVIE_OUTPUT_TEMPLATE_FIELDS,
+            "/downloads/{{ episode_index }}.ext", allowed_fields=VIDEO_OUTPUT_TEMPLATE_FIELDS,
         )
 
 
@@ -177,3 +177,25 @@ def test_site_ids_uploader_author_and_duration_are_template_values() -> None:
         "duration_seconds": "1290",
     }
     assert {"episode_site_id", "episode_uploader", "collection_author", "collection_site_id", "duration_seconds"} <= COLLECTION_OUTPUT_TEMPLATE_FIELDS
+
+
+def test_an_episode_of_a_creators_collection_knows_its_creator_and_section() -> None:
+    from backend.utils.output_template import episode_output_template_values
+
+    episode = _episode("ep.S2024E03")
+    episode.collection.creator = SimpleNamespace(
+        title="Northwind Workshop", collections=[], sections=[], main_collection_ids=set(),
+        accounts=[SimpleNamespace(handle="@northwindworkshop", source_key="ytdlp", site_key="youtube")],
+    )
+    episode.season_id = 7
+    episode.collection.lists = [SimpleNamespace(title="Tool Reviews", season_id=7)]
+    episode.collection.list_layout = "season_each"
+
+    values = episode_output_template_values(episode)
+
+    assert {key: values[key] for key in ("creator_title", "creator_handle", "creator_kind", "section_title", "section_kind")} == {
+        "creator_title": "Northwind Workshop", "creator_handle": "northwindworkshop", "creator_kind": "YouTube creator",
+        "section_title": "Tool Reviews", "section_kind": "list",
+    }
+    # A collection without a creator leaves them empty.
+    assert episode_output_template_values(_episode("ep.1"))["creator_title"] == ""

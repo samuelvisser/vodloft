@@ -95,6 +95,9 @@ class MediaDownloadBase(HasMetadataMixin, HasTaskResourcesMixin, Base):
         JSON, nullable=True,
         comment="The SponsorBlock segments of the video as published, and whether each became a chapter or was cut",
     )
+    cut_chapters: Mapped[Optional[list[dict]]] = mapped_column(
+        JSON, nullable=True, comment="The chapters of the video as published that were cut out by their title",
+    )
     video_height: Mapped[Optional[int]] = mapped_column(comment="The smaller side of the kept video stream, in pixels")
     video_codec: Mapped[Optional[str]] = mapped_column(String(20), comment="The codec of the kept video stream")
     subtitle_languages: Mapped[Optional[list[str]]] = mapped_column(

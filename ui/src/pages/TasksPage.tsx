@@ -1,8 +1,9 @@
+import {capitalized} from '../types/creator'
 import {useQuery} from '@tanstack/react-query'
 import {useEffect, useMemo, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
-import Select from 'react-select'
+import Select from '../components/common/ReactSelect'
 import {faIcon} from '../icons/faIcon'
 
 import {Column, DataTable} from '../components/DataTable/DataTable'
@@ -59,10 +60,11 @@ function formatDuration(milliseconds: number | null | undefined): string {
 }
 
 function resourceLabel(row: TaskLedgerEntryRead): string {
-    const label = row.resourceType.replace(/_/g, ' ').replace(/^./, (character) => character.toUpperCase())
+    const names = row.resourceNames
+    const label = names ? capitalized(names.singular) : row.resourceType
     if (row.resourceType === 'system') return label
     // Scheduled sweeps over every resource of a type run with no id, or id 0.
-    if (!row.resourceId) return `All ${label.toLowerCase()}s`
+    if (!row.resourceId) return names ? `All ${names.plural}` : label
     return `${label} #${row.resourceId}`
 }
 

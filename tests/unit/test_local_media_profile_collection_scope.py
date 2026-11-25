@@ -28,7 +28,7 @@ def test_collection_local_media_profile_scope_defaults_to_both() -> None:
         ),
     )
 
-    assert profile.collection_scope == "both"
+    assert profile.collection_scope == "podcast-and-series"
 
     session.close()
     engine.dispose()
@@ -60,9 +60,9 @@ def test_collection_local_media_profile_scope_is_persisted_and_returned() -> Non
 
 
 def test_movie_local_media_profile_request_has_no_show_scope_field() -> None:
-    from backend.api.models.movie_local_media_profile import MovieLocalMediaProfileAPICreate
+    from backend.api.models.video_local_media_profile import VideoLocalMediaProfileAPICreate
 
-    assert "collection_scope" not in MovieLocalMediaProfileAPICreate.model_fields
+    assert "collection_scope" not in VideoLocalMediaProfileAPICreate.model_fields
 
 
 
@@ -82,7 +82,7 @@ def test_updating_collection_scope_keeps_the_saved_subtitle_choice() -> None:
     for initial_scope, initial_mode, new_scope in (
         ("podcast", "no_subtitles", "series"),
         ("series", "sidecar", "podcast"),
-        ("both", "embed_and_sidecar", "podcast"),
+        ("podcast-and-series", "embed_and_sidecar", "podcast"),
     ):
         session, engine = _new_session()
         try:
@@ -156,35 +156,35 @@ def test_explicit_subtitle_selection_still_updates_existing_collection_profile()
 
 
 def test_movie_update_without_subtitle_mode_preserves_saved_choice() -> None:
-    from backend.api.endpoints.movie_local_media_profiles.service import (
-        create_movie_local_media_profile,
-        update_movie_local_media_profile,
+    from backend.api.endpoints.video_local_media_profiles.service import (
+        create_video_local_media_profile,
+        update_video_local_media_profile,
     )
-    from backend.api.models.movie_local_media_profile import (
-        MovieLocalMediaProfileAPICreate,
-        MovieLocalMediaProfileAPIUpdate,
+    from backend.api.models.video_local_media_profile import (
+        VideoLocalMediaProfileAPICreate,
+        VideoLocalMediaProfileAPIUpdate,
     )
-    from backend.db.models import MovieLocalMediaProfile
+    from backend.db.models import VideoLocalMediaProfile
 
     session, engine = _new_session()
     try:
         template = "/downloads/movies/{{ movie_title }}/{{ title }}.ext"
-        created = create_movie_local_media_profile(
+        created = create_video_local_media_profile(
             session,
-            MovieLocalMediaProfileAPICreate(
+            VideoLocalMediaProfileAPICreate(
                 name="Movie subtitles", preferred_format="format_1080p",
                 subtitle_mode="embed_and_sidecar", output_template=template,
             ),
         )
-        update = MovieLocalMediaProfileAPIUpdate(
+        update = VideoLocalMediaProfileAPIUpdate(
             name=created.name, preferred_format="format_720p",
             output_template=template,
         )
         assert "subtitle_mode" not in update.model_fields_set
-        updated = update_movie_local_media_profile(session, created.slug, update)
+        updated = update_video_local_media_profile(session, created.slug, update)
         assert updated.preferred_format == "format_720p"
         assert updated.subtitle_mode == "embed_and_sidecar"
-        assert session.get(MovieLocalMediaProfile, created.id).subtitle_mode == "embed_and_sidecar"
+        assert session.get(VideoLocalMediaProfile, created.id).subtitle_mode == "embed_and_sidecar"
     finally:
         session.close()
         engine.dispose()

@@ -45,11 +45,10 @@ from backend.utils.custom_metadata import (
 )
 from backend.utils.output_template import (
     rendering_with_filename_mode,
-    MOVIE_OUTPUT_TEMPLATE_FIELDS,
-    MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
     COLLECTION_OUTPUT_TEMPLATE_FIELDS,
     COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
     VIDEO_OUTPUT_TEMPLATE_FIELDS,
+    VIDEO_OUTPUT_TEMPLATE_METADATA_SCOPES,
     episode_output_template_values,
     movie_output_template_values,
     video_output_template_values,
@@ -60,6 +59,8 @@ from backend.utils.output_template import (
     typed_characters_the_mode_replaces,
 )
 from backend.utils.search import search_all_terms, search_relevance_score
+from backend.services.local_media_profile_sites import movie_site_keys
+from sources import Feature, all_sources
 
 from ..custom_metadata.service import get_custom_metadata_fields
 
@@ -68,16 +69,27 @@ _EXAMPLE_COLLECTION_VALUES = {
     "collection": "example-collection",
     "collection_title": "Example Show",
     "collection_author": "Example Host",
+    "creator_title": "Example Host",
+    "creator_handle": "examplehost",
+    "creator_kind": "YouTube creator",
+    "section_title": "Videos",
+    "section_kind": "feed",
+    "artist": "Example Host",
+    "album": "Season 1",
+    "track_number": "1",
+    "track_number_padded": "01",
     "collection_site_id": "example-collection",
     "season": "season-1",
     "season_name": "Season 1",
     "season_index": "1",
     "season_type": "normal",
     "season_number": "1",
+    "album_slug": "season-1",
+    "album_number": "1",
     "episode": "the-first-episode",
     "episode_title": "The First Episode",
     "title": "The First Episode",
-    "dw_episode_number": "1.00",
+    "source_number": "1.00",
     "episode_type": "ep",
     "episode_extra_type": "",
     "episode_number": "1",
@@ -101,8 +113,12 @@ _EXAMPLE_COLLECTION_VALUES = {
     "hour": "20",
     "minute": "00",
     "second": "00",
+    "day_of_year": "242",
+    "day_of_year_reversed": "124",
 }
 
+EXAMPLE_MOVIE_SOURCE_ID = "example:movie"
+"""The example movie a Video profile shows beside its example video while VODLoft has no media yet."""
 _EXAMPLE_MOVIE_VALUES = {
     "movie_slug": "example-movie",
     "movie_title": "Example Movie",
@@ -119,6 +135,8 @@ _EXAMPLE_MOVIE_VALUES = {
     "movie_hour": "00",
     "movie_minute": "00",
     "movie_second": "00",
+    "movie_day_of_year": "242",
+    "movie_day_of_year_reversed": "124",
     "slug": "example-movie",
     "title": "Example Movie",
     "extended_title": "Example Movie",
@@ -127,6 +145,7 @@ _EXAMPLE_MOVIE_VALUES = {
     "rating": "PG-13",
     "duration_seconds": "6420",
     "media_type": "movie",
+    "source": "The Daily Wire",
     "date": "2026-08-30",
     "time": "00:00:00",
     "datetime": "2026-08-30 00:00:00",
@@ -136,13 +155,17 @@ _EXAMPLE_MOVIE_VALUES = {
     "hour": "00",
     "minute": "00",
     "second": "00",
+    "day_of_year": "242",
+    "day_of_year_reversed": "124",
 }
 
 _EXAMPLE_VIDEO_VALUES = {
     "slug": "dQw4w9WgXcQ",
     "title": "Example Video",
+    "extended_title": "Example Video",
     "author": "Example Channel",
     "duration_seconds": "213",
+    "media_type": "video",
     "source": "YouTube",
     "date": "2026-08-30",
     "time": "00:00:00",
@@ -153,6 +176,8 @@ _EXAMPLE_VIDEO_VALUES = {
     "hour": "00",
     "minute": "00",
     "second": "00",
+    "day_of_year": "242",
+    "day_of_year_reversed": "124",
 }
 
 
@@ -161,17 +186,15 @@ def get_output_template_variables(
     profile_type: LocalMediaProfileType,
 ) -> list[LocalMediaProfileTemplateVariable]:
     """Return custom template variables available to one Local Media Profile type."""
-    if profile_type == LocalMediaProfileType.COLLECTION:
+    if LocalMediaProfileType(profile_type).for_collections:
         scope: CustomMetadataScope = "collection"
         description = "Custom collection metadata"
-    elif profile_type == LocalMediaProfileType.MOVIE:
+    elif profile_type == LocalMediaProfileType.VIDEO:
+        # Only movies have custom metadata; for a single video it is empty.
         scope = "movie"
         description = "Custom movie metadata"
-    elif profile_type == LocalMediaProfileType.VIDEO:
-        # Videos have no custom metadata.
-        return []
     else:
-        raise ValueError("Template variables are only available for Collection and Movie profiles")
+        raise ValueError("Template variables are only available for Collection and Video profiles")
 
     return [
         LocalMediaProfileTemplateVariable(
@@ -183,13 +206,7 @@ def get_output_template_variables(
 
 
 def _collection_type_values(collection_scope: CollectionLocalMediaProfileScope) -> tuple[str, ...]:
-    if collection_scope == CollectionLocalMediaProfileScope.BOTH:
-        return (CollectionType.PODCAST.value, CollectionType.SERIES.value)
-    if collection_scope == CollectionLocalMediaProfileScope.PODCAST:
-        return (CollectionType.PODCAST.value,)
-    if collection_scope == CollectionLocalMediaProfileScope.SERIES:
-        return (CollectionType.SERIES.value,)
-    raise ValueError(f"Unsupported collection template source scope: {collection_scope}")
+    return CollectionLocalMediaProfileScope(collection_scope).collection_types()
 
 
 def _on_sites(site_key_column, site_keys: list[str] | None):
@@ -487,15 +504,22 @@ def _collection_source_page(
 
 def get_random_collection_template_source(
     session: Session,
-    collection_scope: CollectionLocalMediaProfileScope = CollectionLocalMediaProfileScope.BOTH,
+    collection_scope: CollectionLocalMediaProfileScope = CollectionLocalMediaProfileScope.PODCAST_AND_SERIES,
     *,
     local_media_profile_id: int | None = None,
     site_keys: list[str] | None = None,
+    collection_id: int | None = None,
 ) -> LocalMediaProfileTemplateSource | None:
     """Choose an example uniformly by Collection, then uniformly within that Collection.
 
-    With a profile, a Collection that downloads to it is chosen when there is one.
+    A profile opened from a Collection's page always takes its example from that Collection, whatever the profile is
+    available for so far. With a profile, a Collection that downloads to it is chosen when there is one.
     """
+    if collection_id is not None:
+        episode = _random_episode_of(session, collection_id)
+        if episode is not None:
+            return _collection_template_source(episode)
+
     candidates = (
         select(Episode.collection_id)
         .join(Episode.collection)
@@ -516,14 +540,19 @@ def get_random_collection_template_source(
     if collection_id is None:
         return None
 
-    episode = session.scalar(
+    episode = _random_episode_of(session, collection_id)
+    return _collection_template_source(episode) if episode is not None else None
+
+
+def _random_episode_of(session: Session, collection_id: int) -> Episode | None:
+    """Any episode of the Collection that is in a season, each as likely as the next."""
+    return session.scalar(
         select(Episode)
         .join(Episode.season)
         .where(Episode.collection_id == collection_id)
         .order_by(func.random())
         .limit(1)
     )
-    return _collection_template_source(episode) if episode is not None else None
 
 
 def get_example_template_sources(collection: ExampleCollection) -> list[LocalMediaProfileTemplateSource]:
@@ -540,15 +569,37 @@ def get_example_template_sources(collection: ExampleCollection) -> list[LocalMed
         ]
 
 
-def _movie_source_page(
+def _movie_sources_on(site_keys: list[str] | None):
+    """Movies from a Source that fetches one of the Sites; every movie when the profile has no Site filter."""
+    if site_keys is None:
+        return true()
+    keys = [
+        source.id for source in all_sources()
+        if source.has(Feature.MOVIES) and any(source.site_of(key) is not None for key in site_keys)
+    ]
+    return Movie.source_key.in_(keys)
+
+
+def _video_profile_source_page(
     session: Session,
     *,
     search: str | None,
     cursor: str | None,
     limit: int,
+    site_keys: list[str] | None = None,
 ) -> tuple[list[LocalMediaProfileTemplateSource], str | None, str | None, str]:
+    """Movies, their extras and single videos, as a Video profile keeps them."""
     search_text = (search or "").strip()
-    revision = _movie_source_revision(session)
+    sites = sorted(site_keys) if site_keys is not None else None
+    video_changed, video_count, newest_video = session.execute(
+        select(_modified_timestamp(Video), func.count(Video.id), func.max(Video.id))
+        .select_from(Video)
+        .where(_on_sites(Video.site_key, site_keys))
+    ).one()
+    revision = (
+        f"{_movie_source_revision(session)}|"
+        f"{video_changed.isoformat() if video_changed is not None else ''}|{video_count}|{newest_video or 0}"
+    )
     movie_relevance = search_relevance_score(
         search,
         Movie.title,
@@ -581,7 +632,7 @@ def _movie_source_page(
             literal(0).label("kind_sort"),
             func.lower(Movie.title).label("item_sort"),
         )
-        .where(*search_all_terms(
+        .where(_movie_sources_on(site_keys), *search_all_terms(
             search,
             Movie.title,
             Movie.extended_title,
@@ -601,7 +652,7 @@ def _movie_source_page(
         )
         .join(Movie, Movie.id == MovieExtra.movie_id)
         .join(MovieExtraSource, MovieExtraSource.id == MovieExtra.source_id)
-        .where(*search_all_terms(
+        .where(_movie_sources_on(site_keys), *search_all_terms(
             search,
             Movie.title,
             Movie.extended_title,
@@ -611,7 +662,23 @@ def _movie_source_page(
             MovieExtra.movie_extra_type,
         ))
     )
-    candidates = union_all(movie_query, extra_query).subquery()
+    video_relevance = search_relevance_score(search, Video.title, Video.slug, Video.author_name)
+    if video_relevance is None:
+        video_relevance = literal(0)
+    # A single video is a group of its own, after any movie of the same title.
+    video_query = (
+        select(
+            literal("video").label("kind"),
+            Video.id.label("item_id"),
+            Video.id.label("movie_id"),
+            video_relevance.label("relevance"),
+            func.lower(Video.title).label("group_sort"),
+            literal(2).label("kind_sort"),
+            func.lower(Video.title).label("item_sort"),
+        )
+        .where(_on_sites(Video.site_key, site_keys), *search_all_terms(search, Video.title, Video.slug, Video.author_name))
+    )
+    candidates = union_all(movie_query, extra_query, video_query).subquery()
 
     natural_fields = [
         (candidates.c.relevance, True),
@@ -635,7 +702,8 @@ def _movie_source_page(
         try:
             values = decode_cursor(cursor)
             if (
-                values.get("kind") != "template-movie"
+                values.get("kind") != "template-video"
+                or values.get("sites") != sites
                 or values.get("search") != search_text
                 or values.get("direction") not in {"next", "previous"}
             ):
@@ -698,7 +766,8 @@ def _movie_source_page(
     next_cursor = None
     if has_previous and raw_rows:
         previous_cursor = encode_cursor({
-            "kind": "template-movie",
+            "kind": "template-video",
+            "sites": sites,
             "search": search_text,
             "direction": "previous",
             "revision": revision,
@@ -706,14 +775,19 @@ def _movie_source_page(
         })
     if has_next and raw_rows:
         next_cursor = encode_cursor({
-            "kind": "template-movie",
+            "kind": "template-video",
+            "sites": sites,
             "search": search_text,
             "direction": "next",
             "revision": revision,
             "key": row_key(raw_rows[-1]),
         })
 
-    movie_ids = {row.movie_id for row in raw_rows}
+    movie_ids = {row.movie_id for row in raw_rows if row.kind != "video"}
+    video_ids = {row.item_id for row in raw_rows if row.kind == "video"}
+    videos = {
+        video.id: video for video in session.scalars(select(Video).where(Video.id.in_(video_ids))).all()
+    } if video_ids else {}
     extra_ids = {row.item_id for row in raw_rows if row.kind == "movie-extra"}
     movies = {
         movie.id: movie
@@ -732,6 +806,14 @@ def _movie_source_page(
 
     sources: list[LocalMediaProfileTemplateSource] = []
     for row in raw_rows:
+        if row.kind == "video":
+            if (video := videos.get(row.item_id)) is not None:
+                sources.append(LocalMediaProfileTemplateSource(
+                    id=f"video:{video.id}",
+                    label=video.title,
+                    values=video_output_template_values(video),
+                ))
+            continue
         movie = movies.get(row.movie_id)
         if movie is None:
             continue
@@ -755,97 +837,10 @@ def _movie_source_page(
     return sources, next_cursor, previous_cursor, revision
 
 
-def _video_source_page(
-    session: Session,
-    *,
-    search: str | None,
-    cursor: str | None,
-    limit: int,
-    site_keys: list[str] | None = None,
-) -> tuple[list[LocalMediaProfileTemplateSource], str | None, str | None, str]:
-    search_text = (search or "").strip()
-    sites = sorted(site_keys) if site_keys is not None else None
-    changed, count, newest = session.execute(
-        select(_modified_timestamp(Video), func.count(Video.id), func.max(Video.id))
-        .select_from(Video)
-        .where(_on_sites(Video.site_key, site_keys))
-    ).one()
-    revision = f"{changed.isoformat() if changed is not None else ''}|{count}|{newest or 0}"
-    relevance = search_relevance_score(search, Video.title, Video.slug, Video.author_name)
-    natural_fields = [(func.lower(Video.title), False), (Video.id, False)]
-    if search_text and relevance is not None:
-        natural_fields.insert(0, (relevance, True))
-
-    direction = "next"
-    cursor_values: list[object] | None = None
-    cursor_applied = False
-    if cursor:
-        try:
-            values = decode_cursor(cursor)
-            if (
-                values.get("kind") != "template-video"
-                or values.get("sites") != sites
-                or values.get("search") != search_text
-                or values.get("direction") not in {"next", "previous"}
-            ):
-                raise InvalidCursorError("Cursor does not match this template source collection")
-            if values.get("revision") == revision:
-                cursor_values = cursor_key_values(values, length=len(natural_fields))
-                direction = values["direction"]
-                cursor_applied = True
-        except InvalidCursorError as exc:
-            raise ValueError(str(exc)) from exc
-
-    query_fields = natural_fields
-    if direction == "previous":
-        query_fields = [(expr, not descending) for expr, descending in natural_fields]
-
-    stmt = select(Video, *(expr for expr, _ in natural_fields)).where(
-        _on_sites(Video.site_key, site_keys),
-        *search_all_terms(search, Video.title, Video.slug, Video.author_name),
-    )
-    if cursor_values is not None:
-        stmt = stmt.where(keyset_after([
-            KeysetField(expr, value, descending=descending)
-            for (expr, descending), value in zip(query_fields, cursor_values, strict=True)
-        ]))
-    stmt = stmt.order_by(*[expr.desc() if descending else expr.asc() for expr, descending in query_fields])
-
-    rows = session.execute(stmt.limit(limit + 1)).all()
-    has_extra = len(rows) > limit
-    rows = rows[:limit]
-    has_previous = has_extra if direction == "previous" else cursor_applied
-    has_next = True if direction == "previous" and cursor_applied else has_extra
-    if direction == "previous":
-        rows.reverse()
-
-    def page_cursor(row, page_direction: str) -> str:
-        return encode_cursor({
-            "kind": "template-video",
-            "sites": sites,
-            "search": search_text,
-            "direction": page_direction,
-            "revision": revision,
-            "key": list(row[1:]),
-        })
-
-    previous_cursor = page_cursor(rows[0], "previous") if has_previous and rows else None
-    next_cursor = page_cursor(rows[-1], "next") if has_next and rows else None
-    sources = [
-        LocalMediaProfileTemplateSource(
-            id=f"video:{row[0].id}",
-            label=row[0].title,
-            values=video_output_template_values(row[0]),
-        )
-        for row in rows
-    ]
-    return sources, next_cursor, previous_cursor, revision
-
-
 def get_output_template_source_page(
     session: Session,
     profile_type: LocalMediaProfileType,
-    collection_scope: CollectionLocalMediaProfileScope = CollectionLocalMediaProfileScope.BOTH,
+    collection_scope: CollectionLocalMediaProfileScope = CollectionLocalMediaProfileScope.PODCAST_AND_SERIES,
     *,
     search: str | None = None,
     cursor: str | None = None,
@@ -857,7 +852,7 @@ def get_output_template_source_page(
 
     With `site_keys`, only media on those Sites, as a profile's Sites filter offers it.
     """
-    if profile_type == LocalMediaProfileType.COLLECTION:
+    if LocalMediaProfileType(profile_type).for_collections:
         anchor_offset = None
         if cursor is None and anchor_source_id and not (search or "").strip():
             anchor_offset = _collection_source_anchor_offset(
@@ -876,37 +871,30 @@ def get_output_template_source_page(
             anchor_offset=anchor_offset,
             site_keys=site_keys,
         )
-        fallback_values = _EXAMPLE_COLLECTION_VALUES
-        fallback_label = "Example collection episode"
-    elif profile_type == LocalMediaProfileType.MOVIE:
-        sources, next_cursor, previous_cursor, revision = _movie_source_page(
-            session,
-            search=search,
-            cursor=cursor,
-            limit=limit,
-        )
-        fallback_values = _EXAMPLE_MOVIE_VALUES
-        fallback_label = "Example movie"
+        fallbacks = [(f"example:{profile_type.value}", "Example collection episode", _EXAMPLE_COLLECTION_VALUES)]
     elif profile_type == LocalMediaProfileType.VIDEO:
-        sources, next_cursor, previous_cursor, revision = _video_source_page(
+        sources, next_cursor, previous_cursor, revision = _video_profile_source_page(
             session,
             search=search,
             cursor=cursor,
             limit=limit,
             site_keys=site_keys,
         )
-        fallback_values = _EXAMPLE_VIDEO_VALUES
-        fallback_label = "Example video"
+        fallbacks = [
+            (f"example:{profile_type.value}", "Example video", _EXAMPLE_VIDEO_VALUES),
+            (EXAMPLE_MOVIE_SOURCE_ID, "Example movie", _EXAMPLE_MOVIE_VALUES),
+        ]
+        # A profile only for Sites that have movies, such as The Daily Wire, shows a movie first.
+        if site_keys and set(site_keys) <= set(movie_site_keys(session)):
+            fallbacks.reverse()
     else:
-        raise ValueError("Template examples are only available for Collection, Movie and Video profiles")
+        raise ValueError("Template examples are only available for Collection and Video profiles")
 
     if not sources and cursor is None and not (search or "").strip():
-        sources = [LocalMediaProfileTemplateSource(
-            id=f"example:{profile_type.value}",
-            label=fallback_label,
-            values=dict(fallback_values),
-            fallback=True,
-        )]
+        sources = [
+            LocalMediaProfileTemplateSource(id=source_id, label=label, values=dict(values), fallback=True)
+            for source_id, label, values in fallbacks
+        ]
 
     return LocalMediaProfileTemplateSourcePage(
         items=sources,
@@ -1089,20 +1077,11 @@ def _output_template_preview(
     index_keys = output_template_custom_index_keys(body.output_template)
     definition_keys: frozenset[str] = frozenset()
     provisional_keys: frozenset[str] = frozenset()
-    if body.type == LocalMediaProfileType.COLLECTION:
+    if LocalMediaProfileType(body.type).for_collections:
         output_path, definition_keys, provisional_keys = _render_collection_preview(
             session,
             body,
             index_keys=index_keys,
-        )
-    elif body.type == LocalMediaProfileType.MOVIE:
-        if index_keys:
-            raise ValueError("custom_index is only available to Collection Local Media Profiles")
-        output_path = render_output_template(
-            body.output_template,
-            body.values,
-            allowed_fields=MOVIE_OUTPUT_TEMPLATE_FIELDS,
-            allowed_metadata_scopes=MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
         )
     elif body.type == LocalMediaProfileType.VIDEO:
         if index_keys:
@@ -1111,9 +1090,10 @@ def _output_template_preview(
             body.output_template,
             body.values,
             allowed_fields=VIDEO_OUTPUT_TEMPLATE_FIELDS,
+            allowed_metadata_scopes=VIDEO_OUTPUT_TEMPLATE_METADATA_SCOPES,
         )
     else:
-        raise ValueError("Template previews are only available for Collection, Movie and Video profiles")
+        raise ValueError("Template previews are only available for Collection and Video profiles")
 
     filename_mode = effective_filename_mode(body)
     if body.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY:

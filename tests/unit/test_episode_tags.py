@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from backend.utils.episode import EpisodeIdentifierInfo, episode_identifier_type_predicate
-from sources import MAIN_TAG, RssEpisodeType, VideoDetails, get_source, registry
+from sources import MAIN_TAG, Names, RssEpisodeType, VideoDetails, get_source, registry
 from sources import ytdlp_runner as runner
 from sources.ytdlp import YtDlpSource
 
@@ -55,22 +55,42 @@ def session():
     engine.dispose()
 
 
-def test_each_source_declares_its_tags_with_the_main_one_first():
+def test_each_site_declares_its_tags_with_the_main_one_first():
     daily_wire = get_source("dailywire")
-    assert [tag.key for tag in daily_wire.episode_tags] == ["ep", "ep-extra", "trailer", "aux"]
-    assert daily_wire.episode_tag("aux").rss_episode_type == RssEpisodeType.BONUS
+    tags = daily_wire.episode_tags_for(None)
+    assert [tag.key for tag in tags] == ["ep", "ep-extra", "trailer", "aux"]
+    assert daily_wire.sites[0].episode_tag("aux").rss_episode_type == RssEpisodeType.BONUS
     # What new Daily Wire profiles tick stays what it was.
-    assert [tag.key for tag in daily_wire.episode_tags if tag.selected_by_default] == ["ep", "aux"]
+    assert [tag.key for tag in tags if tag.selected_by_default] == ["ep", "aux"]
 
     ytdlp = get_source("ytdlp")
     youtube = ytdlp.episode_tags_for("https://www.youtube.com/@a/videos")
     assert [(tag.key, tag.label, tag.selected_by_default) for tag in youtube] == [
         ("ep", "Video", True), ("short", "Short", False), ("livestream", "Livestream", True),
     ]
-    assert [tag.key for tag in ytdlp.episode_tags_for("https://vimeo.com/channels/a")] == ["ep"]
-    assert [tag.key for tag in get_source("npo").episode_tags] == ["ep"]
+    assert [tag.label for tag in ytdlp.episode_tags_for("https://vimeo.com/channels/a")] == ["Video"]
+    assert [tag.label for tag in get_source("npo").episode_tags_for(None)] == ["Episode"]
     for source in (daily_wire, ytdlp, get_source("npo")):
-        assert source.episode_tags[0].main and source.episode_tags[0].key == MAIN_TAG
+        tags = source.episode_tags_for(None)
+        assert tags[0].main and tags[0].key == MAIN_TAG
+
+
+def test_a_site_with_sound_only_has_tracks_and_downloads_sound_unless_its_contract_says_otherwise():
+    from sources import DownloadOptions, EpisodeTag, Site, UpgradeImprovement
+    from sources.ytdlp.sites import site_of
+
+    for key in ("soundcloud", "bandcamp"):
+        site = site_of(key)
+        assert [(tag.key, tag.label) for tag in site.episode_tags] == [(MAIN_TAG, "Track")]
+        assert site.downloads.video_heights == () and site.downloads.hls_heights == () and not site.downloads.subtitles
+        assert not {UpgradeImprovement.RESOLUTION, UpgradeImprovement.CODEC, UpgradeImprovement.SUBTITLES} & set(
+            site.upgrade_checks.improvements)
+    assert site_of("youtube").downloads.video_heights
+
+    own = (EpisodeTag(MAIN_TAG, "Episode", "An episode", Names("episode", "episodes"), main=True),)
+    downloads = DownloadOptions(video_heights=(720,))
+    site = Site(key="x", name="X", domains=("x.example",), audio_only=True, episode_tags=own, downloads=downloads)
+    assert site.episode_tags == own and site.downloads == downloads
 
 
 @pytest.mark.parametrize("info, tag", [
@@ -148,7 +168,7 @@ def test_the_episode_tags_endpoint_and_profiles_accept_source_tags():
     app = FastAPI()
     app.include_router(source_router_module.router, prefix="/api")
     client = TestClient(app)
-    tags = client.get("/api/sources/ytdlp/episode-tags", params={"url": "https://youtu.be/abc"}).json()
+    tags = client.get("/api/sources/ytdlp/episode-tags", params={"url": "https://youtu.be/dQw4w9WgXcQ"}).json()
     assert [(tag["key"], tag["rssEpisodeType"], tag["main"]) for tag in tags] == [
         ("ep", "full", True), ("short", "bonus", False), ("livestream", "full", False),
     ]
@@ -164,3 +184,19 @@ def test_the_episode_tags_endpoint_and_profiles_accept_source_tags():
         DownloadProfileAPICreate.model_validate(
             {**body, "filters": [{"action": "only", "field": "types", "episode_types": ["ep; drop"]}]}
         )
+
+def test_the_episode_tags_endpoint_names_the_main_tag_by_collection_type():
+    from backend.api.endpoints.sources import router as source_router_module
+
+    app = FastAPI()
+    app.include_router(source_router_module.router, prefix="/api")
+    client = TestClient(app)
+
+    def labels(url, collection_type=None):
+        params = {"url": url, **({"collection_type": collection_type} if collection_type else {})}
+        return [tag["label"] for tag in client.get("/api/sources/ytdlp/episode-tags", params=params).json()]
+
+    assert labels("https://x.bandcamp.com/music", "music") == ["Track"]
+    assert labels("https://www.youtube.com/@a", "music")[0] == "Music video"
+    assert labels("https://www.youtube.com/@a", "podcast")[0] == "Episode"
+    assert labels("https://www.youtube.com/@a")[0] == "Video"

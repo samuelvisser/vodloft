@@ -15,7 +15,7 @@ def test_pending_movie_gets_one_lookup_after_tmdb_is_configured(tmp_path, monkey
     from backend.services import movies as movie_service
     from backend.api.models.media_download import MediaDownloadAPICreate
     from backend.db.core import Base
-    from backend.db.models import Movie, MovieLocalMediaProfile
+    from backend.db.models import Movie, VideoLocalMediaProfile
     from backend.integrations.tmdb import MovieReleaseLookupResult
     from config import get_settings
     from sources.dailywire.api.records import DwMovieExtraRecord, DwMovieRecord
@@ -43,7 +43,7 @@ def test_pending_movie_gets_one_lookup_after_tmdb_is_configured(tmp_path, monkey
     monkeypatch.setattr(movie_service, "lookup_movie_release_metadata", fake_lookup)
 
     profiles = [
-        MovieLocalMediaProfile(
+        VideoLocalMediaProfile(
             slug=f"movies-{index}",
             name=f"Movies {index}",
             output_template=f"/downloads/profile-{index}/{{{{ title }}}}.ext",

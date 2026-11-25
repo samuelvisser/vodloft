@@ -54,8 +54,6 @@ const TrackNewEpisodeScheduleSchema = z.object({
     quickCheckCron: z.string(),
     fullRescanCronEnabled: z.boolean(),
     fullRescanCron: z.string(),
-    monitorNoUsableMediaEpisodeCronEnabled: z.boolean(),
-    monitorNoUsableMediaEpisodeCron: z.string(),
     metadataRefreshIntervals: z.string(),
     upcomingAndLive: z.boolean(),
     pendingUpcomingMinutes: z.number(),
@@ -66,7 +64,6 @@ const TrackNewEpisodeScheduleSchema = z.object({
 const EpisodeStatusTimingSchema = z.object({
     publishedFinalAfterMinutes: z.number(),
     dwProcessingMaxMinutes: z.number(),
-    noUsableMediaDeleteAfterMinutes: z.number(),
 })
 
 export const FilenameRestrictionModeSchema = z.enum(['unrestricted', 'windows', 'restricted'])
@@ -90,6 +87,7 @@ const DownloadSettingsSchema = z.object({
     maxConcurrentDownloads: z.number(),
     maxDownloadAttempts: z.number(),
     episodeDownloadDelayMinutes: z.number(),
+    dailyDownloadLimit: z.number(),
     ensureSafeDelay: z.boolean(),
     downloadTimeoutSeconds: z.number(),
     downloadRoot: z.string(),
@@ -130,11 +128,18 @@ const DownloadStorageInspectionSchema = z.object({
     sameFilesystem: z.boolean().nullable(),
 })
 
+const LogFileSettingsSchema = z.object({
+    enabled: z.boolean(),
+    maxMegabytes: z.number(),
+    keptFiles: z.number(),
+})
+
 const YouTubeApiSettingsSchema = z.object({
     dailyQuota: z.number(),
     checksQuota: z.number(),
     searchQuota: z.number(),
-    minCheckIntervalMinutes: z.number(),
+    usageLogEnabled: z.boolean(),
+    usageLogMaxLines: z.number(),
 })
 
 const FileWatcherSettingsSchema = z.object({
@@ -194,6 +199,7 @@ const SiteSettingValuesSchema = z.object({
     lookupMinutes: orDefault(LookupMinutesSchema),
     downloadWithCountdown: z.boolean().nullish(),
     downloadDelayMinutes: orDefault(z.number()),
+    dailyDownloadLimit: orDefault(z.number()),
     upgradeCheck: orDefault(z.boolean()),
     upgradeAfterDays: orDefault(z.number()),
     upgradeRepeat: orDefault(z.enum(UpgradeRepeatValues)),
@@ -202,6 +208,7 @@ const SiteSettingValuesSchema = z.object({
     autoSubtitles: orDefault(z.enum(AutoSubtitlesValues)),
     sponsorblock: z.boolean().nullish(),
     sponsorblockSegments: z.record(z.string(), z.enum(['keep', 'chapter', 'cut'])).nullish(),
+    chapters: z.boolean().nullish(),
 })
 export type SiteSettingValues = z.infer<typeof SiteSettingValuesSchema>
 export type SiteSettingKey = keyof SiteSettingValues
@@ -218,6 +225,7 @@ const DownloadProfileDefaultsSchema = z.object({
 
 export const SettingsValuesSchema = z.object({
     logLevel: z.enum(['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']),
+    logFile: LogFileSettingsSchema,
     timezone: z.string(),
     crypto: CryptoFileSettingsSchema,
     loginSession: SessionSettingsSchema,
@@ -276,6 +284,7 @@ const wholeNumber = (min: number, max: number, unit: string) => requiredNumber()
 const upgradeAfterDays = wholeNumber(1, 365, 'days')
 const upgradeLengthMinutes = wholeNumber(1, 600, 'minutes')
 const downloadDelayMinutes = wholeNumber(0, 7 * 24 * 60, 'minutes')
+const dailyDownloadLimit = wholeNumber(0, 10000, 'downloads')
 
 const SiteSettingValuesFormSchema = SiteSettingValuesSchema.extend({
     metadataRefresh: z.string().nullish().refine(
@@ -289,6 +298,7 @@ const SiteSettingValuesFormSchema = SiteSettingValuesSchema.extend({
         live: pendingMinutes(60),
     })),
     downloadDelayMinutes: orDefault(downloadDelayMinutes),
+    dailyDownloadLimit: orDefault(dailyDownloadLimit),
     upgradeAfterDays: orDefault(upgradeAfterDays),
     upgradeLengthMinutes: orDefault(upgradeLengthMinutes),
 })
@@ -316,7 +326,6 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
         findEpisodesCron: cronExpression,
         quickCheckCron: cronExpression,
         fullRescanCron: cronExpression,
-        monitorNoUsableMediaEpisodeCron: cronExpression,
         metadataRefreshIntervals,
         pendingUpcomingMinutes: pendingMinutes(24 * 60),
         pendingStartingMinutes: pendingMinutes(60),
@@ -327,13 +336,13 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
     episodeStatusTiming: EpisodeStatusTimingSchema.extend({
         publishedFinalAfterMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
         dwProcessingMaxMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
-        noUsableMediaDeleteAfterMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
     }),
     downloadSettings: DownloadSettingsSchema.extend({
         verifyDownloadsCron: cronExpression,
         maxConcurrentDownloads: requiredNumber().int().min(1, 'Must be at least 1.'),
         maxDownloadAttempts: requiredNumber().int().min(1, 'Must be at least 1.'),
         episodeDownloadDelayMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
+        dailyDownloadLimit: dailyDownloadLimit,
         downloadTimeoutSeconds: requiredNumber().int().min(1, 'Must be at least 1 second.'),
         downloadRoot: z.string().trim().min(1, 'A download root is required.'),
         temporaryDownloadRoot: z.string().trim().min(1, 'A temporary download folder is required.'),
@@ -346,11 +355,15 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
         pauseStart: z.string().regex(TIME_OF_DAY, 'Use a time like 01:00.'),
         pauseEnd: z.string().regex(TIME_OF_DAY, 'Use a time like 07:00.'),
     }),
+    logFile: LogFileSettingsSchema.extend({
+        maxMegabytes: requiredNumber().int().min(1, 'Must be at least 1 MB.'),
+        keptFiles: requiredNumber().int().min(1, 'Must be at least 1.'),
+    }),
     youtubeApi: YouTubeApiSettingsSchema.extend({
         dailyQuota: requiredNumber().int().min(1, 'Must be at least 1.'),
         checksQuota: requiredNumber().int().min(0, 'Must be 0 or greater.'),
         searchQuota: requiredNumber().int().min(0, 'Must be 0 or greater.'),
-        minCheckIntervalMinutes: requiredNumber().int().min(10, 'Must be at least 10 minutes.'),
+        usageLogMaxLines: requiredNumber().int().min(100, 'Must be at least 100 lines.'),
     }).refine(
         (value) => value.checksQuota + value.searchQuota <= value.dailyQuota,
         {message: 'Checks and search together cannot be more than the daily quota.', path: ['searchQuota']},
@@ -380,13 +393,15 @@ export const SettingsServerErrors = createServerErrorMapper({
     'values.newEpisodeSchedule.findEpisodesCron': CRON_SERVER_ERRORS,
     'values.newEpisodeSchedule.quickCheckCron': CRON_SERVER_ERRORS,
     'values.newEpisodeSchedule.fullRescanCron': CRON_SERVER_ERRORS,
-    'values.newEpisodeSchedule.monitorNoUsableMediaEpisodeCron': CRON_SERVER_ERRORS,
     'values.downloadSettings.verifyDownloadsCron': CRON_SERVER_ERRORS,
     'values.fileWatcher.scanCron': CRON_SERVER_ERRORS,
 })
 
 export const SETTINGS_FIELD_PATHS = [
     'logLevel',
+    'logFile.enabled',
+    'logFile.maxMegabytes',
+    'logFile.keptFiles',
     'timezone',
     'crypto.secretKeyFile',
     'crypto.defaultSecretFile',
@@ -416,8 +431,6 @@ export const SETTINGS_FIELD_PATHS = [
     'newEpisodeSchedule.quickCheckCron',
     'newEpisodeSchedule.fullRescanCronEnabled',
     'newEpisodeSchedule.fullRescanCron',
-    'newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled',
-    'newEpisodeSchedule.monitorNoUsableMediaEpisodeCron',
     'newEpisodeSchedule.metadataRefreshIntervals',
     'newEpisodeSchedule.upcomingAndLive',
     'newEpisodeSchedule.pendingUpcomingMinutes',
@@ -432,12 +445,12 @@ export const SETTINGS_FIELD_PATHS = [
     'downloadProfileDefaults.autoSubtitles',
     'episodeStatusTiming.publishedFinalAfterMinutes',
     'episodeStatusTiming.dwProcessingMaxMinutes',
-    'episodeStatusTiming.noUsableMediaDeleteAfterMinutes',
     'downloadSettings.verifyDownloadsCronEnabled',
     'downloadSettings.verifyDownloadsCron',
     'downloadSettings.maxConcurrentDownloads',
     'downloadSettings.maxDownloadAttempts',
     'downloadSettings.episodeDownloadDelayMinutes',
+    'downloadSettings.dailyDownloadLimit',
     'downloadSettings.ensureSafeDelay',
     'downloadSettings.downloadTimeoutSeconds',
     'downloadSettings.downloadRoot',
@@ -463,7 +476,8 @@ export const SETTINGS_FIELD_PATHS = [
     'youtubeApi.dailyQuota',
     'youtubeApi.checksQuota',
     'youtubeApi.searchQuota',
-    'youtubeApi.minCheckIntervalMinutes',
+    'youtubeApi.usageLogEnabled',
+    'youtubeApi.usageLogMaxLines',
     'fileWatcher.enabled',
     'fileWatcher.scanCronEnabled',
     'fileWatcher.scanCron',

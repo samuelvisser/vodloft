@@ -8,7 +8,7 @@ from types import MappingProxyType
 from urllib.parse import urlsplit
 
 from ..contract import (
-    MIN_NEWEST_EPISODES, Access, Feature, LinkKind, Playback, PlaybackKind, ResolvedLink, SearchResults, SeasonRef, CollectionDetails, Site, Source,
+    MAIN_TAG, MIN_NEWEST_EPISODES, Access, EpisodeTag, Names, Feature, LinkKind, Playback, PlaybackKind, ResolvedLink, SearchResults, SeasonRef, CollectionDetails, Site, Source,
     CookiesStatus, DownloadOptions, SiteSetting, SiteSettings, SourceProblem, UpgradeChecks, UpgradeImprovement, UpgradeOffer, VideoDetails,
 )
 from .. import ytdlp_runner as runner
@@ -128,12 +128,15 @@ class NpoSource(Source):
     name = "NPO Start"
     domains = ("npo.nl",)
     sites = (Site(
-        account.SITE_KEY, "NPO Start", domains, accesses=(NPO_PLUS,),
+        # A custom icon in VODLoft's Font Awesome Kit: NPO's diamond logo.
+        account.SITE_KEY, "NPO Start", domains, icon="fak:npo-start", initials="NP", accesses=(NPO_PLUS,), searchable=True,
         # Its programme pages only tell the length, which is all the upgrade check can compare.
         upgrade_checks=UpgradeChecks((UpgradeImprovement.LENGTH,)),
         # Its streams download with yt-dlp, which chooses among their versions. They have no subtitles.
-        downloads=DownloadOptions(quality_choices=True),
+        downloads=DownloadOptions(quality_choices=True, info_file=True),
         settings=SiteSettings(hides=frozenset({SiteSetting.AUTO_SUBTITLES})),
+        # Its programmes are broadcast episodes.
+        episode_tags=(EpisodeTag(MAIN_TAG, "Episode", "An episode of the collection", Names("episode", "episodes"), main=True),),
         cookies_help=(
             "Sign in with your NPO account to download programmes that need NPO Plus. Sign in on npo.nl in a "
             "private browser window, export a cookies.txt file for npo.nl, choose it here, and then close that "
@@ -141,8 +144,10 @@ class NpoSource(Source):
             "Programmes protected by DRM still can't be downloaded."
         ),
     ),)
-    features = frozenset({Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.PAGE_STREAMS, Feature.VIDEOS, Feature.SEARCH, Feature.COOKIES})
-    kind_names = MappingProxyType({LinkKind.COLLECTION: "Series"})
+    features = frozenset({
+        Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.PAGE_STREAMS, Feature.VIDEOS, Feature.SEARCH, Feature.COOKIES, Feature.OWN_SEASONS,
+    })
+    kind_names = MappingProxyType({LinkKind.COLLECTION: Names("series", "series")})
 
     def collection_ref(self, url: str) -> str | None:
         parsed = parse_link(url)
@@ -234,7 +239,7 @@ class NpoSource(Source):
             access=video.access,
         )
 
-    def search(self, query: str) -> SearchResults:
+    def search(self, site: Site, query: str) -> SearchResults:
         query = query.strip()
         if not query:
             return SearchResults([])
@@ -303,7 +308,9 @@ class NpoSource(Source):
             return {program["slug"]: bool(states[0]) for program in programs}
         return {program["slug"]: bool(self._protected(program)) for program in programs}
 
-    def list_episodes(self, url: str, *, known: frozenset[str]) -> Iterator[VideoDetails]:
+    def list_episodes(
+        self, url: str, *, known: frozenset[str], feeds: frozenset[str] | None = None,
+    ) -> Iterator[VideoDetails]:
         parsed = parse_link(url)
         if parsed is None or parsed[0] is not LinkKind.COLLECTION:
             raise NpoError("This is not a link to a series on NPO Start")

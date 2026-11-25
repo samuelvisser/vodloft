@@ -41,6 +41,7 @@ class DownloadProfileFilter(Base):
     days: Mapped[Optional[int]] = mapped_column(comment="A published or downloaded line: the last N days")
     count: Mapped[Optional[int]] = mapped_column(comment="A published line: the latest N episodes")
     starting_from: Mapped[Optional[date]] = mapped_column(Date, comment="A published line: published since this day")
+    until: Mapped[Optional[date]] = mapped_column(Date, comment="A published line: published on or before this day")
 
     download_profile: Mapped["DownloadProfile"] = relationship(back_populates="filters")
 

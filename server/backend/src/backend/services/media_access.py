@@ -13,7 +13,7 @@ from sqlalchemy import and_, false, not_, or_
 
 from backend.db.models import Episode, Video
 from backend.db.models.media_item import MediaItemBase
-from backend.services.sites import collection_site, video_site
+from backend.services.sites import collection_site, episode_site_key, video_site
 from sources import Access, UnknownSourceError, all_sources, get_source, site_for, site_of
 
 CHECK_GAPS = (
@@ -46,7 +46,7 @@ def link_access(source_key: str, url: str, key: str | None) -> Access | None:
 def media_site_key(media: MediaItemBase) -> str | None:
     """The key of the Site the media is on, told from its link while VODLoft has not stored it yet."""
     if isinstance(media, Episode):
-        return media.collection.site_key or collection_site(media.collection).key
+        return episode_site_key(media) or collection_site(media.collection).key
     if isinstance(media, Video):
         return media.site_key or video_site(media).key
     return None

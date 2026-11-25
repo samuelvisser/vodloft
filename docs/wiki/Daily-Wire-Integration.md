@@ -34,7 +34,7 @@ The Daily Wire can also change titles, thumbnails, episode numbers, or other met
 
 You can use **Sync now** on a collection whenever you want to check that collection immediately rather than wait for the next scheduled discovery pass.
 
-To re-check every episode in a collection that VODLoft knows about with the version The Daily Wire currently publishes, use **Refresh all metadata** on a collection.
+To re-check every episode in a collection that VODLoft knows about with the version The Daily Wire currently publishes, use **Refresh info from The Daily Wire** on a collection. This only updates VODLoft itself: to bring downloaded files up to date afterwards, use **Write metadata into files**.
 This is a heavy task with many API requests, so VODLoft automatically paces it to prevent hitting The Daily Wire's API rate limits.
 
 See [[Automation-and-Background-Tasks]] for the default schedules.

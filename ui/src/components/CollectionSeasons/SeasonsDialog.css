@@ -1,0 +1,199 @@
+.modal.seasons-dialog {
+    /* Roomy: its lists and rows have a lot to say, and the plain dialog width cramps them. */
+    max-width: none;
+    width: min(960px, calc(100vw - 32px));
+    max-height: calc(100dvh - 48px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.seasons-dialog > form {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-direction: column;
+}
+
+.seasons-dialog-content {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+    min-height: 0;
+    margin-top: 8px;
+    padding: 0 4px 18px 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.seasons-dialog .modal-actions {
+    flex: 0 0 auto;
+    padding-top: 14px;
+    border-top: 1px solid rgba(148, 163, 184, 0.28);
+}
+
+.seasons-dialog-section { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; }
+.seasons-dialog-season-copy .input { width: 100%; min-width: 0; }
+.seasons-dialog-section h3 { margin: 0 0 2px; font-size: 1rem; }
+.seasons-dialog-muted { margin: 0; color: var(--muted); font-size: .875rem; }
+
+.seasons-dialog-switch-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.seasons-dialog-list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.seasons-dialog-check { display: flex; align-items: center; gap: .6rem; cursor: pointer; font-weight: normal; }
+
+.seasons-dialog-links,
+.seasons-dialog-seasons {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid rgba(100, 116, 139, 0.24);
+    border-radius: 12px;
+}
+
+.seasons-dialog-links { max-height: min(480px, 45dvh); overflow-y: auto; }
+.seasons-dialog-links li { padding: .5rem .75rem; }
+.seasons-dialog-list-tools { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: flex-end; }
+.seasons-dialog-links li.is-selected { background: rgba(59, 130, 246, .08); }
+.seasons-dialog-link-placement { margin: .4rem 0 0 1.6rem; max-width: 18rem; }
+.seasons-dialog-links li + li,
+.seasons-dialog-season + .seasons-dialog-season { border-top: 1px solid rgba(100, 116, 139, 0.24); }
+
+.seasons-dialog-link-copy,
+.seasons-dialog-season-copy { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.seasons-dialog-link-copy > span,
+.seasons-dialog-season-copy > span:not(.error):not(.seasons-dialog-season-lists) { opacity: .75; font-size: .875rem; }
+
+.seasons-dialog-badge {
+    display: inline-block;
+    margin-right: .4rem;
+    padding: 0 .4rem;
+    border-radius: 999px;
+    background: rgba(14, 165, 233, 0.16);
+    color: #0284c7;
+    font-size: .75rem;
+    font-weight: 600;
+}
+
+.seasons-dialog-season { display: flex; align-items: center; gap: .6rem; padding: .5rem .5rem .5rem .75rem; cursor: grab; }
+.seasons-dialog-season.is-dragging { background: rgba(59, 130, 246, 0.1); }
+.seasons-dialog-grip { opacity: .6; }
+.seasons-dialog-number {
+    flex: 0 0 auto;
+    min-width: 1.75rem;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    opacity: .8;
+}
+.seasons-dialog-arrows { display: flex; gap: .25rem; }
+.seasons-dialog-arrows button {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    padding: .25rem .4rem;
+    cursor: pointer;
+}
+.seasons-dialog-arrows button:disabled { opacity: .3; cursor: default; }
+
+@media (max-width: 560px) {
+    .seasons-dialog-switch-row { flex-direction: column; }
+    .seasons-dialog-grip { display: none; }
+}
+
+.seasons-dialog-links li.seasons-dialog-added { display: flex; align-items: center; gap: .6rem; }
+.seasons-dialog-added .seasons-dialog-link-copy > span { overflow-wrap: anywhere; }
+.seasons-dialog-added.is-removed b { text-decoration: line-through; opacity: .6; }
+.seasons-dialog-added .seasons-dialog-default { flex: none; font-size: .85em; opacity: .75; }
+.seasons-dialog-add-link { display: flex; gap: .5rem; align-items: center; }
+.seasons-dialog-add-link .input { flex: 1 1 auto; min-width: 0; }
+
+.seasons-dialog-season-lists {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-top: 0.35rem;
+}
+
+.seasons-dialog-list-names {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.seasons-dialog-list-name {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+
+.seasons-dialog-join {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+}
+
+.seasons-dialog-join > div {
+    flex: 1;
+    min-width: 0;
+    max-width: 22rem;
+}
+
+.seasons-dialog-joins {
+    font-size: 0.85rem;
+    font-style: italic;
+    color: var(--muted);
+}
+
+.seasons-dialog-list-name .btn { white-space: nowrap; }
+
+/* The seasons saving deletes, under the others, where they can't be moved. */
+.seasons-dialog-leaving { margin-top: .75rem; }
+.seasons-dialog-leaving h4 { margin: 0 0 .35rem; font-size: .875rem; font-weight: 600; opacity: .8; }
+.seasons-dialog-leaving ul { list-style: none; margin: 0; padding: 0; border: 1px dashed rgba(100, 116, 139, 0.4); border-radius: 10px; }
+.seasons-dialog-leaving li { display: flex; align-items: center; gap: .6rem; padding: .45rem .75rem; }
+.seasons-dialog-leaving li + li { border-top: 1px dashed rgba(100, 116, 139, 0.3); }
+.seasons-dialog-leaving .seasons-dialog-link-copy { flex: 1 1 auto; min-width: 0; }
+.seasons-dialog-leaving b { text-decoration: line-through; opacity: .7; overflow-wrap: anywhere; }
+.seasons-dialog-warning {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    margin-bottom: .75rem;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid #fcd34d; /* amber-300 */
+    background: #fffbeb; /* amber-50 */
+    color: #78350f; /* amber-900 */
+}
+.seasons-dialog-warning svg { color: #d97706; flex: none; }
+.seasons-dialog-warning p { margin: 0 0 .5rem; }
+.seasons-dialog-warning p:last-child { margin-bottom: 0; }
+@media (prefers-color-scheme: dark) {
+    .seasons-dialog-warning {
+        border-color: rgba(245, 158, 11, 0.4);
+        background: rgba(245, 158, 11, 0.12);
+        color: #fde68a; /* amber-200 */
+    }
+    .seasons-dialog-warning svg { color: #fbbf24; }
+}
+/* A season saving the dialog adds, shown where it will be. */
+.seasons-dialog-season.is-new { cursor: default; box-shadow: inset 3px 0 0 #22c55e; }
+.seasons-dialog-season.is-new .seasons-dialog-grip { visibility: hidden; }
+.seasons-dialog-season.is-new .input { font-style: italic; }

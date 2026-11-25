@@ -1,6 +1,6 @@
 import {useState} from 'react'
 import {useQueryClient} from '@tanstack/react-query'
-import {toast} from 'react-hot-toast'
+import {toast} from '../../lib/toast'
 import type {DataTableSelection} from '../DataTable/DataTable'
 import BulkChangeDialog, {type BulkFieldSpec} from './BulkChangeDialog'
 import BulkDeleteDialog from './BulkDeleteDialog'

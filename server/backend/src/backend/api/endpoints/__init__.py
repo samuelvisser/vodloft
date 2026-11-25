@@ -5,7 +5,6 @@ from .episodes import episode_router
 from .media_downloads import media_download_router
 from .local_media_profiles import local_media_profile_router
 from .collection_local_media_profiles import collection_local_media_profile_router
-from .movie_local_media_profiles import movie_local_media_profile_router
 from .movies import movie_router
 from .videos import video_router
 from .library import library_router
@@ -17,6 +16,7 @@ from .puller import puller_router
 from .quick_downloads import quick_download_router
 from .settings import setting_router
 from .collections import collection_router
+from .creators import creator_router
 from .config import config_router
 from .tasks import task_router
 from .rss_stream_profiles import rss_stream_profile_router

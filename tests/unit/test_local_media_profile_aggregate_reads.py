@@ -19,9 +19,9 @@ def test_aggregate_local_media_profiles_are_validated_before_session_closes() ->
         get_local_media_profile,
         get_local_media_profiles_list,
     )
-    from backend.api.models.movie_local_media_profile import MovieLocalMediaProfileAPIRead
+    from backend.api.models.video_local_media_profile import VideoLocalMediaProfileAPIRead
     from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPIRead
-    from backend.db.models import MovieLocalMediaProfile, CollectionLocalMediaProfile
+    from backend.db.models import VideoLocalMediaProfile, CollectionLocalMediaProfile
 
     session, engine = _new_session()
     try:
@@ -33,7 +33,7 @@ def test_aggregate_local_media_profiles_are_validated_before_session_closes() ->
                 output_template="/downloads/shows/{{ collection }}/{{ episode }}.ext",
                 preferred_format="format_1080p",
             ),
-            MovieLocalMediaProfile(
+            VideoLocalMediaProfile(
                 slug="movie-profile",
                 name="Movie profile",
                 output_template="/downloads/movies/{{ movie_title }}/{{ title }}.ext",
@@ -50,7 +50,7 @@ def test_aggregate_local_media_profiles_are_validated_before_session_closes() ->
 
     assert isinstance(profiles[0], CollectionLocalMediaProfileAPIRead)
     assert profiles[0].collection_scope == "series"
-    assert isinstance(profiles[1], MovieLocalMediaProfileAPIRead)
+    assert isinstance(profiles[1], VideoLocalMediaProfileAPIRead)
     assert isinstance(collection_profile, CollectionLocalMediaProfileAPIRead)
     assert collection_profile.collection_scope == "series"
 
@@ -62,13 +62,13 @@ def test_local_media_profile_view_reports_managed_download_statistics() -> None:
         get_local_media_profile_views_page,
     )
     from backend.api.models.profile_list import LocalMediaProfileListQuery
-    from backend.db.models import Movie, MovieLocalMediaProfile, MovieMediaDownload
+    from backend.db.models import Movie, VideoLocalMediaProfile, MovieMediaDownload
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
 
     session, engine = _new_session()
     try:
-        profile = MovieLocalMediaProfile(
+        profile = VideoLocalMediaProfile(
             slug="movie-profile",
             name="Movie profile",
             output_template="/downloads/movies/{{ movie_title }}/{{ title }}.ext",
@@ -134,7 +134,7 @@ def test_local_media_profile_view_reports_managed_download_statistics() -> None:
 
 def test_local_media_profiles_storage_adds_up_every_profile() -> None:
     from backend.api.endpoints.local_media_profiles.service import get_local_media_profiles_storage
-    from backend.db.models import Movie, MovieLocalMediaProfile, MovieMediaDownload
+    from backend.db.models import Movie, VideoLocalMediaProfile, MovieMediaDownload
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
 
@@ -144,8 +144,8 @@ def test_local_media_profiles_storage_adds_up_every_profile() -> None:
             extended_title=slug, author_name="Director", mature_rating="PG", description=None, duration=60,
         )
 
-    def profile(slug: str) -> MovieLocalMediaProfile:
-        return MovieLocalMediaProfile(
+    def profile(slug: str) -> VideoLocalMediaProfile:
+        return VideoLocalMediaProfile(
             slug=slug, name=slug, output_template=f"/downloads/{slug}/{{{{ title }}}}.ext",
             preferred_format="format_1080p",
         )

@@ -2,6 +2,8 @@ from fastapi import APIRouter, Query, status
 
 from .service import *
 from ...models.episode import *
+from ...models.reconcile import MovePreviewAPIRead, ReconcileAPIIn, ReconcileAPIRead
+from ..reconcile import episode_scope, move, preview_move
 from ...models.media_download import EpisodeDownloadAPICreate
 from ...models.operations import EpisodeMetadataOperationAccepted, MediaDownloadOperationAccepted, TaskOperationAccepted
 from ..media_downloads.service import create_episode_download
@@ -15,7 +17,7 @@ from task_manager.tasks.media_download_operations import (
 )
 from backend.security.access import Area, Level
 from backend.types.download_profile_types import EpisodeTagKey
-from backend.security.deps import may_delete_files, requires
+from backend.security.deps import requires
 from backend.db.core import run_write_transaction
 
 router = APIRouter(prefix="/episodes", tags=["Episodes"])
@@ -135,18 +137,34 @@ def episode_metadata_refresh(episode_slug: str):
     return run_write_transaction(work)
 
 
-@router.post(
-    "/{episode_slug}/early-delete",
-    dependencies=[requires(Area.LIBRARY, Level.MANAGE), may_delete_files()],
-    response_model=TaskOperationAccepted,
-    status_code=status.HTTP_202_ACCEPTED,
+@router.get(
+    "/{episode_slug}/season-place", dependencies=[requires(Area.LIBRARY, Level.VIEW)],
+    response_model=EpisodeSeasonPlaceAPIRead,
 )
-def episode_early_delete(episode_slug: str):
-    """Immediately remove one episode that is currently stuck in source_processing."""
-    def work(s):
-        return request_episode_early_delete(s, episode_slug)
+def episode_season_place_get(episode_slug: str):
+    """Whether the episode belongs in another season now that its collection's playlists changed."""
+    with db_session() as s:
+        try:
+            return episode_season_place(s, episode_slug)
+        finally:
+            s.rollback()
 
-    return run_write_transaction(work)
+
+@router.post(
+    "/{episode_slug}/reconcile/preview", dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
+    response_model=MovePreviewAPIRead,
+)
+def episode_reconcile_preview(episode_slug: str):
+    """What moving the episode to the season its collection's lists put it in now does. Changes nothing."""
+    return run_write_transaction(lambda s: preview_move(s, episode_scope(episode_slug)))
+
+
+@router.post(
+    "/{episode_slug}/reconcile", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=ReconcileAPIRead,
+)
+def episode_reconcile(episode_slug: str, body: ReconcileAPIIn):
+    """Move the episode, with its files, to the season it belongs in now."""
+    return run_write_transaction(lambda s: move(s, episode_scope(episode_slug), body))
 
 
 @router.get("/{episode_slug}", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=EpisodeAPIRead)

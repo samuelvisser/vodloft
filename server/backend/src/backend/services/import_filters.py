@@ -27,6 +27,7 @@ class PlannedFilter:
     days: Optional[int] = None
     count: Optional[int] = None
     starting_from: Optional[date] = None
+    until: Optional[date] = None
 
 
 def _day(value: object) -> Optional[date]:
@@ -39,6 +40,7 @@ def _date_line(values: Mapping[str, object]) -> Optional[PlannedFilter]:
     count = int(values.get("download_episode_count") or 0)
     days = int(values.get("download_days_in_past") or 0)
     starting_from = _day(values.get("download_starting_from"))
+    until = _day(values.get("download_until"))
     only = EpisodeFilterAction.ONLY.value
     if count > 0:
         return PlannedFilter(only, EpisodeFilterField.PUBLISHED.value, count=count)
@@ -46,8 +48,8 @@ def _date_line(values: Mapping[str, object]) -> Optional[PlannedFilter]:
         downloaded = values.get("retention_from") == "downloaded"
         field = EpisodeFilterField.DOWNLOADED if downloaded else EpisodeFilterField.PUBLISHED
         return PlannedFilter(only, field.value, days=days)
-    if starting_from is not None:
-        return PlannedFilter(only, EpisodeFilterField.PUBLISHED.value, starting_from=starting_from)
+    if starting_from is not None or until is not None:
+        return PlannedFilter(only, EpisodeFilterField.PUBLISHED.value, starting_from=starting_from, until=until)
     return None
 
 

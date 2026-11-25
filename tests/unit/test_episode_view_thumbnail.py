@@ -51,7 +51,7 @@ def test_episode_grid_view_uses_landscape_thumbnail():
             season_id=season.id,
             index=1,
             episode_identifier="ep.1",
-            dw_episode_number="1",
+            source_number="1",
             slug="episode-1",
             publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
             video_url=None,

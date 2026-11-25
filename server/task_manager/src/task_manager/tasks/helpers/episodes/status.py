@@ -20,9 +20,12 @@ _AUTHORITATIVE_REMOTE_STATUSES = {
 
 @dataclass(frozen=True)
 class EpisodeRemoteSnapshot:
-    """Facts observed from one Daily Wire detail response, without lifecycle timers."""
+    """Facts observed from one Daily Wire detail response, without lifecycle timers.
 
-    status: EpisodePublishStatus
+    ``status`` is None when the episode has nothing usable, such as a No Show Today placeholder or a recording that
+    never finished processing: VODLoft treats it as gone from The Daily Wire."""
+
+    status: EpisodePublishStatus | None
     has_usable_media: bool
     hls_duration_seconds: float | None = None
 
@@ -89,29 +92,20 @@ def has_usable_media(
     return duration is not None and duration > 12
 
 
-def observe_episode_detail(
-    detail: DwEpisodeDetailRecord,
-    *,
-    inspect_static_media: bool = False,
-) -> EpisodeRemoteSnapshot:
+def observe_episode_detail(detail: DwEpisodeDetailRecord) -> EpisodeRemoteSnapshot:
     """Interpret one Daily Wire response without applying VODLoft state/history.
 
-    Authoritative scheduled/live/delayed states normally do not need HLS probing.
-    Quarantine recovery and final metadata settling can opt into media inspection
-    when they need to decide whether ownership may safely transfer.
+    Authoritative scheduled/live/delayed states do not need HLS probing.
     """
     if is_no_show_today_slug(detail.slug):
-        return EpisodeRemoteSnapshot(EpisodePublishStatus.NO_USABLE_MEDIA, False)
+        return EpisodeRemoteSnapshot(None, False)
 
     static = _static_status(detail)
-    if static is not None and not inspect_static_media:
+    if static is not None:
         return EpisodeRemoteSnapshot(static, False)
 
     hls_duration_seconds = _hls_duration(detail) if detail.video_url else None
     usable = has_usable_media(detail, hls_duration_seconds=hls_duration_seconds)
-
-    if static is not None:
-        return EpisodeRemoteSnapshot(static, usable, hls_duration_seconds)
 
     if (
         detail.publish_status.upper() == "PUBLISHED"
@@ -126,11 +120,7 @@ def observe_episode_detail(
         )
 
     if not usable:
-        return EpisodeRemoteSnapshot(
-            EpisodePublishStatus.NO_USABLE_MEDIA,
-            False,
-            hls_duration_seconds,
-        )
+        return EpisodeRemoteSnapshot(None, False, hls_duration_seconds)
 
     if not detail.is_downloadable:
         return EpisodeRemoteSnapshot(
@@ -171,9 +161,8 @@ def resolve_episode_status(
     if snapshot.status in _AUTHORITATIVE_REMOTE_STATUSES:
         return snapshot
 
-    # No usable media is an explicit ownership boundary. Never allow an age-based
-    # publication fallback to overwrite quarantine evidence.
-    if snapshot.status is EpisodePublishStatus.NO_USABLE_MEDIA:
+    # Nothing usable is never overwritten by an age-based publication fallback.
+    if snapshot.status is None:
         return snapshot
 
     # The processing signature is useful only for a bounded window after the
@@ -185,15 +174,11 @@ def resolve_episode_status(
         and age_minutes is not None
         and age_minutes >= timing.dw_processing_max_minutes
     ):
-        return EpisodeRemoteSnapshot(
-            EpisodePublishStatus.NO_USABLE_MEDIA,
-            False,
-            snapshot.hls_duration_seconds,
-        )
+        return EpisodeRemoteSnapshot(None, False, snapshot.hls_duration_seconds)
 
     # Once final, weaker inferred snapshots must not cause ordinary regressions.
     # Strong evidence above (authoritative pending state or unusable media) still
-    # transfers ownership as intended.
+    # wins.
     if (
         current is EpisodePublishStatus.PUBLISHED_FINAL
         and snapshot.status in {
@@ -208,7 +193,7 @@ def resolve_episode_status(
         )
 
     # This fallback applies only to a snapshot that currently looks like the
-    # published countdown state; scheduled/delayed/live and no-usable states have
+    # published countdown state; scheduled/delayed/live and unusable states have
     # already returned above and can never be overwritten by episode age.
     if (
         snapshot.status is EpisodePublishStatus.PUBLISHED_PRELIMINARY
@@ -235,8 +220,8 @@ def is_published_final(episode: DwEpisodeRecord) -> bool:
     )
 
 
-def get_publish_status_from_dw_detail(detail: DwEpisodeDetailRecord) -> EpisodePublishStatus:
-    """Compatibility wrapper returning only the resolved lifecycle status."""
+def get_publish_status_from_dw_detail(detail: DwEpisodeDetailRecord) -> EpisodePublishStatus | None:
+    """The resolved lifecycle status only: None when the episode has nothing usable."""
     return resolve_episode_status(
         detail,
         publication_timing_reference=detail.published_date,

@@ -7,7 +7,7 @@ import {
   useRef,
 } from 'react'
 import {useQueryClient} from '@tanstack/react-query'
-import {toast} from 'react-hot-toast'
+import {toast} from '../../lib/toast'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {faIcon} from '../../icons/faIcon'
 import {type TaskOperationRead} from '../../types/schemas/operation'
@@ -15,6 +15,7 @@ import {invalidateForOperations} from '../../lib/operationInvalidation'
 import {refreshFrontendPuller, useFrontendPuller} from '../../lib/puller'
 import {type OperationNotificationDefinitions} from './OperationNotificationDefinitions'
 import {apiUrl} from '../../lib/api'
+import {nameInText} from '../../lib/nameInText'
 
 const ACTIVE_STATUSES = new Set(['QUEUED', 'RUNNING', 'WAITING'])
 const TERMINAL_STATUSES = new Set(['SUCCEEDED', 'PARTIAL', 'FAILED', 'CANCELED'])
@@ -60,26 +61,26 @@ function terminalMessage(
     return definition?.success?.(operation)
       ?? operation.result?.summary
       ?? operation.message
-      ?? `${operation.title} completed`
+      ?? `${nameInText(operation.title)} completed`
   }
 
   if (operation.status === 'PARTIAL') {
     if (definition?.partial) return definition.partial(operation)
     const completed = resultNumber(operation, 'completed') ?? operation.progressCurrent
     const total = resultNumber(operation, 'total') ?? operation.progressTotal
-    return `${label} partially completed for ${operation.title}: ${completed}/${total} tasks succeeded`
+    return `${label} partially completed for ${nameInText(operation.title)}: ${completed}/${total} tasks succeeded`
   }
 
   if (operation.status === 'CANCELED') {
     if (definition?.canceled) return definition.canceled(operation)
     if (operation.message && operation.message !== 'Canceled by user') {
-      return `${label} stopped for ${operation.title}: ${operation.message}`
+      return `${label} stopped for ${nameInText(operation.title)}: ${operation.message}`
     }
-    return `${label} was canceled for ${operation.title}`
+    return `${label} was canceled for ${nameInText(operation.title)}`
   }
 
   if (definition?.failed) return definition.failed(operation)
-  return `${label} failed for ${operation.title}${operation.error ? `: ${operation.error}` : ''}`
+  return `${label} failed for ${nameInText(operation.title)}${operation.error ? `: ${operation.error}` : ''}`
 }
 
 export default function OperationNotifier({

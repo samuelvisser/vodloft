@@ -7,15 +7,9 @@ import {ClearInputButton} from '../components/common/ClearInputButton'
 
 import {toImageUrl} from '../components/Episode/EpisodeCard'
 import {useCollections, useSourceLookup, useSourceSearch} from '../lib/queries'
-import {SearchNoticeRead, SearchResultRead, SourceFeature, kindName, searchName, sourceHas} from '../types/schemas/source'
+import {SearchNoticeRead, SearchResultRead, SourceFeature, kindNames, sourceHas} from '../types/schemas/source'
+import {capitalized} from '../types/creator'
 import {AccessBadge} from '../components/common/AccessLocked'
-
-const KIND_LABEL: Record<SearchResultRead['kind'], string> = {
-    collection: 'Collection',
-    movie: 'Movie',
-    episode: 'Episode',
-    video: 'Video',
-}
 
 /** How the search was answered, such as through an API or a slower fallback. */
 function SearchNotice({notice}: {notice: SearchNoticeRead}) {
@@ -33,20 +27,24 @@ function SearchNotice({notice}: {notice: SearchNoticeRead}) {
 type SourceSearchPageProps = {
     /** The Source to search, when it does not come from the page's address. */
     sourceId?: string
+    /** Which of the Source's search Sites to search, when it does not come from the page's address. */
+    siteKey?: string
     /** What choosing a result does, instead of opening the page that adds it. */
     onChoose?: (result: SearchResultRead) => void
 }
 
-/** Browse a Source that has no catalogue by searching it. */
-export default function SourceSearchPage({sourceId: givenSourceId, onChoose}: SourceSearchPageProps = {}) {
+/** Browse a Site whose Source has no catalogue by searching it. */
+export default function SourceSearchPage({sourceId: givenSourceId, siteKey: givenSiteKey, onChoose}: SourceSearchPageProps = {}) {
     const navigate = useNavigate()
     const routeParams = useParams()
     const sourceId = givenSourceId ?? routeParams.sourceId
     const [params, setParams] = useSearchParams()
+    const siteKey = givenSiteKey ?? routeParams.siteKey
     const source = useSourceLookup().get(sourceId ?? '')
-    const canSearch = sourceHas(source, SourceFeature.SEARCH) && canUseSource(source?.id ?? '')
-    // Each search costs something at such a Source, so it searches on Enter instead of while typing.
-    const onEnter = sourceHas(source, SourceFeature.COSTLY_SEARCH)
+    const site = source?.searchSites.find((candidate) => candidate.key === siteKey)
+    const canSearch = !!site && sourceHas(source, SourceFeature.SEARCH) && canUseSource(source?.id ?? '')
+    // Each search costs something on such a Site, so it searches on Enter instead of while typing.
+    const onEnter = !!site?.costlySearch
     const [search, setSearch] = useState(params.get('q') ?? '')
     const [query, setQuery] = useState(search.trim())
     const submit = (value: string) => {
@@ -60,10 +58,10 @@ export default function SourceSearchPage({sourceId: givenSourceId, onChoose}: So
         return () => window.clearTimeout(timer)
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [search, onEnter])
-    const results = useSourceSearch(canSearch ? sourceId : undefined, query)
+    const results = useSourceSearch(canSearch ? sourceId : undefined, siteKey, query)
     const searching = !!query && results.isFetching
     const {data: localCollections} = useCollections()
-    const sourceName = searchName(source) ?? sourceId ?? 'this service'
+    const sourceName = site?.name ?? siteKey ?? 'this service'
 
     const choose = (result: SearchResultRead) => {
         if (onChoose) {
@@ -72,7 +70,8 @@ export default function SourceSearchPage({sourceId: givenSourceId, onChoose}: So
         }
         if (result.kind === 'collection') {
             const local = localCollections?.find((collection) => collection.sourceKey === sourceId && collection.slug === result.slug)
-            navigate(local ? `/collection/${local.slug}` : `/add-collection?url=${encodeURIComponent(result.url)}`)
+            if (local) navigate(`/collection/${local.slug}`)
+            else navigate(`/add-collection?url=${encodeURIComponent(result.url)}`)
             return
         }
         navigate(`/add?url=${encodeURIComponent(result.url)}`)
@@ -137,7 +136,7 @@ export default function SourceSearchPage({sourceId: givenSourceId, onChoose}: So
                                 </span>
                                 <span className="collection-summary-copy">
                                     <strong className="collection-summary-title">{result.title}</strong>
-                                    <span className="collection-summary-author">{[result.kindLabel ?? kindName(source, result.kind, KIND_LABEL[result.kind]), result.authorName, ...(result.facts ?? [])].filter(Boolean).join(' · ')}</span>
+                                    <span className="collection-summary-author">{[result.kindLabel ?? capitalized(kindNames(source, result.kind)?.singular ?? ''), result.authorName, ...(result.facts ?? [])].filter(Boolean).join(' · ')}</span>
                                     {result.description && <span className="collection-summary-description">{result.description}</span>}
                                     {result.access && <span><AccessBadge label={result.accessLabel}/></span>}
                                 </span>

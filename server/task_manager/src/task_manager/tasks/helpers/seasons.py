@@ -1,5 +1,6 @@
 from backend.db.models import Season, Collection
 from backend.services.seasons import create_season_record
+from backend.types.season_types import SeasonOrigin
 from sources.dailywire.api.records import DwSeasonRecord
 from sqlalchemy.orm import Session
 
@@ -18,5 +19,6 @@ def create_season_by_dw_season(
         index=next_index,
         slug=dw_season.slug,
         name=dw_season.name,
+        origin=SeasonOrigin.SITE,
         update_collection_profiles=True,
     )

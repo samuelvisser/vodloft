@@ -1,39 +1,33 @@
 import { useEffect, useRef, useState } from 'react'
-import {Link, useNavigate, useParams} from 'react-router-dom'
+import {Link, useNavigate, useParams, useSearchParams} from 'react-router-dom'
 import CollectionForm, { CollectionFormValue, defaultCollectionFormValue } from '../../components/CollectionForm'
 import CustomMetadataEditor from '../../components/CustomMetadataEditor/CustomMetadataEditor'
 import { useQueryClient } from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {useCollection} from '../../lib/queries'
+import {useCollection, useCollectionSeasons} from '../../lib/queries'
 import SimpleSelect from '../../components/common/SimpleSelect'
-import {createSelectRegistry} from '../../utils/selectRegistry'
 import {faIcon} from '../../icons/faIcon'
 import OptionsEditor from '../../components/common/OptionsEditor/OptionsEditor'
 import ReadMore from '../../utils/ReadMore'
 import {hasSourceFeature, SourceFeature} from '../../types/schemas/source'
 import CronEditor from '../../components/Settings/CronEditor'
 import {useQuery} from '@tanstack/react-query'
-import {toast} from 'react-hot-toast'
+import {toast} from '../../lib/toast'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
-import {removeEpisodePreviewFromStorage, removeSeasonsFromStorage} from '../../lib/cache'
+import {removeEpisodePreviewFromStorage} from '../../lib/cache'
+import {forgetDeletedCollection} from '../../lib/deletedCollection'
 import {episodeQueryKeys} from '../../lib/collectionQueryOptions'
-import {CollectionTypeReg, EpisodeIdentifierReg, EpisodeOrderReg, EpisodeOrderValue} from '../../types/collection'
+import {CheckFrequencyReg, type CheckFrequency, CollectionTypeReg, CollectionTypeValue, CookiesModeReg, type CookiesMode, SplitChaptersReg, episodeIdentifierRegFor, musicIdentificationAdvice, EpisodeIdentifierValue, EpisodeOrderReg, EpisodeOrderValue} from '../../types/collection'
+import ChangeIdentificationDialog from '../../components/ChangeIdentificationDialog/ChangeIdentificationDialog'
+import ProgressSelect from '../../components/common/ProgressSelect'
+import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 import {apiUrl} from '../../lib/api'
+import SeasonsDialog from '../../components/CollectionSeasons/SeasonsDialog'
+import ReconcileDialog from '../../components/ReconcileDialog/ReconcileDialog'
+import PageHeader, {PageHeaderAction} from '../../components/common/PageHeader'
+import {collectionWords, wordsFor} from '../../lib/collectionWords'
+import Breadcrumb from '../../components/common/Breadcrumb/Breadcrumb'
 
-const CheckFrequencyReg = createSelectRegistry('CollectionCheckFrequency', {
-  default: {label: 'Like other Collections'},
-  less_often: {label: 'Less often'},
-  own: {label: 'On its own schedule'},
-})
-
-const CookiesModeReg = createSelectRegistry('CollectionCookiesMode', {
-  automatic: {label: 'Only when needed'},
-  never: {label: 'Never'},
-  always: {label: 'Always'},
-})
-
-type CheckFrequency = 'default' | 'less_often' | 'own'
-type CookiesMode = 'automatic' | 'never' | 'always'
 
 type RouteParams = { id?: string }
 
@@ -43,9 +37,11 @@ type FormState = CollectionFormValue & {
   checkFrequency: CheckFrequency
   checkCron: string
   cookiesMode: CookiesMode
+  splitChapters: boolean
   episodeOrder: EpisodeOrderValue
   genre: string
   contentRating: string
+  type: CollectionTypeValue
 }
 
 export default function EditCollectionPage() {
@@ -53,23 +49,44 @@ export default function EditCollectionPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const [metadataOpen, setMetadataOpen] = useState(false)
+  // The Move dialog, for the downloaded episodes a save of the seasons left in another season.
+  const [moving, setMoving] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+  // A message about new playlists opens the Seasons dialog straight away.
+  const seasonsOpen = searchParams.get('seasons') === '1'
+  const setSeasonsOpen = (next: boolean) => setSearchParams((params) => {
+    const changed = new URLSearchParams(params)
+    if (next) changed.set('seasons', '1')
+    else changed.delete('seasons')
+    return changed
+  }, {replace: true})
   const [urlCopied, setUrlCopied] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [optionsError, setOptionsError] = useState<string | null>(null)
   const {data: collection} = useCollection(id)
+  // A Music collection that is one album, such as one made from an album, has no albums to group its tracks by.
+  const {data: seasons} = useCollectionSeasons(id)
+  const oneAlbum = seasons?.length === 1
   const initializedCollectionId = useRef<string | undefined>(undefined)
 
   const [form, setForm] = useState<FormState>(() => ({
-    url: id ? `https://www.dailywire.com/show/${id}` : '',
+    url: '',
     ytdlpOptions: '',
     checkFrequency: 'default',
     checkCron: '0 */6 * * *',
     cookiesMode: 'automatic',
+    splitChapters: false,
     episodeOrder: 'newest_first',
     genre: '',
     contentRating: '',
+    type: 'series',
     ...defaultCollectionFormValue,
   }))
+  // What the collection calls its seasons and episodes, by the type chosen here.
+  const words = wordsFor({type: form.type, site: collection?.site})
+  // What the parts of a video split by its chapters are: sound in a Music collection, such as an album of tracks.
+  const parts = collectionWords(form.type, 'audio')
+  const musicParts = collectionWords('music', 'audio')
 
   useEffect(() => {
     if (!id || !collection || collection.slug !== id || initializedCollectionId.current === id) return
@@ -77,22 +94,31 @@ export default function EditCollectionPage() {
     initializedCollectionId.current = id
     setForm((prev) => ({
       ...prev,
-      url: collection.sharingUrl,
+      url: collection.sharingUrl ?? '',
       name: collection.title,
       author: collection.authorName,
       ytdlpOptions: collection.ytdlpOptions ?? '',
       checkFrequency: collection.checkFrequency,
       checkCron: collection.checkCron || prev.checkCron,
       cookiesMode: collection.cookiesMode,
+      splitChapters: collection.splitChapters,
       episodeOrder: collection.episodeOrder,
       genre: collection.genre ?? '',
       contentRating: collection.contentRating ?? '',
+      type: CollectionTypeReg.normalize(collection.type) ?? prev.type,
     }))
   }, [id, collection])
 
+  const [identificationTarget, setIdentificationTarget] = useState<EpisodeIdentifierValue | null>(null)
+
   const usesYtdlp = hasSourceFeature(collection, SourceFeature.YTDLP_OPTIONS)
   const optionalCookies = hasSourceFeature(collection, SourceFeature.OPTIONAL_COOKIES)
+  const chapters = hasSourceFeature(collection, SourceFeature.CHAPTERS)
   const [cronError, setCronError] = useState<string | null>(null)
+  const [typeError, setTypeError] = useState<string | null>(null)
+  const [urlError, setUrlError] = useState<string | null>(null)
+  // A collection that holds only what its links have may go without a link of its own, or change it.
+  const linkOptional = collection?.outsideVideos === 'only'
   const {data: suggestion} = useQuery({
     queryKey: ['collection', id, 'checkSuggestion'],
     enabled: !!id,
@@ -111,7 +137,7 @@ export default function EditCollectionPage() {
     const payload = {
       title: form.name,
       description: collection.description,
-      sharingUrl: form.url,
+      sharingUrl: form.url.trim() || null,
       ...(collection.membershipLevel !== undefined ? {membershipLevel: collection.membershipLevel} : {}),
       authorName: form.author,
       authorHeadshotPath: collection.authorHeadshotPath ?? null,
@@ -121,12 +147,14 @@ export default function EditCollectionPage() {
       thumbnailPortraitPath: collection.thumbnailPortraitPath ?? null,
       thumbnailSquarePath: collection.thumbnailSquarePath ?? null,
       ...(usesYtdlp ? {ytdlpOptions: form.ytdlpOptions} : {}),
+      type: form.type,
       episodeOrder: form.episodeOrder,
       genre: form.genre,
       contentRating: form.contentRating,
       checkFrequency: form.checkFrequency,
       ...(form.checkFrequency === 'own' ? {checkCron: form.checkCron} : {}),
       ...(optionalCookies ? {cookiesMode: form.cookiesMode} : {}),
+      ...(chapters ? {splitChapters: form.splitChapters} : {}),
     }
     const r = await fetch(`${apiUrl()}/collections/${id}`, {
       method: 'PATCH',
@@ -142,6 +170,16 @@ export default function EditCollectionPage() {
       const problem = problemAt('ytdlpOptions')
       if (problem) {
         setOptionsError(String(problem.msg).replace(/^Value error, /, ''))
+        return
+      }
+      const urlProblem = problemAt('sharingUrl', 'sharing_url')
+      if (urlProblem) {
+        setUrlError(String(urlProblem.msg).replace(/^Value error, /, ''))
+        return
+      }
+      const typeProblem = problemAt('type')
+      if (typeProblem) {
+        setTypeError(String(typeProblem.msg).replace(/^Value error, /, ''))
         return
       }
       const cronProblem = problemAt('checkCron', 'check_cron')
@@ -190,23 +228,8 @@ export default function EditCollectionPage() {
       toast.error(friendly)
       return
     }
-    removeEpisodePreviewFromStorage(id)
-    removeSeasonsFromStorage(id)
     setDeleteConfirm(false)
-
-    await Promise.all([
-      qc.cancelQueries({queryKey: ['collection', id]}),
-      qc.cancelQueries({queryKey: ['seasons', id]}),
-      qc.cancelQueries({queryKey: episodeQueryKeys.forCollection(id)}),
-    ])
-    qc.removeQueries({queryKey: ['collection', id]})
-    qc.removeQueries({queryKey: ['seasons', id]})
-    qc.removeQueries({queryKey: episodeQueryKeys.forCollection(id)})
-
-    await Promise.all([
-      qc.invalidateQueries({queryKey: ['collections']}),
-      qc.invalidateQueries({queryKey: ['collectionsView']}),
-    ])
+    await forgetDeletedCollection(qc, id)
     navigate('/library?type=collections')
   }
 
@@ -238,14 +261,22 @@ export default function EditCollectionPage() {
 
   return (
     <section className="view" aria-labelledby="edit-collection-title">
-      <div className="view-header">
-        <h1 id="edit-collection-title">Edit collection</h1>
-        {collection && (
-          <button type="button" className="btn" onClick={() => setMetadataOpen(true)}>
-            Metadata
-          </button>
+      {collection && (
+        <Breadcrumb className="page-breadcrumb" items={[
+          {label: 'Library', to: '/library'},
+          // A creator's collection often has the creator's name, so it says which of the two it is.
+          {label: collection.creatorSlug ? `Collection ${collection.title}` : collection.title, to: `/collection/${collection.slug}`},
+        ]}/>
+      )}
+      <PageHeader
+        title="Edit collection" titleId="edit-collection-title"
+        actions={collection && (
+          <>
+            <PageHeaderAction icon={faIcon('fass', 'layer-group')} label={words.season.Plural} variant="secondary" caption onClick={() => setSeasonsOpen(true)}/>
+            <PageHeaderAction icon={faIcon('fass', 'list')} label="Metadata" variant="secondary" caption onClick={() => setMetadataOpen(true)}/>
+          </>
         )}
-      </div>
+      />
 
       <form className="form" onSubmit={(e) => e.preventDefault()}>
         <div className="form-row">
@@ -258,8 +289,10 @@ export default function EditCollectionPage() {
               inputMode="url"
               placeholder="https://…"
               value={form.url}
-              onChange={(e) => setForm({ ...form, url: e.target.value })}
-              disabled
+              onChange={(e) => { setForm({ ...form, url: e.target.value }); setUrlError(null) }}
+              disabled={!linkOptional}
+              aria-invalid={urlError ? true : undefined}
+              aria-describedby={linkOptional ? 'collection-url-help' : undefined}
             />
             <div className="rss-feed-url-actions">
               <button
@@ -280,11 +313,24 @@ export default function EditCollectionPage() {
               </button>
             </div>
           </div>
+          {urlError && <div className="error" role="alert">{urlError}</div>}
+          {linkOptional && (
+            <div className="help" id="collection-url-help">
+              {collection?.kind === 'custom'
+                ? 'Optional. A link of its own turns this custom collection into a channel or a list collection, by what the link is.'
+                : `Optional. This collection holds only what its ${words.season.plural} have. A channel link here offers that channel's playlists in the ${words.season.Plural} window and finds new ones.`}
+            </div>
+          )}
         </div>
 
         <CollectionForm
           value={form}
           onChange={(v: CollectionFormValue) => setForm((prev) => ({ ...prev, ...v }))}
+          creator={collection?.creatorSlug && collection.creatorTitle && collection.creatorNames ? {
+            slug: collection.creatorSlug,
+            title: collection.creatorTitle,
+            word: collection.creatorNames.singular,
+          } : null}
         />
 
         <div className="form-row">
@@ -315,40 +361,60 @@ export default function EditCollectionPage() {
             aria-describedby="collection-content-rating-help"
           />
           <div className="help" id="collection-content-rating-help">
-            The rating media servers show for the show and its episodes, such as TV-14 or TV-Y.
+            The rating media servers show for the show and its {words.episode.plural}, such as TV-14 or TV-Y.
           </div>
         </div>
 
         <div className="form-row">
           <label htmlFor="collection-type">Collection type</label>
-          <input
-            id="collection-type"
-            className="input"
-            type="text"
-            value={collection ? CollectionTypeReg.getLabelLoose(collection.type) : ''}
-            disabled
-            aria-describedby="collection-type-help"
+          <SimpleSelect
+            inputId="collection-type"
+            registry={CollectionTypeReg}
+            value={form.type}
+            onChange={(value) => {
+              setTypeError(null)
+              setForm((prev) => ({...prev, type: value as CollectionTypeValue}))
+            }}
+            aria-invalid={!!typeError}
+            aria-describedby={typeError ? 'collection-type-error' : 'collection-type-help'}
           />
-          <div className="help" id="collection-type-help">Chosen when the Collection was added, and cannot be changed.</div>
-        </div>
-
-        <div className="form-row">
-          <label htmlFor="collection-episode-identification">Episode identification</label>
-          <input
-            id="collection-episode-identification"
-            className="input"
-            type="text"
-            value={collection ? EpisodeIdentifierReg.getLabelLoose(collection.episodeIdentifier) : ''}
-            disabled
-            aria-describedby="collection-episode-identification-help"
-          />
-          <div className="help" id="collection-episode-identification-help">
-            How VODLoft numbers the episodes, chosen when the Collection was added. It cannot be changed.
+          {typeError && <div id="collection-type-error" className="error" role="alert">{typeError}</div>}
+          <div className="help" id="collection-type-help">
+            {CollectionTypeReg.getHelp(form.type) ?? ''} The Local Media Profiles offered for this collection depend on
+            its type: a Music collection takes profiles available for Music.
           </div>
         </div>
 
         <div className="form-row">
-          <label htmlFor="collection-episode-order">Episode order</label>
+          <label htmlFor="collection-episode-identification">{words.episode.Singular} identification</label>
+          <ProgressSelect
+            inputId="collection-episode-identification"
+            registry={episodeIdentifierRegFor(form.type)}
+            value={collection?.episodeIdentifier ?? null}
+            isDisabled={!collection}
+            definition={frontendOperationDefinitions['collection.change_identification']}
+            resourceId={collection?.id}
+            targetValueKey="episode_identifier"
+            activeLabel={`Renumbering ${words.episode.plural}`}
+            busyReason={`VODLoft is still numbering the ${words.episode.plural} of ${collection?.title ?? 'this collection'} again and renaming their files. You can change the identification again once that is done.`}
+            onChange={(value) => {
+              if (collection && value !== collection.episodeIdentifier) {
+                setIdentificationTarget(value as EpisodeIdentifierValue)
+              }
+            }}
+            aria-describedby="collection-episode-identification-help"
+          />
+          <div className="help" id="collection-episode-identification-help">
+            How VODLoft numbers the {words.episode.plural}. Changing it numbers every {words.episode.singular} again, renames the files
+            that are named by their numbers and rewrites their metadata.
+          </div>
+          {musicIdentificationAdvice(form.type, collection?.episodeIdentifier, oneAlbum) && (
+            <div className="help form-advice" role="status">{musicIdentificationAdvice(form.type, collection?.episodeIdentifier, oneAlbum)}</div>
+          )}
+        </div>
+
+        <div className="form-row">
+          <label htmlFor="collection-episode-order">{words.episode.Singular} order</label>
           <SimpleSelect
             inputId="collection-episode-order"
             registry={EpisodeOrderReg}
@@ -357,10 +423,10 @@ export default function EditCollectionPage() {
           />
           <div className="help">
             {collection?.episodeIdentifier === 'seasonal'
-              ? 'The order of the episodes within each season'
-              : 'The order of the episodes'}
+              ? `The order of the ${words.episode.plural} within each ${words.season.singular}`
+              : `The order of the ${words.episode.plural}`}
             {' '}on the Collection page and in podcast apps that follow its RSS feeds.
-            By default a seasonal Collection starts each season at its first episode, and any other Collection lists its newest episode first.
+            By default a seasonal Collection starts each {words.season.singular} at its first {words.episode.singular}, and any other Collection lists its newest {words.episode.singular} first.
           </div>
         </div>
 
@@ -390,7 +456,7 @@ export default function EditCollectionPage() {
         )}
 
         <div className="form-row">
-          <label htmlFor="collection-check-frequency">Look for new episodes</label>
+          <label htmlFor="collection-check-frequency">Look for new {words.episode.plural}</label>
           <SimpleSelect
             inputId="collection-check-frequency"
             registry={CheckFrequencyReg}
@@ -422,6 +488,31 @@ export default function EditCollectionPage() {
                 setForm((prev) => ({...prev, checkCron: value}))
               }}
             />
+          </div>
+        )}
+
+        {chapters && (
+          <div className="form-row">
+            <label htmlFor="collection-split-chapters">Videos with chapters</label>
+            <SimpleSelect
+              inputId="collection-split-chapters"
+              registry={SplitChaptersReg}
+              value={form.splitChapters ? 'split' : 'whole'}
+              onChange={(value) => setForm((prev) => ({...prev, splitChapters: value === 'split'}))}
+            />
+            <div className="help">
+              <ReadMore summary={
+                form.splitChapters
+                  ? `Each new video with chapters becomes ${parts.season.a} of its own, named after the video, with ${parts.episode.a} per chapter.`
+                  : `Each video is one ${words.episode.singular}, chapters and all.`
+              }>
+                <p>Splitting suits full albums uploaded as one video: in a Music Collection each video becomes {musicParts.season.a} and
+                  each chapter {musicParts.episode.a}. Each part downloads only its own stretch of the video and has its own file, so a
+                  podcast app or music player plays it like any other {parts.episode.singular}. A feed can't stream a part straight from
+                  the site, because the site only has the whole video.</p>
+                <p>This only changes videos found from now on. Videos already in the Collection stay as they are.</p>
+              </ReadMore>
+            </div>
           </div>
         )}
 
@@ -468,6 +559,40 @@ export default function EditCollectionPage() {
           <button type="button" className="btn btn-primary" onClick={onSave} disabled={!collection}>Save changes</button>
         </div>
       </form>
+
+      {collection && (
+        <ChangeIdentificationDialog
+          open={identificationTarget !== null}
+          collectionSlug={collection.slug}
+          collectionTitle={collection.title}
+          current={collection.episodeIdentifier as EpisodeIdentifierValue}
+          collectionType={form.type}
+          target={identificationTarget}
+          episodeOrder={collection.episodeOrder}
+          words={wordsFor(collection)}
+          onDismiss={() => setIdentificationTarget(null)}
+          onStarted={() => {
+            setIdentificationTarget(null)
+            navigate(`/collection/${collection.slug}`)
+          }}
+        />
+      )}
+
+      <SeasonsDialog
+        open={seasonsOpen && !!collection}
+        collectionSlug={id}
+        collectionTitle={collection?.title ?? id}
+        onDismiss={() => setSeasonsOpen(false)}
+        onMovesWaiting={() => setMoving(true)}
+        words={wordsFor(collection)}
+      />
+
+      <ReconcileDialog
+        open={moving}
+        path={`/collections/${encodeURIComponent(id)}`}
+        what={`the ${wordsFor(collection).episode.plural} of ${collection?.title ?? id}`}
+        onDismiss={() => setMoving(false)}
+      />
 
       <CustomMetadataEditor
         open={metadataOpen}

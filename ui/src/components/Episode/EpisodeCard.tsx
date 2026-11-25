@@ -1,15 +1,17 @@
 import DownloadStatusBadge from '../DownloadProgress/DownloadStatusBadge'
 import React from 'react'
-import {useNavigate} from 'react-router-dom'
+import {useLocation, useNavigate} from 'react-router-dom'
 import {linkAreaHandlers} from '../../lib/linkClicks'
 import {EpisodeReadView} from '../../types/schemas/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import {DrmBadge} from '../common/DrmProtected'
 import {AccessBadge} from '../common/AccessLocked'
 import {RemovedBadge} from '../common/RemovedFromSource'
+import {MovedBadge} from './SeasonPlaceNote'
 import {apiUrl} from '../../lib/api'
 import DurationPill from '../common/DurationPill'
 import EpisodeTypePill from './EpisodeTypePill'
+import type {CollectionWords} from '../../lib/collectionWords'
 
 // Beyond this many downloads for one episode, collapse the rest into a "+N" pill
 // instead of letting icons overflow the thumbnail.
@@ -87,6 +89,7 @@ function DownloadStatusIcons({downloads}: { downloads: MediaDownloadViewRead[] }
     )
 }
 
+const SEASON_LABEL = /^S\d+E\d+$/
 const DATE_LABEL = /^(\d{4})-(\d{2})-(\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/
 
 /** "#12" for a numbered episode; a short date such as "18 Jan 2013" for one a Source numbers by its publish date. */
@@ -102,10 +105,18 @@ type Props = {
     ep: EpisodeReadView
     collectionSlug: string
     downloads?: MediaDownloadViewRead[]
+    /** Belongs in another season now, and waits for the user to move it there. */
+    moved?: boolean
+    /** The title of the episode's collection, for a list of episodes from several collections. */
+    collectionTitle?: string
+    /** The name of the episode's season, for a list of the episodes of several seasons. */
+    seasonName?: string
+    /** What the collection calls its seasons and episodes, such as albums and tracks. */
+    words: CollectionWords
 }
 
 /** The episode thumbnail card used on a show's episode list. */
-export default function EpisodeCard({ep, collectionSlug, downloads}: Props) {
+export default function EpisodeCard({ep, collectionSlug, downloads, moved = false, collectionTitle, seasonName, words}: Props) {
     const initials = ep.title
         .split(' ')
         .map((w) => w[0])
@@ -115,7 +126,7 @@ export default function EpisodeCard({ep, collectionSlug, downloads}: Props) {
 
     // Episode thumbnails are landscape by default; if missing/empty, use a placeholder with the episode index.
     const landscapePath = (ep.thumbnailLandscapePath && ep.thumbnailLandscapePath.trim() !== '') ? ep.thumbnailLandscapePath : undefined
-    const imageUrl = landscapePath ? toImageUrl(landscapePath) : `https://placehold.co/640x360/png?text=Episode+%23${ep.index}`
+    const imageUrl = landscapePath ? toImageUrl(landscapePath) : `https://placehold.co/640x360/png?text=${encodeURIComponent(words.episode.Singular)}+%23${ep.index}`
     const style = imageUrl ? {backgroundImage: `url(${imageUrl})`} : undefined
     const isLive = String(ep.publishStatus).toLowerCase() === 'live'
     // An episode that has not started yet has no length, so its pill says it is upcoming instead.
@@ -124,15 +135,25 @@ export default function EpisodeCard({ep, collectionSlug, downloads}: Props) {
     // Identifier semantics are parsed once by the backend. The card only decides
     // how those semantics should be presented: the number of a numbered episode,
     // then its release date, unless the number already is that date.
-    const numberText = ep.episodeType === 'ep' && ep.episodeLabel ? episodeBadgeText(ep.episodeLabel) : undefined
+    // An album's track goes by its number on the album alone, such as Track 3, rather than S01E03.
+    const numberText = ep.episodeType === 'ep' && ep.episodeLabel
+        ? (words.numberedInSeason && SEASON_LABEL.test(ep.episodeLabel) && ep.episodeNumber
+            ? `${words.episode.Singular} ${ep.episodeNumber}`
+            : episodeBadgeText(ep.episodeLabel))
+        : undefined
     // An episode extra is labelled by its own number, such as #2542.10, in the extras' colour.
     const extraNumber = ep.episodeType === 'ep-extra' && ep.episodeLabel ? episodeBadgeText(ep.episodeLabel) : undefined
     const dateText = ep.publishedDate && !DATE_LABEL.test(ep.episodeLabel)
         ? ep.publishedDate.toLocaleDateString(undefined, {day: 'numeric', month: 'short', year: 'numeric'})
         : undefined
-    const metaText = [numberText, dateText].filter(Boolean).join(' · ')
+    const metaText = [collectionTitle, seasonName, numberText, dateText].filter(Boolean).join(' · ')
 
-    const navigate = useNavigate()
+    const routerNavigate = useNavigate()
+    const location = useLocation()
+    // Opened from its collection's page, the episode's breadcrumb leads back to that page as it was, such as with
+    // the season the user picked.
+    const fromCollection = location.pathname === `/collection/${collectionSlug}` ? location.pathname + location.search : undefined
+    const navigate = (to: string) => routerNavigate(to, {state: fromCollection ? {fromCollection} : undefined})
     const episodeHref = `/collection/${collectionSlug}/episode/${ep.slug}`
     const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -148,9 +169,10 @@ export default function EpisodeCard({ep, collectionSlug, downloads}: Props) {
                 {ep.drmProtected ? <DrmBadge onCover/>
                     // Media the account may watch only shows its open lock on its own page.
                     : ep.access && !ep.accessGranted ? <AccessBadge label={ep.accessLabel} description={ep.accessDescription} onCover/>
-                    : ep.removedFromSource && <RemovedBadge onCover/>}
+                    : ep.removedFromSource && !ep.removedByRetention ? <RemovedBadge onCover/>
+                    : moved && <MovedBadge onCover words={words}/>}
                 {isLive && (
-                    <span style={LIVE_BADGE_STYLE} aria-label="Episode is live">
+                    <span style={LIVE_BADGE_STYLE} aria-label={`${words.episode.Singular} is live`}>
                         <span style={LIVE_BADGE_DOT_STYLE} aria-hidden/>
                         Live
                     </span>

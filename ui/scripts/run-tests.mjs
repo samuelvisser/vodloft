@@ -38,7 +38,7 @@ try {
                     namespace: 'vodloft-version-test',
                 }))
                 build.onLoad({filter: /.*/, namespace: 'vodloft-version-test'}, () => ({
-                    contents: 'export const VODLOFT_VERSION = "test"',
+                    contents: 'export const VODLOFT_VERSION = "test"\nexport const VODLOFT_BUILD_ID = ""',
                     loader: 'js',
                 }))
             },

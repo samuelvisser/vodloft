@@ -252,19 +252,19 @@ def test_movie_sources_include_movies_and_every_extra_with_server_search(db_sess
 
     all_sources = get_output_template_source_page(
         db_session,
-        LocalMediaProfileType.MOVIE,
+        LocalMediaProfileType.VIDEO,
         cursor=None,
         limit=2,
     )
     last_source = get_output_template_source_page(
         db_session,
-        LocalMediaProfileType.MOVIE,
+        LocalMediaProfileType.VIDEO,
         cursor=all_sources.next_cursor,
         limit=2,
     )
     trailer_search = get_output_template_source_page(
         db_session,
-        LocalMediaProfileType.MOVIE,
+        LocalMediaProfileType.VIDEO,
         search="Alpha Trailer",
     )
 
@@ -324,7 +324,7 @@ def test_movie_source_search_ranks_matching_extra_title_by_relevance(db_session)
 
     result = get_output_template_source_page(
         db_session,
-        LocalMediaProfileType.MOVIE,
+        LocalMediaProfileType.VIDEO,
         search="Radical Islam is on the",
     )
 
@@ -332,6 +332,33 @@ def test_movie_source_search_ranks_matching_extra_title_by_relevance(db_session)
         "Radical Islam Is On The March",
         "Trump Gets It Right On Radical Islam",
     ]
+
+
+def test_video_profile_examples_hold_movies_and_videos_on_its_sites(db_session):
+    from backend.api.endpoints.local_media_profiles.output_template import get_output_template_source_page
+    from backend.db.models import Movie, Video
+    from backend.types.local_media_profile_types import LocalMediaProfileType
+
+    db_session.add_all([
+        Movie(source_key="dailywire", uuid="m", type="movie", slug="beta-movie", title="Beta Movie", duration=60),
+        Video(
+            source_key="ytdlp", uuid="v", type="video", slug="abc", title="Alpha Video", duration=60,
+            sharing_url="https://www.youtube.com/watch?v=abc", site_key="youtube",
+        ),
+    ])
+    db_session.commit()
+
+    every_site = get_output_template_source_page(db_session, LocalMediaProfileType.VIDEO)
+    assert [(item.label, item.values["media_type"]) for item in every_site.items] == [
+        ("Alpha Video", "video"), ("Beta Movie", "movie"),
+    ]
+    # A single video leaves the movie values empty.
+    assert every_site.items[0].values["movie_title"] == ""
+
+    youtube = get_output_template_source_page(db_session, LocalMediaProfileType.VIDEO, site_keys=["youtube"])
+    assert [item.label for item in youtube.items] == ["Alpha Video"]
+    dailywire = get_output_template_source_page(db_session, LocalMediaProfileType.VIDEO, site_keys=["dailywire"])
+    assert [item.label for item in dailywire.items] == ["Beta Movie"]
 
 
 def test_empty_library_uses_fallback_but_empty_search_does_not(db_session):
@@ -342,17 +369,18 @@ def test_empty_library_uses_fallback_but_empty_search_does_not(db_session):
 
     fallback = get_output_template_source_page(
         db_session,
-        LocalMediaProfileType.MOVIE,
+        LocalMediaProfileType.VIDEO,
     )
     search = get_output_template_source_page(
         db_session,
-        LocalMediaProfileType.MOVIE,
+        LocalMediaProfileType.VIDEO,
         search="missing",
     )
 
-    assert len(fallback.items) == 1
-    assert fallback.items[0].fallback is True
-    assert fallback.items[0].values["media_type"] == "movie"
+    # A Video profile shows an example video and an example movie.
+    assert [item.id for item in fallback.items] == ["example:video", "example:movie"]
+    assert all(item.fallback for item in fallback.items)
+    assert [item.values["media_type"] for item in fallback.items] == ["video", "movie"]
     assert search.items == []
     assert search.has_more is False
 
@@ -422,7 +450,7 @@ def test_a_saved_profile_starts_on_a_collection_that_downloads_to_it(db_session)
 
     profile = CollectionLocalMediaProfile(
         slug="shows", name="Shows", output_template="/downloads/{{ collection }}/{{ episode }}.ext",
-        preferred_format="format_1080p", collection_scope="both",
+        preferred_format="format_1080p", collection_scope="podcast-and-series",
     )
     db_session.add(profile)
     collections = [
@@ -442,6 +470,36 @@ def test_a_saved_profile_starts_on_a_collection_that_downloads_to_it(db_session)
         assert source.values["collection"] == "show-3"
     # A profile no collection downloads to yet starts anywhere.
     assert output_template.get_random_collection_template_source(db_session, local_media_profile_id=999) is not None
+
+
+def test_a_profile_opened_from_a_collection_takes_its_example_from_that_collection(db_session):
+    from backend.api.endpoints.local_media_profiles import output_template
+    from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope
+    from backend.types.collection_types import CollectionType
+
+    podcasts = [
+        _make_collection(db_session, slug=f"podcast-{number}", collection_type=CollectionType.PODCAST.value)
+        for number in range(5)
+    ]
+    for podcast in podcasts:
+        _add_episode(db_session, podcast, index=1)
+    music = _make_collection(db_session, slug="artist", collection_type=CollectionType.MUSIC.value)
+    for index in range(1, 4):
+        _add_episode(db_session, music, index=index)
+    empty = _make_collection(db_session, slug="empty", collection_type=CollectionType.PODCAST.value)
+    db_session.flush()
+
+    # Even while the profile is still available for something the collection is not.
+    for _ in range(5):
+        source = output_template.get_random_collection_template_source(
+            db_session, CollectionLocalMediaProfileScope.PODCAST_AND_SERIES, collection_id=music.id,
+        )
+        assert source.values["collection"] == "artist"
+    # A collection without episodes leaves the choice to the profile.
+    source = output_template.get_random_collection_template_source(
+        db_session, CollectionLocalMediaProfileScope.PODCAST, collection_id=empty.id,
+    )
+    assert source is not None and source.values["collection"].startswith("podcast-")
 
 
 def test_collection_source_anchor_opens_at_selected_episode_in_natural_order(db_session):
@@ -575,13 +633,13 @@ def test_collection_examples_follow_the_profiles_sites(db_session):
 
     def titles(site_keys):
         page = get_output_template_source_page(
-            db_session, LocalMediaProfileType.COLLECTION, CollectionLocalMediaProfileScope.BOTH,
+            db_session, LocalMediaProfileType.COLLECTION, CollectionLocalMediaProfileScope.PODCAST_AND_SERIES,
             limit=2, site_keys=site_keys,
         )
         labels = [source.label for source in page.items]
         while page.next_cursor:
             page = get_output_template_source_page(
-                db_session, LocalMediaProfileType.COLLECTION, CollectionLocalMediaProfileScope.BOTH,
+                db_session, LocalMediaProfileType.COLLECTION, CollectionLocalMediaProfileScope.PODCAST_AND_SERIES,
                 cursor=page.next_cursor, limit=2, site_keys=site_keys,
             )
             labels += [source.label for source in page.items]

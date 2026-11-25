@@ -1,7 +1,8 @@
 from datetime import datetime
+from collections.abc import Iterable
 from typing import Optional, TYPE_CHECKING, TypeAlias
 
-from sqlalchemy import ForeignKey, Text, UniqueConstraint, func
+from sqlalchemy import JSON, ForeignKey, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
@@ -10,16 +11,22 @@ from backend.db.mixins.MediaContentMetadataMixin import PICTURE_PATH_COMMENT
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 from backend.db.mixins.CreatedByMixin import CreatedByMixin
 from backend.types.collection_types import EpisodeOrder
+from backend.types.collection_contracts import collection_contract
+from backend.types.link_season_types import ChannelSeason, CollectionKind, ListLayout, LooseVideos, LinkSeasons, OutsideVideos
 
 if TYPE_CHECKING:
     from backend.db.models.media_item import Episode
     from backend.db.models.stream_profile import StreamProfileBase
     from backend.db.models import Season, DownloadProfile, Site
-    from backend.db.models import CustomIndexState
+    from backend.db.models import Creator, CustomIndexState, CollectionList
 
 
 def _default_episode_order(context) -> str:
     return EpisodeOrder.default_for(context.get_current_parameters()["episode_identifier"]).value
+
+
+def _default_repeat_videos(context) -> str:
+    return collection_contract(context.get_current_parameters()["type"]).repeat_videos.value
 
 
 class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
@@ -37,12 +44,75 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
         ForeignKey("sites.key"), index=True, comment="The Site the collection is on; filled in the background for older collections",
     )
     site_ref: Mapped[Optional[str]] = mapped_column(comment="The Site's own id for the collection")
+    kind: Mapped[str] = mapped_column(
+        default=CollectionKind.CHANNEL.value, server_default=CollectionKind.CHANNEL.value,
+        comment="What its own link is: channel, a creator's page of all their uploads, list, one list, or custom, no link: it "
+                "gets all it holds from the lists the user gives it",
+    )
+    list_type: Mapped[Optional[str]] = mapped_column(
+        comment="The key of its Site's type of list its link is, such as album or playlist on SoundCloud, where the "
+                "Site has several types its links don't tell apart",
+    )
+    creator_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("creators.id", ondelete="SET NULL"), index=True,
+        comment="The creator it is grouped under in the Library, for a channel collection",
+    )
     title: Mapped[str]
     description: Mapped[Optional[str]]
-    sharing_url: Mapped[str] = mapped_column(unique=True)
+    sharing_url: Mapped[Optional[str]] = mapped_column(
+        unique=True, comment="The collection's own link; a collection that only holds its link seasons may go without",
+    )
     ytdlp_options: Mapped[str] = mapped_column(
         Text, default="", server_default="",
         comment="Your own yt-dlp options for this Collection, added after the yt-dlp Source's",
+    )
+    link_seasons: Mapped[str] = mapped_column(
+        default=LinkSeasons.OFF.value, server_default=LinkSeasons.OFF.value,
+        comment="Whether the channel's playlists are seasons: off, all or selected",
+    )
+    new_lists: Mapped[dict[str, str]] = mapped_column(
+        JSON, default=dict, server_default="{}",
+        comment="What happens with a list the channel adds, by the kind of list, when only selected lists are seasons: "
+                "ask, add or ignore",
+    )
+    list_layout: Mapped[str] = mapped_column(
+        default=ListLayout.SEASON_EACH.value, server_default=ListLayout.SEASON_EACH.value,
+        comment="How the lists that are seasons are laid out: season_each, or by_year in a season per upload year",
+    )
+    loose_videos: Mapped[str] = mapped_column(
+        default=LooseVideos.ONE_SEASON.value, server_default=LooseVideos.ONE_SEASON.value,
+        comment="Where the channel's own videos go: one_season, the channel season, or by_year",
+    )
+    channel_season: Mapped[str] = mapped_column(
+        default=ChannelSeason.EVERYTHING.value, server_default=ChannelSeason.UNLISTED.value,
+        comment="What the channel season holds: everything, every video of the feeds, or unlisted, those in no list",
+    )
+    repeat_videos: Mapped[str] = mapped_column(
+        default=_default_repeat_videos, server_default="one_season",
+        comment="What happens with a video that belongs in several of its seasons: one_season, an episode in the first, "
+                "or each_season, an episode in each",
+    )
+    outside_videos: Mapped[str] = mapped_column(
+        default=OutsideVideos.LEAVE_OUT.value, server_default=OutsideVideos.LEAVE_OUT.value,
+        comment=(
+            "What happens with the videos of the playlists that are seasons that the collection's own link does "
+            "not list: leave_out, add, or only, which holds nothing but the videos of those playlists"
+        ),
+    )
+    feeds: Mapped[Optional[list[str]]] = mapped_column(
+        JSON, nullable=True,
+        comment=(
+            "For a channel collection, the refs of the channel's feeds it lists, such as only a YouTube channel's "
+            "Videos; null lists every feed"
+        ),
+    )
+    custom_season_order: Mapped[bool] = mapped_column(
+        default=False, server_default="0",
+        comment="The user put the seasons in their own order, so a new season goes last instead of where its date puts it",
+    )
+    split_chapters: Mapped[bool] = mapped_column(
+        default=False, server_default="0",
+        comment="Each new video with chapters becomes a season of its own, with an episode per chapter",
     )
     cookies_mode: Mapped[str] = mapped_column(
         default="automatic", server_default="automatic",
@@ -94,6 +164,7 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
 
     # Relationships
     site: Mapped[Optional["Site"]] = relationship(lazy="joined")
+    creator: Mapped[Optional["Creator"]] = relationship(back_populates="collections", foreign_keys=[creator_id])
     episodes: Mapped[list["Episode"]] = relationship(
         back_populates="collection", cascade="all, delete-orphan", order_by="desc(Episode.index)"
     )
@@ -109,6 +180,33 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     custom_index_states: Mapped[list["CustomIndexState"]] = relationship(
         back_populates="collection", cascade="all, delete-orphan"
     )
+    lists: Mapped[list["CollectionList"]] = relationship(
+        back_populates="collection", cascade="all, delete-orphan", order_by="CollectionList.site_position",
+    )
+
+    @property
+    def link_site_keys(self) -> list[Optional[str]]:
+        """The Site of each link season of a collection without a link of its own, which is on the Sites of its links;
+        none for a collection with a link of its own."""
+        return [] if self.sharing_url is not None else [link.site_key for link in self.lists]
+
+    @property
+    def link_image_path(self) -> Optional[str]:
+        """For a collection without a link of its own, whose own pictures come from no Site, the picture of its default
+        link, or else of the first one that has one."""
+        if self.sharing_url is not None:
+            return None
+        default = [link for link in self.lists if link.is_default]
+        return next((link.image_path for link in (*default, *self.lists) if link.image_path), None)
+
+    def keep_a_default_link(self, links: "Optional[Iterable[CollectionList]]" = None) -> None:
+        """A collection without a link of its own always has one default link: its first, until the user picks
+        another. ``links`` are the links it keeps, when some are on their way out."""
+        if self.sharing_url is not None:
+            return
+        links = sorted(self.lists if links is None else links, key=lambda link: (link.site_position, link.id or 0))
+        if links and not any(link.is_default for link in links):
+            links[0].is_default = True
 
     def __repr__(self) -> str:
         return f"<Show(id={self.id}, slug={self.slug}, title={self.title}, created_at={self.created_at}, updated_at={self.updated_at})>"

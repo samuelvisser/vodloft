@@ -110,7 +110,8 @@ def test_tv_show_presets_become_profiles_with_the_same_folder_layout(tmp_path):
     assert any("{title_sanitized_plex}" in line and "nearly the same" in line for line in by_date.report)
     collection = profiles["Plex TV Show Collection"]
     assert collection.output_template == (
-        "/downloads/{{ collection_title }}/Season 01/s01.e{{ date | strftime('%y') }}{{ month }}{{ day }}"
+        "/downloads/{{ collection_title }}/Season {{ '%02d' | format(season_number | int) }}"
+        "/s{{ '%02d' | format(season_number | int) }}.e{{ date | strftime('%y') }}{{ month }}{{ day }}"
         "{{ '%02d' | format('day' | custom_index(per=date)) }} - {{ title }}.ext"
     )
     assert plan.download_folder == "/tv_shows"
@@ -128,10 +129,39 @@ def test_subscriptions_become_collections_with_genre_rating_and_filters(tmp_path
     assert (news["download_days_in_past"], news["delete_older_episodes"]) == (60, True)
     assert collections["BBC News"].warnings[0].message == "today-2months becomes the last 60 days"
     assert collections["NOVA PBS"].download_profile["ep_id_type_list"] == ["ep", "short", "livestream"]
-    # One link per Collection until VODLoft has collections of collections.
-    assert collections["Rick Beato"].url == "https://www.youtube.com/@RickBeato"
-    assert "the other link comes" in collections["Rick Beato"].warnings[0].message
-    assert collections["Beyond the Guitar"].url == "https://www.youtube.com/c/BeyondTheGuitar"
+    # A subscription with several links is the first channel's, with each other link a link season: nothing is left out.
+    beato = collections["Rick Beato"]
+    assert beato.url == "https://www.youtube.com/@RickBeato"
+    assert [(link.url, link.title, link.season_number) for link in beato.link_seasons] == [("https://www.youtube.com/@rickbeato240", "@rickbeato240", None)]
+    assert not any(warning.subject == "links" for warning in beato.warnings)
+    assert collections["NOVA PBS"].link_seasons == ()
+
+
+def test_a_tv_show_collection_keeps_its_seasons_and_the_highest_keeps_a_shared_video(tmp_path):
+    plan = _plan(_write(tmp_path, EXAMPLE + """
+    "~Guitar Specials":
+      s00_url: "https://www.youtube.com/watch?v=special"
+      s01_url: "https://www.youtube.com/c/BeyondTheGuitar"
+      s02_url:
+        - "https://www.youtube.com/playlist?list=PLone"
+        - "https://www.youtube.com/playlist?list=PLtwo"
+"""))
+
+    collections = {collection.title: collection for collection in plan.collections}
+    # The channel is the collection; its own playlists are link seasons, the highest season first.
+    guitar = collections["Beyond the Guitar"]
+    assert guitar.url == "https://www.youtube.com/c/BeyondTheGuitar"
+    assert [(link.title, link.season_number) for link in guitar.link_seasons] == [("Music Videos", 2)]
+    # The channel's own season keeps its videos in none of the playlists.
+    assert (guitar.loose_season.title, guitar.loose_season.season_number) == ("Videos", 1)
+    specials = collections["Guitar Specials"]
+    assert specials.url == "https://www.youtube.com/c/BeyondTheGuitar"
+    assert [(link.url, link.title, link.season_number) for link in specials.link_seasons] == [
+        ("https://www.youtube.com/playlist?list=PLone", "Season 2", 2), ("https://www.youtube.com/playlist?list=PLtwo", "Season 2", 2),
+        # A single video is a season of its own too, so nothing the subscription had is left out.
+        ("https://www.youtube.com/watch?v=special", "Specials", 0),
+    ]
+    assert not any(warning.subject == "links" for warning in specials.warnings)
 
 
 def test_custom_presets_convert_simple_variables_and_report_scripts(tmp_path):
@@ -153,6 +183,8 @@ presets:
       allow_auto_generated_subtitles: true
     chapters:
       remove_sponsorblock_categories: ["sponsor"]
+      remove_chapters_regex: ["^Intro$", "(unclosed"]
+      allow_chapters_from_comments: true
     overrides:
       tv_show_directory: "/media/tv"
       episode_file_name: "{upload_date_standardized} - {%regex_sub('[0-9]+', '', title)}"
@@ -180,6 +212,8 @@ YouTube Releases:
     assert (profile.settings["preferred_format"], profile.settings["metadata_mode"], profile.settings["show_nfo"]) == (
         "format_1080p", "embed_and_nfo", True)
     assert (profile.settings["subtitle_mode"], profile.settings["subtitle_languages"]) == ("sidecar", ["en", "nl"])
+    # ytdl-sub's base preset saves the info file beside each video.
+    assert profile.settings["save_info_json"] is True
     collection = plan.collections[0]
     assert collection.title == "Kurzgesagt – In a Nutshell"
     rules = collection.download_profile["rules"]
@@ -190,10 +224,153 @@ YouTube Releases:
     assert collection.download_profile["ep_id_type_list"] == ["ep"]
     assert collection.download_profile["auto_subtitles"] == "fallback"
     assert collection.download_profile["sponsorblock_segments"]["sponsor"] == "cut"
+    # ytdl-sub keeps the video's own chapters unless embed_chapters is turned off.
+    assert (collection.download_profile["keep_chapters"], collection.download_profile["cut_chapters"]) == (True, ["^Intro$"])
     subjects = {warning.subject for warning in collection.warnings}
-    assert {"throttle_protection", "ytdl_options extractor_args"} <= subjects
+    assert {"throttle_protection", "ytdl_options extractor_args", "remove_chapters_regex",
+            "allow_chapters_from_comments"} <= subjects
     assert [setting.key for setting in plan.settings] == ["downloads.filename_restriction_mode", "ytdlp.cookies"]
-    assert any(warning.subject == "Some Band" and "music" in warning.message for warning in plan.warnings)
+    assert any(warning.subject == "Some Band" and "Releases tab" in warning.message for warning in plan.warnings)
+
+
+# ytdl-sub's own music example, examples/music_subscriptions.yaml, shortened.
+MUSIC = """
+__preset__:
+  overrides:
+    music_directory: "/music"
+
+YouTube Full Albums:
+  = Lofi:
+    "Game Chops": "https://www.youtube.com/playlist?list=PLBsm_SagFMmdWnCnrNtLjA9kzfrRkto4i"
+
+SoundCloud Discography:
+  = Chill Hop:
+    "UKNOWY": "https://soundcloud.com/uknowymunich"
+
+Bandcamp:
+  = Lofi:
+    "Emily Hopkins": "https://emilyharpist.bandcamp.com/"
+"""
+
+
+def test_a_discography_becomes_a_collection_of_the_artists_page_with_a_music_profile(tmp_path):
+    plan = _plan(_write(tmp_path, MUSIC), ("/music", "/downloads/music"))
+
+    profile = next(profile for profile in plan.profiles if profile.name == "Bandcamp")
+    assert (profile.name, profile.settings.get("type", "collection"), profile.settings["collection_scope"]) == ("Bandcamp", "collection", "music")
+    assert profile.settings["preferred_format"] == "format_audio_only"
+    assert profile.output_template == (
+        "/downloads/music/{{ artist }}/[{{ year }}] {{ album }}/{{ track_number_padded }} - {{ title }}.ext"
+    )
+    collections = {collection.title: collection for collection in plan.collections}
+    hopkins = collections["Emily Hopkins"]
+    assert (hopkins.url, hopkins.artist_page, hopkins.settings["type"], hopkins.settings["genre"]) == (
+        "https://emilyharpist.bandcamp.com/", True, "music", "Lofi",
+    )
+    assert collections["UKNOWY"].profile_external_id == "preset:SoundCloud Discography"
+    assert plan.download_folder == "/music"
+    assert not any(warning.subject == "Game Chops" for warning in plan.warnings)
+
+
+def test_full_albums_are_split_into_tracks_by_their_chapters(tmp_path):
+    downloads = tmp_path / "downloads"
+    # A music preset's archive sits in the music folder, beside every artist's folder.
+    (downloads / "music").mkdir(parents=True)
+    (downloads / "music" / ".ytdl-sub-Game Chops-download-archive.json").write_text(json.dumps({
+        "album-1": {"upload_date": "2020-05-01", "extractor": "youtube", "file_names": [
+            "Game Chops/[2020] Lofi Album/02 - Second.mp3", "Game Chops/[2020] Lofi Album/folder.jpg",
+            "Game Chops/[2020] Lofi Album/01 - First.mp3",
+        ]},
+    }))
+    plan = _plan(_write(tmp_path / "config", MUSIC), ("/music", "/downloads/music"), downloads)
+
+    albums = next(collection for collection in plan.collections if collection.title == "Game Chops")
+    assert (albums.artist_page, albums.link_seasons, albums.settings["type"], albums.settings["split_chapters"]) == (False, (), "music", True)
+    profile = next(profile for profile in plan.profiles if profile.external_id == albums.profile_external_id)
+    assert profile.output_template == (
+        "/downloads/music/{{ artist }}/[{{ year }}] {{ album }}/{{ track_number_padded }} - {{ title }}.ext"
+    )
+    # Each track is a part of the album's video, in the order the tracks play in.
+    assert [(file.media_site_id, file.part, file.path.rsplit("/", 1)[1]) for file in plan.files
+            if file.collection_external_id == albums.external_id] == [
+        ("album-1", 1, "01 - First.mp3"), ("album-1", 2, "02 - Second.mp3"),
+    ]
+
+
+def _proof(plan, collection):
+    from backend.services import imports
+    from config.settings.submodels import FilenameRestrictionMode
+
+    profile = next(profile for profile in plan.profiles if profile.external_id == collection.profile_external_id)
+    files = [file for file in plan.files if file.collection_external_id == collection.external_id]
+    return imports.path_proof(profile, files, {collection.external_id: collection.title},
+                              FilenameRestrictionMode.UNRESTRICTED)
+
+
+def test_the_path_check_reads_a_tracks_album_and_number_from_its_folders(tmp_path):
+    downloads = tmp_path / "downloads"
+    (downloads / "music").mkdir(parents=True)
+    (downloads / "music" / ".ytdl-sub-Emily Hopkins-download-archive.json").write_text(json.dumps({
+        "track-1": {"upload_date": "2026-01-05", "extractor": "bandcamp", "file_names": [
+            "Emily Hopkins/[2026] Harp Songs/02 - Second Song.flac", "Emily Hopkins/[2026] Harp Songs/folder.jpg",
+        ]},
+    }))
+    plan = _plan(_write(tmp_path / "config", MUSIC), ("/music", "/downloads/music"), downloads)
+
+    hopkins = next(collection for collection in plan.collections if collection.title == "Emily Hopkins")
+    (track,) = [file for file in plan.files if file.collection_external_id == hopkins.external_id]
+    assert (track.title, track.episode_values) == ("Second Song", {
+        "artist": "Emily Hopkins", "album": "Harp Songs", "track_number": "2", "track_number_padded": "02",
+    })
+    assert _proof(plan, hopkins).identical == 1
+
+
+def test_the_path_check_reads_a_videos_title_and_uploader_from_its_info_file(tmp_path):
+    downloads = tmp_path / "downloads"
+    videos = downloads / "music_videos"
+    (videos / "Rick Astley").mkdir(parents=True)
+    (videos / "Rick Astley" / "Never Gonna Give You Up.info.json").write_text(json.dumps(
+        {"title": "Never Gonna Give You Up", "uploader": "Rick Astley", "duration": 212.4}))
+    _archive_named(videos, "Rick Astley", {
+        "vid-rick": {"upload_date": "2009-10-25", "extractor": "youtube", "file_names": [
+            "Rick Astley/Never Gonna Give You Up.info.json", "Rick Astley/Never Gonna Give You Up.mp4",
+        ]},
+        # Without an info file the check has no title to go on.
+        "vid-none": {"upload_date": "2010-01-01", "extractor": "youtube", "file_names": ["Rick Astley/Other.mp4"]},
+    })
+    plan = _plan(_write(tmp_path / "config", MUSIC_VIDEOS), ("/music_videos", "/downloads/music_videos"), downloads)
+
+    rick = next(collection for collection in plan.collections if collection.title == "Rick Astley")
+    assert {file.media_site_id: (file.title, file.episode_values) for file in plan.files} == {
+        "vid-rick": ("Never Gonna Give You Up",
+                     {"artist": "Rick Astley", "episode_uploader": "Rick Astley", "duration_seconds": "212"}),
+        "vid-none": (None, {"artist": "Rick Astley"}),
+    }
+    assert _proof(plan, rick).identical == 1
+
+
+def test_the_path_check_keeps_each_tv_show_collection_file_in_its_season(tmp_path):
+    downloads = tmp_path / "downloads"
+    _archive(downloads / "Beyond the Guitar", {
+        "vid-one": {"upload_date": "2026-11-18", "extractor": "youtube", "file_names": [
+            "Season 01/s01.e26111801 - Ocarina Songs.mp4"]},
+        "vid-two": {"upload_date": "2015-12-25", "extractor": "youtube", "file_names": [
+            "Season 02/s02.e15122501 - Reys Theme.mp4"]},
+    })
+    plan = _plan(_write(tmp_path / "config", EXAMPLE), ("/tv_shows", "/downloads"), downloads)
+
+    guitar = next(collection for collection in plan.collections if collection.title == "Beyond the Guitar")
+    assert {file.media_site_id: file.episode_values for file in plan.files
+            if file.collection_external_id == guitar.external_id} == {
+        "vid-one": {"season_number": "1"}, "vid-two": {"season_number": "2"},
+    }
+    proof = _proof(plan, guitar)
+    assert (proof.identical, proof.total) == (2, 2), proof.differences
+
+
+def _archive_named(folder: Path, subscription: str, entries: dict) -> None:
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f".ytdl-sub-{subscription}-download-archive.json").write_text(json.dumps(entries))
 
 
 def test_download_archives_give_every_file_by_video_id_and_find_the_folder(tmp_path):
@@ -223,6 +400,21 @@ def test_download_archives_give_every_file_by_video_id_and_find_the_folder(tmp_p
     assert plan.profiles[0].output_template == "/downloads/tv/" + BY_DATE
 
 
+def test_a_link_to_one_tab_of_a_channel_lists_only_that_feed(tmp_path):
+    plan = _plan(_write(tmp_path, """
+Plex TV Show by Date:
+  "Only Videos": "https://www.youtube.com/@novapbs/videos"
+  "Only Shorts": "https://www.youtube.com/@novapbs/shorts"
+  "Only Streams": "https://www.youtube.com/@novapbs/streams"
+  "Everything": "https://www.youtube.com/@novapbs"
+  "A Playlist": "https://www.youtube.com/playlist?list=PLvideos"
+"""))
+
+    feeds = {collection.title: collection.settings.get("feeds") for collection in plan.collections}
+    assert feeds == {"Only Videos": ["videos"], "Only Shorts": ["shorts"], "Only Streams": ["live"],
+                     "Everything": None, "A Playlist": None}
+
+
 def test_an_upload_takes_the_subscriptions_and_config_files():
     assert normalise_upload_path("config/subscriptions.yaml", ytdl_sub.UPLOAD_FILES)[0] == "subscriptions.yaml"
     assert normalise_upload_path("config/config.yaml", ytdl_sub.UPLOAD_FILES)[0] == "config.yaml"
@@ -230,6 +422,16 @@ def test_an_upload_takes_the_subscriptions_and_config_files():
 
 
 # Applying an import -----------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def forget_sites():
+    """Each test's Sources tell the Sites of their links afresh."""
+    from backend.services import sites
+
+    sites._site_of.cache_clear()
+    yield
+    sites._site_of.cache_clear()
+
 
 @pytest.fixture
 def installation(tmp_path, monkeypatch):
@@ -333,3 +535,683 @@ def test_an_import_finds_the_folder_adopts_the_archive_and_keeps_the_genre(insta
     session.expire_all()
     download = session.scalar(select(EpisodeMediaDownload))
     assert download is not None and download.file_path.endswith("tv/NOVA PBS/Season 2021/s2021.e031701 - First.mp4")
+
+
+def test_an_imported_tv_show_collection_has_its_playlists_as_seasons_in_ytdl_subs_numbers(installation):
+    from backend.db.models import Collection
+    from backend.services import imports
+
+    session = installation
+    run = imports.start_run(session, ytdl_sub.IMPORTER, imports.ImportOptions(collections=("subscription:Beyond the Guitar",)))
+    session.commit()
+    imports.apply_run(run.id)
+    session.expire_all()
+
+    guitar = session.scalar(select(Collection).where(Collection.title == "Beyond the Guitar"))
+    assert guitar.sharing_url == "https://www.youtube.com/c/BeyondTheGuitar"
+    assert [(link.url, link.season.season_number, link.season.name) for link in guitar.lists] == [
+        ("https://www.youtube.com/playlist?list=PLE62gWlWZk5NWVAVuf0Lm9jdv_-_KXs0W", 2, "Music Videos"),
+    ]
+    # Its files are named by ytdl-sub's numbers, so those stay.
+    assert (guitar.link_seasons, guitar.custom_season_order) == ("selected", True)
+    # As in ytdl-sub, the channel's season holds what is in no playlist, and a video is in one season.
+    assert (guitar.channel_season, guitar.repeat_videos) == ("unlisted", "one_season")
+
+
+def _artist_import(monkeypatch):
+    """The music example uploaded, and a yt-dlp Source that knows Emily Hopkins on Bandcamp."""
+    from backend.services import import_uploads
+    from sources import registry
+    from sources.contract import CreatorDetails, Feature, Names, SectionKind, SectionRef, SectionType, Site
+
+    subscriptions = MUSIC.encode()
+    import_uploads.begin_upload(ytdl_sub.IMPORTER, [("subscriptions.yaml", len(subscriptions))], include_secrets=False)
+    import_uploads.write_chunk(ytdl_sub.IMPORTER, "subscriptions.yaml", 0, subscriptions)
+    import_uploads.finish_upload(ytdl_sub.IMPORTER)
+    ytdlp = registry._sources["ytdlp"]
+
+    class Artists(type(ytdlp)):
+        domains = ("bandcamp.com",)
+        features = ytdlp.features | {Feature.CREATORS}
+        sites = (Site("bandcamp", "Bandcamp", ("bandcamp.com",), creators=True, creator_names=Names("artist", "artists"), link_seasons=True,
+                      section_types=(SectionType("album", SectionKind.LIST, Names("album", "albums")),
+                                     SectionType("single", SectionKind.ITEM, Names("single", "singles")))),)
+
+        def creator_of(self, url):
+            return "https://emilyharpist.bandcamp.com"
+
+        def creator_details(self, ref, progress=lambda step: None):
+            album = SectionRef(ref="album/harp", url="https://emilyharpist.bandcamp.com/album/harp", title="Harp",
+                               type=self.sites[0].section_type("album"))
+            single = SectionRef(ref="track/one", url="https://emilyharpist.bandcamp.com/track/one", title="One",
+                                type=self.sites[0].section_type("single"))
+            return CreatorDetails(ref="emilyharpist", url="https://emilyharpist.bandcamp.com", title="Emily Hopkins",
+                                  sections=(album, single), music=True)
+
+    monkeypatch.setattr(registry, "_sources", {**registry._sources, "ytdlp": Artists()})
+
+
+def test_an_imported_discography_is_one_collection_of_the_artists_page(installation, monkeypatch):
+    from backend.db.models import Creator, Collection, CollectionLocalMediaProfile
+    from backend.services import imports
+
+    session = installation
+    _artist_import(monkeypatch)
+    run = imports.start_run(session, ytdl_sub.IMPORTER, imports.ImportOptions(collections=("subscription:Emily Hopkins",)))
+    session.commit()
+    imports.apply_run(run.id)
+    session.expire_all()
+
+    # Added as Add Collection adds the artist's page, on its own.
+    assert session.scalar(select(Creator)) is None
+    collection = session.scalar(select(Collection))
+    assert (collection.title, collection.type, collection.genre, collection.creator_id) == ("Emily Hopkins", "music", "Lofi", None)
+    # Every album is a season, the ones to come too, as the Site's defaults for a channel say.
+    assert (collection.sharing_url, collection.kind, collection.link_seasons) == (
+        "https://emilyharpist.bandcamp.com/", "channel", "all",
+    )
+    assert session.scalar(select(CollectionLocalMediaProfile.collection_scope).where(CollectionLocalMediaProfile.name == "Bandcamp")) == "music"
+
+
+def test_an_imported_tab_link_keeps_only_its_feed(installation):
+    from backend.db.models import Collection
+    from backend.services import import_uploads, imports
+
+    session = installation
+    subscriptions = """
+Plex TV Show by Date:
+  "Only Videos": "https://www.youtube.com/@novapbs/videos"
+""".encode()
+    import_uploads.begin_upload(ytdl_sub.IMPORTER, [("subscriptions.yaml", len(subscriptions))], include_secrets=False)
+    import_uploads.write_chunk(ytdl_sub.IMPORTER, "subscriptions.yaml", 0, subscriptions)
+    import_uploads.finish_upload(ytdl_sub.IMPORTER)
+    run = imports.start_run(session, ytdl_sub.IMPORTER, imports.ImportOptions())
+    session.commit()
+    imports.apply_run(run.id)
+    session.expire_all()
+
+    assert session.scalar(select(Collection.feeds)) == ["videos"]
+
+
+def test_an_imported_collection_stays_on_its_own(installation, monkeypatch):
+    from backend.db.models import Creator, Collection
+    from backend.services import imports
+    from sources import registry
+    from sources.contract import CreatorDetails, Feature, Names, SectionKind, SectionRef, SectionType, Site
+
+    session = installation
+    ytdlp = registry._sources["ytdlp"]
+
+    class Creators(type(ytdlp)):
+        features = ytdlp.features | {Feature.CREATORS}
+        sites = (Site("youtube", "YouTube", ("youtube.com",), creators=True),)
+
+        def creator_of(self, url):
+            return "BeyondTheGuitar"
+
+        def creator_details(self, ref, progress=lambda step: None):
+            return CreatorDetails(ref=ref, url="https://www.youtube.com/c/BeyondTheGuitar", title="Beyond the Guitar", sections=(
+                SectionRef(ref="videos", url="https://www.youtube.com/c/BeyondTheGuitar", type=SectionType("videos", SectionKind.FEED, Names("video", "videos"))),
+            ))
+
+    monkeypatch.setattr(registry, "_sources", {**registry._sources, "ytdlp": Creators()})
+    run = imports.start_run(session, ytdl_sub.IMPORTER, imports.ImportOptions(collections=("subscription:Beyond the Guitar",)))
+    session.commit()
+    imports.apply_run(run.id)
+    session.expire_all()
+
+    # Its channel has a creator, but the import doesn't add it.
+    guitar = session.scalar(select(Collection))
+    assert (session.scalar(select(Creator)), guitar.creator_id) == (None, None)
+    # The playlist stays a season of the collection.
+    assert [link.ref for link in guitar.lists] == ["PLE62gWlWZk5NWVAVuf0Lm9jdv_-_KXs0W"]
+
+
+def test_a_tv_show_collection_of_only_playlists_holds_only_them(tmp_path):
+    plan = _plan(_write(tmp_path, EXAMPLE + """
+    "~Mixed Playlists":
+      s01_name: "Firsts"
+      s01_url: "https://www.youtube.com/playlist?list=PLfirst"
+      s02_url:
+        - "https://www.youtube.com/playlist?list=PLsecond"
+        - "https://www.youtube.com/watch?v=single"
+"""))
+
+    mixed = {collection.title: collection for collection in plan.collections}["Mixed Playlists"]
+    # No channel to make the collection of: it has no link of its own, and every link is a season.
+    assert (mixed.links_only, mixed.url) == (True, "https://www.youtube.com/playlist?list=PLfirst")
+    assert sorted((link.url, link.title, link.season_number) for link in mixed.link_seasons) == [
+        ("https://www.youtube.com/playlist?list=PLfirst", "Firsts", 1),
+        ("https://www.youtube.com/playlist?list=PLsecond", "Season 2", 2),
+        ("https://www.youtube.com/watch?v=single", "Season 2", 2),
+    ]
+    assert not any(warning.subject == "links" for warning in mixed.warnings)
+
+
+def test_a_subscription_with_links_on_several_sites_becomes_a_collection_per_site_in_one_creator(tmp_path):
+    downloads = tmp_path / "downloads"
+    _archive(downloads / "tv" / "Mixed Sites", {
+        "vid-yt": {"upload_date": "2024-01-02", "extractor": "youtube:tab",
+                   "file_names": ["Season 01/s01.e000001 - On YouTube.mp4"]},
+        "vid-sc": {"upload_date": "2024-01-03", "extractor": "soundcloud",
+                   "file_names": ["Season 04/s04.e000001 - On SoundCloud.mp4"]},
+    })
+    plan = _plan(_write(tmp_path / "config", EXAMPLE + """
+    "~Mixed Sites":
+      s01_url: "https://www.youtube.com/playlist?list=PLfirst"
+      s02_url: "https://www.youtube.com/playlist?list=PLsecond"
+      s03_url: "https://www.youtube.com/playlist?list=PLthird"
+      s04_url: "https://soundcloud.com/mixed/sets/first"
+      s05_url: "https://soundcloud.com/mixed/sets/second"
+"""), ("/tv_shows", "/downloads/tv"), downloads)
+
+    mixed = {collection.external_id: collection for collection in plan.collections
+             if collection.external_id.startswith("subscription:Mixed Sites")}
+    youtube, soundcloud = mixed["subscription:Mixed Sites"], mixed["subscription:Mixed Sites:soundcloud"]
+    # The YouTube links are one collection and the SoundCloud ones another, each with its playlists as seasons.
+    assert (youtube.title, youtube.links_only, youtube.creator) == ("Mixed Sites (YouTube)", True, "Mixed Sites")
+    assert [(link.url, link.season_number) for link in youtube.link_seasons] == [
+        ("https://www.youtube.com/playlist?list=PLthird", 3), ("https://www.youtube.com/playlist?list=PLsecond", 2),
+        ("https://www.youtube.com/playlist?list=PLfirst", 1),
+    ]
+    assert (soundcloud.title, soundcloud.links_only, soundcloud.creator) == ("Mixed Sites (SoundCloud)", True, "Mixed Sites")
+    assert [(link.url, link.season_number) for link in soundcloud.link_seasons] == [
+        ("https://soundcloud.com/mixed/sets/second", 5), ("https://soundcloud.com/mixed/sets/first", 4),
+    ]
+    # Each collection takes the files of its own Site.
+    assert sorted((file.collection_external_id, file.media_site_id) for file in plan.files) == [
+        ("subscription:Mixed Sites", "vid-yt"), ("subscription:Mixed Sites:soundcloud", "vid-sc"),
+    ]
+
+
+def test_a_subscription_on_one_site_stays_one_collection(tmp_path):
+    plan = _plan(_write(tmp_path, EXAMPLE))
+
+    beato = {collection.title: collection for collection in plan.collections}["Rick Beato"]
+    assert (beato.external_id, beato.creator) == ("subscription:Rick Beato", None)
+
+
+def test_backwards_episode_orderings_number_the_newest_first(tmp_path):
+    plan = _plan(_write(tmp_path, """
+__preset__:
+  overrides:
+    tv_show_directory: "/tv_shows"
+
+Plex TV Show by Date:
+  = Documentaries:
+    "~NOVA PBS":
+      url: "https://www.youtube.com/@novapbs"
+      tv_show_by_date_episode_ordering: "upload-month-day-reversed"
+"""))
+
+    profile = plan.profiles[0]
+    assert profile.output_template == (
+        "/downloads/{{ collection_title }}/Season {{ year }}/s{{ year }}.e{{ day_of_year_reversed }}"
+        "{{ '%02d' | format('day' | custom_index(per=date, start=99, step=-1)) }} - {{ title }}.ext"
+    )
+    assert [index.key for index in profile.custom_indexes] == ["day"]
+    assert not any(warning.subject == "tv_show_by_date_episode_ordering" for warning in plan.collections[0].warnings)
+
+
+def test_the_day_of_year_counts_back_from_the_end_of_the_year():
+    from datetime import date
+
+    from backend.utils.output_template import _date_substitutions
+
+    assert (_date_substitutions(date(2026, 1, 1))["day_of_year"], _date_substitutions(date(2026, 1, 1))["day_of_year_reversed"]) == ("001", "365")
+    assert _date_substitutions(date(2026, 12, 31))["day_of_year_reversed"] == "001"
+    assert _date_substitutions(date(2028, 1, 1))["day_of_year_reversed"] == "366"
+
+
+def test_a_date_range_with_an_end_date_downloads_between_two_dates(tmp_path):
+    config = """
+presets:
+  closed_period:
+    preset:
+      - "Jellyfin TV Show by Date"
+    date_range:
+      after: "20200101"
+      before: "20221231"
+    overrides:
+      tv_show_directory: "/tv_shows"
+"""
+    plan = _plan(_write(tmp_path, """
+closed_period:
+  "NOVA PBS": "https://www.youtube.com/@novapbs"
+""", config))
+
+    from backend.services.import_filters import filters_from_plan
+
+    collection = plan.collections[0]
+    (published,) = [item for item in filters_from_plan(collection.download_profile, seasons=False) if item.field == "published"]
+    assert (published.starting_from.isoformat(), published.until.isoformat()) == ("2020-01-01", "2022-12-31")
+    assert not any(warning.subject == "date_range" for warning in collection.warnings)
+
+
+def test_an_own_episode_title_and_plot_become_the_profiles_metadata_templates(tmp_path):
+    config = """
+presets:
+  titled:
+    preset:
+      - "Jellyfin TV Show by Date"
+    overrides:
+      tv_show_directory: "/tv_shows"
+      episode_title: "{upload_date_standardized} - {title}"
+      episode_plot: "{description}"
+"""
+    plan = _plan(_write(tmp_path, """
+titled:
+  "NOVA PBS": "https://www.youtube.com/@novapbs"
+""", config))
+
+    settings = plan.profiles[0].settings
+    assert settings["episode_title_template"] == "{{ date }} - {{ title }}"
+    assert settings["episode_description_template"] == "{{ description }}"
+
+
+MUSIC_VIDEOS = """
+__preset__:
+  overrides:
+    music_video_directory: "/music_videos"
+
+Jellyfin Music Videos:
+  = Pop:
+    "Rick Astley": "https://www.youtube.com/@RickAstleyYT"
+"""
+
+
+def test_an_artists_music_videos_become_a_music_collection(tmp_path):
+    plan = _plan(_write(tmp_path, MUSIC_VIDEOS), ("/music_videos", "/downloads/music_videos"))
+
+    assert not any(warning.subject == "Rick Astley" for warning in plan.warnings)
+    videos = next(collection for collection in plan.collections if collection.title == "Rick Astley")
+    # A plain Music collection, on its own.
+    assert (videos.url, videos.artist_page, videos.artist, videos.settings["type"], videos.settings["genre"]) == (
+        "https://www.youtube.com/@RickAstleyYT", False, "Rick Astley", "music", "Pop",
+    )
+    profile = next(profile for profile in plan.profiles if profile.external_id == videos.profile_external_id)
+    assert profile.output_template == "/downloads/music_videos/{{ artist }}/{{ title }}.ext"
+    assert (profile.settings["episode_nfo"], profile.settings["show_nfo"], profile.settings["metadata_mode"]) == (
+        "music_video", False, "embed_and_nfo",
+    )
+    assert plan.download_folder == "/music_videos"
+
+
+ARTIST = """
+__preset__:
+  overrides:
+    music_directory: "/media/music"
+    music_video_directory: "/media/music_videos"
+
+Bandcamp:
+  = Lofi:
+    "Emily Hopkins": "https://emilyharpist.bandcamp.com/"
+
+YouTube Full Albums:
+  = Lofi:
+    "Game Chops": "https://www.youtube.com/@GameChops"
+
+Jellyfin Music Videos:
+  = Lofi:
+    "Emily Hopkins": "https://www.youtube.com/playlist?list=PLharp"
+    "Game Chops": "https://www.youtube.com/@GameChops"
+  = Pop:
+    "+ Rick Astley":
+      Music Videos:
+        - "https://www.youtube.com/playlist?list=PLrick"
+      Concerts:
+        - "https://www.youtube.com/watch?v=live1"
+        # A link with overrides of its own, as ytdl-sub's examples write a single video.
+        - title: "Never Gonna Give You Up (Glastonbury 2023)"
+          year: "2023"
+          url: "https://www.youtube.com/watch?v=live2"
+"""
+
+
+def test_an_artists_albums_and_music_videos_are_two_collections_of_one_artist(tmp_path):
+    plan = _plan(_write(tmp_path, ARTIST), ("/media", "/downloads"))
+
+    by_id = {collection.external_id: collection for collection in plan.collections}
+    # The second subscription of a name is known by its presets too, so neither takes the other's files.
+    assert set(by_id) == {
+        "subscription:Emily Hopkins", "subscription:Game Chops", "subscription:Emily Hopkins:Jellyfin Music Videos",
+        "subscription:Game Chops:Jellyfin Music Videos", "subscription:Rick Astley",
+    }
+    albums, videos = by_id["subscription:Emily Hopkins"], by_id["subscription:Emily Hopkins:Jellyfin Music Videos"]
+    assert (albums.title, albums.artist, albums.artist_page) == ("Emily Hopkins albums", "Emily Hopkins", True)
+    assert (videos.title, videos.artist, videos.artist_page) == ("Emily Hopkins music videos", "Emily Hopkins", False)
+    # The music videos are a playlist: still a collection of their own, in the creator of the albums.
+    assert (albums.creator, videos.creator) == ("Emily Hopkins", "Emily Hopkins")
+    # The artist's own page comes first, so the playlist joins the creator its albums join.
+    order = [collection.external_id for collection in plan.collections]
+    assert order.index(albums.external_id) < order.index(videos.external_id)
+    # The same link for both is one collection with both profiles, named after the artist.
+    assert {by_id["subscription:Game Chops"].title, by_id["subscription:Game Chops:Jellyfin Music Videos"].title} == {"Game Chops"}
+
+
+def test_a_music_video_map_has_each_category_as_a_link_season(tmp_path):
+    plan = _plan(_write(tmp_path, ARTIST), ("/media", "/downloads"))
+
+    assert not any(warning.subject == "Rick Astley" for warning in plan.warnings)
+    rick = next(collection for collection in plan.collections if collection.external_id == "subscription:Rick Astley")
+    assert (rick.links_only, rick.artist, rick.settings["type"]) == (True, "Rick Astley", "music")
+    assert [(season.url, season.title, season.season_number) for season in rick.link_seasons] == [
+        ("https://www.youtube.com/playlist?list=PLrick", "Music Videos", 1),
+        ("https://www.youtube.com/watch?v=live1", "Concerts", 2),
+        ("https://www.youtube.com/watch?v=live2", "Concerts", 2),
+    ]
+
+
+def test_ytdl_subs_artist_name_names_the_artist(tmp_path):
+    plan = _plan(_write(tmp_path, """
+Bandcamp:
+  "Emily":
+    preset: Bandcamp
+    overrides:
+      music_directory: "/music"
+      url: "https://emilyharpist.bandcamp.com/"
+      track_artist: "Emily Hopkins"
+"""), ("/music", "/downloads/music"))
+
+    assert [collection.artist for collection in plan.collections] == ["Emily Hopkins"]
+
+
+@pytest.mark.parametrize(("preset", "url", "expected"), [
+    ("Max Audio Quality", "https://www.youtube.com/@GameChops", "opus"),
+    ("Max Audio Quality", "https://emilyharpist.bandcamp.com/", "mp3"),
+    ("MP3 320k", "https://www.youtube.com/@GameChops", "mp3"),
+])
+def test_best_audio_keeps_the_sites_own_format(tmp_path, preset, url, expected):
+    preset_name = "Bandcamp" if "bandcamp" in url else "YouTube Full Albums"
+    plan = _plan(_write(tmp_path, f"""
+__preset__:
+  overrides:
+    music_directory: "/music"
+{preset_name} | {preset}:
+  "Artist": "{url}"
+"""), ("/music", "/downloads/music"))
+
+    profile = plan.profiles[0]
+    assert profile.settings["audio_format"] == expected
+    assert not any(warning.subject == "audio_extract" and "saves audio as" in warning.message for warning in profile.warnings)
+
+
+def test_flac_stays_flac_for_music_tracks(tmp_path):
+    plan = _plan(_write(tmp_path, """
+YouTube Full Albums:
+  "Artist":
+    overrides:
+      music_directory: "/music"
+      url: "https://www.youtube.com/@GameChops"
+    audio_extract:
+      codec: flac
+"""), ("/music", "/downloads/music"))
+
+    assert plan.profiles[0].settings["audio_format"] == "flac"
+
+
+@pytest.mark.parametrize("videos_url", [
+    "https://www.youtube.com/@EmilyHopkinsHarp", "https://www.youtube.com/playlist?list=PLharp",
+], ids=["channel", "playlist"])
+def test_an_imported_artist_keeps_ytdl_subs_name_with_their_albums_and_music_videos(installation, monkeypatch, videos_url):
+    from backend.services.link_seasons import collection_new_lists
+    from backend.db.models import Creator, Collection
+    from backend.services import import_uploads, imports
+    from sources import registry
+    from sources.contract import CreatorDetails, Feature, Names, SectionKind, SectionRef, SectionType, Site
+
+    session = installation
+    subscriptions = """
+__preset__:
+  overrides:
+    music_directory: "/tv/music"
+    music_video_directory: "/tv/music_videos"
+
+Bandcamp:
+  "Emily Hopkins": "https://emilyharpist.bandcamp.com/"
+
+Jellyfin Music Videos:
+  "Emily Hopkins": "%s"
+""".replace("%s", videos_url).encode()
+    import_uploads.begin_upload(ytdl_sub.IMPORTER, [("subscriptions.yaml", len(subscriptions))], include_secrets=False)
+    import_uploads.write_chunk(ytdl_sub.IMPORTER, "subscriptions.yaml", 0, subscriptions)
+    import_uploads.finish_upload(ytdl_sub.IMPORTER)
+    ytdlp = registry._sources["ytdlp"]
+
+    class Artists(type(ytdlp)):
+        domains = ("bandcamp.com", "youtube.com")
+        features = ytdlp.features | {Feature.CREATORS}
+        # A Site that tells an artist's albums from their playlists.
+        sites = (Site("bandcamp", "Bandcamp", ("bandcamp.com",), creators=True, creator_names=Names("artist", "artists"), link_seasons=True,
+                      section_types=(SectionType("album", SectionKind.LIST, Names("album", "albums"), albums=True),
+                                     SectionType("playlist", SectionKind.LIST, Names("playlist", "playlists")))),
+                 Site("youtube", "YouTube", ("youtube.com",), creators=True))
+
+        def creator_of(self, url):
+            return "https://emilyharpist.bandcamp.com"
+
+        def creator_details(self, ref, progress=lambda step: None):
+            album = SectionRef(ref="album/harp", url="https://emilyharpist.bandcamp.com/album/harp", title="Harp",
+                               type=self.sites[0].section_type("album"))
+            playlist = SectionRef(ref="sets/favourites", url="https://emilyharpist.bandcamp.com/sets/favourites",
+                                  title="Favourites", type=self.sites[0].section_type("playlist"))
+            # The site names the artist by their handle; ytdl-sub by the subscription.
+            return CreatorDetails(ref="emilyharpist", url="https://emilyharpist.bandcamp.com", title="emilyharpist",
+                                  sections=(album, playlist), music=True)
+
+    monkeypatch.setattr(registry, "_sources", {**registry._sources, "ytdlp": Artists()})
+    run = imports.start_run(session, ytdl_sub.IMPORTER, imports.ImportOptions(collections=(
+        "subscription:Emily Hopkins", "subscription:Emily Hopkins:Jellyfin Music Videos",
+    )))
+    session.commit()
+    imports.apply_run(run.id)
+    session.expire_all()
+
+    creator = session.scalar(select(Creator))
+    collections = {collection.title: collection for collection in session.scalars(select(Collection))}
+    assert set(collections) == {"Emily Hopkins albums", "Emily Hopkins music videos"}
+    albums, videos = collections["Emily Hopkins albums"], collections["Emily Hopkins music videos"]
+    # The albums and the music videos, on two Sites, share one creator, named as ytdl-sub names the artist. A playlist
+    # of music videos stays a collection of its own beside the albums.
+    assert (creator.title, albums.creator_id, videos.creator_id) == ("Emily Hopkins", creator.id, creator.id)
+    assert (videos.type, videos.sharing_url, videos.author_name) == ("music", videos_url, "Emily Hopkins")
+    # New albums are added as they come out, as the other program did; new playlists are skipped.
+    assert [(setting.key, setting.action) for setting in collection_new_lists(albums)] == [("album", "add"), ("playlist", "ignore")]
+
+
+def test_a_subscriptions_collections_on_two_sites_share_one_creator_named_after_it(installation, monkeypatch):
+    from backend.db.models import Creator, Collection
+    from backend.services import import_uploads, imports
+    from sources import registry
+    from sources.contract import CreatorDetails, Feature, Site
+
+    session = installation
+    subscriptions = """
+__preset__:
+  overrides:
+    tv_show_directory: "/tv_shows"
+
+Plex TV Show Collection:
+  "~Mixed Sites":
+    s01_url: "https://www.youtube.com/playlist?list=PLfirst"
+    s02_url: "https://www.youtube.com/playlist?list=PLsecond"
+    s03_url: "https://soundcloud.com/mixed/sets/first"
+""".encode()
+    import_uploads.begin_upload(ytdl_sub.IMPORTER, [("subscriptions.yaml", len(subscriptions))], include_secrets=False)
+    import_uploads.write_chunk(ytdl_sub.IMPORTER, "subscriptions.yaml", 0, subscriptions)
+    import_uploads.finish_upload(ytdl_sub.IMPORTER)
+    ytdlp = registry._sources["ytdlp"]
+
+    class Creators(type(ytdlp)):
+        domains = ("youtube.com", "soundcloud.com")
+        features = ytdlp.features | {Feature.CREATORS, Feature.LINK_COLLECTIONS}
+        sites = (Site("youtube", "YouTube", ("youtube.com",), creators=True),
+                 Site("soundcloud", "SoundCloud", ("soundcloud.com",), creators=True))
+
+        def creator_of(self, url):
+            # A playlist's creator is the channel that made it.
+            return "https://www.youtube.com/@mixed" if "youtube.com" in url else None
+
+        def creator_details(self, ref, progress=lambda step: None):
+            return CreatorDetails(ref="UCmixed", url="https://www.youtube.com/@mixed", title="mixed")
+
+    monkeypatch.setattr(registry, "_sources", {**registry._sources, "ytdlp": Creators()})
+    run = imports.start_run(session, ytdl_sub.IMPORTER, imports.ImportOptions(collections=(
+        "subscription:Mixed Sites", "subscription:Mixed Sites:soundcloud",
+    )))
+    session.commit()
+    imports.apply_run(run.id)
+    session.expire_all()
+
+    collections = {collection.title: collection for collection in session.scalars(select(Collection))}
+    assert set(collections) == {"Mixed Sites (YouTube)", "Mixed Sites (SoundCloud)"}
+    youtube, soundcloud = collections["Mixed Sites (YouTube)"], collections["Mixed Sites (SoundCloud)"]
+    assert sorted(link.url for link in youtube.lists) == [
+        "https://www.youtube.com/playlist?list=PLfirst", "https://www.youtube.com/playlist?list=PLsecond",
+    ]
+    assert [link.url for link in soundcloud.lists] == ["https://soundcloud.com/mixed/sets/first"]
+    # The creator behind the YouTube playlists, named after the subscription, holds both.
+    creator = session.scalar(select(Creator))
+    assert (creator.title, youtube.creator_id, soundcloud.creator_id) == ("Mixed Sites", creator.id, creator.id)
+
+
+def test_albums_and_music_videos_of_differently_named_subscriptions_pair_by_their_artist(tmp_path):
+    # ytdl-sub keeps only the last of two subscriptions of one name, so configurations name the artist in an override.
+    plan = _plan(_write(tmp_path, """
+__preset__:
+  overrides:
+    music_directory: "/media/music"
+    music_video_directory: "/media/music_videos"
+
+Bandcamp:
+  "Emily Hopkins - Albums":
+    overrides:
+      url: "https://emilyharpist.bandcamp.com/"
+      track_artist: "Emily Hopkins"
+
+Jellyfin Music Videos:
+  "Emily Hopkins - Videos":
+    overrides:
+      url: "https://www.youtube.com/playlist?list=PLharp"
+      music_video_artist: "Emily Hopkins"
+"""), ("/media", "/downloads"))
+
+    assert [(collection.title, collection.artist) for collection in plan.collections] == [
+        ("Emily Hopkins albums", "Emily Hopkins"), ("Emily Hopkins music videos", "Emily Hopkins"),
+    ]
+
+
+def _links_collection(session, *links):
+    """A collection of links without one of its own, as an import of only playlists makes it."""
+    from backend.db.models import Collection, CollectionList
+    from backend.services.sites import site_record
+    from sources import site_of
+
+    count = len(session.scalars(select(Collection.id)).all())
+    collection = Collection(
+        uuid=f"links-{count}", slug=f"links-{count}", source_key="ytdlp", title="Citation Needed", sharing_url=None,
+        membership_level="FREE", type="series", episode_identifier="seasonal", author_name="", author_slug="",
+        kind="custom",
+    )
+    session.add(collection)
+    for position, (url, site_key, image) in enumerate(links):
+        collection.lists.append(CollectionList(
+            ref=url, url=url, title=url, source_key="ytdlp", site_position=position, image_path=image,
+            site_key=site_record(session, site_of(site_key)).key,
+        ))
+    session.commit()
+    return collection
+
+
+def test_a_collection_of_links_is_named_for_its_links_and_shows_the_first_ones_picture():
+    import backend.api.endpoints.collections.router  # noqa: F401  (loads every model first)
+    import task_manager.scheduler.db  # noqa: F401
+    from backend.api.models.collection import CollectionAPIRead
+    from backend.db import Base
+
+    engine = create_engine("sqlite+pysqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
+    Base.metadata.create_all(engine)
+    session = Session(engine)
+    playlists = _links_collection(
+        session,
+        ("https://www.youtube.com/playlist?list=PL7", "youtube", None),
+        ("https://www.youtube.com/playlist?list=PL8", "youtube", "https://i.ytimg.com/pl8.jpg"),
+    )
+    view = CollectionAPIRead.model_validate(playlists).model_dump(by_alias=True)
+    assert (view["kindName"], view["linkImagePath"]) == ("YouTube playlists", "https://i.ytimg.com/pl8.jpg")
+    assert "linkSiteKeys" not in view
+
+    mixed = _links_collection(
+        session,
+        ("https://www.youtube.com/playlist?list=PL9", "youtube", None),
+        ("https://soundcloud.com/earmake/sets/one", "soundcloud", None),
+    )
+    assert CollectionAPIRead.model_validate(mixed).kind_name == "Custom collection"
+
+
+def test_an_import_looks_up_the_pictures_of_a_collection_of_links_after_its_write(installation, monkeypatch):
+    from backend.db.models import ImportRun, ImportStep
+    from backend.services import imports
+    from sources import registry
+    from sources.contract import CollectionDetails
+
+    session = installation
+    collection = _links_collection(
+        session,
+        ("https://www.youtube.com/playlist?list=PL7", "youtube", None),
+        ("https://www.youtube.com/watch?v=concert", "youtube", None),
+    )
+    run = ImportRun(importer=ytdl_sub.IMPORTER.key, status=imports.WAITING, options={}, report=[], counts={})
+    session.add(run)
+    session.flush()
+    session.add(ImportStep(run_id=run.id, collection_id=collection.id, local_media_profile_id=1,
+                           status="waiting", files=[], result={}))
+    session.commit()
+
+    source = registry._sources["ytdlp"]
+
+    def details(url):
+        if "watch?v=" in url:
+            raise ValueError("This link is a single video, not a channel or playlist")
+        return CollectionDetails(slug="PL7", url=url, title="Season 7", author_name="", image_url="https://i.ytimg.com/pl7.jpg")
+
+    monkeypatch.setattr(source, "collection_details", details)
+    imports._picture_links(run.id)
+
+    session.expire_all()
+    assert [link.image_path for link in collection.lists] == ["https://i.ytimg.com/pl7.jpg", None]
+    assert collection.link_image_path == "https://i.ytimg.com/pl7.jpg"
+
+
+def test_an_imported_collection_of_links_lists_them_as_the_users_links(tmp_path, monkeypatch):
+    from backend.db.models import Collection
+    from backend.services import imports
+    from importer.contract import CollectionPlan, PlaylistSeasonPlan
+
+    import backend.api.endpoints.collections.router  # noqa: F401  (loads every model first)
+    import task_manager.scheduler.db  # noqa: F401
+    from backend.db import Base
+
+    engine = create_engine("sqlite+pysqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
+    Base.metadata.create_all(engine)
+    session = Session(engine)
+    links = Collection(
+        uuid="links", slug="links", source_key="ytdlp", title="Rick Astley", sharing_url=None, membership_level="FREE",
+        type="music", episode_identifier="seasonal", author_name="", author_slug="", kind="list",
+    )
+    session.add(links)
+    session.flush()
+    plan = CollectionPlan(
+        external_id="subscription:Rick Astley", title="Rick Astley", url="https://www.youtube.com/playlist?list=PLrick",
+        profile_external_id=None, links_only=True, link_seasons=(
+            PlaylistSeasonPlan("https://www.youtube.com/playlist?list=PLrick", "Music Videos", 1),
+            PlaylistSeasonPlan("https://www.youtube.com/watch?v=live1", "Concerts", 2),
+        ),
+    )
+
+    imports._add_link_seasons(session, links, plan)
+
+    # Every imported link is the user's, and the first one is the collection's default.
+    assert [(link.ref, link.added_by_user, link.is_default) for link in links.lists] == [
+        ("PLrick", True, True), ("https://www.youtube.com/watch?v=live1", True, False),
+    ]

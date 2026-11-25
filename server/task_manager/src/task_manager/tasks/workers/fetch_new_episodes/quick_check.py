@@ -20,7 +20,13 @@ from backend.services.check_frequency import joins_regular_checks
 from backend.db.models import Episode, Collection
 from config.network import is_no_internet_error
 from sources import Feature, Source, get_source
-from ...helpers.listed_collections import add_listed_episodes, index_listed_collection, known_episode_slugs
+from backend.services.notifications.emitters import link_seasons_found
+from backend.services.link_seasons import (
+    list_lists, lists_own_link, own_feeds, place_in_link_seasons, link_seasons_on, save_lists,
+)
+from ...helpers.listed_collections import (
+    add_listed_episodes, index_listed_collection, known_episode_slugs, splits_chapters, with_chapters,
+)
 from backend.services.thumbnails import newest_media_item_id
 from .service import finish_index
 
@@ -71,27 +77,52 @@ def _due_collections(s: Session, now: datetime) -> list[tuple[Collection, Source
     due = []
     for source_key, collections in by_source.items():
         source = get_source(source_key)
-        minutes = source.quick_check_minutes([(collection.sharing_url, counts.get(collection.id, 0)) for collection in collections])
-        for collection in collections:
+        plans = [check_frequency.quick_check_plan(collection, counts.get(collection.id, 0)) for collection in collections]
+        minutes = source.quick_check_minutes(plans)
+        for collection, plan in zip(collections, plans):
             last = _last_checked.get(collection.id)
-            wait = timedelta(minutes=check_frequency.quick_check_minutes(collection, minutes))
+            wait = timedelta(minutes=max(minutes, plan.least_minutes))
             if last is None or now - last >= wait - _SLACK:
                 due.append((collection, source, counts.get(collection.id, 0)))
     return due
 
 
 def _check_collection(s: Session, *, collection: Collection, source: Source) -> int:
-    collection_id, url = collection.id, collection.sharing_url
+    """Look at the collection's newest videos, and add the ones it does not have yet. When it found some and the
+    collection's playlists are seasons, it looks at the playlists too, so a new video goes to its playlist's season
+    before it is downloaded."""
+    collection_id, url, feeds = collection.id, collection.sharing_url, own_feeds(collection)
     known = known_episode_slugs(s, collection)
+    split = splits_chapters(collection)
+    playlists = link_seasons_on(collection)
     # No transaction stays open while the Source looks videos up.
     s.rollback()
-    new = [item for item in source.latest_items(url) if item.slug not in known]
+    newest = newest_media_item_id(s)
+    s.rollback()
+    new = [item for item in source.latest_items(url, feeds=feeds) if item.slug not in known]
     if not new:
         return 0
     found = [details for details in source.item_details(new).values() if details is not None]
-    newest = newest_media_item_id(s)
+    if split:
+        found = [with_chapters(source, details) for details in found]
+    if not found:
+        return 0
+    listing = None
+    collection = s.get(Collection, collection_id)
+    if playlists and collection is not None:
+        listing = list_lists(s, collection, source)
     s.rollback()
-    added = run_write_transaction(lambda w: add_listed_episodes(w, collection_id=collection_id, found=found))
+
+    def save(w: Session) -> int:
+        collection = w.get(Collection, collection_id)
+        if collection is not None and listing is not None:
+            link_seasons_found(w, collection, save_lists(w, collection, listing))
+        added = add_listed_episodes(w, collection_id=collection_id, found=found)
+        if collection is not None and listing is not None:
+            place_in_link_seasons(w, collection)
+        return added
+
+    added = run_write_transaction(save)
     if added:
         finish_index(collection_id=collection_id, found=added, newest=newest)
     return added
@@ -105,8 +136,9 @@ def run_quick_check(s: Session, *, now: datetime | None = None) -> QuickCheckRes
         _last_checked[collection.id] = now
         collection_id, title = collection.id, collection.title
         try:
-            if count == 0:
+            if count == 0 or not lists_own_link(collection):
                 # A collection that was never indexed gets its full first index, so its numbering follows upload order.
+                # One that only holds its link seasons has no newest videos of its own: its lists are read again.
                 newest = newest_media_item_id(s)
                 added = index_listed_collection(s, collection_id=collection_id, source=source)
                 finish_index(collection_id=collection_id, found=added, newest=newest)

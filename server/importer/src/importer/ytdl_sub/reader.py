@@ -41,7 +41,9 @@ class Subscription:
     unknown: tuple[str, ...] = ()
     """Presets it names that are neither ytdl-sub's nor in config.yaml."""
     map: bool = False
-    """Written as a ``+`` map, which only ytdl-sub's music presets read."""
+    """Written as a ``+`` map, which only ytdl-sub's music video presets read."""
+    categories: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    """A ``+`` map's categories, such as Concerts, each with its links in order."""
 
     @property
     def overrides(self) -> dict[str, object]:
@@ -142,29 +144,45 @@ def _indent_overrides(indents: Sequence[str]) -> dict[str, str]:
     return {f"subscription_indent_{index + 1}": value for index, value in enumerate(indents)}
 
 
+Categories = tuple[tuple[str, tuple[str, ...]], ...]
+
+
+def _categories(value: Mapping) -> Categories:
+    """A ``+`` map's categories and their links: each category holds one link or a list of them. A link can also be
+    a map with its ``url`` and overrides of its own, such as the title of one video."""
+    found = []
+    for category, links in value.items():
+        links = links if isinstance(links, list) else [links]
+        urls = (link.get("url") if isinstance(link, Mapping) else link for link in links)
+        found.append((str(category), tuple(str(url) for url in urls if isinstance(url, str) and url)))
+    return tuple(found)
+
+
 def _subscriptions(
     tree: Mapping, presets: _Presets, inherited: tuple[str, ...], indents: tuple[str, ...], global_presets: list[str],
-) -> list[tuple[str, list[str], dict, list[str], bool]]:
-    """Each subscription under ``tree`` as (name, presets, own config, URLs, written as a map)."""
-    found: list[tuple[str, list[str], dict, list[str], bool]] = []
+) -> list[tuple[str, list[str], dict, list[str], Categories | None]]:
+    """Each subscription under ``tree`` as (name, presets, own config, URLs, the categories of a map or None)."""
+    found: list[tuple[str, list[str], dict, list[str], Categories | None]] = []
     for key, value in tree.items():
         key = str(key)
         if isinstance(value, str):
             found.append((key, [*inherited, *global_presets],
                           {"overrides": {**_indent_overrides(indents), "subscription_value": value, "url": value}},
-                          [value], False))
+                          [value], None))
         elif isinstance(value, list):
             urls = [str(item) for item in value]
             overrides = {**_indent_overrides(indents), "subscription_value": urls[0] if urls else ""}
             overrides.update({("url" if index == 0 else f"url{index + 1}"): url for index, url in enumerate(urls)})
-            found.append((key, [*inherited, *global_presets], {"overrides": overrides}, urls, False))
+            found.append((key, [*inherited, *global_presets], {"overrides": overrides}, urls, None))
         elif isinstance(value, Mapping):
             if key.startswith("~"):
                 overrides = {**_indent_overrides(indents), **{str(name): item for name, item in value.items()}}
-                found.append((key[1:].strip(), [*inherited, *global_presets], {"overrides": overrides}, [], False))
+                found.append((key[1:].strip(), [*inherited, *global_presets], {"overrides": overrides}, [], None))
             elif key.startswith("+"):
+                categories = _categories(value)
+                urls = [url for _category, links in categories for url in links]
                 found.append((key[1:].strip(), [*inherited, *global_presets],
-                              {"overrides": _indent_overrides(indents)}, [], True))
+                              {"overrides": _indent_overrides(indents)}, urls, categories))
             elif (group := _group(key, presets)) is not None:
                 names, more_indents = group
                 found += _subscriptions(value, presets, (*inherited, *names), (*indents, *more_indents), global_presets)
@@ -174,7 +192,7 @@ def _subscriptions(
                 parents = own.pop("preset", []) or []
                 parents = [parents] if isinstance(parents, str) else [str(item) for item in parents]
                 own["overrides"] = {**(own.get("overrides") or {}), **_indent_overrides(indents)}
-                found.append((key, [*parents, *inherited, *global_presets], own, [], False))
+                found.append((key, [*parents, *inherited, *global_presets], own, [], None))
         else:
             raise YtdlSubReadError(f"The subscription {key} is neither a link, a list nor settings")
     return found
@@ -229,7 +247,7 @@ def read_ytdl_sub(subscriptions: Path, config: Path | None = None) -> YtdlSubDat
     global_presets = [FILE_PRESET] if file_preset is not None else []
 
     result: list[Subscription] = []
-    for name, names, own, listed, as_map in _subscriptions(tree, presets, (), (), global_presets):
+    for name, names, own, listed, categories in _subscriptions(tree, presets, (), (), global_presets):
         applied, unknown = presets.sequence(names)
         merged = merge(*(presets.config(preset) for preset in applied), own)
         urls = _urls(merged, listed)
@@ -240,6 +258,7 @@ def read_ytdl_sub(subscriptions: Path, config: Path | None = None) -> YtdlSubDat
             config=merged,
             urls=tuple(urls),
             unknown=tuple(unknown),
-            map=as_map,
+            map=categories is not None,
+            categories=categories or (),
         ))
     return YtdlSubData(tuple(result), tuple(name for name in custom if name != FILE_PRESET))

@@ -43,7 +43,11 @@ RUN if [ -n "$VODLOFT_BUILD_LABEL" ]; then \
     fi
 COPY ui/ ./
 
-RUN if [ "$VODLOFT_PRO_ICONS" = "true" ]; then \
+# Every build gets an id of its own, baked into the UI and read by the backend, so an open page
+# reloads after a deploy even when the version stays the same, as it does for test builds.
+RUN date -u +%Y%m%d%H%M%S%N > /build-id \
+    && export VODLOFT_BUILD_ID="$(cat /build-id)" \
+    && if [ "$VODLOFT_PRO_ICONS" = "true" ]; then \
         npm run build:pro-icons; \
     else \
         npm run build; \
@@ -96,8 +100,9 @@ RUN if [ -n "$VODLOFT_BUILD_LABEL" ]; then \
 # Default config seed, copied into the /config volume on first run if missing.
 COPY config/config.yml.default ./config/config.yml.default
 
-# Built UI static assets.
+# Built UI static assets, and the id of the build they are.
 COPY --from=ui-build /ui/dist /usr/share/nginx/html
+COPY --from=ui-build /build-id ./build-id
 
 # nginx: single entrypoint on :80 serving the UI and proxying /api to uvicorn.
 COPY .docker/app/nginx.conf /etc/nginx/conf.d/default.conf

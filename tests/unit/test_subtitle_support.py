@@ -157,18 +157,18 @@ def test_download_plan_uses_existing_sidecar_and_embedding_stages(tmp_path):
     assert plan.subtitle_asset_ids == ("subtitle_0",)
 
 
-def test_movie_profiles_default_to_subtitle_sidecars():
-    from backend.api.models.movie_local_media_profile import MovieLocalMediaProfileAPICreate
+def test_video_profiles_default_to_subtitle_sidecars():
+    from backend.api.models.video_local_media_profile import VideoLocalMediaProfileAPICreate
 
-    movie = MovieLocalMediaProfileAPICreate(
-        name="Movie", type="movie", preferred_format="format_1080p",
+    movie = VideoLocalMediaProfileAPICreate(
+        name="Movie", type="video", preferred_format="format_1080p",
         output_template="/downloads/movies/{{ movie_title }}/{{ title }}.ext",
     )
     assert movie.subtitle_mode == "sidecar"
 
 
 @pytest.mark.parametrize(("scope", "expected"), [
-    ("both", "sidecar"),
+    ("podcast-and-series", "sidecar"),
     ("series", "sidecar"),
     ("podcast", "no_subtitles"),
 ])
@@ -187,7 +187,7 @@ def test_collection_subtitle_default_follows_scope_when_not_specified(scope, exp
 @pytest.mark.parametrize("mode", [
     "no_subtitles", "embed", "sidecar", "embed_and_sidecar",
 ])
-@pytest.mark.parametrize("scope", ["podcast", "series", "both"])
+@pytest.mark.parametrize("scope", ["podcast", "series", "podcast-and-series"])
 def test_manual_subtitle_selection_overrides_collection_scope(scope, mode):
     from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPICreate
 
@@ -501,3 +501,42 @@ def test_adoption_finds_the_default_subtitle_beside_the_media():
     from backend.services.adoption import _SUBTITLE
 
     assert _SUBTITLE.match(".en.default.srt").group("language") == "en"
+
+
+def test_the_info_file_ytdlp_writes_is_published_beside_the_media(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    from downloader import coordinator
+    from downloader.capacity import DownloadResources
+    from downloader.lifecycle import DownloadTracker
+    from downloader.models import DownloadProgress, DownloadResult
+
+    def transfer(_url, destination, *, command, subtitles_dir, info_json_dir, progress, should_cancel, **_options):
+        assert subtitles_dir is None and info_json_dir is not None
+        Path(destination).write_bytes(b"media")
+        info = info_json_dir / "media.info.json"
+        info.write_text('{"id": "x"}')
+        progress(DownloadProgress(5, 5))
+        return DownloadResult(destination, 5, info_json=str(info))
+
+    monkeypatch.setattr(coordinator, "download_ytdlp", transfer)
+    asset = SidecarSpec(
+        "info_json", "info_json", url="https://www.youtube.com/watch?v=x", extension="json",
+        target_suffix=".info.json", source_format="ytdlp", required=False,
+    )
+    with DownloadTracker() as tracker:
+        plan = build_download_plan(
+            source=ResolvedDownloadSource(
+                "https://www.youtube.com/watch?v=x", "up to 1080p", False, False, "mp4", False,
+                ytdlp_command=("yt-dlp",),
+            ),
+            requested_destination=tmp_path / "library" / "Video.mp4",
+            temporary_root=tmp_path / "temp", download_mode="temporary",
+            assets=(asset,), attempt_id=tracker.attempt_id,
+        )
+        execution = coordinator.execute_download_plan(plan, tracker=tracker, resources=DownloadResources())
+        library = tmp_path / "library"
+        assert sorted(path.name for path in library.iterdir()) == ["Video.info.json", "Video.mp4"]
+        assert (library / "Video.info.json").read_text() == '{"id": "x"}'
+        assert [(item.id, item.kind) for item in execution.assets] == [("info_json", "info_json")]
+        execution.cleanup_workspace()

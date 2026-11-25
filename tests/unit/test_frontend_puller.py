@@ -8,7 +8,7 @@ def test_frontend_pull_includes_application_version(monkeypatch):
     monkeypatch.setattr(
         service,
         "get_settings",
-        lambda: SimpleNamespace(app_version="9.8.7"),
+        lambda: SimpleNamespace(app_version="9.8.7", build_id="20261119112400"),
     )
     monkeypatch.setattr(service, "list_operations", lambda _access, **_kwargs: [])
 
@@ -16,3 +16,4 @@ def test_frontend_pull_includes_application_version(monkeypatch):
 
     assert response.app_version == "9.8.7"
     assert response.model_dump(by_alias=True)["appVersion"] == "9.8.7"
+    assert response.model_dump(by_alias=True)["buildId"] == "20261119112400"

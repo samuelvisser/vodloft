@@ -140,6 +140,7 @@ class SiteSetting(StrEnum):
     LOOKUP_MINUTES = "lookupMinutes"
     DOWNLOAD_WITH_COUNTDOWN = "downloadWithCountdown"
     DOWNLOAD_DELAY_MINUTES = "downloadDelayMinutes"
+    DAILY_DOWNLOAD_LIMIT = "dailyDownloadLimit"
     UPGRADE_CHECK = "upgradeCheck"
     UPGRADE_AFTER_DAYS = "upgradeAfterDays"
     UPGRADE_REPEAT = "upgradeRepeat"
@@ -148,6 +149,7 @@ class SiteSetting(StrEnum):
     AUTO_SUBTITLES = "autoSubtitles"
     SPONSORBLOCK = "sponsorblock"
     SPONSORBLOCK_SEGMENTS = "sponsorblockSegments"
+    CHAPTERS = "chapters"
 
 
 class LookupMinutes(SubmodelBase):
@@ -198,6 +200,7 @@ class SiteSettingValues(SubmodelBase):
     lookup_minutes: Optional[Union[Default, LookupMinutes]] = None
     download_with_countdown: Optional[bool] = None
     download_delay_minutes: Optional[Union[Default, Annotated[int, Field(ge=0, le=7 * 24 * 60)]]] = None
+    daily_download_limit: Optional[Union[Default, Annotated[int, Field(ge=0, le=10000)]]] = None
     upgrade_check: Optional[Union[Default, bool]] = None
     upgrade_after_days: Optional[Union[Default, Annotated[int, Field(ge=1, le=365)]]] = None
     upgrade_repeat: Optional[Union[Default, UpgradeRepeat]] = None
@@ -206,6 +209,7 @@ class SiteSettingValues(SubmodelBase):
     auto_subtitles: Optional[Union[Default, AutoSubtitles]] = None
     sponsorblock: Optional[bool] = None
     sponsorblock_segments: Optional[dict[SponsorBlockCategory, SponsorBlockAction]] = None
+    chapters: Optional[bool] = None
 
     @field_validator("metadata_refresh")
     @classmethod
@@ -279,6 +283,10 @@ SITE_SETTINGS: Mapping[SiteSetting, SiteSettingSpec] = {spec.key: spec for spec 
         SiteSetting.DOWNLOAD_DELAY_MINUTES, SiteSettingGroup.DOWNLOAD_PROFILE,
         lambda settings: settings.download_settings.episode_download_delay_minutes,
     ),
+    SiteSettingSpec(
+        SiteSetting.DAILY_DOWNLOAD_LIMIT, SiteSettingGroup.SCHEDULING,
+        lambda settings: settings.download_settings.daily_download_limit,
+    ),
     SiteSettingSpec(SiteSetting.UPGRADE_CHECK, SiteSettingGroup.DOWNLOAD_PROFILE, _profile_default("upgrade_check")),
     SiteSettingSpec(SiteSetting.UPGRADE_AFTER_DAYS, SiteSettingGroup.DOWNLOAD_PROFILE, _profile_default("upgrade_after_days")),
     SiteSettingSpec(SiteSetting.UPGRADE_REPEAT, SiteSettingGroup.DOWNLOAD_PROFILE, _profile_default("upgrade_repeat")),
@@ -293,6 +301,7 @@ SITE_SETTINGS: Mapping[SiteSetting, SiteSettingSpec] = {spec.key: spec for spec 
     SiteSettingSpec(
         SiteSetting.SPONSORBLOCK_SEGMENTS, SiteSettingGroup.LOCAL_MEDIA_PROFILE, builtin=DEFAULT_SPONSORBLOCK_SEGMENTS,
     ),
+    SiteSettingSpec(SiteSetting.CHAPTERS, SiteSettingGroup.LOCAL_MEDIA_PROFILE, builtin=True),
 )}
 
 

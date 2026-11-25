@@ -149,6 +149,8 @@ def check_quick_downloadable(
         )
     if kind is LinkKind.COLLECTION:
         raise QuickDownloadRefused("Quick download takes one video, episode or movie, not a whole collection such as a channel")
+    if kind is LinkKind.CREATOR:
+        raise QuickDownloadRefused("Quick download takes one video, episode or movie, not everything a creator has")
 
 
 def check_quick_choice(source: Source, choice: QuickChoice) -> None:

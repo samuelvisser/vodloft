@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal, Optional
 
-from sqlalchemy import and_, exists, false, func, or_, select, true
+from sqlalchemy import and_, exists, false, func, or_, select
 from sqlalchemy.orm import object_session, Session, joinedload
 
 from backend.db.models import DownloadProfile, Episode, LocalMediaProfileBase
@@ -20,7 +20,7 @@ from backend.db.models.user import User
 from backend.services import users
 from backend.services.episode_filters import filters_allow_new_episode
 from backend.services.errors import NotFoundError, ServiceError
-from backend.services.sites import collection_site
+from backend.services.sites import collection_site, with_main_type
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.episode_types import EpisodePublishStatus
@@ -42,7 +42,6 @@ _RECONCILABLE_ARTIFACT_STATUSES = (
 _UNAVAILABLE_PUBLISH_STATUSES = {
     EpisodePublishStatus.SCHEDULED.value,
     EpisodePublishStatus.DELAYED.value,
-    EpisodePublishStatus.NO_USABLE_MEDIA.value,
     EpisodePublishStatus.SOURCE_PROCESSING.value,
 }
 _VIDEO_HEIGHTS = {fmt.value: height for fmt, height in PREFERRED_FORMAT_HEIGHTS.items()}
@@ -284,7 +283,7 @@ def _episode_type_prefix(episode: Episode) -> str:
 
 
 def _profile_allows_episode(profile: StreamProfileBase, episode: Episode) -> bool:
-    return _episode_type_prefix(episode) in set(profile.ep_id_type_list or [])
+    return _episode_type_prefix(episode) in with_main_type(profile.collection, profile.ep_id_type_list or [])
 
 
 def _profile_streams_live_hls(profile: StreamProfileBase) -> bool:
@@ -354,7 +353,10 @@ def can_stream_from_source(
         profile: StreamProfileBase,
         episode: Episode,
 ) -> bool:
-    """Whether the profile may stream the episode straight from its Source, when it is not downloaded."""
+    """Whether the profile may stream the episode straight from its Source, when it is not downloaded. The Site only
+    has the whole video, so never a part of a split video."""
+    if episode.part_of is not None:
+        return False
     if profile.use_source_stream:
         return collection_site(profile.collection).streams
     if not keeps_live_episode_handoff(profile):
@@ -412,7 +414,7 @@ def get_stream_items(
         Episode.went_live_date,
         Episode.created_at,
     )
-    allowed_types = set(profile.ep_id_type_list or [])
+    allowed_types = with_main_type(profile.collection, profile.ep_id_type_list or [])
     if not allowed_types:
         return []
 
@@ -430,7 +432,7 @@ def get_stream_items(
         else false()
     )
     non_live_delivery_candidate = (
-        true()
+        or_(Episode.part_of.is_(None), local_download_exists)
         if profile.use_source_stream
         else local_download_exists
         if profile.use_downloads
@@ -526,7 +528,9 @@ def get_stream_items(
         if episode.publish_status in _UNAVAILABLE_PUBLISH_STATUSES:
             return
 
-        if collect and (profile.use_source_stream or _has_required_local_media(profile, local)):
+        # The Site only has the whole video, so a part of a split video is only served from its own file.
+        streams = profile.use_source_stream and episode.part_of is None
+        if collect and (streams or _has_required_local_media(profile, local)):
             items.append((episode, relevant_local))
 
     if profile.max_items > 0:
@@ -577,7 +581,7 @@ def _offered_episode(
         episode_slug: str,
 ) -> Episode:
     """The episode under this slug, if it is of a type the profile offers; whether it has media is not checked."""
-    allowed_types = set(profile.ep_id_type_list or [])
+    allowed_types = with_main_type(profile.collection, profile.ep_id_type_list or [])
     if not allowed_types:
         raise _not_offered()
 
@@ -627,8 +631,6 @@ def get_stream_episode(
         else:
             return episode
 
-    if episode.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value:
-        raise ServiceError("Episode has no usable media", status_code=404)
     if episode.publish_status == EpisodePublishStatus.SOURCE_PROCESSING.value:
         raise ServiceError("Episode media is still processing", status_code=404)
 

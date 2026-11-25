@@ -7,6 +7,16 @@
 th.bulk-check-cell, td.bulk-check-cell { width: 1%; padding-right: 0 !important; }
 tr.bulk-row.is-selected > td { background: rgba(59, 130, 246, .12); }
 
+/* A tile, such as the Library's, that bulk edit chooses: a check on its artwork */
+.bulk-tile-check {
+  position: absolute; top: 8px; right: 8px; z-index: 2; display: grid; place-items: center; width: 34px; height: 34px;
+  border-radius: 50%; background: rgba(15, 23, 42, .65); box-shadow: 0 2px 8px rgba(0, 0, 0, .35); cursor: pointer;
+}
+.bulk-tile-check .bulk-check { width: 20px; height: 20px; }
+.bulk-tile { cursor: pointer; user-select: none; }
+.library-tile.is-selected { border-color: #3b82f6; background: rgba(59, 130, 246, .10); box-shadow: 0 0 0 1px #3b82f6; }
+.movie-poster-card.is-selected .movie-poster-art { box-shadow: 0 0 0 3px #3b82f6; }
+
 .mobile-data-card.bulk-card { display: grid; grid-template-columns: auto minmax(0, 1fr); }
 .mobile-data-card.bulk-card .mobile-data-chevron { display: none; }
 .mobile-data-card.bulk-card.is-selected { border-color: #3b82f6; background: rgba(59, 130, 246, .10); }
@@ -32,9 +42,13 @@ tr.bulk-row.is-selected > td { background: rgba(59, 130, 246, .12); }
 .bulk-action-bar__hidden { padding: 2px 8px; border-radius: 999px; background: rgba(234, 88, 12, .14); color: #c2410c; font-size: 12px; }
 .bulk-action-bar__actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .bulk-action-bar__actions .btn { display: inline-flex; align-items: center; gap: 7px; }
+/* How many of the chosen ones an action applies to, when not all */
+.bulk-action-count {
+  min-width: 20px; padding: 0 6px; border-radius: 999px; background: rgba(255, 255, 255, .25); font-size: 12px; line-height: 20px; text-align: center;
+}
+.btn:not(.btn-primary):not(.btn-danger) .bulk-action-count { background: rgba(148, 163, 184, .25); }
 
 /* Change settings */
-.bulk-dialog { max-height: calc(100dvh - 48px); overflow-y: auto; }
 .bulk-dialog-subjects { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 14px; }
 .bulk-subject { padding: 3px 10px; border-radius: 999px; background: rgba(148, 163, 184, .14); font-size: 13px; }
 .bulk-subject.is-more { color: var(--muted); }
@@ -74,6 +88,6 @@ tr.bulk-row.is-selected > td { background: rgba(59, 130, 246, .12); }
   .bulk-field__control { padding-left: 12px; }
   .modal-overlay:has(.bulk-dialog) { padding: 0; place-items: end stretch; }
   .bulk-dialog { max-height: 92dvh; border-radius: 16px 16px 0 0; }
-  .bulk-dialog .modal-actions { position: sticky; bottom: -20px; flex-direction: column-reverse; margin: 0 -20px -20px; padding: 12px 20px; background: inherit; }
+  .bulk-dialog .modal-actions { flex-direction: column-reverse; margin: 0 -20px -20px; padding: 12px 20px; }
   .bulk-dialog .modal-actions .btn { width: 100%; justify-content: center; }
 }

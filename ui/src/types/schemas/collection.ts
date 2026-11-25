@@ -2,7 +2,8 @@ import {z} from "zod";
 import {EpisodeIdentifierReg, EpisodeOrderReg, CollectionTypeReg} from "../collection";
 import {DwMembershipLevelReg} from "../dailywire_user_info";
 import {ApiDateTimeSchema} from "./datetime";
-import {SiteReadSchema, SourcedFields} from "./source";
+import {NamesSchema, SiteReadSchema, SourcedFields} from "./source";
+import {OutsideVideosValues} from "./collection_seasons";
 
 
 /** Ensure https:// if a scheme is missing */
@@ -70,7 +71,10 @@ const CollectionBasePayloadSchema = CollectionBaseFormSchema.extend({
 })
 
 
-export const CollectionCreatePayloadSchema = CollectionBasePayloadSchema
+export const CollectionCreatePayloadSchema = CollectionBasePayloadSchema.extend({
+    /** Which of its Site's types of list the link is, as looking it up told. */
+    listType: z.string().nullable().default(null),
+})
 export type CollectionCreatePayloadIn = z.input<typeof CollectionCreatePayloadSchema>;
 export type CollectionCreatePayloadOut = z.output<typeof CollectionCreatePayloadSchema>;
 
@@ -95,9 +99,26 @@ export const CollectionReadSchema = z.looseObject({
     authorSlug: z.string(),
     title: z.string(),
     description: z.string().nullable(),
-    sharingUrl: z.string(),
+    /** Null for a collection that holds only what its playlists have and has no link of its own. */
+    sharingUrl: z.string().nullable(),
+    /** 'only' when the collection holds only what its link seasons have, so its own link is optional. */
+    outsideVideos: z.enum(OutsideVideosValues).optional(),
+    /** What its own link is: a channel, which takes the channel's lists and can be in a creator, one list, or none, for a
+     *  custom collection. */
+    kind: z.enum(['channel', 'list', 'custom']).nullable().default(null),
     /** The website it is on; null for an older collection until VODLoft has found it. */
     site: SiteReadSchema.nullable().optional(),
+    /** What the collection calls the creator behind it, such as host, or artist in a Music collection. Optional only
+     *  for collections kept in the browser by an older VODLoft. */
+    creatorNames: NamesSchema.optional(),
+    /** Whether it can be in a creator: a channel or a list on a Site with creators, or a collection without a link of
+     *  its own, which joins a creator in the Library by hand. */
+    canJoinCreator: z.boolean().optional().default(false),
+    /** What its Site calls its seasons, such as playlists in a YouTube channel collection; null where its type's word stands. */
+    seasonNames: NamesSchema.nullable().optional(),
+    /** What it is on its Site, in the Site's words, such as "YouTube channel" or "YouTube playlist", as a creator is
+     *  named; null for a collection of links of its own. */
+    kindName: z.string().nullable().optional(),
     backgroundImagePath: z.string().nullable().optional(),
     logoImagePath: z.string().nullable().optional(),
 
@@ -107,14 +128,21 @@ export const CollectionReadSchema = z.looseObject({
     thumbnailLandscapePath: z.string().nullable().optional(),
     thumbnailPortraitPath: z.string().nullable().optional(),
     thumbnailSquarePath: z.string().nullable().optional(),
+    /** For a collection without a link of its own, the picture of its first link season that has one. */
+    linkImagePath: z.string().nullable().optional(),
     /** Your own yt-dlp options for this Collection, added after its Local Media Profile's. */
     ytdlpOptions: z.string().default(''),
     genre: z.string().nullable().optional(),
     contentRating: z.string().nullable().optional(),
     cookiesMode: z.enum(['automatic', 'never', 'always']).default('automatic'),
+    /** Each new video with chapters becomes a season of its own, with an episode per chapter. */
+    splitChapters: z.boolean().default(false),
     cookiesNeededUntil: ApiDateTimeSchema.nullable().optional(),
     checkFrequency: z.enum(['default', 'less_often', 'own']).default('default'),
     checkCron: z.string().nullable().optional(),
+    creatorSlug: z.string().nullable().optional(),
+    creatorTitle: z.string().nullable().optional(),
+    creatorAvatarUrl: z.string().nullable().optional(),
     customMetadata: z.record(z.string(), z.string()).default({}),
 
     createdAt: ApiDateTimeSchema,

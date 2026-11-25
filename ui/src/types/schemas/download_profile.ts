@@ -44,19 +44,23 @@ export const EpisodeFilterSchema = z.object({
     days: z.int('Enter a number of days').min(1, 'Use at least 1 day').nullable().default(null),
     count: z.int('Enter a number of episodes').min(1, 'Use at least 1 episode').nullable().default(null),
     startingFrom: z.iso.date().nullable().default(null),
+    /** Published on or before this day, with or without a start date. */
+    until: z.iso.date().nullable().default(null),
 }).superRefine((filter, ctx) => {
     if (isDateLine(filter)) {
         if (filter.action === 'skip') ctx.addIssue({code: 'custom', path: ['action'], message: 'A date line can only download or keep episodes'})
         if (filter.field === 'downloaded') {
             if (!filter.days) ctx.addIssue({code: 'custom', path: ['days'], message: 'Choose a number of days'})
-        } else if ([filter.days, filter.count, filter.startingFrom].filter((value) => value !== null).length !== 1) {
+        } else if ([filter.days, filter.count, filter.startingFrom ?? filter.until].filter((value) => value !== null).length !== 1) {
             ctx.addIssue({code: 'custom', path: ['days'], message: 'Choose a number of days, a number of episodes or a date'})
+        } else if (filter.startingFrom && filter.until && filter.until < filter.startingFrom) {
+            ctx.addIssue({code: 'custom', path: ['until'], message: 'Choose an end date on or after the start date'})
         }
     } else if (filter.field === 'types') {
         if (!filter.episodeTypes?.length) ctx.addIssue({code: 'custom', path: ['episodeTypes'], message: 'Choose at least one episode type'})
     } else if (filter.field === 'seasons') {
         if (!filter.seasonSlugs?.length && !filter.includeUpcoming) {
-            ctx.addIssue({code: 'custom', path: ['seasonSlugs'], message: 'Choose at least one season, or upcoming seasons'})
+            ctx.addIssue({code: 'custom', path: ['seasonSlugs'], message: 'Choose at least one, or the upcoming ones'})
         }
     } else if (filter.field === 'duration') {
         if (!filter.durationOperator || !filter.durationSeconds) {
@@ -71,7 +75,7 @@ export type EpisodeFilter = z.output<typeof EpisodeFilterSchema>
 
 const EMPTY_FILTER: Omit<EpisodeFilter, 'action' | 'field'> = {
     pattern: null, durationOperator: null, durationSeconds: null, episodeTypes: null,
-    seasonSlugs: null, includeUpcoming: false, days: null, count: null, startingFrom: null,
+    seasonSlugs: null, includeUpcoming: false, days: null, count: null, startingFrom: null, until: null,
 }
 
 /** A new filter of a field, with the values its editor starts from. A date line cannot skip. */
@@ -99,17 +103,21 @@ export function defaultEpisodeTypes(
 }
 
 /**
- * The filters a new profile starts with: for a seasonal collection its latest season and the
- * upcoming ones, then the Source's default episode types, then the latest 25 episodes.
+ * The filters a new profile starts with: for a seasonal collection the upcoming seasons and the seasons its Site picks
+ * (`profileSeasons`: the newest, or all of them), then the Source's default episode types, then the latest 25
+ * episodes. The seasons come oldest first.
  */
 export function defaultEpisodeFilters(
     episodeIdentifier: EpisodeIdentifierValue | string | undefined,
     tags: readonly EpisodeTagRead[] | undefined,
-    latestSeasonSlug?: string,
+    seasons: readonly {slug: string}[] | undefined,
+    profileSeasons: 'newest' | 'all' | undefined,
 ): EpisodeFilter[] {
     const filters: EpisodeFilter[] = []
     if (episodeIdentifier === EpisodeIdentifierReg.Enum.seasonal) {
-        filters.push({...newEpisodeFilter('seasons'), seasonSlugs: latestSeasonSlug ? [latestSeasonSlug] : [], includeUpcoming: true})
+        const slugs = (seasons ?? []).map((season) => season.slug)
+        const seasonSlugs = profileSeasons === 'all' ? slugs : slugs.slice(-1)
+        filters.push({...newEpisodeFilter('seasons'), seasonSlugs, includeUpcoming: true})
     }
     filters.push({...newEpisodeFilter('types'), episodeTypes: defaultEpisodeTypes(episodeIdentifier, tags)})
     filters.push(newEpisodeFilter('published'))
@@ -136,6 +144,8 @@ export const DownloadProfileSchemaRequest = z.object({
     redownloadFinal: z.boolean().default(true),
     /** Whether an Only date line deletes the downloads it leaves out. */
     deleteOlderEpisodes: z.boolean().default(true),
+    /** Whether deleting older episodes also deletes the collection's manual downloads in this Local Media Profile. */
+    retentionIncludesManual: z.boolean().default(false),
     upgradeCheck: z.boolean().default(true),
     upgradeAfterDays: z.int('Enter a number of days').min(1, 'Check after at least 1 day').max(365, 'Check within a year').default(7),
     upgradeRepeat: z.enum(['once', 'twice', 'every']).default('once'),
@@ -167,6 +177,7 @@ export const DownloadProfileReadSchema = z.looseObject({
     downloadWithCountdown: z.boolean(),
     redownloadFinal: z.boolean(),
     deleteOlderEpisodes: z.boolean(),
+    retentionIncludesManual: z.boolean(),
     upgradeCheck: z.boolean(),
     upgradeAfterDays: z.int(),
     upgradeRepeat: z.enum(['once', 'twice', 'every']),
@@ -185,6 +196,7 @@ export const DownloadProfileReadSchema = z.looseObject({
         days: z.int().nullable(),
         count: z.int().nullable(),
         startingFrom: z.iso.date().nullable(),
+        until: z.iso.date().nullable().default(null),
     })),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,
@@ -244,6 +256,8 @@ export const SiteOptionsSchema = z.object({
         upgradeImprovements: z.array(UpgradeImprovementSchema),
         upgradeLengthMinutes: z.int(),
     }),
+    /** Which seasons a new Download Profile of a seasonal collection picks, beside the upcoming ones. */
+    profileSeasons: z.enum(['newest', 'all']),
     /** What the upgrade check can find on the site; no improvements means no upgrade check. */
     upgradeChecks: z.object({
         improvements: z.array(UpgradeImprovementSchema),
@@ -255,6 +269,8 @@ export const SiteOptionsSchema = z.object({
     streamMethods: z.array(z.enum(['file', 'hls', 'live'])),
     /** The resolutions the site streams video at. */
     streamVideoHeights: z.array(z.number().int()),
+    /** The one resolution the site streams as an MP4 file with sound; the others play once VODLoft has joined them. */
+    streamFileHeight: z.number().int().nullable().default(null),
     /** Whether a feed can send podcast apps straight to the site's video instead of passing it through VODLoft. */
     streamProxyChoice: z.boolean().default(false),
     /** What a feed's video output does on the site, by output value, where it differs from the usual explanation. */

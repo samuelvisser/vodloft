@@ -12,6 +12,8 @@
   --select-menu-bg: #ffffff;
   --select-menu-border: rgba(100, 116, 139, 0.24);
   --select-menu-shadow: 0 14px 32px rgba(15, 23, 42, 0.16);
+  /* Text links, readable on the page's background in light and dark. */
+  --link-color: #2563eb;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -22,6 +24,7 @@
     --select-menu-bg: #172235;
     --select-menu-border: #43516a;
     --select-menu-shadow: 0 16px 38px rgba(0, 0, 0, 0.4);
+    --link-color: #93c5fd;
   }
 }
 
@@ -347,12 +350,12 @@ a.collection-header:focus-visible {
 .episode-card {
   scroll-snap-align: start;
 }
+/* A plain text link, such as one in a sentence. Without specificity, so a component's own link style wins. */
+:where(a:not([class]), a:not([class]):visited) { color: var(--link-color); }
+
 /* A link that reads as plain text until hovered, like the episode breadcrumb. */
 a.quiet-link { color: inherit; text-decoration: none; }
-a.quiet-link:hover { color: var(--link-color, #66267a); text-decoration: underline; }
-@media (prefers-color-scheme: dark) {
-  a.quiet-link:hover { color: #c084fc; }
-}
+a.quiet-link:hover { color: var(--link-color); text-decoration: underline; }
 
 /* Library videos use the episode card as a link. */
 a.episode-card { display: block; min-width: 0; color: inherit; text-decoration: none; }
@@ -602,8 +605,11 @@ a.btn,
     border-right-color: rgba(148, 163, 184, 0.24);
   }
 }
+/* One column that may shrink below its content, so a field with long values (a multi-select full of long names)
+   wraps inside the form instead of pushing the row, and the Select all button beside its label, past the edge. */
 .form-row {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 .input {
@@ -1035,6 +1041,23 @@ input[type="time"] {
 .table tbody tr:hover td { background: #f8fafc; }
 .mobile-data-list { display: none; }
 
+/* Sticky columns (the actions, and columns marked sticky) always stay in view: when a table is wider than its
+   box, they sit over its right edge. Their cells need a solid background, so the rows' see-through tints are
+   mixed in here. DataTable sets each one's distance from the right. */
+.table .data-table-sticky {
+  position: sticky;
+  z-index: 1;
+}
+.table thead th.data-table-sticky { z-index: 2; }
+.table tbody td.data-table-sticky { background: #fff; }
+.table tbody tr:nth-child(odd) td.data-table-sticky { background: #fafbfc; }
+.table tbody tr:hover td.data-table-sticky { background: #f8fafc; }
+@media (prefers-color-scheme: dark) {
+  .table tbody td.data-table-sticky { background: #0b1220; }
+  .table tbody tr:nth-child(odd) td.data-table-sticky { background: #0f1624; }
+  .table tbody tr:hover td.data-table-sticky { background: #141b28; }
+}
+
 /* Sortable column headers */
 .th-sort-btn {
   display: inline-flex;
@@ -1305,12 +1328,46 @@ a.icon-btn { display: inline-block; text-decoration: none; }
   box-shadow: 0 20px 60px rgba(0,0,0,0.2), 0 2px 8px rgba(0,0,0,0.08);
   padding: 20px;
   animation: scaleIn 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* Within the screen: the header and the buttons stay in place and the .modal-body between them scrolls. A dialog
+     without a .modal-body scrolls as a whole instead. */
+  max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+/* A dialog that grows past the screen instead (Modal's scrollable={false}). */
+.modal.modal-unbounded {
+  max-height: none;
+  display: block;
+  overflow: visible;
+}
+.modal > .modal-header,
+.modal > .modal-actions {
+  flex: none;
+}
+.modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* Room for the scrollbar, beside the dialog's own padding. */
+  margin-right: -6px;
+  padding-right: 6px;
+}
+.modal-unbounded > .modal-body {
+  overflow: visible;
 }
 .modal-header {
   display: flex;
   align-items: center;
   gap: 12px;
   margin-bottom: 8px;
+}
+/* The header's margin is the gap below it: margins don't collapse in the dialog's column. */
+.modal > .modal-header + .modal-text {
+  margin-top: 0;
 }
 .modal-icon {
   width: 36px;
@@ -1635,8 +1692,8 @@ div[class$="-indicatorSeparator"] { background-color: rgba(148, 163, 184, 0.4) !
 div[class$="-indicators"] svg { color: var(--muted) !important; fill: currentColor !important; }
 div[class$="-dropdownIndicator"] { color: var(--muted) !important; }
 div[class$="-clearIndicator"] { color: var(--muted) !important; }
-/* Menu */
-div[class$="-menu"] {
+/* Menu (react-select's; an ActionMenu's class also ends in -menu) */
+div[class$="-menu"]:not(.action-menu) {
   background: var(--select-menu-bg) !important;
   color: var(--text) !important;
   border-radius: 8px !important;
@@ -1668,6 +1725,24 @@ div[class$="-option"][aria-disabled="true"]:active,
 /* Normal hover/active for enabled options only */
 div[class$="-option"]:not([aria-disabled="true"]):hover { background: rgba(14, 165, 233, 0.18) !important; }
 div[class$="-option"]:not([aria-disabled="true"]):active { background: rgba(14, 165, 233, 0.26) !important; }
+/* SimpleSelect's fitLabels: the longest label sets the control's width, without taking any height. */
+.simple-select-fit {
+  grid-area: 1 / 1 / 2 / 3;
+  display: grid;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+}
+.simple-select-fit > span {
+  grid-area: 1 / 1;
+  margin: 0 2px;
+  white-space: nowrap;
+}
+/* The option react-select highlights for the keyboard: the first result while typing, and
+   wherever the arrow keys move to. Enter chooses it. Needs classNamePrefix="select". */
+div[class$="-option"].select__option--is-focused:not(.select__option--is-disabled):not(.select__option--is-selected) {
+  background: rgba(14, 165, 233, 0.18) !important;
+}
 /* Multi-value (tags) */
 div[class$="-multiValue"] { background: rgba(14, 165, 233, 0.15) !important; }
 div[class$="-multiValueLabel"] { color: var(--text) !important; }
@@ -1736,6 +1811,17 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
   }
 }
 
+
+/* The Read more / Show less toggle: underlined, in the colour of the text it opens. */
+.read-more-toggle {
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
 
 /* ReadMore content paragraph spacing (CSS-only): half a line-height between paragraphs */
 .read-more-content p {
@@ -2121,6 +2207,10 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 .library-tile-meta { display: flex; flex-wrap: wrap; gap: 0 4px; color: var(--muted); font-size: 12px; }
 .library-tile-meta > span { white-space: nowrap; }
 .library-tile-meta > span + span::before { content: "\2022"; margin-right: 4px; }
+/* A card's stats stay on one line: a part that does not fit wraps onto a second line that is clipped away, so the
+   line loses its last, least important parts whole instead of growing. A first part too long by itself ends in an ellipsis. */
+.library-tile-stats { height: 1.4em; overflow: hidden; line-height: 1.4; }
+.library-tile-stats > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .library-tile-status .library-collection-indexing { margin-top: 0; }
 
 .library-empty {
@@ -2190,6 +2280,8 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 .compact-switch button[aria-pressed="true"] { background: rgba(100,116,139,.2); color: var(--text); }
 .catalog-groups { display: grid; gap: 30px; }
 .catalog-group h2 { margin: 0 0 11px; font-size: 18px; }
+.catalog-group-header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 11px; }
+.catalog-group-header h2 { margin: 0; }
 .catalog-collection-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 12px; }
 .catalog-collection-card { grid-template-columns: 92px minmax(0,1fr); }
 .catalog-collection-card .collection-summary-title { padding-right: 64px; }
@@ -2391,6 +2483,7 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 .add-media-browse { margin-top: 32px; }
 .add-media-browse h2 { font-size: 16px; }
 .add-media-browse-list { display: flex; gap: 8px; flex-wrap: wrap; }
+.add-media-browse .add-media-browse-text { margin-bottom: 12px; }
 @media (max-width: 520px) {
   .add-media-preview { flex-direction: column; }
 }
@@ -2518,3 +2611,7 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 @media (max-width: 600px) {
   .keep-question-copy small { white-space: normal; }
 }
+
+/* A small advisory under a field, such as a Music collection that isn't identified by album. */
+.help.form-advice { color: #b45309; }
+@media (prefers-color-scheme: dark) { .help.form-advice { color: #fbbf24; } }

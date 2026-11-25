@@ -43,12 +43,12 @@ from config.settings.settings import (
 from downloader.storage import inspect_filesystem
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import queue_operation_target_dispatch
+from backend.log_file import configure_log_file
 from backend.operations.settings import (
     FileWatcherCronOperation,
     FullRescanCronOperation,
     QuickCheckCronOperation,
     FindEpisodesCronOperation,
-    MonitorNoUsableMediaCronOperation,
     VerifyDownloadsCronOperation,
 )
 
@@ -629,6 +629,7 @@ def save_ui_settings(body: SettingsAPIUpdate) -> SettingsAPIRead:
             logging.getLogger().setLevel(
                 getattr(logging, effective_settings.log_level, logging.INFO)
             )
+            configure_log_file(effective_settings)
             return _response(next_state)
         except SettingsManagedByEnvironmentError:
             raise
@@ -654,7 +655,6 @@ _CRON_OPERATION_FACTORIES = {
     "find-episodes": FindEpisodesCronOperation,
     "quick-check": QuickCheckCronOperation,
     "full-rescan": FullRescanCronOperation,
-    "monitor-no-usable-media": MonitorNoUsableMediaCronOperation,
     "verify-downloads": VerifyDownloadsCronOperation,
     "file-watcher": FileWatcherCronOperation,
 }

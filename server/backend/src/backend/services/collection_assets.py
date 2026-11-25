@@ -19,8 +19,9 @@ from backend.services.example_episodes import EXAMPLE_SOURCE_PREFIX
 from backend.services.download_options import effective_filename_mode
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.custom_metadata import custom_metadata_template_values, get_custom_metadata
+from backend.utils.music import collection_artist
 from backend.utils.output_template import (
-    COLLECTION_OUTPUT_TEMPLATE_FIELDS, COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
+    COLLECTION_OUTPUT_TEMPLATE_FIELDS, COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES, creator_output_template_values,
     _sanitize_emitted_output_value, output_template_fields, rendering_with_filename_mode, sanitize_path_component,
     validate_output_template_path_requirements,
 )
@@ -150,6 +151,8 @@ def resolve_collection_media_directory(
     values = {}
     if collection is not None:
         values.update(collection=collection.slug, collection_title=collection.title)
+        values.update(creator_output_template_values(collection.creator))
+        values.update(artist=collection_artist(collection))
         values.update(custom_metadata_template_values("collection", get_custom_metadata(collection)))
     values.update(values_overrides or {})
     settings = get_settings().download_settings
@@ -250,7 +253,8 @@ def get_collection_asset_root_preview(
 
 def collection_asset_sources(collection: Collection) -> tuple[CollectionAssetSource, ...]:
     choices = (
-        ("poster", (collection.thumbnail_portrait_path, collection.thumbnail_square_path), None),
+        # A collection of links has no picture of its own: its first link's stands in.
+        ("poster", (collection.thumbnail_portrait_path, collection.thumbnail_square_path, collection.link_image_path), None),
         ("fanart", (collection.background_image_path, collection.thumbnail_landscape_path), None),
         ("square", (collection.thumbnail_square_path,), None),
         ("clearlogo", (collection.logo_image_path,), "png"),
@@ -263,7 +267,26 @@ def collection_asset_sources(collection: Collection) -> tuple[CollectionAssetSou
         )
         if url is not None:
             sources.append(CollectionAssetSource(kind, url, forced_format))
-    return tuple(sources)
+    return tuple(sources) + season_poster_sources(collection)
+
+
+def season_poster_sources(collection: Collection) -> tuple[CollectionAssetSource, ...]:
+    """A poster for each season a playlist fills, from the playlist's picture: ``season01-poster.jpg`` in the
+    collection's folder, the name Jellyfin, Emby, Kodi and Plex look for."""
+    posters: dict[int, str] = {}
+    for playlist in sorted(collection.lists, key=lambda playlist: playlist.site_position):
+        season, url = playlist.season, playlist.image_path
+        if not playlist.enabled or season is None or not isinstance(url, str) or not url.startswith(("https://", "http://")):
+            continue
+        if 0 <= season.season_number <= _MAX_POSTER_SEASON:
+            posters.setdefault(season.season_number, url)
+    return tuple(
+        CollectionAssetSource(f"season{number:02d}-poster", url) for number, url in sorted(posters.items())
+    )
+
+
+_MAX_POSTER_SEASON = 999
+"""Above it the artwork's name no longer fits its column."""
 
 
 @dataclass(frozen=True)

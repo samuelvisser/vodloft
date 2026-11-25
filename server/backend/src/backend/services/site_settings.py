@@ -22,7 +22,9 @@ from config.settings.site_settings import (
     resolve_site_setting,
     sponsorblock_changes_anything,
 )
-from sources import Site, site_of
+from sources import Feature, ProfileSeasons, Site, Source, all_sources, named_sites, site_of
+
+from backend.services.sites import site_removable, sites_in_use
 
 _UPGRADE_SETTINGS = frozenset({
     SiteSetting.UPGRADE_CHECK, SiteSetting.UPGRADE_AFTER_DAYS, SiteSetting.UPGRADE_REPEAT,
@@ -43,6 +45,7 @@ _LOCAL_MEDIA_PROFILE_FIELDS = {
     SiteSetting.AUTO_SUBTITLES: "auto_subtitles",
     SiteSetting.SPONSORBLOCK: "sponsorblock_enabled",
     SiteSetting.SPONSORBLOCK_SEGMENTS: "sponsorblock_segments",
+    SiteSetting.CHAPTERS: "keep_chapters",
 }
 """The Local Media Profile field each local media profile setting gives its starting value."""
 
@@ -103,13 +106,30 @@ def download_profile_defaults(site: Site) -> dict[str, Any]:
     return values
 
 
+def profile_seasons(site: Site, source: Source) -> ProfileSeasons:
+    """Which seasons a new Download Profile of a seasonal collection on the Site picks, beside the upcoming ones: what
+    the Site's contract says, or else the newest where the seasons are the Site's own and all where VODLoft makes them."""
+    if site.profile_seasons is not None:
+        return site.profile_seasons
+    return ProfileSeasons.NEWEST if source.has(Feature.OWN_SEASONS) else ProfileSeasons.ALL
+
+
+def _named_sites() -> list[Site]:
+    """The Sites a Source names: the ones it is made for, and the ones it takes an API key for, such as YouTube.
+    Their presets are what a new Local Media Profile starts with."""
+    found = {site.key: site for site in named_sites()}
+    for source in all_sources():
+        if source.has(Feature.API_KEY):
+            for site in source.api_key_sites:
+                found.setdefault(site.key, site)
+    return list(found.values())
+
+
 def local_media_profile_defaults() -> dict[str, Any]:
     """What a new Local Media Profile starts with, by field: for each setting, what the first Site VODLoft knows
     that shows it follows, such as YouTube for SponsorBlock, or else the system default."""
-    from backend.services.local_media_profile_sites import builtin_sites
-
     def start(key: SiteSetting) -> Any:
-        return site_setting_of(next((site for site in builtin_sites() if offers(site, key)), None), key)[0]
+        return site_setting_of(next((site for site in _named_sites() if offers(site, key)), None), key)[0]
 
     values = {field: start(key) for key, field in _LOCAL_MEDIA_PROFILE_FIELDS.items()}
     values["auto_subtitles"] = str(values["auto_subtitles"])
@@ -118,6 +138,7 @@ def local_media_profile_defaults() -> dict[str, Any]:
     values["sponsorblock_enabled"] = (
         bool(values["sponsorblock_enabled"]) and sponsorblock_changes_anything(values["sponsorblock_segments"])
     )
+    values["keep_chapters"] = bool(values["keep_chapters"])
     return values
 
 
@@ -128,6 +149,8 @@ def local_media_profile_site_choices(profile, site: Site) -> dict[str, Any]:
         "auto_subtitles": profile.auto_subtitles if offers(site, SiteSetting.AUTO_SUBTITLES) else "never",
         "sponsorblock_enabled": bool(profile.sponsorblock_enabled) and offers(site, SiteSetting.SPONSORBLOCK),
         "sponsorblock_segments": dict(profile.sponsorblock_segments or {}),
+        "keep_chapters": bool(profile.keep_chapters) and offers(site, SiteSetting.CHAPTERS),
+        "cut_chapters": list(profile.cut_chapters or []) if offers(site, SiteSetting.CHAPTERS) else [],
     }
 
 
@@ -150,6 +173,8 @@ class SiteSettingsListing:
     record: SiteRecord
     site: Site
     settings: list[OfferedSetting]
+    removable: bool
+    """The user can remove the Site: VODLoft has nothing from it and no Source is made for it."""
 
     @property
     def upgrade_improvements(self) -> tuple[UpgradeImprovement, ...]:
@@ -185,10 +210,13 @@ def list_sites_settings(s: Session) -> list[SiteSettingsListing]:
     """Every Site VODLoft has seen, with the settings it shows. A Site without collections or videos yet
     shows every setting it offers."""
     found = _sources_of_sites(s)
+    in_use = sites_in_use(s)
     listings = []
-    for record in s.scalars(select(SiteRecord).order_by(SiteRecord.name)).all():
+    for record in s.scalars(select(SiteRecord).order_by(SiteRecord.position, SiteRecord.name)).all():
         site = site_of(record.key)
         refreshes, follows = found.get(record.key, (True, True))
         keys = offered_settings(site, refreshes=refreshes, follows_pending=follows)
-        listings.append(SiteSettingsListing(record, site, [_offered_setting(site, key) for key in keys]))
+        listings.append(SiteSettingsListing(
+            record, site, [_offered_setting(site, key) for key in keys], site_removable(record.key, in_use),
+        ))
     return listings

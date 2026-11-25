@@ -1,0 +1,218 @@
+"""Bandcamp and SoundCloud artists as creators: their albums are the sections, and their collections hold music."""
+from __future__ import annotations
+
+import pytest
+
+from progress_plan import PlanTracker
+from sources import SectionKind
+from sources import ytdlp_runner as runner
+from sources.ytdlp import sites
+from sources.ytdlp.site_implementations import IMPLEMENTATIONS, OtherSitesImplementation
+
+
+@pytest.fixture(autouse=True)
+def soundcloud_page(monkeypatch):
+    """SoundCloud's account page, which shares the account's picture, and gives its own script its banner."""
+    from sources.ytdlp.site_implementations import artists
+
+    class Page:
+        text = (
+            '<meta property="og:image" content="https://i1.sndcdn.com/avatars-flume-t500x500.jpg">'
+            '<script>window.__sc_hydration = [{"hydratable":"anonymousId","data":"1"},{"hydratable":"user","data":'
+            '{"avatar_url":"https://i1.sndcdn.com/avatars-flume-large.jpg","visuals":{"visuals":'
+            '[{"visual_url":"https://i1.sndcdn.com/visuals-flume-original.jpg"}]}}}];</script>'
+        )
+
+        def raise_for_status(self):
+            pass
+
+    monkeypatch.setattr(artists.requests, "get", lambda url, **kwargs: Page())
+
+
+def _implementation(url):
+    """The yt-dlp implementation of the link's Site, reading feeds as the Source would."""
+    site = sites.site_for(url)
+    return IMPLEMENTATIONS.get(site.key, OtherSitesImplementation)(site, lambda link: runner.run_json(link))
+
+
+@pytest.mark.parametrize(("url", "root"), [
+    ("https://tycho.bandcamp.com/music", "https://tycho.bandcamp.com"),
+    ("https://tycho.bandcamp.com/", "https://tycho.bandcamp.com"),
+    ("https://tycho.bandcamp.com/album/epoch", "https://tycho.bandcamp.com"),
+    ("https://bandcamp.com/discover", None),
+    ("https://soundcloud.com/flume", "https://soundcloud.com/flume"),
+    ("https://soundcloud.com/flume/albums", "https://soundcloud.com/flume"),
+    ("https://soundcloud.com/flume/sets/palaces", "https://soundcloud.com/flume"),
+    ("https://soundcloud.com/discover", None),
+])
+def test_a_link_belongs_to_the_artist_whose_page_it_is_on(url, root):
+    implementation = _implementation(url)
+    assert implementation.creator_root(url) == root
+
+
+def _bandcamp(*args, cookies=None):
+    url = args[-1]
+    if url.endswith("/music"):
+        return {"entries": [{"url": "https://tycho.bandcamp.com/album/epoch"}, {"url": "https://tycho.bandcamp.com/album/dive"},
+                            {"url": "https://tycho.bandcamp.com/track/remix"}]}
+    if url.endswith("/remix"):
+        return {"title": "Epoch (Remix)", "track": "Epoch (Remix)", "release_date": "20190101", "thumbnail": "https://img/remix.jpg"}
+    album = url.rsplit("/", 1)[-1]
+    return {
+        "_type": "playlist", "title": album.title(), "playlist_count": 13 if album == "epoch" else 10,
+        "entries": [{"artist": "Tycho", "album_artist": "Tycho", "release_date": "20160930" if album == "epoch" else "20111101",
+                     "thumbnail": f"https://img/{album}.jpg"}],
+    }
+
+
+def test_a_bandcamp_artist_lists_albums_newest_first_and_tracks_on_their_own_as_singles(monkeypatch):
+    monkeypatch.setattr(runner, "run_json", _bandcamp)
+    counts = []
+    plan = PlanTracker(sink=lambda snapshot: counts.extend(
+        (stage.done, stage.total) for stage in snapshot.stages if stage.id == "read" and stage.total is not None
+    ))
+
+    details = _implementation("https://tycho.bandcamp.com").creator_details("https://tycho.bandcamp.com", plan)
+
+    assert (details.ref, details.url, details.title, details.facts, details.music) == (
+        "tycho", "https://tycho.bandcamp.com", "Tycho", ("2 albums",), True,
+    )
+    assert [(s.title, s.kind, s.year, s.item_count) for s in details.sections] == [
+        ("Epoch (Remix)", SectionKind.ITEM, "2019", None),
+        ("Epoch", SectionKind.LIST, "2016", 13),
+        ("Dive", SectionKind.LIST, "2011", 10),
+    ]
+    stages = plan.snapshot().stages
+    assert [(stage.label, stage.state) for stage in stages] == [
+        ("Listing the albums", "completed"), ("Reading the albums", "completed"),
+    ]
+    # Reading the albums counts them as it goes, one count after the other on the same step.
+    assert counts[0] == (0, 3) and counts[-1] == (3, 3)
+
+
+def test_a_soundcloud_artist_has_its_albums_and_a_feed_of_all_its_tracks(monkeypatch):
+    def soundcloud(*args, cookies=None):
+        url = args[-1]
+        if url.endswith("/sets"):
+            return {"entries": [{"url": "https://soundcloud.com/flume/sets/palaces"}]}
+        return {"_type": "playlist", "title": "Palaces", "album_artist": "Flume", "release_date": "20220520", "playlist_count": 13}
+
+    monkeypatch.setattr(runner, "run_json", soundcloud)
+    details = _implementation("https://soundcloud.com/flume").creator_details("https://soundcloud.com/flume", PlanTracker())
+
+    assert (details.ref, details.title, details.avatar_url) == ("flume", "Flume", "https://i1.sndcdn.com/avatars-flume-t500x500.jpg")
+    assert details.banner_url == "https://i1.sndcdn.com/visuals-flume-original.jpg"
+    assert [(s.ref, s.kind) for s in details.sections] == [("flume/sets/palaces", SectionKind.LIST), ("tracks", SectionKind.FEED)]
+
+
+def test_a_soundcloud_artists_albums_are_told_from_their_playlists(monkeypatch):
+    def soundcloud(*args, cookies=None):
+        url = args[-1]
+        if url.endswith("/sets"):
+            return {"entries": [{"url": "https://soundcloud.com/flume/sets/palaces"},
+                                {"url": "https://soundcloud.com/flume/sets/favourites"}]}
+        if url.endswith("/albums"):
+            return {"entries": [{"url": "https://soundcloud.com/flume/sets/palaces"}]}
+        return {"_type": "playlist", "title": url.rsplit("/", 1)[-1], "release_date": "20220520"}
+
+    monkeypatch.setattr(runner, "run_json", soundcloud)
+    details = _implementation("https://soundcloud.com/flume").creator_details("https://soundcloud.com/flume", PlanTracker())
+
+    lists = {s.ref: s.type.key for s in details.sections if s.kind is SectionKind.LIST}
+    assert lists == {"flume/sets/palaces": "album", "flume/sets/favourites": "playlist"}
+    assert details.facts == ("1 album", "1 playlist")
+    assert (details.music, details.music_known) == (True, False)
+
+
+def test_a_collection_of_a_soundcloud_artists_music_is_named_and_pictured_by_the_artist(monkeypatch):
+    # yt-dlp gives an account's page of all its tracks no picture, so the account's own picture stands in for it.
+    from sources.ytdlp.source import YtDlpSource
+
+    source = YtDlpSource()
+    monkeypatch.setattr(source, "_info", lambda url, *args, **kwargs: {
+        "_type": "playlist", "id": "flume", "title": "Flume (All)", "webpage_url": url,
+    })
+    details = source.collection_details("https://soundcloud.com/flume")
+
+    # yt-dlp names the page "Flume (All)"; the collection is the account's, so it takes the account's name.
+    assert (details.title, details.author_name) == ("Flume", "Flume")
+    assert details.image_url == "https://i1.sndcdn.com/avatars-flume-t500x500.jpg"
+
+
+def test_an_album_of_a_soundcloud_artist_keeps_its_own_name_and_picture(monkeypatch):
+    from sources.ytdlp.source import YtDlpSource
+
+    source = YtDlpSource()
+    monkeypatch.setattr(source, "_info", lambda url, *args, **kwargs: {
+        "_type": "playlist", "id": "palaces", "title": "Palaces (All)", "webpage_url": url,
+    })
+    details = source.collection_details("https://soundcloud.com/flume/sets/palaces")
+
+    assert (details.title, details.image_url) == ("Palaces (All)", None)
+
+
+def test_a_soundcloud_artists_link_is_named_and_pictured_by_the_artist_when_looked_up(monkeypatch):
+    # Add media shows the link as Add collection will add it.
+    from sources.ytdlp.source import YtDlpSource
+
+    source = YtDlpSource()
+    monkeypatch.setattr(source, "_info", lambda url, *args, **kwargs: {
+        "_type": "playlist", "id": "flume", "title": "Flume (All)", "webpage_url": url,
+    })
+    link = source.resolve("https://soundcloud.com/flume")
+
+    assert (link.title, link.author_name) == ("Flume", "Flume")
+    assert link.image_url == "https://i1.sndcdn.com/avatars-flume-t500x500.jpg"
+
+
+def test_new_tracks_are_looked_up_in_one_run_and_those_with_drm_are_marked(monkeypatch):
+    # Starting yt-dlp for every track took longer than looking the tracks up.
+    from sources.ytdlp import source as ytdlp_source
+    from sources.ytdlp.source import YtDlpSource
+
+    links = [f"https://soundcloud.com/flume/track-{n}" for n in range(3)]
+    runs = []
+
+    def lines(*args, cookies=None, timeout=None):
+        runs.append(args)
+        wanted = [arg for arg in args if arg.startswith("https://")]
+        info = lambda url: {"id": url[-1], "original_url": url, "title": f"Track {url[-1]}", "upload_date": "20240101"}
+        if "--allow-unplayable-formats" in args:
+            return [info(url) for url in wanted], {}
+        return [info(url) for url in wanted if not url.endswith("2")], {"2": "This video is DRM protected"}
+
+    monkeypatch.setattr(ytdlp_source.runner, "run_json_lines", lines)
+    monkeypatch.setattr(ytdlp_source.pacing, "pause", lambda *args, **kwargs: None)
+    source = YtDlpSource()
+    monkeypatch.setattr(source, "_from_entry", lambda entry: pytest.fail("looked up on its own"))
+
+    found = list(source._from_entries([{"url": link} for link in links]))
+
+    assert [details.title for details in found] == ["Track 0", "Track 1", "Track 2"]
+    assert len(runs) == 2
+
+
+@pytest.mark.parametrize(("album_type", "list_type"), [
+    ("album", "album"), ("ep", "album"), ("single", "album"), ("compilation", "album"), ("playlist", "playlist"),
+])
+def test_a_soundcloud_set_is_an_album_or_a_playlist_as_soundcloud_says(monkeypatch, album_type, list_type):
+    # A set's link doesn't tell, but SoundCloud gives each set a type of release, which a playlist has none of.
+    from sources.ytdlp.source import YtDlpSource
+
+    source = YtDlpSource()
+    monkeypatch.setattr(source, "_info", lambda url, *args, **kwargs: {
+        "_type": "playlist", "id": "palaces", "title": "Palaces", "webpage_url": url, "album_type": album_type,
+    })
+
+    assert source.collection_details("https://soundcloud.com/flume/sets/palaces").list_type == list_type
+
+
+def test_only_a_soundcloud_set_has_a_type_of_list(monkeypatch):
+    from sources.ytdlp.source import YtDlpSource
+
+    source = YtDlpSource()
+    monkeypatch.setattr(source, "_info", lambda url, *args, **kwargs: {
+        "_type": "playlist", "id": "flume", "title": "Flume (All)", "webpage_url": url,
+    })
+
+    assert source.collection_details("https://soundcloud.com/flume").list_type is None

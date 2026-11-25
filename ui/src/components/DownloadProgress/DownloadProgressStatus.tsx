@@ -12,7 +12,7 @@ export default function DownloadProgressStatus({presentation: state, compact = f
     return <span className={`download-progress download-progress-status${compact ? ' is-compact' : ''}${state.outcome === 'locked' ? ' is-locked' : ''}`}>
         <span className="download-progress-heading">
             <span className="download-progress-label" role="status" aria-live={state.mode === 'determinate' ? 'off' : 'polite'}><FontAwesomeIcon icon={state.icon} aria-hidden="true"/> {label}</span>
-            {details && <ProgressExplanation detail={state.detail + (state.secondary ? ` ${state.secondary}.` : '')}/>}
+            {details && <ProgressExplanation detail={state.detail + (state.secondary ? ` ${state.secondary}.` : '')} steps={state.steps}/>}
         </span>
         {state.active && <ProgressBar value={state.percent} mode={state.mode} ariaLabel="Download progress" detail={state.detail}/>}
         {!compact && state.secondary && <small>{state.secondary}</small>}

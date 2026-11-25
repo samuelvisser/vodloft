@@ -1,10 +1,12 @@
 [project]
 name = "downloader"
-version = "0.8.0"
+version = "0.9.0"
 description = "Standalone HLS, direct-file and yt-dlp media downloader used by VODLoft"
 authors = [{ name = "Samuël Visser", email = "samuvisser@gmail.com" }]
 requires-python = ">=3.13,<3.14"
-dependencies = []
+dependencies = [
+    "progress-plan",
+]
 
 [project.scripts]
 vodloft-downloader = "downloader.__main__:main"

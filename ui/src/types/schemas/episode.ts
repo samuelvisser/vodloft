@@ -1,7 +1,7 @@
 import {z} from 'zod';
 import {EpisodePublishStatus} from "../episode";
 import {ApiDateTimeSchema} from "./datetime";
-import {LockableFields, SourcedFields} from "./source";
+import {RetentionFields, SourcedFields} from "./source";
 
 
 const EpisodeBaseSchema = z.object({
@@ -33,7 +33,7 @@ export const EpisodeReadSchema = z.looseObject({
     seasonId: z.int(),
     index: z.number(),
     episodeIdentifier: z.string(),
-    dwEpisodeNumber: z.string().nullable(),
+    sourceNumber: z.string().nullable(),
     episodeType: z.string().nullable(),
     episodeExtraType: z.string().nullable(),
     episodeNumber: z.string().nullable(),
@@ -43,9 +43,8 @@ export const EpisodeReadSchema = z.looseObject({
     title: z.string(),
     publishStatus: z.union([z.enum(EpisodePublishStatus), z.string()]),
     drmProtected: z.boolean(),
-    ...LockableFields,
+    ...RetentionFields,
     removedFromSource: z.boolean(),
-    earlyDeleteAvailable: z.boolean().optional().default(false),
     downloadDelayPassed: z.boolean(),
     downloadDelayReadyAt: ApiDateTimeSchema.nullable(),
     description: z.string().nullable(),
@@ -71,7 +70,7 @@ export const EpisodeReadViewSchema = z.object({
     seasonId: z.int(),
     index: z.number(),
     episodeIdentifier: z.string(),
-    dwEpisodeNumber: z.string().nullable(),
+    sourceNumber: z.string().nullable(),
     episodeType: z.string().nullable(),
     episodeExtraType: z.string().nullable(),
     episodeNumber: z.string().nullable(),
@@ -83,7 +82,7 @@ export const EpisodeReadViewSchema = z.object({
     publishedDate: ApiDateTimeSchema.nullable(),
     publishStatus: z.union([z.enum(EpisodePublishStatus), z.string()]),
     drmProtected: z.boolean(),
-    ...LockableFields,
+    ...RetentionFields,
     removedFromSource: z.boolean(),
     thumbnailLandscapePath: z.string().nullable().optional(),
     thumbnailPortraitPath: z.string().nullable().optional(),

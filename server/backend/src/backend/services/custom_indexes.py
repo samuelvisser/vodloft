@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from sqlalchemy import and_, delete, or_, select, true, update
-from sqlalchemy.orm import Session, lazyload
+from sqlalchemy.orm import Session, lazyload, selectinload
 
 from backend.db.models import CustomIndexState, Episode, Metadata, Collection, CollectionLocalMediaProfile
 from backend.db.models.media_download import EpisodeMediaDownload
@@ -28,6 +28,7 @@ from jinja_analysis import (
     CustomIndexReachabilityStatus,
     compare_custom_index_reachability,
 )
+from backend.utils.music import album_places
 from backend.utils.output_template import (
     COLLECTION_OUTPUT_TEMPLATE_FIELDS,
     COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
@@ -58,7 +59,7 @@ class CustomIndexReconciliationResult:
 
 
 def profile_offered_for_collection_type(profile: CollectionLocalMediaProfile, collection: Collection) -> bool:
-    return profile.collection_scope in (CollectionLocalMediaProfileScope.BOTH, collection.type)
+    return collection.type in CollectionLocalMediaProfileScope(profile.collection_scope).collection_types()
 
 
 def profile_applies_to_collection(s: Session, profile: CollectionLocalMediaProfile, collection: Collection) -> bool:
@@ -70,15 +71,13 @@ def profile_applies_to_collection(s: Session, profile: CollectionLocalMediaProfi
 
 def profile_collection_scope_filter_for_collection_type(collection_type: str):
     """SQL predicate for Collection Local Media Profiles that apply to one collection type."""
-    return or_(
-        CollectionLocalMediaProfile.collection_scope == CollectionLocalMediaProfileScope.BOTH,
-        CollectionLocalMediaProfile.collection_scope == collection_type,
-    )
+    scopes = [scope.value for scope in CollectionLocalMediaProfileScope if collection_type in scope.collection_types()]
+    return CollectionLocalMediaProfile.collection_scope.in_(scopes)
 
 
 def profile_collection_scope_filter(profile: CollectionLocalMediaProfile):
     """SQL predicate for Collections that are in one Local Media Profile's scope."""
-    scope = true() if profile.collection_scope == CollectionLocalMediaProfileScope.BOTH else Collection.type == profile.collection_scope
+    scope = Collection.type.in_(CollectionLocalMediaProfileScope(profile.collection_scope).collection_types())
     # A collection whose Site VODLoft has not stored yet is in every profile's scope.
     return and_(scope, or_(Collection.site_key.in_(profile.site_keys), Collection.site_key.is_(None)))
 
@@ -312,6 +311,7 @@ def simulate_episode_indexes(
 
 def _synced_downloads_before_reindex(
     session: Session, profile: CollectionLocalMediaProfile, episodes: list[Episode],
+    values: dict[int, dict[str, str]],
 ) -> dict[int, str]:
     """Only previously synchronized physical paths qualify for an automatic move."""
     episode_by_id = {episode.id: episode for episode in episodes}
@@ -338,7 +338,7 @@ def _synced_downloads_before_reindex(
                 profile.output_template, episode=episode, index_definitions=definitions,
                 index_values=get_episode_index_assignments(episode, profile.id),
                 filename_mode=effective_filename_mode(profile),
-                extension=source.suffix.removeprefix("."),
+                extension=source.suffix.removeprefix("."), values=values[episode.id],
             )
         except (CustomIndexNotReadyError, ValueError):
             continue
@@ -347,52 +347,93 @@ def _synced_downloads_before_reindex(
     return synced
 
 
-def reconcile_collection_profile_custom_indexes(
+@dataclass(frozen=True)
+class CustomIndexPlan:
+    """What one reconciliation of a collection and profile stores, worked out from one generation of its inputs."""
+
+    collection_id: int
+    local_media_profile_id: int
+    generation: int
+    episodes_considered: int
+    changes: tuple[tuple[int, dict[str, int], dict[str, int]], ...]
+    """Each episode whose numbers change: its id, its numbers before and its numbers after."""
+    synced: dict[int, str]
+    """Episode id -> the synchronized file that a rename moves after the numbers changed."""
+
+
+def plan_custom_index_reconciliation(
     session: Session, *, collection_id: int, local_media_profile_id: int,
     auto_rename: bool = True,
-) -> CustomIndexReconciliationResult:
+) -> CustomIndexPlan | None:
+    """Work out a reconciliation, reading only. ``apply_custom_index_plan`` stores it unless its inputs changed since."""
     state = session.scalar(select(CustomIndexState).where(
         CustomIndexState.collection_id == collection_id,
         CustomIndexState.local_media_profile_id == local_media_profile_id,
     ))
     profile = session.get(CollectionLocalMediaProfile, local_media_profile_id)
     collection = session.get(Collection, collection_id)
-    empty = CustomIndexReconciliationResult(collection_id, local_media_profile_id, 0, 0, ())
     if state is None or profile is None or collection is None:
-        return empty
+        return None
 
     generation = state.requested_generation
-    episodes = list(session.scalars(select(Episode).where(Episode.collection_id == collection_id)
-        .order_by(Episode.index.asc(), Episode.id.asc())))
+    episodes = list(session.scalars(
+        select(Episode).where(Episode.collection_id == collection_id)
+        .options(selectinload(Episode.meta_items))
+        .order_by(Episode.index.asc(), Episode.id.asc())
+    ))
     applicable = profile_applies_to_collection(session, profile, collection)
+    indexed = applicable and profile_uses_custom_indexes(profile)
+    renaming = auto_rename and applicable
+    values: dict[int, dict[str, str]] = {}
+    if indexed or renaming:
+        # Each episode's values are built once, with every track's place on its album from one query.
+        places = album_places(session, {episode.season_id for episode in episodes})
+        values = {
+            episode.id: episode_output_template_values(episode, album_places=places) for episode in episodes
+        }
     old = {ep.id: get_episode_index_assignments(ep, profile.id) for ep in episodes}
     desired = simulate_episode_indexes(
         episodes, template=profile.output_template,
         definitions=indexing_value_definition_keys(profile),
-        kept=old, keep_keys=kept_index_keys(profile),
-    ) if applicable and profile_uses_custom_indexes(profile) else {ep.id: {} for ep in episodes}
-    synced = _synced_downloads_before_reindex(session, profile, episodes) if auto_rename and applicable else {}
+        values_overrides=values, kept=old, keep_keys=kept_index_keys(profile),
+    ) if indexed else {ep.id: {} for ep in episodes}
+    synced = _synced_downloads_before_reindex(session, profile, episodes, values) if renaming else {}
 
     prefix = f"{INDEX_ASSIGNMENT_PREFIX}{profile.id}."
-    # Found before the first write: every other write waits from there until the commit.
-    outdated = [
-        episode for episode in episodes
+    changes = tuple(
+        (episode.id, old[episode.id], desired[episode.id]) for episode in episodes
         if old[episode.id] != desired[episode.id]
         or sum(item.key.startswith(prefix) for item in episode.meta_items) != len(desired[episode.id])
-    ]
+    )
+    return CustomIndexPlan(collection_id, local_media_profile_id, generation, len(episodes), changes, synced)
 
-    # Compare-and-swap and metadata edits belong to the same transaction.
+
+def apply_custom_index_plan(session: Session, plan: CustomIndexPlan) -> CustomIndexReconciliationResult:
+    """Store a plan in a write transaction, or report it superseded when its inputs changed after it was made."""
+    collection_id, local_media_profile_id = plan.collection_id, plan.local_media_profile_id
+    # Compare-and-swap and metadata edits belong to the same transaction. Whatever changes the inputs asks for a
+    # new generation in its own transaction, so a plan of the current generation still holds.
     updated = session.execute(update(CustomIndexState).where(
-        CustomIndexState.id == state.id,
-        CustomIndexState.requested_generation == generation,
-    ).values(completed_generation=generation)).rowcount
+        CustomIndexState.collection_id == collection_id,
+        CustomIndexState.local_media_profile_id == local_media_profile_id,
+        CustomIndexState.requested_generation == plan.generation,
+    ).values(completed_generation=plan.generation)).rowcount
     if not updated:
-        return CustomIndexReconciliationResult(collection_id, local_media_profile_id, len(episodes), 0, (), True)
+        return CustomIndexReconciliationResult(
+            collection_id, local_media_profile_id, plan.episodes_considered, 0, (), True,
+        )
 
+    episodes = {episode.id: episode for episode in session.scalars(
+        select(Episode).where(Episode.id.in_([episode_id for episode_id, _, _ in plan.changes]))
+        .options(selectinload(Episode.meta_items))
+    )} if plan.changes else {}
+    prefix = f"{INDEX_ASSIGNMENT_PREFIX}{local_media_profile_id}."
     changed = 0
     synced_episode_ids: list[int] = []
-    for episode in outdated:
-        before, after = old[episode.id], desired[episode.id]
+    for episode_id, before, after in plan.changes:
+        episode = episodes.get(episode_id)
+        if episode is None:
+            continue
         changed += max(1, len(set(before.items()) ^ set(after.items())))
         seen: set[str] = set()
         for item in list(episode.meta_items):
@@ -407,14 +448,28 @@ def reconcile_collection_profile_custom_indexes(
                 item.value = str(after[key])
         for key, value in after.items():
             if key not in seen:
-                set_episode_index_assignment(episode, profile.id, key, value)
-        if episode.id in synced:
-            synced_episode_ids.append(episode.id)
+                set_episode_index_assignment(episode, local_media_profile_id, key, value)
+        if episode_id in plan.synced:
+            synced_episode_ids.append(episode_id)
     session.flush()
     return CustomIndexReconciliationResult(
-        collection_id, local_media_profile_id, len(episodes), changed, tuple(synced_episode_ids),
-        synced_source_paths=tuple((id_, synced[id_]) for id_ in synced_episode_ids),
+        collection_id, local_media_profile_id, plan.episodes_considered, changed, tuple(synced_episode_ids),
+        synced_source_paths=tuple((id_, plan.synced[id_]) for id_ in synced_episode_ids),
     )
+
+
+def reconcile_collection_profile_custom_indexes(
+    session: Session, *, collection_id: int, local_media_profile_id: int,
+    auto_rename: bool = True,
+) -> CustomIndexReconciliationResult:
+    """Plan and store a reconciliation in one write transaction, where nothing can supersede it."""
+    plan = plan_custom_index_reconciliation(
+        session, collection_id=collection_id, local_media_profile_id=local_media_profile_id,
+        auto_rename=auto_rename,
+    )
+    if plan is None:
+        return CustomIndexReconciliationResult(collection_id, local_media_profile_id, 0, 0, ())
+    return apply_custom_index_plan(session, plan)
 
 
 def remove_profile_custom_index_state(session: Session, *, local_media_profile_id: int) -> None:

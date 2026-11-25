@@ -1,0 +1,237 @@
+.creator-view { display: flex; flex-direction: column; gap: 1.25rem; }
+/* The page's gap already parts the header from what follows, so the header adds no margin of its own. */
+.creator-edit-head .page-header { margin-bottom: 0; }
+
+/* The banner hero: the banner, the creator's picture over its lower edge, their name beside it and their buttons on
+   the right. A phone stacks them, with the buttons last. */
+.creator-header {
+    /* The buttons take at most 60% of the row, so the name keeps room; the links fit themselves into it. */
+    display: grid; grid-template-columns: auto minmax(0, 1fr) fit-content(60%); column-gap: 18px;
+    grid-template-areas: "banner banner banner" "avatar name actions" "about about about";
+    align-items: end;
+}
+.creator-banner {
+    grid-area: banner; aspect-ratio: 6 / 1; min-height: 96px; border-radius: 14px;
+    background-size: cover; background-position: center; background-color: rgba(100, 116, 139, 0.15);
+}
+.creator-avatar {
+    grid-area: avatar; position: relative; width: 120px; height: 120px; margin: -48px 0 0 20px; border-radius: 50%;
+    object-fit: cover; border: 5px solid var(--bg); background: var(--bg);
+    display: grid; place-items: center; font-size: 2.5rem; font-weight: 600; box-sizing: border-box;
+}
+.creator-header--no-banner { grid-template-areas: "avatar name actions" "about about about"; }
+.creator-header--no-banner .creator-avatar { margin-top: 0; border: 0; width: 96px; height: 96px; margin-left: 0; }
+.creator-avatar--empty { background: rgba(100, 116, 139, 0.15); }
+.creator-header .creator-name { grid-area: name; margin: 0 0 8px; min-width: 0; font-size: 1.9rem; line-height: 1.15; overflow-wrap: anywhere; }
+/* One row: where the links' names do not fit, the page shows their Sites' icons instead (see useLinkFit). */
+.creator-actions { grid-area: actions; min-width: 0; display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: nowrap; justify-content: flex-end; }
+.creator-actions > * { flex-shrink: 0; white-space: nowrap; }
+.creator-actions .site-link { flex-shrink: 0; }
+.creator-about { grid-area: about; min-width: 0; padding: 10px 20px 0; display: flex; flex-direction: column; gap: 6px; }
+.creator-header--no-banner .creator-about { padding-left: 0; padding-right: 0; }
+.creator-facts { margin: 0; color: var(--muted); }
+.creator-description-wrap { position: relative; color: var(--muted); }
+.creator-description-toggle { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+/* Over the end of the cut second line, fading the text under it into the page. */
+.creator-description-wrap.is-cut .creator-description-toggle {
+    position: absolute; right: 0; bottom: 0; padding-left: 1.75em; background: linear-gradient(to right, transparent, var(--bg) 1.25em);
+}
+.creator-description {
+    margin: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    white-space: pre-line; overflow-wrap: anywhere;
+}
+.creator-description.is-open { display: block; }
+.creator-stats { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 0; padding: 0; list-style: none; }
+.creator-stats li {
+    display: inline-flex; align-items: baseline; gap: 5px; padding: 3px 12px; border-radius: 999px;
+    border: 1px solid rgba(100, 116, 139, 0.3); color: var(--muted); font-size: .875rem; white-space: nowrap;
+}
+.creator-stats b { color: var(--text, inherit); font-weight: 700; }
+/* Used by the dialogs that show a creator in a row. */
+.creator-identity-copy { min-width: 0; }
+.creator-kind { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; opacity: .7; }
+
+@media (max-width: 640px) {
+    .creator-header {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas: "banner" "avatar" "name" "about" "actions";
+    }
+    .creator-header--no-banner { grid-template-areas: "avatar" "name" "about" "actions"; }
+    .creator-banner { aspect-ratio: 4 / 1; min-height: 0; margin: 0 -16px; border-radius: 0; }
+    .creator-facts { overflow-wrap: anywhere; }
+    .creator-avatar { width: 88px; height: 88px; margin: -42px 0 0; border-width: 4px; font-size: 2rem; }
+    .creator-header--no-banner .creator-avatar { width: 72px; height: 72px; margin-top: 0; }
+    .creator-header .creator-name { margin: 8px 0 0; font-size: 1.6rem; }
+    .creator-about { padding: 6px 0 0; }
+    .creator-actions { justify-content: flex-start; margin: 14px 0 0; }
+}
+@media (max-width: 560px) {
+    /* The page's own padding is 12px here, so the banner reaches the edges without making the page scroll sideways. */
+    .creator-banner { margin: 0 -12px; }
+}
+
+.creator-setup { display: flex; flex-direction: column; gap: 1.25rem; }
+
+.creator-section-group h2 { font-size: 1rem; margin: 0 0 .5rem; }
+/* A row's select takes the width of the longest choice in its list (SimpleSelect's fitLabels), so the selects of a
+   list line up. The title gives way when the row is short of room, and the select only past half the row. */
+
+.creator-section-note { opacity: .7; font-size: .875rem; }
+/* A feed or list the user moved elsewhere, until the Edit page is saved. */
+
+/* "In your library", on a row of something the user has already, such as a host's movie. */
+
+.creator-order-note { margin: 0; opacity: .75; font-size: .875rem; }
+
+/* The creator's collections, as the same tiles as the Library. */
+.creator-collections-title { display: flex; align-items: baseline; gap: .5rem; }
+
+/* The newest episodes of all of the creator's collections, in a row that scrolls sideways. */
+.creator-shelf-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: .25rem; }
+.creator-shelf-head h2 { margin: 0; }
+.creator-shelf-arrows { display: flex; gap: 6px; }
+.creator-shelf-arrows .btn { width: 34px; height: 34px; padding: 0; border-radius: 50%; justify-content: center; }
+.creator-shelf.episodes-row { grid-auto-columns: 240px; padding-left: 0; padding-right: 0; scrollbar-width: none; }
+.creator-shelf.episodes-row::-webkit-scrollbar { display: none; }
+/* Where the next episodes appear while they load. */
+.creator-shelf-more { aspect-ratio: 16 / 9; border-radius: 10px; background: rgba(100, 116, 139, 0.15); animation: creator-shelf-pulse 1.2s ease-in-out infinite alternate; }
+@keyframes creator-shelf-pulse { from { opacity: .5; } to { opacity: 1; } }
+@media (max-width: 640px) {
+    .creator-shelf-arrows { display: none; }
+    .creator-shelf.episodes-row { grid-auto-columns: 200px; gap: 12px; margin-right: -16px; padding-right: 16px; }
+}
+.creator-empty { margin: 0; opacity: .8; }
+
+/* New playlists and shows wait for a choice on the Edit page. */
+
+.creator-membership { max-width: 360px; }
+/* The settings of each collection the creator adds, side by side where there is room. */
+
+.creator-setup .actions .btn { white-space: nowrap; }
+
+.creator-note { margin: 0; opacity: .75; font-size: .875rem; }
+
+.creator-join { display: flex; flex-direction: column; gap: .75rem; }
+.creator-join-who { display: flex; gap: .75rem; align-items: center; }
+.creator-join-who .creator-identity-copy { display: flex; flex-direction: column; }
+
+.creator-avatar.creator-avatar--small { width: 48px; height: 48px; flex-basis: 48px; margin: 0; border: 0; font-size: 1.2rem; }
+ul.creator-order-note { padding-left: 1.1rem; display: flex; flex-direction: column; gap: .25rem; }
+
+/* While a creator is looked up: what the lookup is doing, over pulsing blocks in the shape of the page. */
+.creator-skeleton { display: flex; flex-direction: column; gap: 1.25rem; }
+.creator-lookup-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .35rem; }
+.creator-lookup-steps li { display: flex; align-items: center; gap: .5rem; }
+.creator-lookup-steps li.is-done { opacity: .6; }
+.creator-lookup-steps li.is-done svg { color: #16a34a; }
+.creator-lookup-steps li.is-failed svg { color: #dc2626; }
+.creator-skeleton .skeleton-block {
+    display: block; background: #e5e7eb; animation: creator-skeleton-pulse 1.5s ease-in-out infinite;
+}
+.creator-skeleton .creator-banner.skeleton-block { border-radius: 0; }
+.creator-skeleton-copy { flex: 1 1 auto; display: flex; flex-direction: column; gap: .5rem; }
+.creator-skeleton-line { height: 14px; width: min(90%, 520px); border-radius: 5px; }
+.creator-skeleton-line--kind { width: 120px; height: 11px; }
+.creator-skeleton-line--title { width: min(60%, 320px); height: 28px; border-radius: 7px; }
+.creator-skeleton-line--title-small { width: min(50%, 240px); height: 16px; }
+
+@keyframes creator-skeleton-pulse {
+    0%, 100% { opacity: .55; }
+    50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .creator-skeleton .skeleton-block { animation: none; }
+}
+
+@media (prefers-color-scheme: dark) {
+    .creator-skeleton .skeleton-block { background: rgba(148, 163, 184, 0.22); }
+}
+
+/* Not in your library: one folded line, then faded Library tiles with a button to add each. */
+.creator-more { margin-top: 1.5rem; border: 1px solid rgba(100, 116, 139, .3); border-radius: 14px; background: rgba(148, 163, 184, .035); }
+.creator-more-head { display: flex; align-items: center; gap: 8px; padding-right: 14px; border-radius: 13px; cursor: pointer; }
+/* The whole bar lights up, buttons included, and a click anywhere on it folds it open or shut. */
+.creator-more-head:hover { background: rgba(148, 163, 184, .06); }
+.creator-more-summary {
+    display: flex; flex: 1 1 auto; min-width: 0; align-items: center; gap: 14px; padding: 12px 14px; border: 0; background: none;
+    color: inherit; font: inherit; text-align: left; cursor: pointer; border-radius: 13px;
+}
+.creator-more-stack { display: flex; flex: 0 0 auto; }
+.creator-more-stack img {
+    width: 46px; height: 46px; object-fit: cover; border-radius: 9px; border: 2px solid var(--bg); margin-left: -12px; background: #1e293b;
+}
+.creator-more-stack img:first-child { margin-left: 0; }
+.creator-more-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.creator-more-text b { font-size: 1rem; }
+.creator-more-short { display: none; }
+.creator-more-sub { color: var(--muted); font-size: .85rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* Open, it says how to add them: let that wrap instead of cutting it off. */
+.creator-more.is-open .creator-more-sub { white-space: normal; overflow: visible; }
+.creator-more-toggle { flex: 0 0 auto; gap: 6px; }
+.creator-more-head .page-header-action { flex: 0 0 auto; }
+/* Bulk edit: select all above the tiles, and a check on each tile instead of its + */
+
+.creator-more-tile.is-selected { border-style: solid; border-color: #3b82f6; background: rgba(59, 130, 246, .10); }
+.creator-more-tile.is-selected .creator-more-art > * { filter: none; }
+.creator-more-body { border-top: 1px solid rgba(100, 116, 139, .3); padding: 14px; }
+.creator-more-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+.creator-more-grid.is-cut > :nth-child(n + 13) { display: none; }
+.creator-more-tile {
+    position: relative; display: flex; flex-direction: column; min-width: 0;
+    border: 1px dashed rgba(148, 163, 184, .4); border-radius: 14px;
+}
+.creator-more-art { border-radius: 13px 13px 0 0; }
+/* Faded until the pointer is on it: it could be in the Library, but is not. */
+.creator-more-art > * { filter: grayscale(.85) brightness(.7); transition: filter .15s ease; }
+.creator-more-tile:hover, .creator-more-tile:focus-within { border-style: solid; border-color: rgba(59, 130, 246, .6); }
+.creator-more-tile:hover .creator-more-art > *, .creator-more-tile:focus-within .creator-more-art > * { filter: none; }
+.creator-more-tile .library-tile-title { font-size: 15px; }
+.creator-more-tile.is-addable { cursor: pointer; }
+.creator-more-add { position: absolute; top: 8px; right: 8px; z-index: 2; }
+/* Its open menu sits over the other tiles and their + buttons. */
+.creator-more-add:has(.action-menu-popover) { z-index: 90; }
+.creator-more-plus { width: 34px; height: 34px; padding: 0; justify-content: center; border-radius: 50%; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
+.creator-more-add .action-menu-trigger--icon { box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
+.creator-more-all { display: flex; justify-content: center; margin-top: 12px; }
+.creator-more-all.is-phone-only { display: none; }
+
+@media (max-width: 640px) {
+    .creator-more-long { display: none; }
+    .creator-more-short { display: inline; }
+    .creator-more-summary { padding: 10px; gap: 10px; }
+    .creator-more-head { padding-right: 10px; gap: 6px; }
+    .creator-more-head .page-header-action { width: 34px; height: 34px; padding: 0; justify-content: center; border-radius: 50%; }
+    .creator-more-head .page-header-action-label { display: none; }
+    .creator-more-stack img { width: 36px; height: 36px; }
+    .creator-more-toggle { width: 34px; height: 34px; padding: 0; justify-content: center; border-radius: 50%; }
+    .creator-more-toggle-label { display: none; }
+    .creator-more-body { padding: 10px; }
+    .creator-more-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .creator-more-grid.is-cut > :nth-child(n + 5) { display: none; }
+    .creator-more-all.is-phone-only { display: flex; }
+}
+
+/* The moves the Edit page saves, one line each: what, where it is, where it goes. The names line up in one column and
+   the places beside them, in one grid for every row. A long name wraps instead of pushing the places past the dialog's
+   edge, and the places wrap too when even they are wider than what is left. */
+
+/* What the moves do to one collection */
+.move-sections-dialog .move-sections-collection {
+    margin-top: 20px;
+}
+
+.move-sections-dialog .move-sections-collection h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 15px;
+}
+
+.move-sections-dialog .move-sections-collection .change-identification-steps {
+    margin-top: 8px;
+}
+
+/* Sets the other collections apart in the Add creator page's choices, from the creator's own and from the rest. */
+

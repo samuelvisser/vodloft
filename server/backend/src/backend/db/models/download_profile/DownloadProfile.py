@@ -38,6 +38,10 @@ class DownloadProfile(Base, HasTaskResourcesMixin):
     redownload_final: Mapped[bool] = mapped_column(default=False)
     # Whether a download its date lines leave out is deleted.
     delete_older_episodes: Mapped[bool] = mapped_column(default=True)
+    retention_includes_manual: Mapped[bool] = mapped_column(
+        default=False, server_default="0",
+        comment="Whether deleting older episodes also deletes the manual downloads of the collection in its Local Media Profile",
+    )
 
     # The upgrade check: downloading again later, and keeping the new file only when it is better
     upgrade_check: Mapped[bool] = mapped_column(default=True, server_default="0")

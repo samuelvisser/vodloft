@@ -22,9 +22,10 @@ from backend.db.models import Collection
 from backend.api.models.source import (
     DownloadOptionsAPIRead, DownloadProfileDefaultsAPIRead, SiteOptionsAPIRead, UpgradeChecksAPIRead,
 )
-from backend.services.site_settings import download_profile_defaults, offered_settings
+from backend.services.site_settings import download_profile_defaults, offered_settings, profile_seasons
 from config.settings.site_settings import SiteSettingGroup
 from backend.services.sites import collection_site
+from sources import get_source
 from backend.db.core import run_write_transaction
 
 router = APIRouter(prefix="/download-profiles", tags=["Download Profiles"])
@@ -121,9 +122,11 @@ def download_profiles_site_options(collection_id: int, request: Request):
         return SiteOptionsAPIRead(
             settings=offered_settings(site, SiteSettingGroup.DOWNLOAD_PROFILE),
             profile_defaults=DownloadProfileDefaultsAPIRead.model_validate(download_profile_defaults(site)),
+            profile_seasons=profile_seasons(site, get_source(collection.source_key)),
             upgrade_checks=UpgradeChecksAPIRead.model_validate(site.upgrade_checks),
             site_key=site.key, site_name=site.name, stream_methods=site.stream_methods,
-            stream_video_heights=site.stream_video_heights, stream_proxy_choice=site.stream_proxy_choice,
+            stream_video_heights=site.stream_video_heights, stream_file_height=site.stream_file_height,
+            stream_proxy_choice=site.stream_proxy_choice,
             video_output_help=site.video_output_help,
             downloads=DownloadOptionsAPIRead.model_validate(site.downloads),
         )

@@ -17,7 +17,8 @@ import {
   scheduleCollectionDataCacheWarm,
 } from './lib/collectionDataCacheWarmer'
 import { loadAppConfig } from './general_utils.js'
-import { loadPublicConfig } from './lib/publicConfig'
+import { getPublicConfig, loadPublicConfig } from './lib/publicConfig'
+import { loadCollectionContracts } from './lib/collectionWords'
 import { router } from './router'
 import { registerServiceWorker } from './lib/registerServiceWorker'
 import { can, loadAccess } from './lib/access'
@@ -34,6 +35,9 @@ async function bootstrap() {
     console.error('[publicConfig] Failed to load public config during bootstrap', error)
   }
 
+  // What each collection type calls its seasons and episodes, which every page names them by.
+  loadCollectionContracts(getPublicConfig()?.collectionContracts)
+
   // Who is signed in decides what to load; App shows the sign-in page when nobody is.
   try {
     await loadAccess()
@@ -45,7 +49,9 @@ async function bootstrap() {
   // Restore cached data synchronously before initial render to prevent flashes.
   const cachedCollections = library ? loadCollectionsFromStorage() : null
   if (cachedCollections) {
-    queryClient.setQueryData(['collections'], cachedCollections)
+    // As old as can be: the stored list paints the first render, but the server's list replaces it, and a collection
+    // page that starts from it asks the server too, so one deleted since shows as gone instead of staying.
+    queryClient.setQueryData(['collections'], cachedCollections, {updatedAt: 0})
     // Season lists are small and seasonal collection pages need them before rendering episode cards.
     // Hydrating them now avoids a skeleton gate without parsing every potentially-large episode list.
     hydrateCachedSeasonQueries(queryClient, cachedCollections)

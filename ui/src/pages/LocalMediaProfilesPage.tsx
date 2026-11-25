@@ -35,8 +35,7 @@ const SIMPLIFY_OUTPUT_PATHS = true
 const USED_FOR_OPTIONS = [
     {value: 'podcast', label: 'Podcasts'},
     {value: 'series', label: 'Series'},
-    {value: 'movie', label: 'Movies'},
-    {value: 'video', label: 'Videos'},
+    {value: 'video', label: 'Videos and movies'},
 ]
 
 const STORAGE_OPTIONS = [
@@ -117,8 +116,8 @@ export default function LocalMediaProfilesPage() {
                 </span>
             ),
             width: '1%',
-            headerStyle: {minWidth: 180, maxWidth: '30%', whiteSpace: 'nowrap'},
-            cellStyle: {minWidth: 180, maxWidth: '30%', whiteSpace: 'nowrap', overflow: 'hidden'},
+            headerStyle: {minWidth: 180, maxWidth: 400, whiteSpace: 'nowrap'},
+            cellStyle: {minWidth: 180, maxWidth: 400, whiteSpace: 'nowrap', overflow: 'hidden'},
             mobileHidden: true,
         },
         {

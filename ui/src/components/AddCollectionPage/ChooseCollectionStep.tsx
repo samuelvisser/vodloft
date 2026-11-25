@@ -4,6 +4,10 @@ import CollectionPreviewCard from "./CollectionPreviewCard";
 import {useDailywireShow, useDailywireUserInfo, useListedCollectionDetails, useResolvedLink} from "../../lib/queries";
 import {DAILYWIRE_SOURCE_KEY, SourceFeature, sourceHas} from "../../types/schemas/source";
 import ReadMore from "../../utils/ReadMore";
+import {collectionWords, creatorNamesFor} from "../../lib/collectionWords";
+import {can} from "../../lib/access";
+import CreatorSwitch, {type CreatorChoice} from "./CreatorSwitch";
+import {dailywireShowDefaults, listedCollectionDefaults} from "./collectionDefaults";
 import {Controller, SubmitHandler, useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
 import {ZodSafeParseResult} from "zod";
@@ -12,7 +16,7 @@ import {
     CollectionCreatePayloadSchema,
     type CollectionCreateFormIn, CollectionCreatePayloadOut, CollectionCreatePayloadIn,
 } from "../../types/schemas/collection";
-import {EpisodeIdentifierReg, EpisodeIdentifierValue, CollectionTypeReg, CollectionTypeValue} from "../../types/collection";
+import {CollectionTypeReg, episodeIdentifierRegFor, musicIdentificationAdvice} from "../../types/collection";
 import Select from "react-select";
 import {UseQueryResult} from "@tanstack/react-query";
 import {SeasonDetachedOut, SeasonDetachedSchema} from "../../types/schemas/season";
@@ -27,9 +31,12 @@ type Props = {
     onSeasonsSubmit: (seasons: SeasonDetachedOut[]) => void;
     onContinue: () => void;
     onCancel: () => void;
+    /** Whether the collection is added to a creator once it is in the Library: only a channel can be. */
+    creator: CreatorChoice;
+    onCreatorChange: (choice: CreatorChoice) => void;
 };
 
-export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmitParent, onSeasonsSubmit, onContinue, onCancel,}: Props) {
+export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmitParent, onSeasonsSubmit, onContinue, onCancel, creator, onCreatorChange}: Props) {
     // --- Form: only user-editable fields are in this schema
     const form = useForm<CollectionCreateFormIn>({
         resolver: zodResolver(CollectionCreateFormSchema),
@@ -70,25 +77,21 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
         ? resolvedCollection.source
         : undefined
     const listed = useListedCollectionDetails(listedSource?.id, listedSource ? resolved.data?.url : undefined);
+    // What a collection of the chosen type calls its seasons and episodes; a Music collection on a Site with sound
+    // only, such as SoundCloud, holds tracks.
+    const typeWords = collectionWords(watch("type"), listed.data?.audioOnly ? 'audio' : 'video')
     const lastListedUrlRef = useRef<string | undefined>(
         value.type && value.episodeIdentifier ? value.url : undefined,
     );
     useEffect(() => {
         if (!listed.data) return;
         setValue("membershipLevel", DwMembershipLevelReg.Enum.FREE, {shouldValidate: true});
-        // Suggest the type the backend guessed from the name. A series is numbered by the Source's own
-        // seasons when it has them, and a podcast or a series without seasons by date.
+        // Suggest the type the backend guessed, from the name or because it is music, and identification to match.
         if (lastListedUrlRef.current === listed.data.sharingUrl) return;
         lastListedUrlRef.current = listed.data.sharingUrl;
-        const type = CollectionTypeReg.normalize(listed.data.probableCollectionType) ?? CollectionTypeReg.Enum.series;
-        setValue("type", type, {shouldDirty: true});
-        setValue(
-            "episodeIdentifier",
-            type === CollectionTypeReg.Enum.series && listed.data.seasons.length
-                ? EpisodeIdentifierReg.Enum.seasonal
-                : EpisodeIdentifierReg.Enum.date_based,
-            {shouldDirty: true},
-        );
+        const suggested = listedCollectionDefaults(listed.data);
+        setValue("type", suggested.type, {shouldDirty: true});
+        setValue("episodeIdentifier", suggested.episodeIdentifier, {shouldDirty: true});
     }, [listed.data, setValue]);
 
     // --- Fetch DailyWire data using the slug
@@ -132,13 +135,9 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
         const currentUrl = watchedUrl ?? "";
         if (currentUrl === (lastPrefilledUrlRef.current ?? "")) return;
 
-        const inferredType: CollectionTypeValue | "" = CollectionTypeReg.normalize(dw.data.probableCollectionType) ?? "";
-        const inferredEpisodeId: EpisodeIdentifierValue | "" = inferredType === CollectionTypeReg.Enum.series
-            ? EpisodeIdentifierReg.Enum.seasonal
-            : (EpisodeIdentifierReg.normalize(dw.data.probableEpisodeIdentification) ?? "");
-
-        setValue("type", inferredType, {shouldDirty: true});
-        setValue("episodeIdentifier", inferredEpisodeId, {shouldDirty: true});
+        const suggested = dailywireShowDefaults(dw.data);
+        setValue("type", suggested.type, {shouldDirty: true});
+        setValue("episodeIdentifier", suggested.episodeIdentifier, {shouldDirty: true});
 
         // Remember that we prefetched for this URL to prevent reapplying on mount/reload
         lastPrefilledUrlRef.current = currentUrl;
@@ -164,6 +163,7 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                 backgroundImagePath: null,
                 logoImagePath: null,
                 sharingUrl: details.sharingUrl,
+                listType: details.listType,
                 authorName: details.authorName,
                 authorSlug: details.authorSlug,
                 authorHeadshotPath: null,
@@ -217,15 +217,16 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
     const seasonsFromSource = !!listed.data?.seasons.length
     const episodeIdentifierField = (
         <div className="form-row">
-            <label htmlFor="episode-identification">Episode identification</label>
+            <label htmlFor="episode-identification">{typeWords.episode.Singular} identification</label>
             <Controller
                 control={control}
                 name="episodeIdentifier"
                 render={({field}) => (
                     <Select
+                        classNamePrefix="select"
                         inputId="episode-identification"
-                        options={EpisodeIdentifierReg.options}
-                        value={EpisodeIdentifierReg.options.find(o => o.value === field.value) ?? null}
+                        options={episodeIdentifierRegFor(watch("type")).options}
+                        value={episodeIdentifierRegFor(watch("type")).options.find(o => o.value === field.value) ?? null}
                         onChange={(opt) => field.onChange(opt?.value ?? "")}
                         onBlur={field.onBlur}
                         aria-invalid={!!errors.episodeIdentifier}
@@ -239,22 +240,32 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                     {errors.episodeIdentifier.message as string}
                 </div>
             )}
+            {musicIdentificationAdvice(watch("type"), watch("episodeIdentifier")) && (
+                <div className="help form-advice" role="status">{musicIdentificationAdvice(watch("type"), watch("episodeIdentifier"))}</div>
+            )}
             <div className="help" id="episode-identification-help">
-                <ReadMore summary={<span>How are episodes in this collection identified?</span>}>
-                    <p>Determines how collection episodes are grouped in the UI, and how they are indexed.</p>
-                    <p><b>Numbered</b> episodes are identified by an episode number. VODLoft will know
-                        when an episode is part of another episode (e.g. a clip) and label it as such.</p>
-                    <p><b>Date-based</b> episodes are identified simply by their publish date.</p>
-                    <p><b>Seasonal</b> episodes are identified by a season number and an episode number, like "S01E01".
+                <ReadMore summary={<span>How are {typeWords.episode.plural} in this collection identified?</span>}>
+                    <p>Determines how the collection's {typeWords.episode.plural} are grouped in the UI, and how they are indexed.</p>
+                    <p><b>Numbered</b> {typeWords.episode.plural} are identified by {typeWords.episode.a} number. VODLoft will know
+                        when {typeWords.episode.a} is part of another (e.g. a clip) and label it as such.</p>
+                    <p><b>Date-based</b> {typeWords.episode.plural} are identified simply by their publish date.</p>
+                    <p><b>{episodeIdentifierRegFor(watch("type")).getLabel('seasonal')}</b> {typeWords.episode.plural} are identified
+                        by {typeWords.season.a} number and {typeWords.episode.a} number, like "S01E01".
                         Auxiliary content like trailers will be identified separately.</p>
                     {listed.data && (seasonsFromSource
-                        ? <p>{resolved.data?.source.name} has its own seasons, which VODLoft keeps, and a Seasonal collection keeps its episode numbers too.</p>
-                        : <p>{resolved.data?.source.name ?? 'This site'} has no seasons, so VODLoft puts the videos of each upload year in their own season.</p>)}
+                        ? <p>{resolved.data?.source.name} has its own seasons, which VODLoft keeps, and a Seasonal collection keeps its {typeWords.episode.singular} numbers too.</p>
+                        : listed.data.seasonsPlans[watch("type") ?? ""] && <p>{listed.data.seasonsPlans[watch("type") ?? ""]}</p>)}
                     {!listed.data && <p>VODLoft suggests one from the collection itself. If you're unsure, select "Numbered".</p>}
                 </ReadMore>
             </div>
         </div>
     )
+
+    // A channel or a list, on a Site with creators, can be added to one of them.
+    const siteCreatorNames = resolved.data?.creatorNames ?? null
+    const creatorSwitch = siteCreatorNames && can('library', 'manage') ? (
+        <CreatorSwitch creatorNames={creatorNamesFor(watch("type"), siteCreatorNames)} value={creator} onChange={onCreatorChange}/>
+    ) : null
 
     // --- Render
     return (
@@ -325,6 +336,7 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                                 name="type"
                                 render={({field}) => (
                                     <Select
+                                        classNamePrefix="select"
                                         inputId="collection-type"
                                         options={CollectionTypeReg.options}
                                         value={CollectionTypeReg.options.find(o => o.value === field.value) ?? null}
@@ -342,6 +354,9 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                                 </div>
                             )}
                             <div className="help" id="collection-type-help">
+                                {listed.data?.musicReason && watch("type") === CollectionTypeReg.Enum.music && (
+                                    <p>{listed.data.musicReason}, so VODLoft took it for music. Pick another type if it isn't.</p>
+                                )}
                                 <ReadMore summary={<span>Why do I need to choose this?</span>}>
                                     <p><b>Podcast</b> collections download and stream episodes from <i>newest</i> to <i>oldest</i>,
                                         which suits most channels.</p>
@@ -352,6 +367,7 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                         </div>
                     )}
                     {listed.data && episodeIdentifierField}
+                    {listed.data && creatorSwitch}
                 </>
             )}
 
@@ -372,6 +388,7 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                                     name="membershipLevel"
                                     render={({field}) => (
                                         <Select
+                                            classNamePrefix="select"
                                             inputId="membership-level"
                                             options={DwMembershipLevelReg.options}
                                             value={DwMembershipLevelReg.options.find(o => o.value === field.value) ?? null}
@@ -411,6 +428,7 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                                     name="type"
                                     render={({field}) => (
                                         <Select
+                                            classNamePrefix="select"
                                             inputId="collection-type"
                                             options={CollectionTypeReg.options}
                                             value={CollectionTypeReg.options.find(o => o.value === field.value) ?? null}
@@ -441,6 +459,7 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                             </div>
 
                             {episodeIdentifierField}
+                            {creatorSwitch}
                         </>
                     )}
                 </>

@@ -2,10 +2,7 @@ from __future__ import annotations
 
 from profile_filters import filter_rows, line
 
-import asyncio
-from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
-from unittest.mock import Mock
+from datetime import datetime, timezone
 
 import pytest
 from conftest import use_database
@@ -146,41 +143,10 @@ def _dw_episode_record(slug: str, title: str):
     )
 
 
-def _dw_episode_detail(slug: str, title: str):
-    from sources.dailywire.api.records import DwEpisodeDetailRecord
-
-    return DwEpisodeDetailRecord(
-        **_dw_episode_record(slug, title).model_dump(mode="python", by_alias=False),
-        audio_url="https://example.test/audio.mp3",
-        video_url="https://example.test/video.m3u8",
-        delivery_mode="VOD",
-        progress=0,
-        next_episode_url=None,
-        playback_status=None,
-    )
-
-
-def _patch_no_token(monkeypatch, service):
-    monkeypatch.setattr(
-        service,
-        "DeviceAuthClient",
-        lambda: Mock(get_token=lambda: None),
-    )
-
-
-def _patch_usable_hls(monkeypatch):
-    from task_manager.tasks.helpers.episodes import status
-
-    monkeypatch.setattr(
-        status,
-        "get_vod_info",
-        lambda _url: SimpleNamespace(seconds=100),
-    )
-
-
 # ---------- no-show state normalization ----------
 
 def test_title_alone_does_not_make_episode_no_show_today(db_session):
+    from backend.utils.episode_slug import is_no_show_today_slug
     from task_manager.tasks.helpers.episodes.save import upsert_episode
 
     collection = _make_collection(db_session)
@@ -194,19 +160,14 @@ def test_title_alone_does_not_make_episode_no_show_today(db_session):
         ep_id="ep.1809",
     )
 
-    assert episode.is_no_show_today is False
+    assert is_no_show_today_slug(episode.slug) is False
 
 
-def test_slug_marks_no_show_today_without_persisted_boolean(db_session):
+def test_no_show_today_placeholder_is_not_added(db_session):
     from backend.db.models import Episode
-    from backend.types.episode_types import EpisodePublishStatus
     from task_manager.tasks.helpers.episodes.save import (
         resolve_dw_episodes,
         save_resolved_episodes_per_season_asc,
-    )
-    from task_manager.tasks.helpers.episodes.unusable_media import (
-        NoUsableMediaReason,
-        episode_no_usable_media_reason,
     )
 
     collection = _make_collection(db_session)
@@ -218,8 +179,7 @@ def test_slug_marks_no_show_today_without_persisted_boolean(db_session):
         require_member_exclusive=False,
     )
 
-    assert resolved.status is EpisodePublishStatus.NO_USABLE_MEDIA
-    assert resolved.unusable_media_reason is NoUsableMediaReason.NO_SHOW_TODAY
+    assert resolved.status is None
 
     _, saved = save_resolved_episodes_per_season_asc(
         db_session,
@@ -228,44 +188,13 @@ def test_slug_marks_no_show_today_without_persisted_boolean(db_session):
         episodes=[resolved],
         start_index=1,
     )
-    episode = saved[0].episode
-    assert episode.is_no_show_today is True
-    assert episode.episode_identifier == "not-usable.1"
-    assert episode.get_meta("no_usable_media.previous_identifier") == "ep.1809"
-    assert episode_no_usable_media_reason(episode) is NoUsableMediaReason.NO_SHOW_TODAY
-    assert "is_no_show_today" not in Episode.__table__.columns.keys()
-
-
-def test_episode_api_does_not_return_is_no_show_today(db_session):
-    from backend.api.endpoints.episodes.service import get_episode
-    from task_manager.tasks.helpers.episodes.save import (
-        resolve_dw_episodes,
-        save_resolved_episodes_per_season_asc,
-    )
-
-    collection = _make_collection(db_session)
-    season = _make_season(db_session, collection)
-    [resolved] = resolve_dw_episodes(
-        episodes=[("ep.1", _dw_episode_record("test-collection-1-no-show-today", "Anything"))],
-        client=object(),
-        require_member_exclusive=False,
-    )
-    _, saved = save_resolved_episodes_per_season_asc(
-        db_session,
-        collection=collection,
-        season=season,
-        episodes=[resolved],
-        start_index=1,
-    )
-
-    payload = get_episode(db_session, saved[0].episode.slug).model_dump(by_alias=True)
-    assert "isNoShowToday" not in payload
-    assert payload["earlyDeleteAvailable"] is False
+    assert saved == []
+    assert db_session.query(Episode).count() == 0
 
 
 # ---------- profile eligibility remains generic ----------
 
-def test_download_profile_excludes_unusable_and_processing_statuses(db_session):
+def test_download_profile_excludes_processing_status(db_session):
     from backend.db.models.download_profile import DownloadProfile
     from backend.types.download_profile_types import EpIdType
     from backend.types.episode_types import EpisodePublishStatus
@@ -285,16 +214,6 @@ def test_download_profile_excludes_unusable_and_processing_statuses(db_session):
         ep_id="ep.1",
         title="Real episode",
         index=1,
-    )
-    unusable_ep = _make_episode(
-        db_session,
-        collection,
-        season,
-        slug="ep-unusable",
-        ep_id="aux.1",
-        title="Unavailable episode",
-        index=2,
-        publish_status=EpisodePublishStatus.NO_USABLE_MEDIA.value,
     )
     processing_ep = _make_episode(
         db_session,
@@ -321,326 +240,4 @@ def test_download_profile_excludes_unusable_and_processing_statuses(db_session):
 
     slugs = {episode.slug for episode in get_download_profile_episodes(db_session, profile)}
     assert real_ep.slug in slugs
-    assert unusable_ep.slug not in slugs
     assert processing_ep.slug not in slugs
-
-
-# ---------- no-usable-media monitoring ----------
-
-def _mark_unusable_at(session, episode, reason, observed_at):
-    from task_manager.tasks.helpers.episodes.unusable_media import mark_episode_no_usable_media
-
-    mark_episode_no_usable_media(
-        session,
-        episode,
-        reason=reason,
-        now=observed_at,
-    )
-
-
-def test_monitor_keeps_recent_no_show_today(db_session, monkeypatch):
-    from backend.db.models import Episode
-    from task_manager.tasks.helpers.episodes.unusable_media import NoUsableMediaReason
-    from task_manager.tasks.workers.monitor_no_usable_media_episode import service
-
-    now = datetime.now(timezone.utc)
-    collection = _make_collection(db_session)
-    season = _make_season(db_session, collection)
-    episode = _make_episode(
-        db_session,
-        collection,
-        season,
-        slug="ep-no-show-today",
-        ep_id="aux.1",
-        title="No Show Today",
-        index=1,
-        published_at=(now - timedelta(hours=1)),
-    )
-    _mark_unusable_at(
-        db_session,
-        episode,
-        NoUsableMediaReason.NO_SHOW_TODAY,
-        now - timedelta(hours=1),
-    )
-    db_session.commit()
-    episode_id = episode.id
-
-    class FakeClient:
-        def __init__(self, access_token=None):
-            pass
-
-        def get_episode_details(self, slug, *, require_member_exclusive):
-            return _dw_episode_detail(slug, "No Show Today")
-
-    monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
-    _patch_no_token(monkeypatch, service)
-    asyncio.run(service.run_monitor_no_usable_media_episode(db_session))
-
-    assert db_session.get(Episode, episode_id) is not None
-
-
-def test_monitor_keeps_old_no_show_today_while_dailywire_still_returns_it(db_session, monkeypatch):
-    from backend.db.models import Episode
-    from task_manager.tasks.helpers.episodes.unusable_media import NoUsableMediaReason
-    from task_manager.tasks.workers.monitor_no_usable_media_episode import service
-
-    now = datetime.now(timezone.utc)
-    collection = _make_collection(db_session)
-    season = _make_season(db_session, collection)
-    episode = _make_episode(
-        db_session,
-        collection,
-        season,
-        slug="ep-no-show-today",
-        ep_id="aux.1",
-        title="No Show Today",
-        index=1,
-        published_at=(now - timedelta(hours=5)),
-    )
-    _mark_unusable_at(
-        db_session,
-        episode,
-        NoUsableMediaReason.NO_SHOW_TODAY,
-        now - timedelta(hours=5),
-    )
-    db_session.commit()
-    episode_id = episode.id
-
-    class FakeClient:
-        def __init__(self, access_token=None):
-            pass
-
-        def get_episode_details(self, slug, *, require_member_exclusive):
-            return _dw_episode_detail(slug, "No Show Today")
-
-    monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
-    _patch_no_token(monkeypatch, service)
-    asyncio.run(service.run_monitor_no_usable_media_episode(db_session))
-
-    assert db_session.get(Episode, episode_id) is not None
-
-
-def test_monitor_recovers_no_show_placeholder_that_became_real_episode(db_session, monkeypatch):
-    from backend.db.models import Episode
-    from backend.types.episode_types import EpisodePublishStatus
-    from task_manager.tasks.helpers.episodes.unusable_media import NoUsableMediaReason
-    from task_manager.tasks.workers.monitor_no_usable_media_episode import service
-
-    now = datetime.now(timezone.utc)
-    collection = _make_collection(db_session)
-    season = _make_season(db_session, collection)
-    episode = _make_episode(
-        db_session,
-        collection,
-        season,
-        slug="ep-no-show-today",
-        ep_id="ep.1",
-        title="No Show Today",
-        index=1,
-        published_at=(now - timedelta(hours=5)),
-    )
-    _mark_unusable_at(
-        db_session,
-        episode,
-        NoUsableMediaReason.NO_SHOW_TODAY,
-        now - timedelta(hours=5),
-    )
-    db_session.commit()
-    episode_id = episode.id
-
-    class FakeClient:
-        def __init__(self, access_token=None):
-            pass
-
-        def get_episode_details(self, slug, *, require_member_exclusive):
-            return _dw_episode_detail("ep-real", "Episode 1: A Real Episode")
-
-    monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
-    _patch_no_token(monkeypatch, service)
-    _patch_usable_hls(monkeypatch)
-    asyncio.run(service.run_monitor_no_usable_media_episode(db_session))
-
-    stored = db_session.get(Episode, episode_id)
-    assert stored is not None
-    assert stored.slug == "ep-real"
-    assert stored.is_no_show_today is False
-    assert stored.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value
-    assert stored.episode_identifier == "ep.1"
-
-
-def test_monitor_deletes_continuous_404_after_four_hours(db_session, monkeypatch):
-    from backend.db.models import Episode
-    from sources.dailywire.api.dw_api.client import MiddlewareAPIError
-    from task_manager.tasks.helpers.episodes.unusable_media import NoUsableMediaReason
-    from task_manager.tasks.workers.monitor_no_usable_media_episode import service
-
-    now = datetime.now(timezone.utc)
-    collection = _make_collection(db_session)
-    season = _make_season(db_session, collection)
-    episode = _make_episode(
-        db_session,
-        collection,
-        season,
-        slug="bad-remote-episode",
-        ep_id="ep.1",
-        title="Real episode",
-        index=1,
-        published_at=(now - timedelta(hours=5)),
-    )
-    _mark_unusable_at(
-        db_session,
-        episode,
-        NoUsableMediaReason.NOT_FOUND,
-        now - timedelta(hours=5),
-    )
-    db_session.commit()
-    episode_id = episode.id
-
-    class FakeClient:
-        def __init__(self, access_token=None):
-            pass
-
-        def get_episode_details(self, slug, *, require_member_exclusive):
-            raise MiddlewareAPIError("HTTP error 404: episode not found", status_code=404)
-
-    monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
-    _patch_no_token(monkeypatch, service)
-    asyncio.run(service.run_monitor_no_usable_media_episode(db_session))
-
-    assert db_session.get(Episode, episode_id) is None
-
-
-def test_monitor_verifies_recent_404_but_does_not_delete_it(db_session, monkeypatch):
-    from backend.db.models import Episode
-    from sources.dailywire.api.dw_api.client import MiddlewareAPIError
-    from task_manager.tasks.helpers.episodes.unusable_media import NoUsableMediaReason
-    from task_manager.tasks.workers.monitor_no_usable_media_episode import service
-
-    now = datetime.now(timezone.utc)
-    collection = _make_collection(db_session)
-    season = _make_season(db_session, collection)
-    episode = _make_episode(
-        db_session,
-        collection,
-        season,
-        slug="temporarily-missing",
-        ep_id="ep.1",
-        title="Real episode",
-        index=1,
-        published_at=(now - timedelta(hours=10)),
-    )
-    _mark_unusable_at(
-        db_session,
-        episode,
-        NoUsableMediaReason.NOT_FOUND,
-        now - timedelta(hours=1),
-    )
-    db_session.commit()
-    episode_id = episode.id
-    calls = Mock()
-
-    class FakeClient:
-        def __init__(self, access_token=None):
-            pass
-
-        def get_episode_details(self, slug, *, require_member_exclusive):
-            calls(slug)
-            raise MiddlewareAPIError("HTTP error 404: episode not found", status_code=404)
-
-    monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
-    _patch_no_token(monkeypatch, service)
-    asyncio.run(service.run_monitor_no_usable_media_episode(db_session))
-
-    calls.assert_called_once_with("temporarily-missing")
-    assert db_session.get(Episode, episode_id) is not None
-
-
-def test_monitor_recovers_episode_when_404_endpoint_has_usable_media(db_session, monkeypatch):
-    from backend.db.models import Episode
-    from backend.types.episode_types import EpisodePublishStatus
-    from task_manager.tasks.helpers.episodes.unusable_media import (
-        NoUsableMediaReason,
-        episode_no_usable_media_reason,
-    )
-    from task_manager.tasks.workers.monitor_no_usable_media_episode import service
-
-    now = datetime.now(timezone.utc)
-    collection = _make_collection(db_session)
-    season = _make_season(db_session, collection)
-    episode = _make_episode(
-        db_session,
-        collection,
-        season,
-        slug="recovered-episode",
-        ep_id="ep.1",
-        title="Real episode",
-        index=1,
-        published_at=(now - timedelta(hours=5)),
-    )
-    _mark_unusable_at(
-        db_session,
-        episode,
-        NoUsableMediaReason.NOT_FOUND,
-        now - timedelta(hours=5),
-    )
-    db_session.commit()
-    episode_id = episode.id
-
-    class FakeClient:
-        def __init__(self, access_token=None):
-            pass
-
-        def get_episode_details(self, slug, *, require_member_exclusive):
-            return _dw_episode_detail(slug, "Real episode")
-
-    monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
-    _patch_no_token(monkeypatch, service)
-    _patch_usable_hls(monkeypatch)
-    asyncio.run(service.run_monitor_no_usable_media_episode(db_session))
-
-    stored = db_session.get(Episode, episode_id)
-    assert stored is not None
-    assert stored.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value
-    assert episode_no_usable_media_reason(stored) is None
-    assert stored.episode_identifier == "ep.1"
-
-
-def test_monitor_ignores_genuine_dw_processing(db_session, monkeypatch):
-    from backend.db.models import Episode
-    from backend.types.episode_types import EpisodePublishStatus
-    from task_manager.tasks.workers.monitor_no_usable_media_episode import service
-
-    collection = _make_collection(db_session)
-    season = _make_season(db_session, collection)
-    episode = _make_episode(
-        db_session,
-        collection,
-        season,
-        slug="real-processing",
-        ep_id="ep.1",
-        title="Real processing episode",
-        index=1,
-        publish_status=EpisodePublishStatus.SOURCE_PROCESSING.value,
-        published_at=(datetime.now(timezone.utc) - timedelta(hours=10)),
-    )
-    db_session.commit()
-    episode_id = episode.id
-
-    called = Mock()
-    monkeypatch.setattr(service, "MiddlewareClient", called)
-    _patch_no_token(monkeypatch, service)
-    asyncio.run(service.run_monitor_no_usable_media_episode(db_session))
-
-    assert db_session.get(Episode, episode_id) is not None
-    called.assert_not_called()
-
-
-def test_monitor_noop_when_nothing_is_unusable(db_session, monkeypatch):
-    from task_manager.tasks.workers.monitor_no_usable_media_episode import service
-
-    called = Mock()
-    monkeypatch.setattr(service, "MiddlewareClient", called)
-    _patch_no_token(monkeypatch, service)
-    asyncio.run(service.run_monitor_no_usable_media_episode(db_session))
-
-    called.assert_not_called()

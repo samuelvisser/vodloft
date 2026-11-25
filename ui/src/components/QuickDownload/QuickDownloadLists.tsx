@@ -1,7 +1,7 @@
 import {useEffect, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useQueryClient} from '@tanstack/react-query'
-import {toast} from 'react-hot-toast'
+import {toast} from '../../lib/toast'
 import {faIcon} from '../../icons/faIcon'
 import {presentDownloadProgress} from '../../lib/downloadProgress'
 import {useControlOperation} from '../../lib/operations'

@@ -1,8 +1,8 @@
-from sqlalchemy import ForeignKey, false
+from sqlalchemy import ForeignKey, String, Text, false
 from sqlalchemy.orm import Mapped, mapped_column
 from backend.db.mixins.HasMetadataMixin import HasMetadataMixin
 
-from backend.types.local_media_profile_types import LocalMediaProfileType, CollectionLocalMediaProfileScope
+from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope, EpisodeNfo, LocalMediaProfileType
 
 from .LocalMediaProfileBase import LocalMediaProfileBase
 
@@ -17,8 +17,8 @@ class CollectionLocalMediaProfile(LocalMediaProfileBase, HasMetadataMixin):
         primary_key=True,
     )
     collection_scope: Mapped[str] = mapped_column(
-        default=CollectionLocalMediaProfileScope.BOTH.value,
-        server_default=CollectionLocalMediaProfileScope.BOTH.value,
+        default=CollectionLocalMediaProfileScope.PODCAST_AND_SERIES.value,
+        server_default=CollectionLocalMediaProfileScope.PODCAST_AND_SERIES.value,
         nullable=False,
     )
 
@@ -28,8 +28,19 @@ class CollectionLocalMediaProfile(LocalMediaProfileBase, HasMetadataMixin):
         default=False, server_default=false(), nullable=False,
         comment="Write tvshow.nfo in the collection's folder and season.nfo in each season's folder",
     )
+    episode_nfo: Mapped[str] = mapped_column(
+        String(16), default=EpisodeNfo.EPISODE.value, server_default=EpisodeNfo.EPISODE.value, nullable=False,
+        comment="What each episode's NFO file and embedded metadata call it: episode or music_video",
+    )
+    episode_title_template: Mapped[str | None] = mapped_column(
+        Text, nullable=True, comment="A Jinja template for each episode's title in its NFO and embedded metadata",
+    )
+    episode_description_template: Mapped[str | None] = mapped_column(
+        Text, nullable=True, comment="A Jinja template for each episode's description in its NFO and embedded metadata",
+    )
 
     @property
     def indexing_values(self):
         from backend.utils.custom_index import get_indexing_value_definitions
         return get_indexing_value_definitions(self)
+

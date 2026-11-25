@@ -13,7 +13,7 @@ def test_media_download_view_filters_episode_collection_and_movie_in_sql():
         Episode,
         Movie,
         MovieExtra,
-        MovieLocalMediaProfile,
+        VideoLocalMediaProfile,
         Season,
         Collection,
         CollectionLocalMediaProfile,
@@ -53,7 +53,7 @@ def test_media_download_view_filters_episode_collection_and_movie_in_sql():
             season=season,
             index=1,
             episode_identifier="ep.1",
-            dw_episode_number="1",
+            source_number="1",
             slug="episode-one",
             title="Episode One",
             description=None,
@@ -69,7 +69,7 @@ def test_media_download_view_filters_episode_collection_and_movie_in_sql():
             season=season,
             index=2,
             episode_identifier="ep.2",
-            dw_episode_number="2",
+            source_number="2",
             slug="episode-two",
             title="Episode Two",
             description=None,
@@ -104,7 +104,7 @@ def test_media_download_view_filters_episode_collection_and_movie_in_sql():
             description=None,
             duration=30,
         )
-        movie_profile = MovieLocalMediaProfile(
+        movie_profile = VideoLocalMediaProfile(
             slug="movie-profile",
             name="Movie Profile",
             output_template="/downloads/{{ title }}.ext",

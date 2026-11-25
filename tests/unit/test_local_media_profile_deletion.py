@@ -34,10 +34,10 @@ def _add_movie_download(
     file_path: str = "/downloads/movies/movie.mp4",
     available: bool = False,
 ):
-    from backend.db.models import Movie, MovieLocalMediaProfile, MovieMediaDownload
+    from backend.db.models import Movie, VideoLocalMediaProfile, MovieMediaDownload
     from backend.types.media_types import MediaType
 
-    profile = MovieLocalMediaProfile(
+    profile = VideoLocalMediaProfile(
         slug="movie-profile",
         name="Movie Profile",
         output_template="/downloads/movies/{{ movie_slug }}.ext",
@@ -68,10 +68,10 @@ def _add_movie_download(
 
 @pytest.mark.sqlite_only
 def test_delete_local_media_profile_removes_attached_download_without_file() -> None:
-    from backend.api.endpoints.movie_local_media_profiles.service import (
-        delete_movie_local_media_profile,
+    from backend.api.endpoints.video_local_media_profiles.service import (
+        delete_video_local_media_profile,
     )
-    from backend.db.models import MovieLocalMediaProfile, MovieMediaDownload
+    from backend.db.models import VideoLocalMediaProfile, MovieMediaDownload
     from backend.db.models.media_download import MediaDownloadHistory
 
     session, engine = _new_session(enforce_foreign_keys=True)
@@ -86,10 +86,10 @@ def test_delete_local_media_profile_removes_attached_download_without_file() -> 
         ))
         session.commit()
 
-        delete_movie_local_media_profile(session, profile.slug)
+        delete_video_local_media_profile(session, profile.slug)
         session.commit()
 
-        assert session.get(MovieLocalMediaProfile, profile_id) is None
+        assert session.get(VideoLocalMediaProfile, profile_id) is None
         assert session.get(MovieMediaDownload, download_id) is None
         assert (
             session.query(MediaDownloadHistory)
@@ -105,10 +105,10 @@ def test_delete_local_media_profile_removes_attached_download_without_file() -> 
 def test_delete_local_media_profile_rejects_physical_file_even_when_status_is_absent(
     tmp_path: Path,
 ) -> None:
-    from backend.api.endpoints.movie_local_media_profiles.service import (
-        delete_movie_local_media_profile,
+    from backend.api.endpoints.video_local_media_profiles.service import (
+        delete_video_local_media_profile,
     )
-    from backend.db.models import MovieLocalMediaProfile, MovieMediaDownload
+    from backend.db.models import VideoLocalMediaProfile, MovieMediaDownload
 
     media_file = tmp_path / "movie.mp4"
     media_file.write_bytes(b"movie")
@@ -123,14 +123,14 @@ def test_delete_local_media_profile_rejects_physical_file_even_when_status_is_ab
         download_id = download.id
 
         with pytest.raises(HTTPException) as exc_info:
-            delete_movie_local_media_profile(session, profile.slug)
+            delete_video_local_media_profile(session, profile.slug)
 
         assert exc_info.value.status_code == 409
         detail = exc_info.value.detail[0]
         assert detail["type"] == "resource_in_use"
         assert "physical file" in detail["msg"]
         assert "Delete all downloads" in detail["msg"]
-        assert session.get(MovieLocalMediaProfile, profile_id) is not None
+        assert session.get(VideoLocalMediaProfile, profile_id) is not None
         assert session.get(MovieMediaDownload, download_id) is not None
         assert media_file.is_file()
     finally:
@@ -142,10 +142,10 @@ def test_delete_local_media_profile_rejects_physical_file_even_when_status_is_ab
 def test_delete_local_media_profile_allows_stale_available_row_when_file_is_gone(
     tmp_path: Path,
 ) -> None:
-    from backend.api.endpoints.movie_local_media_profiles.service import (
-        delete_movie_local_media_profile,
+    from backend.api.endpoints.video_local_media_profiles.service import (
+        delete_video_local_media_profile,
     )
-    from backend.db.models import MovieLocalMediaProfile, MovieMediaDownload
+    from backend.db.models import VideoLocalMediaProfile, MovieMediaDownload
 
     missing_file = tmp_path / "missing.mp4"
 
@@ -159,10 +159,10 @@ def test_delete_local_media_profile_allows_stale_available_row_when_file_is_gone
         profile_id = profile.id
         download_id = download.id
 
-        delete_movie_local_media_profile(session, profile.slug)
+        delete_video_local_media_profile(session, profile.slug)
         session.commit()
 
-        assert session.get(MovieLocalMediaProfile, profile_id) is None
+        assert session.get(VideoLocalMediaProfile, profile_id) is None
         assert session.get(MovieMediaDownload, download_id) is None
     finally:
         session.close()

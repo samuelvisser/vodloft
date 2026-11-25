@@ -341,16 +341,6 @@
         min-width: 0;
     }
 
-    .collection-open-label {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    .collection-open-prefix {
-        display: none;
-    }
-
     .collection-profile-links {
         gap: 7px;
     }
@@ -360,3 +350,6 @@
    and drop the Actions menu's taller minimum so every button in the row is the same height. */
 .collection-page-actions .btn { font-size: 0.8333rem; }
 .collection-page-actions .action-menu-trigger { min-height: 0; }
+
+.rename-season-folders { display: flex; align-items: flex-start; gap: .6rem; margin-top: .75rem; font-weight: normal; cursor: pointer; }
+.rename-season-folders > span { display: flex; flex-direction: column; gap: 2px; }

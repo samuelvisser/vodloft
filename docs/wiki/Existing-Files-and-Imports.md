@@ -154,17 +154,53 @@ What comes along:
 - **Quality**: *Max 1080p*, *Max 720p* and the other resolution presets, and the audio presets, become the Local
   Media Profile's quality.
 - **Subtitles**, **SponsorBlock**, **NFO files** and **thumbnails** become the matching Local Media Profile settings.
-- **Only Recent**, `date_range` and `keep_max_files` become the Download Profile's date and "latest N" filters;
+- **Chapters** (`embed_chapters` and `remove_chapters_regex`) and the **info file** become the Local Media Profile's
+  chapter settings and **Save the site's info file**. Your own `episode_title` and `episode_plot` become the profile's
+  own title and description.
+- **Only Recent**, `date_range` (also with a `before` date) and `keep_max_files` become the Download Profile's date and
+  "latest N" filters;
   **Filter Keywords** and **Filter Duration** become **Only download** and **Skip** filters.
 - The **genre** and **content rating** you give with `= Documentaries` and `= TV-Y` become the collection's own genre
   and content rating, which VODLoft writes into its NFO files.
 - ytdl-sub's file names use the same characters as VODLoft's Windows-compatible names, so the import sets that.
+- A subscription with **several links** becomes one collection of its channel, with each of the other links, such
+  as a playlist, another channel or a single video, as a season of its own (see
+  [[Collections-and-Library#playlists-and-albums-as-seasons]]). The collection is set to add the videos the channel
+  doesn't list itself, so nothing you had in ytdl-sub is left out. A **TV Show Collection** keeps each season's
+  number and name; a video that is in more than one season stays in the one that comes first.
+- A **TV Show Collection** made only of playlists becomes a collection of only those playlists (see
+  [[Collections-and-Library#collections-of-only-playlists]]), so the channel's other videos are not added.
+- Every subscription becomes a collection of its own. You can add a collection to its creator later from its
+  Actions menu.
+- A subscription with links on more than one site becomes a collection per site, all in one creator named after
+  the subscription: three YouTube playlists and two SoundCloud sets become a YouTube collection and a SoundCloud
+  collection, such as *Mixed (YouTube)* and *Mixed (SoundCloud)*. Each one adopts the files of its own site.
+- A **Bandcamp** or **SoundCloud Discography** subscription becomes one Music collection of the artist's page, as
+  **Add collection** adds it: each album a season, with a Music Local Media Profile that keeps ytdl-sub's folder per
+  artist and per album. A SoundCloud artist's playlists are left out, as ytdl-sub only took their albums. New albums
+  are added as seasons when they come out, as ytdl-sub did. The genre you give with `= Lofi` becomes the collection's
+  genre.
+- A **YouTube Full Albums** subscription becomes a Music collection that splits videos by chapter: each video is an
+  album and each chapter a track, as in ytdl-sub. The tracks ytdl-sub already saved are adopted one by one.
+- A **Music Videos** subscription (for Plex, Jellyfin, Emby or Kodi) becomes a Music collection with a Collection
+  profile for Music that downloads video, which keeps ytdl-sub's folder per artist and writes `musicvideo` NFO files. Its link can be
+  a channel, a playlist or a single video. An artist written as a `+` map, with links under categories such as
+  Concerts, becomes one collection with each link a season named after its category.
+- Every artist keeps the name ytdl-sub gave them, also when their site calls them something else, so new files go
+  into the same artist folder as the ones you already have.
+- An artist with both albums and music videos in ytdl-sub becomes one creator with two collections,
+  named after the artist, such as *Emily Hopkins albums* and *Emily Hopkins music videos* (see [[Collections-and-Library#music-videos]]), also when the
+  music videos are on another site, their label's channel or a playlist. Albums and music videos stay two collections: a
+  playlist doesn't become a season of the albums. When both download the same link, they share one
+  collection that keeps both profiles.
+- ytdl-sub's **best** audio keeps what the site sends: VODLoft saves it as Opus, or as MP3 on Bandcamp. **FLAC**
+  stays FLAC for music.
 
 What does not come along is listed in the report: scripts that compute values (VODLoft's templates are Jinja, see
 [[Local-Media-Profiles]]), throttle settings (VODLoft has a guard of its own, see
-[[Downloads-and-File-Integrity#when-youtube-only-offers-360p]]), chunked downloads, the music presets, and yt-dlp
-options VODLoft has no setting for. A subscription with more than one link gets the first one; add the others as
-collections of their own.
+[[Downloads-and-File-Integrity#when-youtube-only-offers-360p]]; **Automatic downloads per day** in Settings limits how
+many downloads a Site starts), chunked downloads, *YouTube Releases*
+(VODLoft can't read YouTube's Releases tab yet), and yt-dlp options VODLoft has no setting for.
 
 Stop ytdl-sub's cron job before you turn on the imported Download Profiles, or both will download the same videos.
 

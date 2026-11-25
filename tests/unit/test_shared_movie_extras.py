@@ -196,7 +196,7 @@ def test_downloading_one_extra_survives_another_movies_shared_clip(
     from backend.api.endpoints.movies.service import index_dailywire_movie
     from backend.api.models.media_download import MediaDownloadAPICreate
     from backend.db import Base
-    from backend.db.models import MovieExtra, MovieExtraSource, MovieLocalMediaProfile
+    from backend.db.models import MovieExtra, MovieExtraSource, VideoLocalMediaProfile
     from backend.types.media_types import MediaType
     from config import get_settings
     from sources.dailywire.api.records import DwMovieExtraRecord
@@ -207,7 +207,7 @@ def test_downloading_one_extra_survives_another_movies_shared_clip(
     Base.metadata.create_all(engine)
     session = Session(engine)
     try:
-        profile = MovieLocalMediaProfile(
+        profile = VideoLocalMediaProfile(
             slug="movies",
             name="Movies",
             output_template="/downloads/movies/{{ movie_title }}/{{ title }}.ext",
@@ -283,7 +283,7 @@ def test_shared_clip_downloads_remain_scoped_to_parent_movie_and_profile(
     from backend.services.movies import index_dailywire_movie
     from backend.api.models.media_download import MediaDownloadAPICreate
     from backend.db import Base
-    from backend.db.models import MovieExtra, MovieExtraSource, MovieLocalMediaProfile
+    from backend.db.models import MovieExtra, MovieExtraSource, VideoLocalMediaProfile
     from backend.db.models.media_download import MovieExtraMediaDownload
     from config import get_settings
     from sources.dailywire.api.records import DwMovieExtraRecord
@@ -294,7 +294,7 @@ def test_shared_clip_downloads_remain_scoped_to_parent_movie_and_profile(
     Base.metadata.create_all(engine)
     session = Session(engine)
     try:
-        profile = MovieLocalMediaProfile(
+        profile = VideoLocalMediaProfile(
             slug="movies",
             name="Movies",
             output_template="/downloads/movies/{{ movie_title }}/{{ slug }}.ext",

@@ -23,13 +23,15 @@ class DefaultRule:
     delivery: str = "now"
 
 
-# Out of the box: problems only, pushed to administrators, and the daily summary one switch away.
+# Out of the box: problems, and choices a collection asks for, pushed to administrators, and the daily summary one
+# switch away.
 DEFAULT_RULES: tuple[DefaultRule, ...] = (
     DefaultRule("download_failed", Event.DOWNLOAD_FAILED),
     DefaultRule("sign_in_needed", Event.SIGN_IN_NEEDED),
     DefaultRule("disk_almost_full", Event.DISK_ALMOST_FULL),
     DefaultRule("task_failing", Event.TASK_FAILING),
     DefaultRule("update_available", Event.UPDATE_AVAILABLE),
+    DefaultRule("new_lists_found", Event.NEW_LISTS_FOUND),
     DefaultRule("daily_summary", Event.EVERYTHING, enabled=False, delivery="daily"),
 )
 

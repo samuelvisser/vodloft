@@ -7,7 +7,7 @@ Pinchflat do. It imports either of them, so you keep your files and do not downl
 
 - **A web interface for everything.** No YAML to read up on: collections, profiles and filters are set in the UI, and
   every setting explains itself.
-- **Your library, browsable.** Every channel, playlist and video is in the Library, with its episodes, seasons and
+- **Your library, browsable.** Every creator, playlist and video is in the Library, with its episodes, seasons and
   what is downloaded.
 - **Files for your media server.** Output templates are Jinja, with presets for Plex, Jellyfin and Emby, Kodi and
   Audiobookshelf, and NFO files and artwork when you want them (see [[Local-Media-Profiles]]).

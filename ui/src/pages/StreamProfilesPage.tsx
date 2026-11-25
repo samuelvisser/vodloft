@@ -1,7 +1,7 @@
 import {useCallback, useMemo, useRef, useState} from 'react'
 import {can} from '../lib/access'
 import {useQueryClient} from '@tanstack/react-query'
-import {toast} from 'react-hot-toast'
+import {toast} from '../lib/toast'
 import {type StreamProfileTableFilters, useStreamProfileSites, useStreamProfilesTable} from '../lib/queries'
 import ProfileTableFilters, {FORMAT_OPTIONS, STATUS_OPTIONS} from '../components/common/ProfileTableFilters'
 import {ChipFilter} from '../components/common/FilterBar'
@@ -111,6 +111,7 @@ export default function StreamProfilesPage() {
                 />
             ),
             align: 'center',
+            sticky: 'right',
         },
     ]
 

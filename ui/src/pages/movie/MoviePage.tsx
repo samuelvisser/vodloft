@@ -1,12 +1,16 @@
 import {useEffect, useMemo, useRef, useState} from 'react'
+import type {TaskOperationRead} from '../../types/schemas/operation'
+import {operationControls as sharedOperationControls} from '../../lib/operationControls'
 import {addedByLabel, can} from '../../lib/access'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Link, useNavigate, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
-import toast from 'react-hot-toast'
+import toast from '../../lib/toast'
 import {faIcon} from '../../icons/faIcon'
+import SiteLink from '../../components/common/SiteLink'
 
 import ActionConfirmDialogue from '../../components/ActionConfirmDialogue/ActionConfirmDialogue'
+import RedownloadSwitch from '../../components/ActionConfirmDialogue/RedownloadSwitch'
 import ActionMenu, {type ActionMenuItem} from '../../components/ActionMenu/ActionMenu'
 import RunningActions from '../../components/RunningActions/RunningActions'
 import DownloadProgressStatus from '../../components/DownloadProgress/DownloadProgressStatus'
@@ -36,10 +40,13 @@ import {getErrorMessageFromResponse} from '../../utils/helpers'
 import {movieExtraTypeLabel} from '../../utils/movieExtras'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
+import {isLocalMediaProfileAvailableForSite, videoProfileKeeps} from '../../types/local_media_profile'
 import './MoviePage.css'
 import {apiUrl} from '../../lib/api'
 import {type DownloadStarts, startLabel, useDownloadStarts} from '../../lib/downloadStarts'
 import {refreshFrontendPuller} from '../../lib/puller'
+import {addLocalMediaProfilePath} from '../../types/local_media_profile'
+import LinkedText from '../../components/common/LinkedText'
 
 type MovieExtraSummary = {
     id?: number
@@ -144,10 +151,19 @@ export default function MoviePage() {
         'movie',
         localMovie?.id ?? null,
     )
+    const deleteDownloadsOperation = useActiveOperation(
+        'movie.delete_downloads',
+        'movie',
+        localMovie?.id ?? null,
+    )
     const videoProfiles = useMemo(
-        // Movies come from one Site, which every movie profile is offered for.
-        () => profiles?.filter((profile) => profile.type === 'movie') || [],
-        [profiles],
+        // A profile limited to other Sites still shows the download it already made. A movie that is not in the
+        // library yet comes from The Daily Wire, whose Site has its Source's key.
+        () => profiles?.filter((profile) => profile.type === 'video' && videoProfileKeeps(profile, 'movies') && (
+            isLocalMediaProfileAvailableForSite(profile, localMovie?.site?.key ?? DAILYWIRE_SOURCE_KEY)
+            || !!downloads?.some((download) => download.localMediaProfileId === profile.id)
+        )) || [],
+        [profiles, localMovie?.site?.key, downloads],
     )
     const videoProfileReg = useMemo(() => {
         const spec: Record<string, {label: string}> = {}
@@ -157,13 +173,14 @@ export default function MoviePage() {
             spec[value] = {label: profile.name}
             values.push(value)
         }
-        return createSelectRegistry('MovieLocalMediaProfile', spec, values)
+        return createSelectRegistry('MovieVideoLocalMediaProfile', spec, values)
     }, [videoProfiles])
     const [profileId, setProfileId] = useState('')
     const [submitting, setSubmitting] = useState<string | null>(null)
     const [addingMovie, setAddingMovie] = useState(false)
     const [confirmDelete, setConfirmDelete] = useState(false)
-    const [redownloadConfirm, setRedownloadConfirm] = useState(false)
+    const [deleteDownloadsConfirm, setDeleteDownloadsConfirm] = useState(false)
+    const [redownloadAfterDelete, setRedownloadAfterDelete] = useState(false)
     const [deleting, setDeleting] = useState(false)
     const [retryingMetadata, setRetryingMetadata] = useState(false)
     const [refreshingExtrasStarting, setRefreshingExtrasStarting] = useState(false)
@@ -423,29 +440,12 @@ export default function MoviePage() {
         }
     }
 
-    const operationControls = (
-        operationId: string | undefined,
-        label: string,
-        restartable = true,
-    ) => {
-        if (!operationId) return undefined
-        const controlsBusy = operationControlBusy !== null
-        return [
-            ...(restartable ? [{
-                label: `Restart ${label}`,
-                icon: faIcon('fass', 'rotate-right'),
-                disabled: controlsBusy,
-                onSelect: () => void controlTaskOperation(operationId, 'restart', label),
-            }] : []),
-            {
-                label: `Cancel ${label}`,
-                icon: faIcon('fass', 'xmark'),
-                tone: 'danger' as const,
-                disabled: controlsBusy,
-                onSelect: () => void controlTaskOperation(operationId, 'cancel', label),
-            },
-        ]
-    }
+    const operationControls = (operation: TaskOperationRead | undefined, label: string, restartable = true) => (
+        sharedOperationControls(operation, label, {
+            restartable, busy: operationControlBusy !== null,
+            onControl: (operationId, action) => void controlTaskOperation(operationId, action, label),
+        })
+    )
 
     const deleteMovie = async () => {
         if (!slug || !localMovie || deleting) return
@@ -491,8 +491,8 @@ export default function MoviePage() {
         ? extraDownloadsBySlug.get(featuredTrailer.slug)
         : undefined
     const controlBusy = downloadControlBusy !== null
-    const hasRedownloadableMedia = (downloads ?? []).some((download) => download.artifactStatus !== 'absent')
-    const redownloadBusy = redownloadOperation !== undefined
+    const hasDownloadedMedia = (downloads ?? []).some((download) => download.artifactStatus !== 'absent')
+    const deleteDownloadsBusy = deleteDownloadsOperation !== undefined || redownloadOperation !== undefined
 
     const actionItems: ActionMenuItem[] = [
         ...(collectionsExtras ? [{
@@ -506,24 +506,31 @@ export default function MoviePage() {
                     : undefined,
             operation: refreshExtrasOperation,
             starting: refreshingExtrasStarting,
-            controls: operationControls(refreshExtrasOperation?.id, 'movie-extra refresh'),
+            controls: operationControls(refreshExtrasOperation, 'movie-extra refresh'),
             onSelect: () => void refreshMovieExtras(),
         }] : []),
         {
-            label: 'Delete and re-download all media',
-            icon: faIcon('fass', 'arrows-rotate'),
+            label: 'Delete downloads',
+            icon: faIcon('fass', 'trash'),
             tone: 'danger',
             separatorBefore: true,
-            disabled: redownloadBusy || !hasRedownloadableMedia,
-            disabledReason: redownloadOperation
-                ? 'A re-download operation is running for this movie.'
-                : !hasRedownloadableMedia
-                    ? 'This movie has no previously downloaded media.'
-                    : undefined,
-            operation: redownloadOperation,
-            starting: isStarting('movie.redownload_media'),
-            controls: operationControls(redownloadOperation?.id, 're-download', false),
-            onSelect: () => setRedownloadConfirm(true),
+            disabled: deleteDownloadsBusy || !hasDownloadedMedia,
+            disabledReason: deleteDownloadsOperation
+                ? 'A delete downloads operation is running for this movie.'
+                : redownloadOperation
+                    ? 'A re-download operation is running for this movie.'
+                    : !hasDownloadedMedia
+                        ? 'This movie has no downloaded media.'
+                        : undefined,
+            operation: deleteDownloadsOperation ?? redownloadOperation,
+            starting: isStarting('movie.delete_downloads') || isStarting('movie.redownload_media'),
+            controls: deleteDownloadsOperation
+                ? operationControls(deleteDownloadsOperation, 'delete downloads')
+                : operationControls(redownloadOperation, 're-download', false),
+            onSelect: () => {
+                setRedownloadAfterDelete(false)
+                setDeleteDownloadsConfirm(true)
+            },
         },
     ]
 
@@ -552,9 +559,7 @@ export default function MoviePage() {
                     </a>
                 )}
                 {movie.sharingUrl && (
-                    <a className="btn" href={movie.sharingUrl} target="_blank" rel="noreferrer">
-                        <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')}/> Open on {sourceName}
-                    </a>
+                    <SiteLink url={movie.sharingUrl} siteName={localMovie?.site?.name ?? sourceName} site={localMovie?.site}/>
                 )}
                 {localMovies && !localMovie && can('library', 'manage') && (
                     <button type="button" className="btn btn-primary" onClick={() => void addMovie()} disabled={addingMovie || submitting !== null}>
@@ -589,7 +594,7 @@ export default function MoviePage() {
             <div className="movie-detail-layout">
                 <div className="movie-description">
                     <h2>About this movie</h2>
-                    <p>{movie.description || `${sourceName} did not provide a description for this movie.`}</p>
+                    <p>{movie.description ? <LinkedText text={movie.description}/> : `${sourceName} did not provide a description for this movie.`}</p>
                 </div>
 
                 <aside className="movie-download-panel" aria-labelledby="download-movie-title">
@@ -597,7 +602,7 @@ export default function MoviePage() {
                     <p>
                         {isUpcoming
                             ? 'The full movie is not available yet. Published extras can be downloaded now.'
-                            : 'Movies and extras use the same Movie Local Media Profile.'}
+                            : 'A movie and its extras use the same Video Local Media Profile.'}
                     </p>
                     {videoProfiles.length ? (
                         <>
@@ -656,8 +661,8 @@ export default function MoviePage() {
                         </>
                     ) : (
                         <div className="movie-profile-empty">
-                            <p>Create a Movie Local Media Profile before downloading a movie or extra.</p>
-                            <Link className="btn" to="/add-local-media-profile?type=movie">Create profile</Link>
+                            <p>Create a Video Local Media Profile for The Daily Wire before downloading a movie or extra.</p>
+                            <Link className="btn" to={addLocalMediaProfilePath({video: 'movies', siteKey: localMovie?.site?.key ?? DAILYWIRE_SOURCE_KEY, from: movie.title})}>Create profile</Link>
                         </div>
                     )}
                 </aside>
@@ -739,23 +744,29 @@ export default function MoviePage() {
             <DownloadLogDialog row={logDownload} onClose={() => setLogDownloadId(null)}/>
 
             <ActionConfirmDialogue
-                open={redownloadConfirm && Boolean(localMovie)}
-                operationDefinition={frontendOperationDefinitions['movie.redownload_media']}
-                onStartingChange={onStartingChange('movie.redownload_media')}
-                requestPath={`/movies/${encodeURIComponent(slug || '')}/redownload-media`}
+                open={deleteDownloadsConfirm && Boolean(localMovie)}
+                operationDefinition={frontendOperationDefinitions[redownloadAfterDelete ? 'movie.redownload_media' : 'movie.delete_downloads']}
+                onStartingChange={onStartingChange(redownloadAfterDelete ? 'movie.redownload_media' : 'movie.delete_downloads')}
+                requestPath={`/movies/${encodeURIComponent(slug || '')}/${redownloadAfterDelete ? 'redownload-media' : 'delete-downloads'}`}
                 resourceLabel={movie.title}
-                title="Delete and re-download all media"
-                onDismiss={() => setRedownloadConfirm(false)}
-                icon={faIcon('fass', 'arrows-rotate')}
+                title="Delete downloads"
+                onDismiss={() => setDeleteDownloadsConfirm(false)}
+                icon={faIcon('fass', 'trash')}
                 iconTone="danger"
-                confirmLabel="Delete and re-download"
-                disabled={redownloadBusy || !hasRedownloadableMedia}
+                confirmLabel={redownloadAfterDelete ? 'Delete and re-download' : 'Delete downloads'}
+                disabled={deleteDownloadsBusy || !hasDownloadedMedia}
             >
                 <p>
-                    Delete every previously downloaded file for "{movie.title}", including the main movie
-                    and movie extras, and download those files again. Media that has never been downloaded
-                    will not be added by this action.
+                    Delete every downloaded file for "{movie.title}", including the main movie and movie extras.
                 </p>
+                <RedownloadSwitch
+                    label="Re-download the deleted files"
+                    checked={redownloadAfterDelete}
+                    onChange={setRedownloadAfterDelete}
+                    help={redownloadAfterDelete
+                        ? 'VODLoft downloads each deleted file again right away. Media that has never been downloaded will not be added.'
+                        : 'The files are not downloaded again until you download them yourself.'}
+                />
             </ActionConfirmDialogue>
 
             <ConfirmDialog

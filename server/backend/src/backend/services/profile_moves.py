@@ -8,6 +8,7 @@ download is left where it is and reported.
 """
 from __future__ import annotations
 
+from backend.utils.helpers import name_in_text
 import logging
 import os
 from collections import Counter, defaultdict
@@ -321,10 +322,10 @@ def _plan_move(
         return None
     plan = plans[0]
     if not plan.in_scope:
-        raise ProfileMoveError(f"{target.name} is not offered for {plan.collection.title}")
+        raise ProfileMoveError(f"{target.name} is not offered for {name_in_text(plan.collection.title)}")
     if plan.blocked:
         raise ProfileMoveError(
-            f"Several episodes of {plan.collection.title} would get the same path in {target.name}"
+            f"Several episodes of {name_in_text(plan.collection.title)} would get the same path in {target.name}"
         )
 
     candidates = [item for item in plan.episodes if item.outcome.moves]
@@ -438,7 +439,7 @@ def fill_missing_sidecars(download_id: int) -> int:
         episode = download.media
         kinds = {asset.kind for asset in download.assets}
         wants_nfo = effective_metadata_mode(profile) in (MetadataMode.NFO, MetadataMode.EMBED_AND_NFO) and "nfo" not in kinds
-        nfo = render_nfo(build_episode_metadata(episode, episode.collection), kodi_safe=profile.kodi_safe_nfo) if wants_nfo else None
+        nfo = render_nfo(build_episode_metadata(episode, episode.collection, profile), kodi_safe=profile.kodi_safe_nfo) if wants_nfo else None
         wants_thumbnail = (
             effective_thumbnail_mode(profile) in (ThumbnailMode.SIDECAR, ThumbnailMode.EMBED_AND_SIDECAR)
             and "thumbnail" not in kinds

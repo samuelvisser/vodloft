@@ -9,6 +9,7 @@ copy wins over the shipped one.
 from __future__ import annotations
 
 import hashlib
+import re
 import json
 import os
 import subprocess
@@ -26,8 +27,11 @@ from downloader.ytdlp import error_message
 RELEASE_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp"
 CHECKSUMS_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/SHA2-256SUMS"
 UPDATE_INTERVAL = timedelta(days=7)
-_LOOKUP_TIMEOUT_SECONDS = 120
+LOOKUP_TIMEOUT_SECONDS = 120
+"""How long one lookup may take; a run of several links gets longer."""
 _update_lock = threading.Lock()
+# How yt-dlp reports a link it could not look up: ERROR: [extractor] <video id>: <why>.
+_ERROR_LINE = re.compile(r"^ERROR: \[[^\]]+\] ([^:\s]+): (.+)$", re.MULTILINE)
 
 
 class YtDlpError(RuntimeError):
@@ -73,7 +77,7 @@ def run_json(*args: str, cookies: Path | None = None) -> dict:
     try:
         result = subprocess.run(
             [*command(cookies=cookies), "--no-progress", "-J", *args], capture_output=True, text=True,
-            timeout=_LOOKUP_TIMEOUT_SECONDS, check=False,
+            timeout=LOOKUP_TIMEOUT_SECONDS, check=False,
         )
     except subprocess.TimeoutExpired as exc:
         raise YtDlpError("yt-dlp took too long to look up this link") from exc
@@ -86,6 +90,31 @@ def run_json(*args: str, cookies: Path | None = None) -> dict:
     if not isinstance(info, dict):
         raise YtDlpError("yt-dlp returned no information for this link")
     return info
+
+
+def run_json_lines(
+    *args: str, cookies: Path | None = None, timeout: float = LOOKUP_TIMEOUT_SECONDS,
+) -> tuple[list[dict], dict[str, str]]:
+    """Run yt-dlp with ``-j`` over several links at once, the last arguments, and return the info of each one it
+    could look up, and the error of each it couldn't by the video's id; it goes on past a link it can't. One run
+    saves starting yt-dlp for every link. Each info's ``original_url`` is the link it was given."""
+    try:
+        result = subprocess.run(
+            [*command(cookies=cookies), "--no-progress", "--ignore-errors", "-j", *args], capture_output=True,
+            text=True, timeout=timeout, check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise YtDlpError("yt-dlp took too long to look up these links") from exc
+    infos = []
+    for line in result.stdout.splitlines():
+        try:
+            info = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(info, dict):
+            infos.append(info)
+    errors = {match[1]: match[2] for match in _ERROR_LINE.finditer(result.stderr)}
+    return infos, errors
 
 
 def version(prog: tuple[str, ...] | None = None) -> str | None:

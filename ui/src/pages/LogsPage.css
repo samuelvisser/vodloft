@@ -80,6 +80,8 @@
     min-height: 28rem;
     max-height: calc(100vh - 15rem);
     overflow: auto;
+    /* The page keeps the view in place itself when older records load above it. */
+    overflow-anchor: none;
     border: 1px solid rgba(100, 116, 139, .35);
     border-radius: 12px;
     background: #172131;
@@ -151,6 +153,11 @@
 
 .logs-message.is-error {
     color: #fb7185;
+}
+
+.logs-message.is-older {
+    min-height: 2.5rem;
+    font-size: 12px;
 }
 
 

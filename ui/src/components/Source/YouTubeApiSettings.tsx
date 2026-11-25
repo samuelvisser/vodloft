@@ -4,7 +4,7 @@ import {useQueryClient} from '@tanstack/react-query'
 import {ApiKeyRejectedError, changeSourceApiKey, useSourceApi} from '../../lib/queries'
 import type {ApiStatusRead} from '../../types/schemas/source'
 import type {SettingsTabProps} from '../Settings/SettingsTabTypes'
-import {NumberField, SettingsSection} from '../Settings/SettingsControls'
+import {NumberField, SettingsSection, ToggleField} from '../Settings/SettingsControls'
 
 const SOURCE_ID = 'ytdlp'
 /** One search: the search call itself and one batch each of channel and video details. */
@@ -32,12 +32,47 @@ function formatNumber(value: number): string {
     return value.toLocaleString()
 }
 
-/** How often each collection can get a quick check from what the daily re-scan leaves of the checks share. */
-function checkIntervalMinutes(collectionCount: number, rescanUnits: number, checksQuota: number, minInterval: number): number | null {
-    if (collectionCount === 0) return minInterval
+/** No collection is quick-checked more often than this, however much quota is left. */
+const MIN_CHECK_MINUTES = 10
+const LONGEST_CHECK_MINUTES = 24 * 60
+
+/** The units a day of quick checks costs when each collection is checked every `minutes`, or less often when it
+ *  waits longer anyway. A tenth on top covers the details of new videos. */
+function dailyCheckUnits(costs: ApiStatusRead['checkCosts'], minutes: number): number {
+    return costs.reduce((total, cost) => total + cost.units * (24 * 60) / Math.max(minutes, cost.leastMinutes), 0) * 1.1
+}
+
+/** The shortest time between two quick checks that keeps a day of checks and the daily re-scan inside the checks
+ *  share, the way VODLoft works it out each day when the quota resets. Null when not every collection fits a check a day. */
+function checkIntervalMinutes(costs: ApiStatusRead['checkCosts'], rescanUnits: number, checksQuota: number): number | null {
     const room = checksQuota - rescanUnits
-    if (room <= 0) return null
-    return Math.max(minInterval, Math.ceil((24 * 60) / (room / (collectionCount * 1.1))))
+    if (room <= 0 || dailyCheckUnits(costs, LONGEST_CHECK_MINUTES) > room) return null
+    let low = MIN_CHECK_MINUTES
+    let high = LONGEST_CHECK_MINUTES
+    while (low < high) {
+        const middle = Math.floor((low + high) / 2)
+        if (dailyCheckUnits(costs, middle) <= room) high = middle
+        else low = middle + 1
+    }
+    return low
+}
+
+/** Why quick checks are as far apart as they are: at least ten minutes, and further when that would spend more than
+ *  the checks share leaves after the daily re-scan. */
+function checkIntervalHelp(status: ApiStatusRead | undefined, interval: number | null, checksQuota: number): string {
+    const worked = 'VODLoft works this out again each day when the quota resets.'
+    if (!status || interval === null || interval <= MIN_CHECK_MINUTES || status.collectionCount === 0) {
+        return `VODLoft checks a collection at most every ${MIN_CHECK_MINUTES} min, and less often when your checks share would not last the day. ${worked}`
+    }
+    const feeds = status.checkCosts.reduce((total, cost) => total + cost.feeds, 0)
+    const collections = `${status.collectionCount} YouTube ${status.collectionCount === 1 ? 'collection' : 'collections'}`
+    const feedText = `${feeds} ${feeds === 1 ? 'feed' : 'feeds'}`
+    const atMinimum = Math.round(dailyCheckUnits(status.checkCosts, MIN_CHECK_MINUTES))
+    const atInterval = Math.round(dailyCheckUnits(status.checkCosts, interval))
+    const room = Math.max(checksQuota - status.rescanUnits, 0)
+    return `Raised from ${MIN_CHECK_MINUTES} min: checking your ${collections} and their ${feedText} every ${MIN_CHECK_MINUTES} min `
+        + `would use about ${formatNumber(atMinimum)} units a day, and the checks share leaves ${formatNumber(room)} after the daily `
+        + `re-scan (about ${formatNumber(status.rescanUnits)}). Every ${formatInterval(interval)} uses about ${formatNumber(atInterval)}. ${worked}`
 }
 
 function formatInterval(minutes: number): string {
@@ -182,14 +217,15 @@ export default function YouTubeApiSettings({draft, updateDraft, environmentVaria
     const quota = draft.youtubeApi
     const keptFree = quota.dailyQuota - quota.checksQuota - quota.searchQuota
     const interval = status
-        ? checkIntervalMinutes(status.collectionCount, status.rescanUnits, quota.checksQuota, quota.minCheckIntervalMinutes)
+        ? checkIntervalMinutes(status.checkCosts, status.rescanUnits, quota.checksQuota)
         : null
     const collectionCount = status?.collectionCount ?? 0
     const checksHelp = !status || collectionCount === 0
         ? 'Quick checks for new videos and the daily full re-scan of your YouTube collections.'
         : interval === null
-            ? `Not enough for the daily re-scan of your ${collectionCount} YouTube collections (about ${formatNumber(status.rescanUnits)} units). Quick checks use RSS.`
+            ? `Not enough for the daily re-scan of your ${collectionCount} YouTube collections (about ${formatNumber(status.rescanUnits)} units) and a check of each a day. Quick checks use RSS.`
             : `Quick check about every ${formatInterval(interval)} for your ${collectionCount} YouTube ${collectionCount === 1 ? 'collection' : 'collections'}, plus the daily re-scan.`
+    const intervalHelp = checkIntervalHelp(status, interval, quota.checksQuota)
     const searches = Number.isFinite(quota.searchQuota) ? Math.floor(quota.searchQuota / SEARCH_UNITS) : 0
 
     return (
@@ -242,24 +278,42 @@ export default function YouTubeApiSettings({draft, updateDraft, environmentVaria
                         ? `About ${searches} API ${searches === 1 ? 'search' : 'searches'} a day, then searches use yt-dlp.`
                         : 'Every search uses yt-dlp.'}
                 />
-                <NumberField
-                    id="settings-youtube-min-check-interval"
-                    label="Shortest check interval"
-                    value={quota.minCheckIntervalMinutes}
-                    min={10}
-                    unit="minutes"
-                    error={errorFor('youtubeApi.minCheckIntervalMinutes')}
-                    environmentVariable={environmentVariableFor('youtubeApi.minCheckIntervalMinutes')}
-                    onChange={(value) => updateDraft((next) => {
-                        next.youtubeApi.minCheckIntervalMinutes = value
-                    })}
-                    help="VODLoft never checks a collection more often than this, even with quota to spare."
-                />
+                <div className="settings-field">
+                    <span className="youtube-api-split__label">Shortest check interval</span>
+                    <div className="youtube-api-split__value">{interval === null ? '—' : `${formatInterval(interval)}`}</div>
+                    <div className="settings-field__help">{intervalHelp}</div>
+                </div>
                 <div className="settings-field">
                     <span className="youtube-api-split__label">Kept free</span>
                     <div className="youtube-api-split__value">{Number.isFinite(keptFree) ? `${formatNumber(Math.max(keptFree, 0))} units` : '—'}</div>
                     <div className="settings-field__help">For adding collections, Test key and manual refreshes.</div>
                 </div>
+                <ToggleField
+                    id="settings-youtube-usage-log"
+                    label="Keep a usage log"
+                    checked={quota.usageLogEnabled}
+                    environmentVariable={environmentVariableFor('youtubeApi.usageLogEnabled')}
+                    onChange={(checked) => updateDraft((next) => {
+                        next.youtubeApi.usageLogEnabled = checked
+                    })}
+                    help="Writes every API call, and a summary of what each share used each day, to youtube-api-usage.log in the yt-dlp folder next to config.yml. Unlike the debug log, it survives restarts."
+                />
+                {quota.usageLogEnabled && (
+                    <NumberField
+                        id="settings-youtube-usage-log-lines"
+                        label="Usage log length"
+                        value={quota.usageLogMaxLines}
+                        min={100}
+                        step={10000}
+                        unit="lines"
+                        error={errorFor('youtubeApi.usageLogMaxLines')}
+                        environmentVariable={environmentVariableFor('youtubeApi.usageLogMaxLines')}
+                        onChange={(value) => updateDraft((next) => {
+                            next.youtubeApi.usageLogMaxLines = value
+                        })}
+                        help="The oldest lines are removed once the log is longer than this. A day with the whole quota used is a few thousand lines."
+                    />
+                )}
             </SettingsSection>
         </>
     )

@@ -2,24 +2,34 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session, with_expression
 from fastapi import HTTPException
 
 from backend.db.model_mapping import update_database_fields
 from backend.api.models.season import *
-from backend.db.models import Season
+from backend.db.models import Collection, Episode, Season
+from backend.services.link_seasons import holds_whole_channel
 
 
 def get_seasons_list(s: Session, collection_slug: str) -> list[SeasonAPIRead]:
+    # Its newest episode tells which season a collection page opens on.
+    newest = select(func.max(Episode.published_date)).where(Episode.season_id == Season.id).scalar_subquery()
     seasons = (
         s.query(Season)
+        .options(with_expression(Season.newest_published_at, newest))
         .filter(
             Season.collection.has(slug=collection_slug)
         )
         .order_by(Season.id)
         .all()
     )
-    return [SeasonAPIRead.model_validate(season) for season in seasons]
+    collection = s.scalar(select(Collection).where(Collection.slug == collection_slug))
+    whole = collection is not None and holds_whole_channel(collection)
+    return [
+        SeasonAPIRead.model_validate(season).model_copy(update={"whole_channel": whole and season.loose})
+        for season in seasons
+    ]
 
 
 def get_season(s: Session, collection_slug: str, season_slug: str) -> SeasonAPIRead:
@@ -44,6 +54,7 @@ def create_season(
     update_collection_profiles: bool = False,
 ) -> SeasonAPIRead:
     from backend.services.seasons import create_season_record
+    from backend.types.season_types import SeasonOrigin
 
     season = create_season_record(
         s,
@@ -51,6 +62,8 @@ def create_season(
         index=body.index,
         slug=body.slug,
         name=body.name,
+        # A season the user makes is VODLoft's.
+        origin=SeasonOrigin.VODLOFT,
         update_collection_profiles=update_collection_profiles,
     )
     return SeasonAPIRead.model_validate(season)
@@ -74,28 +87,3 @@ def update_season(s: Session, collection_slug: str, season_slug: str, body: Seas
     s.flush()
     return SeasonAPIRead.model_validate(season)
 
-
-def delete_season(s: Session, collection_slug: str, season_slug: str) -> SeasonAPIRead:
-    season = (
-        s.query(Season)
-        .filter(
-            Season.slug == season_slug,
-            Season.collection.has(slug=collection_slug)
-        )
-        .one_or_none()
-    )
-    if season is None:
-        raise HTTPException(status_code=404, detail="Season not found")
-
-    payload = SeasonAPIRead.model_validate(season)
-
-    queue_event(s, "season.deleted", {
-        "resource_id": season.id,
-        "id": season.id,
-        "slug": season.slug,
-        "collection_id": season.collection_id
-    })
-
-    s.delete(season)
-    s.flush()
-    return payload

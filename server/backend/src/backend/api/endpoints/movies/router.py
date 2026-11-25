@@ -1,10 +1,13 @@
 from fastapi import APIRouter, HTTPException, status
 
 from .service import *
+from .bulk import delete_movies
+from ...models.profile_bulk import BulkResultRead, BulkSelectionIn
 from ...models.movie import *
 from ...models.media_download import MediaDownloadAPICreate
 from ...models.operations import (
     MediaDownloadOperationAccepted,
+    MovieDeleteDownloadsOperationAccepted,
     MovieRedownloadOperationAccepted,
     TaskOperationAccepted,
 )
@@ -20,10 +23,16 @@ from task_manager.tasks.media_download_operations import (
     dispatch_queued_media_download_operations,
 )
 from backend.security.access import Access, Area, Level
-from backend.security.deps import requires, signed_in
+from backend.security.deps import may_delete_files, requires, signed_in
 from backend.db.core import run_write_transaction
 
 router = APIRouter(prefix="/movies", tags=["Movies"])
+
+
+@router.post("/bulk/delete", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=BulkResultRead)
+def movies_bulk_delete(body: BulkSelectionIn):
+    """Delete the chosen movies, as deleting each on its page does."""
+    return run_write_transaction(lambda s: delete_movies(s, body))
 
 
 @router.post("/{movie_slug}/index", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=MovieAPIRead, status_code=status.HTTP_201_CREATED)
@@ -128,6 +137,20 @@ def movie_redownload_media(movie_slug: str):
     """Delete and re-download all existing movie and movie-extra artifacts."""
     def work(s):
         return request_movie_redownload(s, movie_slug)
+
+    return run_write_transaction(work)
+
+
+@router.post(
+    "/{movie_slug}/delete-downloads",
+    dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.MANAGE), may_delete_files()],
+    response_model=MovieDeleteDownloadsOperationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def movie_delete_downloads(movie_slug: str):
+    """Delete all existing movie and movie-extra files, keeping their download records."""
+    def work(s):
+        return request_movie_download_delete(s, movie_slug)
 
     return run_write_transaction(work)
 

@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useRef} from 'react'
 import {Controller, UseFormReturn} from 'react-hook-form'
 import Switch from 'react-switch'
-import Select from 'react-select'
+import Select from '../common/ReactSelect'
 import ReadMore from '../../utils/ReadMore'
 import {episodeTagLabel, SourceFeature, sourceHas} from '../../types/schemas/source'
 import {FORMAT_HEIGHTS, PreferredFormatReg} from '../../types/local_media_profile'
@@ -93,6 +93,9 @@ export default function StreamProfileForm({
     const streamSource = sources.get(collection?.sourceKey ?? sourceKey ?? '')
     const streamsMp4Directly = !!streamSource && sourceHas(streamSource, SourceFeature.PAGE_STREAMS)
     const streamSourceName = site?.siteName ?? (collection ? sources.name(collection.sourceKey) : 'its site')
+    // The best the Site streams, and the one resolution it has as an MP4 file, which plays until VODLoft joined the rest.
+    const streamTopHeight = site?.streamVideoHeights.length ? Math.max(...site.streamVideoHeights) : null
+    const streamFileHeight = site?.streamFileHeight ?? null
 
     const useDownloads = watch('useDownloads')
     const useSourceStream = watch('useSourceStream')
@@ -338,10 +341,10 @@ export default function StreamProfileForm({
                                         This could come in handy if you only intend to download a few of the latest episodes,
                                     but still want to retain the ability to stream many more.
                                     </p>
-                                    {streamSourceName == 'YouTube' ? (
+                                    {streamTopHeight && streamFileHeight && streamTopHeight > streamFileHeight ? (
                                         <p>
-                                            YouTube streams video at up to 1080p. As an MP4, it plays at 360p until VODLoft has
-                                            prepared the higher quality, which it starts for the newest episodes as soon as your
+                                            {streamSourceName} streams video at up to {streamTopHeight}p. As an MP4, it plays at {streamFileHeight}p
+                                            until VODLoft has prepared the higher quality, which it starts for the newest episodes as soon as your
                                             podcast app fetches the feed.
                                         </p>
                                     ) : null}
@@ -466,7 +469,7 @@ export default function StreamProfileForm({
                             <p>VODLoft cannot control what format the video or audio that {streamSourceName} provides will be in. Therefore, when Use Downloads
                             is disabled in streaming sources, you cannot select the exact video format you prefer.</p>
                             <p>Setting this to video will set the resolution to 1080p in the background. VODLoft streams the best video
-                                {streamSourceName} gives it up to that: YouTube video streams at up to 1080p.</p>
+                                {streamSourceName} gives it up to that{streamTopHeight ? `: ${streamSourceName} streams video at up to ${streamTopHeight}p` : ''}.</p>
                         </ReadMore>
                     </div>
                 </div>
@@ -484,6 +487,7 @@ export default function StreamProfileForm({
                     name="epIdTypeList"
                     render={() => (
                         <Select
+                            classNamePrefix="select"
                             inputId="sp-episode-types"
                             isMulti
                             options={tagOptions}

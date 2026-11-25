@@ -6,6 +6,7 @@ import {type CollectionLocalMediaProfileScope} from '../../types/local_media_pro
 import {useLocalMediaProfileSites} from '../../lib/queries'
 import CollectionLocalMediaProfileScopeField from './CollectionLocalMediaProfileScopeField'
 import LocalMediaProfileSitesField from './LocalMediaProfileSitesField'
+import VideoLocalMediaProfileScopeField from './VideoLocalMediaProfileScopeField'
 
 /** The Profile section: name, where the profile is offered and for which Sites. */
 export default function LocalMediaProfileCommonFields({
@@ -46,14 +47,12 @@ export default function LocalMediaProfileCommonFields({
                 )}
             </div>
 
-            {mode === 'collection' ? (
-                <div className="local-media-profile-pair">
-                    <CollectionLocalMediaProfileScopeField form={form} onScopeChange={onScopeChange} isCreating={isCreating}/>
-                    <LocalMediaProfileSitesField form={form} mode={mode}/>
-                </div>
-            ) : (
+            <div className="local-media-profile-pair">
+                {mode === 'collection'
+                    ? <CollectionLocalMediaProfileScopeField form={form} onScopeChange={onScopeChange} isCreating={isCreating}/>
+                    : <VideoLocalMediaProfileScopeField form={form} isCreating={isCreating}/>}
                 <LocalMediaProfileSitesField form={form} mode={mode}/>
-            )}
+            </div>
         </>
     )
 }

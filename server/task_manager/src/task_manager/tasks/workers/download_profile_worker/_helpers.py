@@ -13,7 +13,7 @@ from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.types.episode_types import EpisodePublishStatus
 from backend.services.notifications.emitters import episode_deleted
-from backend.services.episode_filters import EpisodeSelection, evaluate, is_date_line, retention_removes, wanted_episodes
+from backend.services.episode_filters import EpisodeSelection, evaluate, is_date_line, retention_downloads, retention_removes, wanted_episodes
 from backend.types.media_types import MediaType
 from backend.services.media_download_history import record_media_download_history
 from backend.services.download_options import effective_filename_mode
@@ -293,21 +293,17 @@ def cleanup_older_episodes(s: Session, profile: DownloadProfile) -> int:
     """Remove downloads that a date line of the profile now leaves out.
 
     Only date lines delete: changing the other filters later never deletes anything,
-    and downloads kept by hand or by a Keep filter are never removed. A download that
+    and downloads kept by hand or by a Keep filter are never removed. With manual downloads
+    included, the Collection's manual downloads in the profile's Local Media Profile go too. A download that
     is not on disk yet goes as soon as a date line leaves it out; one that is, only when
     the profile deletes older episodes.
     """
     if not any(is_date_line(item) for item in profile.filters):
         return 0
     evaluation = evaluate(s, EpisodeSelection.of_profile(profile))
-    downloads = s.scalars(
-        select(EpisodeMediaDownload).where(EpisodeMediaDownload.download_profile_id == profile.id)
-        # Most stay: the few that go load their sidecar files and metadata rows when they are deleted.
-        .options(lazyload(EpisodeMediaDownload.assets), lazyload(EpisodeMediaDownload.meta_items))
-    )
     rows = [
         row
-        for row in downloads
+        for row in retention_downloads(s, profile)
         if retention_removes(evaluation, row, delete_older_episodes=profile.delete_older_episodes)
     ]
     for row in rows:
@@ -316,7 +312,10 @@ def cleanup_older_episodes(s: Session, profile: DownloadProfile) -> int:
             path = row.file_path
             prepare_media_download_artifact(s, row)
             if had_file:
-                episode_deleted(s, row.media, path=path, reason="It fell outside its Download Profile's limit.")
+                episode_deleted(s, row.media, path=path, reason=(
+                    "It fell outside its Download Profile's limit." if row.download_profile_id is not None
+                    else "It fell outside the limit of a Download Profile that also deletes manual downloads."
+                ))
 
         # Retention cleanup is the end of this managed download's lifetime.
         s.delete(row)

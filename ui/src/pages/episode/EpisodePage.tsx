@@ -1,12 +1,10 @@
 import {sourceControls} from '../../lib/sourceControls'
 import {useState} from 'react'
-import {Link, useParams} from 'react-router-dom'
-import {useQueryClient} from '@tanstack/react-query'
-import toast from 'react-hot-toast'
+import {Link, useLocation, useParams} from 'react-router-dom'
+import toast from '../../lib/toast'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
 import {useCollection, useEpisode, useEpisodeDownloads, useLocalMediaProfiles, usePublishStatusLabels, useSkippedByFilter, useSourceLookup, useWaitingForCountdown} from '../../lib/queries'
-import {useLibraryDefaults} from '../../lib/settings'
 import {OperationStartError, useStartOperation} from '../../lib/operations'
 import {isCollectionLocalMediaProfileAvailableFor, isLocalMediaProfileAvailableForSite} from '../../types/local_media_profile'
 import {EpisodePublishStatus, PUBLISH_STATUS_LABELS} from '../../types/episode'
@@ -15,18 +13,26 @@ import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import DisabledReason from '../../components/common/DisabledReason'
 import {siteName} from '../../lib/siteName'
 import {EpisodeDownloadRow} from '../../components/Episode/EpisodeDownloadRow'
-import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
-import {formatDate, formatDurationMinutes} from "../../utils/formatting";
+import {formatDate} from "../../utils/formatting";
 import './EpisodePage.css'
 import {faIcon} from '../../icons/faIcon'
+import SiteLink from '../../components/common/SiteLink'
 import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
-import {RemovedBadge} from '../../components/common/RemovedFromSource'
+import {RemovedBadge, ExpiredBadge} from '../../components/common/RemovedFromSource'
+import SeasonPlaceNote, {MovedBadge, useSeasonPlace} from '../../components/Episode/SeasonPlaceNote'
+import ReconcileDialog from '../../components/ReconcileDialog/ReconcileDialog'
+import {can} from '../../lib/access'
 import {AccessNotice, ItemAccessBadge} from '../../components/common/AccessLocked'
 import SponsorBlockTimeline from '../../components/Episode/SponsorBlockTimeline'
 import {apiUrl} from '../../lib/api'
 import DurationPill from '../../components/common/DurationPill'
 import EpisodeTypePill from '../../components/Episode/EpisodeTypePill'
+import {fileWordsFor, wordsFor} from '../../lib/collectionWords'
+import {addLocalMediaProfilePath} from '../../types/local_media_profile'
+import Breadcrumb from '../../components/common/Breadcrumb/Breadcrumb'
+import LinkedText from '../../components/common/LinkedText'
+import {nameInText} from '../../lib/nameInText'
 
 
 const OPERATION_STARTING_MESSAGE = 'This task is starting...'
@@ -61,7 +67,7 @@ function EpisodePageSkeleton() {
     return (
         <section
             className="view episode-view episode-page-skeleton"
-            aria-label="Loading episode"
+            aria-label="Loading"
             aria-busy="true"
         >
             <article className="episode-details" aria-hidden="true">
@@ -88,13 +94,11 @@ function EpisodePageSkeleton() {
 
 export default function EpisodePage() {
     const {id: collectionId, episodeId} = useParams()
-    const qc = useQueryClient()
     const startOperation = useStartOperation()
     const [metadataRefreshStarting, setMetadataRefreshStarting] = useState(false)
-    const [earlyDeleteConfirm, setEarlyDeleteConfirm] = useState(false)
-    const [earlyDeleteStarting, setEarlyDeleteStarting] = useState(false)
 
     const {data: collection, isPending: isCollectionPending, isFetching: isCollectionFetching, error} = useCollection(collectionId)
+    const words = wordsFor(collection)
     const {data: skipped} = useSkippedByFilter(collection?.id)
     const {
         data: episode,
@@ -102,6 +106,9 @@ export default function EpisodePage() {
         isFetching: isEpisodeFetching,
     } = useEpisode(episodeId)
     const {data: profiles, error: profilesError} = useLocalMediaProfiles()
+    // A Music collection's files are tracks while only profiles for Music that download audio only are offered for it.
+    const fileWords = fileWordsFor(collection, profiles
+        ?.filter((profile) => isCollectionLocalMediaProfileAvailableFor(profile, collection?.type)))
     const {data: waitingForCountdown} = useWaitingForCountdown(
         collection?.id,
         String(episode?.publishStatus) === 'published_preliminary',
@@ -116,7 +123,11 @@ export default function EpisodePage() {
         error: downloadsError,
         hasDomainData: hasDownloadState,
     } = useEpisodeDownloads(episodeId)
-    const settingsQuery = useLibraryDefaults()
+    const location = useLocation()
+    // Its collection's playlists put it in another season, where it waits for the user to move it.
+    const {data: seasonPlace} = useSeasonPlace(episodeId)
+    const moved = !!seasonPlace?.belongsElsewhere
+    const [reconciling, setReconciling] = useState(false)
     const collectionProfiles = profiles?.filter((profile) => (
         isCollectionLocalMediaProfileAvailableFor(profile, collection?.type)
         // A profile limited to other Sites still shows the download it already made.
@@ -128,19 +139,13 @@ export default function EpisodePage() {
         'episode',
         episode?.id ?? null,
     )
-    const earlyDeleteOperation = useActiveOperation(
-        'episode.early_delete',
-        'episode',
-        episode?.id ?? null,
-    )
     const metadataRefreshBusy = metadataRefreshStarting || metadataRefreshOperation !== undefined
-    const earlyDeleteBusy = earlyDeleteStarting || earlyDeleteOperation !== undefined
 
     if (!collectionId) {
         return (
             <section className="view episode-view">
                 <div className="view-header">
-                    <h1>Episode</h1>
+                    <h1>{words.episode.Singular}</h1>
                 </div>
                 <p>Collection not found.</p>
                 <p><Link to="/">Go home</Link></p>
@@ -154,7 +159,7 @@ export default function EpisodePage() {
         return (
             <section className="view episode-view">
                 <div className="view-header">
-                    <h1>Episode</h1>
+                    <h1>{words.episode.Singular}</h1>
                 </div>
                 <p>{(error as any)?.message ?? 'Collection not found.'}</p>
                 <p><Link to="/">Go home</Link></p>
@@ -168,9 +173,9 @@ export default function EpisodePage() {
         return (
             <section className="view episode-view">
                 <div className="view-header">
-                    <h1>Episode</h1>
+                    <h1>{words.episode.Singular}</h1>
                 </div>
-                <p>Episode not found.</p>
+                <p>{words.episode.Singular} not found.</p>
                 <p><Link to={`/collection/${collectionId}`}>Back to collection</Link></p>
             </section>
         )
@@ -183,7 +188,6 @@ export default function EpisodePage() {
     const isUpcoming = publishStatus === 'scheduled' || publishStatus === 'delayed'
     // An upcoming episode shows when it is due to start instead of when it was released.
     const startsAt = isUpcoming ? episode.scheduledDate : null
-    const earlyDeleteAvailable = episode.earlyDeleteAvailable
     const containsCountdown = (
         publishStatus === 'published_preliminary'
         || publishStatus === EpisodePublishStatus.publishedPreliminary
@@ -198,21 +202,10 @@ export default function EpisodePage() {
     const downloadStateError = (profiles === undefined ? profilesError : null)
         ?? (!hasDownloadState ? downloadsError : null)
 
-    const earlyDeleteAfterMinutes = settingsQuery.data?.noUsableMediaDeleteAfterMinutes
-    const earlyDeleteDisabledReason = earlyDeleteStarting
-        ? OPERATION_STARTING_MESSAGE
-        : earlyDeleteOperation
-            ? 'An early delete is running for this episode.'
-            : settingsQuery.error
-                ? 'VODLoft could not load the automatic deletion delay.'
-                : earlyDeleteAfterMinutes === undefined
-                    ? 'VODLoft is loading the automatic deletion delay.'
-                    : undefined
-
     const coverUrl: string = episode.thumbnailLandscapePath
         || episode.backgroundImagePath
         || episode.thumbnailPortraitPath
-        || `https://placehold.co/960x540/png?text=Episode+%23${episode.index}`
+        || `https://placehold.co/960x540/png?text=${encodeURIComponent(words.episode.Singular)}+%23${episode.index}`
 
     const downloadByProfileId = new Map<number, MediaDownloadViewRead>(
         (downloads ?? []).map((d) => [d.localMediaProfileId, d]),
@@ -238,85 +231,48 @@ export default function EpisodePage() {
                 `${base}/episodes/${encodeURIComponent(episode.slug)}/refresh-metadata`,
                 {method: 'POST'},
             )
-            toast.success('Metadata refresh started')
+            toast.success('Info refresh started')
         } catch (error) {
             const detail = error instanceof OperationStartError ? error.message : undefined
-            toast.error(detail || 'Could not start metadata refresh')
+            toast.error(detail || 'Could not start the info refresh')
         } finally {
             setMetadataRefreshStarting(false)
         }
     }
 
-    const earlyDelete = async () => {
-        if (earlyDeleteBusy) return
-
-        setEarlyDeleteStarting(true)
-        try {
-            const base = apiUrl()
-            await startOperation(
-                `${base}/episodes/${encodeURIComponent(episode.slug)}/early-delete`,
-                {method: 'POST'},
-            )
-
-            setEarlyDeleteConfirm(false)
-            await qc.invalidateQueries({queryKey: ['episode', episode.slug]})
-            toast.success('Early delete started')
-        } catch (error) {
-            const detail = error instanceof OperationStartError ? error.message : undefined
-            toast.error(detail || 'Could not start early delete')
-        } finally {
-            setEarlyDeleteStarting(false)
-        }
-    }
-
     return (
         <section className="view episode-view" aria-labelledby="episode-title">
-            <article className="episode-details" aria-label="Episode details">
+            <article className="episode-details" aria-label={`${words.episode.Singular} details`}>
                 {/* The buttons share the breadcrumb's row, so the title below gets the full width. */}
                 <div className="episode-topbar">
-                    <nav className="episode-breadcrumb" aria-label="Breadcrumb">
-                        <Link className="quiet-link" to="/library">Library</Link>
-                        <FontAwesomeIcon icon={faIcon('fass', 'chevron-right')} aria-hidden="true"/>
-                        <Link className="quiet-link" to={`/collection/${collectionId}`}>{collection.title}</Link>
-                    </nav>
+                    <Breadcrumb items={[
+                        {label: 'Library', to: '/library'},
+                        {label: collection.title, to: (location.state as {fromCollection?: string} | null)?.fromCollection ?? `/collection/${collectionId}`},
+                    ]}/>
                     <div className="episode-title-actions">
                         {episode.sharingUrl && (
-                            <a
-                                className="btn btn-secondary episode-open-link"
-                                href={episode.sharingUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                aria-label={`Open on ${siteLabel}`}
-                                title={`Open on ${siteLabel}`}
-                            >
-                                <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')} aria-hidden="true"/>
-                                <span className="episode-open-link-text">{siteLabel}</span>
-                            </a>
+                            <SiteLink className="btn-secondary episode-open-link" url={episode.sharingUrl} siteName={siteLabel} site={collection.site}/>
                         )}
                         <ActionMenu
                             items={[
                                 ...(sourceControls(collection).metadataRefresh ? [{
-                                    label: 'Refresh metadata',
+                                    label: `Refresh info from ${siteLabel}`,
                                     description: detailsChecked,
                                     icon: faIcon('fass', 'arrows-rotate'),
                                     disabled: metadataRefreshBusy,
                                     disabledReason: metadataRefreshStarting
                                         ? OPERATION_STARTING_MESSAGE
                                         : metadataRefreshOperation
-                                            ? 'A metadata refresh is running for this episode.'
+                                            ? `VODLoft is refreshing the info of this ${words.episode.singular}.`
                                             : undefined,
                                     operation: metadataRefreshOperation,
                                     onSelect: () => void refreshMetadata(),
                                 }] : []),
-                                ...(earlyDeleteAvailable ? [{
-                                    label: 'Early Delete',
-                                    icon: faIcon('fass', 'trash') as [string, string],
-                                    tone: 'danger' as const,
-                                    separatorBefore: true,
-                                    disabled: earlyDeleteDisabledReason !== undefined,
-                                    disabledReason: earlyDeleteDisabledReason,
-                                    operation: earlyDeleteOperation,
-                                    onSelect: () => setEarlyDeleteConfirm(true),
+                                ...(moved && can('library', 'manage') ? [{
+                                    label: `Move to its new ${words.season.singular}`,
+                                    description: `Moves the ${words.episode.singular} and renames its files to match`,
+                                    icon: faIcon('fass', 'arrow-right-arrow-left'),
+                                    onSelect: () => setReconciling(true),
                                 }] : []),
                             ]}
                             note={sourceControls(collection).metadataRefresh ? undefined : detailsChecked}
@@ -325,24 +281,27 @@ export default function EpisodePage() {
                 </div>
 
                 <div className="episode-cover">
-                    <img src={coverUrl} alt="Episode cover"/>
+                    <img src={coverUrl} alt={`${words.episode.Singular} cover`}/>
                     {(episode.duration > 0 || isUpcoming) && (
                         <span className="thumb-corner thumb-corner-large">
                             <DurationPill seconds={episode.duration} upcoming={isUpcoming} large/>
                         </span>
                     )}
                     {isLive && (
-                        <span className="episode-live-badge" aria-label="Episode is live">Live</span>
+                        <span className="episode-live-badge" aria-label={`${words.episode.Singular} is live`}>Live</span>
                     )}
                 </div>
 
                 <header className="episode-header">
                     <h1 id="episode-title" className="episode-title-text">{episode.title}</h1>
-                    <div className="episode-summary" aria-label="Episode metadata">
+                    <div className="episode-summary" aria-label={`${words.episode.Singular} metadata`}>
                         <EpisodeTypePill sourceKey={episode.sourceKey} type={episode.episodeType} asText/>
                         {episode.drmProtected && <DrmBadge asText/>}
                         <ItemAccessBadge item={episode} asText/>
-                        {episode.removedFromSource && <RemovedBadge asText/>}
+                        {episode.removedBy
+                            ? <ExpiredBadge removedBy={episode.removedBy}/>
+                            : episode.removedFromSource && <RemovedBadge asText/>}
+                        {moved && <MovedBadge asText words={words}/>}
                         <span className={`episode-status${isLive ? ' is-live' : ''}`} title={sourceStatus?.help}>
                             {isLive && <span className="episode-status-dot" aria-hidden="true"/>}
                             {statusLabel}
@@ -377,10 +336,18 @@ export default function EpisodePage() {
                     </div>
                 </header>
 
+                <SeasonPlaceNote episodeSlug={episode.slug} canManage={can('library', 'manage')} onMove={() => setReconciling(true)} words={words} fileWords={fileWords}/>
+                <ReconcileDialog
+                    open={reconciling}
+                    path={`/episodes/${encodeURIComponent(episode.slug)}`}
+                    what={episode.title}
+                    onDismiss={() => setReconciling(false)}
+                />
+
                 {!!episode.description?.trim() && (
                     <section className="episode-description" aria-labelledby="episode-description-title">
-                        <h2 id="episode-description-title">Episode Description</h2>
-                        <p>{episode.description}</p>
+                        <h2 id="episode-description-title">Description</h2>
+                        <p><LinkedText text={episode.description}/></p>
                     </section>
                 )}
 
@@ -401,8 +368,9 @@ export default function EpisodePage() {
                         )}
                         {!locked && !downloadStateError && profiles !== undefined && !collectionProfiles?.length && (
                             <p>
-                                No Local Media Profiles configured yet.{' '}
-                                <Link to="/add-local-media-profile">Add one</Link> to download this episode.
+                                {profiles.length ? `No Local Media Profile fits ${nameInText(collection.title)} yet.` : 'No Local Media Profiles configured yet.'}{' '}
+                                <Link to={addLocalMediaProfilePath({collectionType: collection.type, siteKey: collection.site?.key, from: collection.title, collectionId: collection.id, returnTo: `${location.pathname}${location.search}`})}>Add one</Link>
+                                {' '}to download this {words.episode.singular}.
                             </p>
                         )}
                         {!locked && !downloadStateError && !!collectionProfiles?.length && (
@@ -426,7 +394,11 @@ export default function EpisodePage() {
                                             confirmSafeDelayDownload={!containsCountdown && !episode.downloadDelayPassed}
                                             safeDelayReadyAt={episode.downloadDelayReadyAt}
                                             skippedBy={skippedBy}
+                                            season={words.season}
                                             waitsForCountdown={containsCountdown && waitsForCountdown}
+                                            goneReason={episode.removedBy
+                                                ? `This ${words.episode.singular} expired on ${episode.removedBy.siteName}, so it can't be downloaded again`
+                                                : undefined}
                                         />
                                     )
                                 })}
@@ -448,36 +420,6 @@ export default function EpisodePage() {
                 )}
             </article>
 
-            {earlyDeleteAvailable && earlyDeleteAfterMinutes !== undefined && (
-                <ConfirmDialog
-                    open={earlyDeleteConfirm}
-                    title="Early Delete"
-                    onDismiss={() => {
-                        if (!earlyDeleteBusy) setEarlyDeleteConfirm(false)
-                    }}
-                    icon={faIcon('fass', 'trash')}
-                    iconTone="danger"
-                    dismissOnOverlayClick={!earlyDeleteBusy}
-                    cancelButton={{disabled: earlyDeleteBusy}}
-                    confirmButton={{
-                        label: earlyDeleteBusy ? 'Deleting…' : 'Delete now',
-                        onClick: earlyDelete,
-                        className: 'btn btn-danger',
-                        disabled: earlyDeleteBusy,
-                    }}>
-                    <p>
-                        {sourceName} currently returns 404 for this episode, so VODLoft cannot recover media from its current slug.
-                    </p>
-                    <p>
-                        VODLoft will normally keep checking it and only delete it automatically after
-                        {' '}<strong>{formatDurationMinutes(earlyDeleteAfterMinutes)}</strong> in the continuous <code>no_usable_media</code> state.
-                    </p>
-                    <p>
-                        Deleting early skips that waiting period. However, if it turns out this episode slug returned to {sourceName}, VODLoft
-                        will refuse to delete it.
-                    </p>
-                </ConfirmDialog>
-            )}
 
         </section>
     )

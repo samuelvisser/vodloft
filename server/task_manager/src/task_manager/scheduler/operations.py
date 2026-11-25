@@ -627,7 +627,9 @@ def _refresh_direct_operation(operation: TaskOperation) -> TaskOperation:
         if _task_status(run.status) not in _TERMINAL_TASK_STATUSES
         and _run_reports_worker_progress(run)
     ]
-    if not _direct_progress_is_determinate(targets) and len(terminal_runs) < total:
+    if len(terminal_runs) < total and (
+        not _direct_progress_is_determinate(targets) or _run_is_unmeasured(effective_runs, total)
+    ):
         operation.progress = None
     elif worker_progress_runs:
         progress_total = 0
@@ -753,25 +755,19 @@ def _composite_progress(operation: TaskOperation) -> tuple[int | None, int]:
         for run in (_effective_run_for_target(target) for target in targets)
         if run is not None
     ) / 100.0
-    child_determinate = True
     for dependency in dependencies:
         child = dependency.child_operation
         if child is None or child.status not in _ACTIVE_OPERATION_STATUSES:
             completed_weight += float(dependency.weight)
             continue
-        progress, completion = _composite_progress(child) if child.dependencies else (
-            child.progress, child.completion_progress,
-        )
-        child_determinate = progress is not None
+        completion = _composite_progress(child)[1] if child.dependencies else child.completion_progress
         completed_weight += float(dependency.weight) * max(0.0, min(1.0, float(completion or 0) / 100.0))
 
     completion_progress = max(0, min(100, int(100 * completed_weight / total_weight) if total_weight else 0))
     total_units = len(targets) + len(dependencies)
-    determinate = (
-        total_units > 1
-        or (bool(targets) and _target_tracks_progress(targets[0]))
-        or (bool(dependencies) and child_determinate)
-    )
+    # An action made of parts always says how far it is, by its parts' weights and how far each is by its own plan,
+    # also while one of them is on a step that cannot measure itself, as a download's steps count toward a batch.
+    determinate = bool(dependencies) or total_units > 1 or (bool(targets) and _target_tracks_progress(targets[0]))
     return (completion_progress if determinate else None), completion_progress
 
 
@@ -1167,7 +1163,11 @@ def _operation_progress_meta(
     if operation.status not in _ACTIVE_OPERATION_STATUSES:
         return None
     if operation.dependencies:
-        return None
+        # A batch of thousands of downloads has its own progress; listing each as a step would only weigh down
+        # every read of the operation.
+        if len(operation.dependencies) + len(effective_runs) > _MOST_PLANNED_PARTS:
+            return None
+        return {"plan": _parts_plan(operation, effective_runs)}
     if len(effective_runs) != 1:
         active = [run for run in effective_runs if run is not None and _task_status(run.status) not in _TERMINAL_TASK_STATUSES]
         waits = [run.wait_state for run in active]
@@ -1183,6 +1183,54 @@ def _operation_progress_meta(
     if wait_state is not None:
         result["wait_state"] = wait_state
     return result or None
+
+
+_MOST_PLANNED_PARTS = 50
+_PART_STATES = {
+    OperationStatus.QUEUED.value: "pending", OperationStatus.RUNNING.value: "running",
+    OperationStatus.WAITING.value: "waiting", OperationStatus.SUCCEEDED.value: "completed",
+    OperationStatus.PARTIAL.value: "failed", OperationStatus.FAILED.value: "failed",
+    OperationStatus.CANCELED.value: "canceled",
+}
+_RUN_STATES = {
+    TaskStatus.SCHEDULED: "pending", TaskStatus.QUEUED: "pending", TaskStatus.RETRY_SCHEDULED: "waiting",
+    TaskStatus.RUNNING: "running", TaskStatus.SUCCEEDED: "completed", TaskStatus.FAILED: "failed",
+    TaskStatus.CANCELED: "canceled",
+}
+
+
+def _parts_plan(operation: TaskOperation, effective_runs: Sequence[TaskRun | None]) -> dict[str, Any]:
+    """The plan of an operation made of parts: a step for each task it runs itself and each
+    operation it started, in the same shape as the plan a task reports, so the UI follows both alike. A step is as
+    far as its part says, or unmeasured while the part cannot tell."""
+    from dataclasses import asdict
+
+    from progress_plan import Stage
+
+    from task_manager.scheduler.registry import task_meta
+
+    stages: list[Stage] = []
+    for target, run in zip(operation.targets, effective_runs):
+        registered = task_meta(target.task_key)
+        state = "pending" if run is None else _RUN_STATES.get(_task_status(run.status), "pending")
+        stages.append(Stage(
+            id=f"task:{target.id}", code=target.task_key, weight=1.0,
+            label=registered.title if registered else None, state=state,
+            fraction=run.progress / 100 if run is not None and state == "running" and isinstance(run.progress, int)
+            and _target_tracks_progress(target) else None,
+        ))
+    for dependency in operation.dependencies:
+        child = dependency.child_operation
+        if child is None:
+            continue
+        progress = _composite_progress(child)[0] if child.dependencies else child.progress
+        state = _PART_STATES.get(child.status, "pending")
+        stages.append(Stage(
+            id=f"operation:{child.id}", code=child.kind, weight=float(dependency.weight), label=child.title,
+            state=state, fraction=progress / 100 if progress is not None and state == "running" else None,
+        ))
+    main = next((stage.id for stage in stages if stage.state in ("running", "waiting")), None)
+    return {"main_activity": main, "stages": [asdict(stage) for stage in stages]}
 
 
 def _operation_snapshot(operation: TaskOperation) -> OperationSnapshot:
@@ -1299,6 +1347,13 @@ def _run_matches_target_inputs(run: TaskRun, target: TaskOperationTarget) -> boo
     if not isinstance(inputs, dict):
         return False
     return all(inputs.get(key) == value for key, value in expected.items())
+
+
+def _run_is_unmeasured(effective_runs: Sequence[TaskRun | None], total: int) -> bool:
+    # The one task of an operation that said its current step cannot tell how far it is: a TaskRun of a task that
+    # tracks progress starts at zero, so None comes only from its worker.
+    run = effective_runs[0] if total == 1 else None
+    return run is not None and _task_status(run.status) not in _TERMINAL_TASK_STATUSES and run.progress is None
 
 
 def _run_reports_worker_progress(run: TaskRun) -> bool:
@@ -1421,3 +1476,4 @@ def _resource_type_value(value: Any) -> str:
 
 def _task_status(value: Any) -> TaskStatus:
     return value if isinstance(value, TaskStatus) else TaskStatus(value)
+

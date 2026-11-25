@@ -1,6 +1,6 @@
 import {forwardRef, useCallback, useImperativeHandle, useState} from 'react'
 import {QueryKey, useQueryClient} from '@tanstack/react-query'
-import {toast} from 'react-hot-toast'
+import {toast} from '../../lib/toast'
 import {faIcon} from '../../icons/faIcon'
 
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'

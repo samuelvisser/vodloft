@@ -12,6 +12,29 @@ how its episodes are identified:
 Only episodes with the Source's main tag follow that scheme. Every other tag,
 such as a YouTube Short, counts on its own across the collection: short.1, short.2.
 
+A collection of a whole channel, on a Site with ``link_seasons``, can make the
+channel's playlists, or an artist's albums, its link seasons: every one, or the
+ones the user keeps on. A link season only takes videos the collection itself
+lists, unless it adds the others too, so a video of another channel in it stays
+out. The collection lists only the feeds of its channel it takes, and a video of
+a feed it no longer takes leaves, unless a link season keeps it. A video in a link
+season goes to that season, and a video in several of them to the one that comes
+first. A video in none goes to the channel season, or to its season per year, as the
+collection is set; a channel season that holds the whole channel has every video
+of its feeds, also those of a link season. Once a video has a file it stays where it is,
+until the user moves it.
+
+A collection of one list, such as a playlist or an album, has that list as its
+one season, and numbers its videos in the list's order. Each collection checks
+for duplicates among its own episodes only: another collection may have the same
+video.
+
+A collection that splits videos by chapter, at a Source with ``Feature.CHAPTERS``,
+adds each new video with chapters as a season of its own, named after the video,
+with an episode per chapter. Each part is downloaded on its own, as just its stretch
+of the video, and otherwise is an episode like any other. A part stays where it is,
+and keeps its own title and length.
+
 A new episode is numbered after the episodes VODLoft already has, so existing
 file names never change. Numbering follows upload order, so the episodes are
 saved together once the Source has listed them all.
@@ -28,24 +51,33 @@ downloaded files and is not downloaded again until it is back.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Episode, Season, Collection
+from backend.db.models import Collection, Episode, Season
 from backend.db.core import run_write_transaction
 from backend.services.media_access import lock_refused
-from backend.services.seasons import create_season_record
+from backend.types.season_types import SeasonOrigin
+from backend.services.notifications.emitters import link_seasons_found
+from backend.services.season_order import arrange_seasons
+from backend.services.link_seasons import (
+    SeasonFinder, SeasonNumbers, holds_only_link_seasons, list_lists, lists_own_link, made_from_list, own_feeds, section_list_names, place_in_link_seasons, link_seasons_on,
+    save_lists,
+)
 from backend.services.metadata_refresh import new_item_metadata_is_final
 from backend.services.pending_episodes import site_follows_pending
+from backend.services.removed_downloads import back_at_source, left_source
 from backend.types.episode_types import PENDING_EPISODE_PUBLISH_STATUSES, EpisodePublishStatus
 from backend.types.media_types import MediaType
 from backend.types.collection_types import EpisodeIdentifier
 from backend.utils.helpers import generate_uuid
-from sources import MAIN_TAG, Feature, ItemRef, Source, VideoDetails, get_source
+from sources import MAIN_TAG, Chapter, Feature, ItemRef, SeasonRef, Source, VideoDetails, get_source, site_for
 from .episodes.events import queue_episode_status_events
+from .episodes.identifier import next_identifier
 from .general import datetime_to_string
 from .progress import update_progress
 from task_manager.tasks.media_download_operations import dispatch_queued_media_download_operations
@@ -55,7 +87,9 @@ from .refreshed_metadata import apply_refreshed_details, check_upgrades_after_re
 logger = logging.getLogger(__name__)
 
 _LISTING_PROGRESS = 10
+_PLAYLISTS_PROGRESS = 60
 _SAVING_PROGRESS = 90
+
 
 def _season_number(details: VideoDetails, fallback: datetime) -> int:
     if details.season is not None:
@@ -68,71 +102,22 @@ def _order_key(details: VideoDetails, fallback: datetime):
     return _season_number(details, fallback), number, details.published_at or fallback, details.slug
 
 
-class _SeasonNumbers:
-    """The episode numbers each season of the collection already uses."""
-
-    def __init__(self, s: Session):
-        self._s = s
-        self._taken: dict[int, set[int]] = {}
-
-    def _of(self, season: Season) -> set[int]:
-        if season.id not in self._taken:
-            taken = set()
-            for identifier in self._s.scalars(select(Episode.episode_identifier).where(Episode.season_id == season.id)):
-                number = (identifier or "").rpartition("E")[2]
-                if number.isdigit():
-                    taken.add(int(number))
-            self._taken[season.id] = taken
-        return self._taken[season.id]
-
-    def take(self, season: Season, wanted: int | None) -> int:
-        """The Source's own episode number, unless the season already has an episode with it."""
-        taken = self._of(season)
-        number = wanted if wanted is not None and wanted not in taken else max(taken, default=0) + 1
-        taken.add(number)
-        return number
-
-
-def _next(identifiers: set[str], prefix: str) -> str:
-    """The next free ``<prefix>.<number>`` after the highest one the collection has."""
-    numbers = [
-        int(identifier.removeprefix(f"{prefix}."))
-        for identifier in identifiers
-        if identifier.startswith(f"{prefix}.") and identifier.removeprefix(f"{prefix}.").isdigit()
-    ]
-    return f"{prefix}.{max(numbers, default=0) + 1}"
-
-
 def _identifier(
-    collection: Collection, season: Season, details: VideoDetails, identifiers: set[str], numbers: _SeasonNumbers,
+    collection: Collection, season: Season, details: VideoDetails, identifiers: set[str], numbers: SeasonNumbers,
     fallback: datetime,
 ) -> str:
     if details.tag != MAIN_TAG:
-        return _next(identifiers, details.tag)
+        return next_identifier(identifiers, details.tag)
     match EpisodeIdentifier(collection.episode_identifier):
         case EpisodeIdentifier.DATE_BASED:
             identifier = f"ep.{datetime_to_string(details.published_at or fallback)}"
             # Two videos uploaded at the same moment: the second one is auxiliary.
-            return _next(identifiers, "aux") if identifier in identifiers else identifier
+            return next_identifier(identifiers, "aux") if identifier in identifiers else identifier
         case EpisodeIdentifier.NUMBERED:
-            return _next(identifiers, "ep")
+            return next_identifier(identifiers, "ep")
         case EpisodeIdentifier.SEASONAL:
             number = numbers.take(season, details.episode_number if details.season else None)
             return f"ep.S{season.season_number:02d}E{number:02d}"
-
-
-def _order_seasons(s: Session, collection: Collection) -> None:
-    """Keep season indices in season order when an earlier season turns up later."""
-    seasons = sorted(collection.seasons, key=lambda season: season.season_number)
-    if [season.index for season in seasons] == list(range(1, len(seasons) + 1)):
-        return
-    # Two passes, because (collection_id, index) is unique.
-    for offset, season in enumerate(seasons, start=1):
-        season.index = -offset
-    s.flush()
-    for offset, season in enumerate(seasons, start=1):
-        season.index = offset
-    s.flush()
 
 
 def _episode_slug(s: Session, collection: Collection, source_slug: str) -> str:
@@ -146,33 +131,42 @@ def adds_pending(collection: Collection) -> bool:
     return get_source(collection.source_key).has(Feature.PENDING_CHECKS) and site_follows_pending(collection.site_key)
 
 
-def date_based_identifier(s: Session, episode: Episode, published_at: datetime) -> str | None:
-    """The identifier a main episode of a date-based collection gets for a new publication date,
-    or None when it keeps its own: an upcoming video that started later than planned moves."""
-    collection = episode.collection
-    if collection.episode_identifier != EpisodeIdentifier.DATE_BASED.value:
-        return None
-    identifier = f"ep.{datetime_to_string(published_at)}"
-    if not episode.episode_identifier.startswith("ep.") or episode.episode_identifier == identifier:
-        return None
-    identifiers = set(s.scalars(select(Episode.episode_identifier).where(
-        Episode.collection_id == collection.id, Episode.id != episode.id,
-    )))
-    return _next(identifiers, "aux") if identifier in identifiers else identifier
-
-
 def known_episode_slugs(s: Session, collection: Collection) -> frozenset[str]:
-    return frozenset(s.scalars(select(Episode.source_slug).where(Episode.collection_id == collection.id)))
+    """The videos the collection has."""
+    return frozenset(s.scalars(select(Episode.video_slug).where(Episode.collection_id == collection.id)))
+
+
+def splits_chapters(collection: Collection) -> bool:
+    """Whether the collection splits its new videos by chapter."""
+    return collection.split_chapters and get_source(collection.source_key).has(Feature.CHAPTERS)
+
+
+def with_chapters(source: Source, details: VideoDetails) -> VideoDetails:
+    """A listed video with its chapters, looked up when the listing did not say."""
+    if details.chapters is not None or details.publish_status in PENDING_EPISODE_PUBLISH_STATUSES:
+        return details
+    try:
+        found = source.video_details(details.url)
+    except Exception as exc:
+        logger.info("Adding %s whole, because its chapters could not be looked up: %s", details.url, exc)
+        return details
+    return replace(details, chapters=found.chapters or ())
 
 
 def _list_new_episodes(s: Session, collection: Collection, source: Source, progress) -> list[VideoDetails]:
-    url, title, known = collection.sharing_url, collection.title, known_episode_slugs(s, collection)
+    title, url = collection.title, collection.sharing_url
+    if url is None or not lists_own_link(collection):
+        # Its link seasons say what it holds, so its own link is not listed.
+        return []
+    feeds = own_feeds(collection)
+    split = splits_chapters(collection)
+    known = known_episode_slugs(s, collection)
     # No transaction stays open while the Source looks videos up.
     s.rollback()
     update_progress(progress, _LISTING_PROGRESS, f"Listing the episodes of '{title}' at {source.name}")
     found: list[VideoDetails] = []
-    for details in source.list_episodes(url, known=known):
-        found.append(details)
+    for details in source.list_episodes(url, known=known, feeds=feeds):
+        found.append(with_chapters(source, details) if split else details)
         message = f"Found {len(found)} new {'episode' if len(found) == 1 else 'episodes'} of '{title}' at {source.name}"
         if progress:
             # A Source can't say how many episodes there are, so the count is shown instead of a percentage.
@@ -183,7 +177,8 @@ def _list_new_episodes(s: Session, collection: Collection, source: Source, progr
 
 
 def index_listed_collection(s: Session, *, collection_id: int, source: Source, progress=None, dry_run: bool = False) -> int:
-    """Add the collection's new episodes. Returns how many were added, or would be added in a dry run."""
+    """Add the collection's new episodes, and put its videos in the seasons of the playlists that are seasons.
+    Returns how many episodes were added, or would be added in a dry run."""
     collection = s.get(Collection, collection_id)
     if collection is None:
         return 0
@@ -194,13 +189,131 @@ def index_listed_collection(s: Session, *, collection_id: int, source: Source, p
         for details in found:
             logger.info("Dry run: would add %s (%s)", details.slug, details.title)
         return len(found)
+    collection = s.get(Collection, collection_id)
+    listing = None
+    if collection is not None and link_seasons_on(collection):
+        # The Site's own word for its lists, such as playlists on YouTube or albums on Bandcamp.
+        lists = section_list_names(collection).plural
+        update_progress(progress, _PLAYLISTS_PROGRESS, f"Listing the {lists} of '{title}' at {source.name}")
+        listing = list_lists(s, collection, source, also=frozenset(details.slug for details in found))
+    s.rollback()
     if found:
         update_progress(progress, _SAVING_PROGRESS, f"Saving {len(found)} new episodes of '{title}'")
-    return run_write_transaction(lambda w: add_listed_episodes(w, collection_id=collection_id, found=found))
+
+    outside = listing.outside if listing is not None else []
+    if outside:
+        update_progress(progress, _SAVING_PROGRESS, f"Saving {len(outside)} videos of the {lists} of '{title}'")
+
+    def save(w: Session) -> int:
+        collection = w.get(Collection, collection_id)
+        if collection is not None and listing is not None:
+            link_seasons_found(w, collection, save_lists(w, collection, listing))
+        added = add_listed_episodes(
+            w, collection_id=collection_id, found=[*found, *outside], sources=listing.sources if listing is not None else None,
+        )
+        if outside:
+            # The collection's own link does not list them, so they leave when no playlist that is a season does.
+            for episode in w.scalars(select(Episode).where(
+                Episode.collection_id == collection_id, Episode.video_slug.in_([details.slug for details in outside]),
+            )):
+                episode.from_link_season = True
+        if collection is None:
+            return added
+        place_in_link_seasons(w, collection)
+        return added
+
+    return run_write_transaction(save)
 
 
-def add_listed_episodes(s: Session, *, collection_id: int, found: list[VideoDetails]) -> int:
-    """Save episodes a Source found, numbered after the ones the collection has. Returns how many were added.
+class _Placer(SeasonFinder):
+    """Finds the season each new video goes to, and the identifier it gets there."""
+
+    def __init__(self, s: Session, collection: Collection, now: datetime):
+        super().__init__(s, collection, now)
+        self.identifiers = set(s.scalars(select(Episode.episode_identifier).where(Episode.collection_id == collection.id)))
+
+    def season(self, ref: SeasonRef | None, published_at: datetime | None) -> Season:
+        """The Source's own season, or the season of the upload year."""
+        if ref is None:
+            return self.home_season(published_at)
+        season = self._by_slug.get(ref.slug)
+        if season is not None and season.season_number != ref.number:
+            # A season picked when the collection was added, before VODLoft knew its number.
+            season.season_number = ref.number
+        if season is None:
+            season = self.create(slug=ref.slug, name=ref.name, number=ref.number, origin=SeasonOrigin.SITE)
+        return season
+
+    def part_identifier(self, season: Season, details: VideoDetails, number: int) -> str:
+        """A part's identifier: its chapter's number in its video's season, whatever the collection's numbering, so the
+        parts of one video never share a date or a number. A Short or another tag counts on its own as always."""
+        if details.tag != MAIN_TAG:
+            identifier = next_identifier(self.identifiers, details.tag)
+        else:
+            identifier = f"ep.S{season.season_number:02d}E{self.numbers.take(season, number):02d}"
+        self.identifiers.add(identifier)
+        return identifier
+
+    def identifier(self, season: Season, details: VideoDetails) -> str:
+        identifier = _identifier(self._collection, season, details, self.identifiers, self.numbers, self._now)
+        self.identifiers.add(identifier)
+        return identifier
+
+
+def _new_episode(
+    s: Session, collection: Collection, season: Season, index: int, identifier: str,
+    details: VideoDetails, *, part: tuple[int, Chapter] | None = None, source_key: str | None = None,
+) -> Episode:
+    """A listed video as an episode, or with ``part``, the chapter of it with that number. ``source_key`` is the
+    Source that found it, when that is not the collection's: the one of the list it is in."""
+    number, chapter = part if part is not None else (None, None)
+    source_key = source_key or collection.source_key
+    source_slug = details.slug if chapter is None else f"{details.slug}-part-{number}"
+    return Episode(
+        uuid=generate_uuid(),
+        type=MediaType.EPISODE.value,
+        source_key=source_key,
+        collection_id=collection.id,
+        season_id=season.id,
+        index=index,
+        episode_identifier=identifier,
+        slug=_episode_slug(s, collection, source_slug),
+        source_slug=source_slug,
+        publish_status=details.publish_status.value,
+        # The metadata refresh sweep follows a new upload for a while, from when it is published; an older one is done.
+        # A part keeps the title and length of its chapter, so a refresh of the whole video has nothing for it.
+        metadata_is_final=chapter is not None or (
+            details.publish_status not in PENDING_EPISODE_PUBLISH_STATUSES and new_item_metadata_is_final(
+                # A collection of links from several Sites follows each video's own Site.
+                source_key=source_key,
+                site_key=site_for(details.url, source_key).key
+                if holds_only_link_seasons(collection) or source_key != collection.source_key else collection.site_key,
+                published_at=details.published_at,
+            )
+        ),
+        scheduled_date=details.scheduled_at,
+        sharing_url=details.url,
+        published_date=details.published_at,
+        title=details.title if chapter is None else chapter.title,
+        description=details.description,
+        duration=(details.duration or 0.0) if chapter is None else chapter.end - chapter.start,
+        author_name=details.author_name,
+        thumbnail_landscape_path=details.image_url,
+        background_image_path=details.image_url,
+        drm_protected=details.drm_protected,
+        access=details.access,
+        part_of=None if chapter is None else details.slug,
+        part_start=None if chapter is None else chapter.start,
+        part_end=None if chapter is None else chapter.end,
+    )
+
+
+def add_listed_episodes(
+    s: Session, *, collection_id: int, found: list[VideoDetails], sources: Mapping[str, str] | None = None,
+) -> int:
+    """Save episodes the collection's Source listed, numbered after the ones the collection has. ``sources`` names the
+    Source of each video another Source found, by its slug, such as a video of a list on another Site. Returns how
+    many were added.
 
     ``s`` is a write transaction's session."""
     if not found:
@@ -208,76 +321,51 @@ def add_listed_episodes(s: Session, *, collection_id: int, found: list[VideoDeta
     collection = s.get(Collection, collection_id)
     if collection is None:
         return 0
-    known = known_episode_slugs(s, collection)
     now = datetime.now(timezone.utc)
     pending_too = any(details.publish_status in PENDING_EPISODE_PUBLISH_STATUSES for details in found) and adds_pending(collection)
-    new: dict[str, VideoDetails] = {}
+    listed: dict[str, VideoDetails] = {}
     for details in found:
         if details.publish_status in PENDING_EPISODE_PUBLISH_STATUSES and not pending_too:
             # A later scan adds it once it is published.
             continue
-        if details.slug not in known:
-            new.setdefault(details.slug, details)
-    ordered = sorted(new.values(), key=lambda details: _order_key(details, now))
+        listed.setdefault(details.slug, details)
+    if not listed:
+        return 0
 
-    # A Source's own season is found by its slug, a season per year by its year.
-    by_slug = {season.slug: season for season in collection.seasons}
-    by_year = {season.season_number: season for season in collection.seasons}
-    identifiers = set(s.scalars(select(Episode.episode_identifier).where(Episode.collection_id == collection.id)))
-    numbers = _SeasonNumbers(s)
+    known = set(s.scalars(select(Episode.video_slug).where(Episode.collection_id == collection.id, Episode.video_slug.in_(listed))))
+    new = [details for slug, details in listed.items() if slug not in known]
+    # A collection made from one list numbers its videos in the list's order, as an album numbers its tracks.
+    ordered = new if made_from_list(collection) else sorted(new, key=lambda details: _order_key(details, now))
+
+    placer = _Placer(s, collection, now)
+    split = splits_chapters(collection)
     next_index = (s.scalar(select(func.max(Episode.index)).where(Episode.collection_id == collection.id)) or 0) + 1
     created: list[tuple[Episode, EpisodePublishStatus]] = []
     for details in ordered:
-        number = _season_number(details, now)
-        ref = details.season
-        season = by_slug.get(ref.slug) if ref is not None else by_year.get(number)
-        if season is not None and season.season_number != number:
-            # A season picked when the collection was added, before VODLoft knew its number.
-            season.season_number = number
-        if season is None:
-            season = create_season_record(
-                s, collection_id=collection.id, index=max((x.index for x in collection.seasons), default=0) + 1,
-                slug=ref.slug if ref else str(number),
-                name=ref.name if ref else str(number),
-                season_number=number, update_collection_profiles=True,
-            )
-            by_slug[season.slug] = by_year[number] = season
-            s.refresh(collection)
-        identifier = _identifier(collection, season, details, identifiers, numbers, now)
-        identifiers.add(identifier)
-        episode = Episode(
-            uuid=generate_uuid(),
-            type=MediaType.EPISODE.value,
-            source_key=collection.source_key,
-            collection_id=collection.id,
-            season_id=season.id,
-            index=next_index,
-            episode_identifier=identifier,
-            slug=_episode_slug(s, collection, details.slug),
-            source_slug=details.slug,
-            publish_status=details.publish_status.value,
-            # The metadata refresh sweep follows a new upload for a while, from when it is published; an older one is done.
-            metadata_is_final=details.publish_status not in PENDING_EPISODE_PUBLISH_STATUSES and new_item_metadata_is_final(
-                source_key=collection.source_key, site_key=collection.site_key, published_at=details.published_at,
-            ),
-            scheduled_date=details.scheduled_at,
-            sharing_url=details.url,
-            published_date=details.published_at,
-            title=details.title,
-            description=details.description,
-            duration=details.duration or 0.0,
-            author_name=details.author_name,
-            thumbnail_landscape_path=details.image_url,
-            background_image_path=details.image_url,
-            drm_protected=details.drm_protected,
-            access=details.access,
-        )
-        s.add(episode)
-        s.flush()
-        created.append((episode, details.publish_status))
-        next_index += 1
+        chapters = details.chapters or ()
+        if split and len(chapters) > 1 and details.publish_status not in PENDING_EPISODE_PUBLISH_STATUSES:
+            season = placer.own_season(details.title)
+            episodes = [
+                _new_episode(
+                    s, collection, season, next_index + offset, placer.part_identifier(season, details, number), details,
+                    part=(number, chapter), source_key=(sources or {}).get(details.slug),
+                )
+                for offset, (number, chapter) in enumerate(enumerate(chapters, start=1))
+            ]
+        else:
+            season = placer.season(details.season, details.published_at)
+            episodes = [_new_episode(
+                s, collection, season, next_index, placer.identifier(season, details), details,
+                source_key=(sources or {}).get(details.slug),
+            )]
+        for episode in episodes:
+            s.add(episode)
+            s.flush()
+            created.append((episode, details.publish_status))
+        next_index += len(episodes)
 
-    _order_seasons(s, collection)
+    s.flush()
+    arrange_seasons(s, collection)
     for episode, status in created:
         queue_episode_status_events(
             s, episode=episode, collection=collection, old_status=None, new_status=status, was_created=True,
@@ -301,45 +389,51 @@ def refresh_listed_collection(s: Session, *, collection_id: int, source: Source)
     collection = s.get(Collection, collection_id)
     if collection is None:
         return RefreshCounts()
-    url = collection.sharing_url
-    items = [
-        ItemRef(slug, item_url or "")
+    title, url = collection.title, collection.sharing_url
+    # A collection that only holds its link seasons has no listing of its own to read its videos from.
+    one_by_one = url is None or not lists_own_link(collection)
+    # The parts of a split video are asked about once, as their video.
+    items = list({
+        slug: ItemRef(slug, item_url or "")
         for slug, item_url in s.execute(
-            select(Episode.source_slug, Episode.sharing_url).where(Episode.collection_id == collection_id, Episode.source_slug.is_not(None))
+            select(Episode.video_slug, Episode.sharing_url)
+            .where(Episode.collection_id == collection_id, Episode.source_slug.is_not(None))
         )
-    ]
-    if not items:
-        return RefreshCounts()
-    title = collection.title
+    }.values())
     # No transaction stays open while the Source looks videos up.
     s.rollback()
-    refresh = source.refresh_items(url, items)
-    counts = run_write_transaction(lambda w: _apply_refresh(w, collection_id, refresh))
+    if not items:
+        return RefreshCounts()
+    refresh = source.refresh_metadata(items) if one_by_one else source.refresh_items(url, items)
+    slugs = frozenset(item.slug for item in items)
+    counts = run_write_transaction(lambda w: _apply_refresh(w, collection_id, refresh, slugs))
     if counts.removed or counts.returned:
         logger.info("'%s': %d episodes no longer at the Source, %d back", title, counts.removed, counts.returned)
     return counts
 
 
-def _apply_refresh(s: Session, collection_id: int, refresh) -> RefreshCounts:
+def _apply_refresh(s: Session, collection_id: int, refresh, slugs: frozenset[str]) -> RefreshCounts:
     updated = removed = returned = opened = 0
-    for episode in s.scalars(select(Episode).where(Episode.collection_id == collection_id)):
-        if episode.source_slug in refresh.removed:
+    for episode in list(s.scalars(select(Episode).where(Episode.collection_id == collection_id, Episode.video_slug.in_(slugs)))):
+        slug = episode.video_slug
+        if slug in refresh.removed:
             if not episode.removed_from_source:
-                episode.removed_from_source = True
                 removed += 1
+            # One with files stays, marked removed; one without goes.
+            left_source(s, episode)
             continue
-        details = refresh.details.get(episode.source_slug)
-        access = refresh.refused.get(episode.source_slug)
-        if episode.source_slug in refresh.open:
+        details = refresh.details.get(slug)
+        access = refresh.refused.get(slug)
+        if slug in refresh.open:
             opened += open_up(s, episode)
         if details is None and access is None:
             continue
-        if episode.removed_from_source:
-            episode.removed_from_source = False
+        if back_at_source(episode):
             returned += 1
         if access is not None and episode.access_refused_at is None:
             lock_refused(episode, access)
-        if details is not None:
+        if details is not None and episode.part_of is None:
+            # A part keeps its chapter's title and length; the whole video's are not its own.
             updated += apply_refreshed_details(episode, details)
             check_upgrades_after_refresh(s, episode)
     if opened:

@@ -34,8 +34,8 @@ from .reader import KEYRING_FILE, WireLoftData, read_wireloft
 
 SOURCE = "dailywire"
 
-# Output template variables that named the show (VODLoft 0.6.0's rename).
-_TEMPLATE_NAMES = {"show": "collection", "show_title": "collection_title"}
+# Output template variables VODLoft renamed: the show ones (0.6.0) and dw_episode_number (0.10.0).
+_TEMPLATE_NAMES = {"show": "collection", "show_title": "collection_title", "dw_episode_number": "source_number"}
 _TEMPLATE_PREFIXES = (("meta_show_", "meta_collection_"),)
 # Stored values VODLoft renamed (VODLoft's stored-names migration).
 _MEMBERSHIP_LEVELS = {"WL_ANY": "HIGHEST_ALLOWED"}
@@ -178,7 +178,9 @@ def _profiles(data: WireLoftData) -> tuple[ProfilePlan, ...]:
         settings: dict[str, object] = {name: row[name] for name in _PROFILE_SETTINGS if row.get(name) is not None}
         settings["type"] = kind
         if kind == "collection" and profile_id in show_profiles:
-            settings["collection_scope"] = show_profiles[profile_id]["show_scope"]
+            scope = show_profiles[profile_id]["show_scope"]
+            # WireLoft calls a profile for podcasts and series "both".
+            settings["collection_scope"] = "podcast-and-series" if scope == "both" else scope
             if show_profiles[profile_id].get("download_show_assets") is not None:
                 settings["download_collection_assets"] = bool(show_profiles[profile_id]["download_show_assets"])
         indexes = tuple(
@@ -193,7 +195,7 @@ def _profiles(data: WireLoftData) -> tuple[ProfilePlan, ...]:
             custom_indexes=indexes,
             settings=settings,
             original_template=str(row["output_template"]),
-            report=("The show variables became collection variables",) if template != row["output_template"] else (),
+            report=("Variables VODLoft renamed now use their new names",) if template != row["output_template"] else (),
         ))
     return tuple(plans)
 
@@ -253,6 +255,7 @@ def _episodes(data: WireLoftData) -> list[RecordPlan]:
         episode_meta = meta.get(episode_id, {})
         own, assignments = _split_episode_metadata(episode_meta)
         values = {name: row[name] for name in _EPISODE_FIELDS}
+        values["source_number"] = values.pop("dw_episode_number")
         values["publish_status"] = _publish_status(values["publish_status"])
         values.update(uuid=item["uuid"], type=item["type"], source_key=SOURCE,
                       source_slug=episode_meta.get(_SOURCE_SLUG_KEY) or row["slug"])

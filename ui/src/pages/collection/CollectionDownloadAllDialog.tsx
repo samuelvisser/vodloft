@@ -1,8 +1,8 @@
 import {useEffect, useId, useMemo, useState} from 'react'
 import {Controller, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
-import Select from 'react-select'
-import toast from 'react-hot-toast'
+import Select from '../../components/common/ReactSelect'
+import toast from '../../lib/toast'
 import {z} from 'zod'
 
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
@@ -10,13 +10,20 @@ import SimpleSelect from '../../components/common/SimpleSelect'
 import {faIcon} from '../../icons/faIcon'
 import {OperationStartError, useStartOperation} from '../../lib/operations'
 import {useCollectionEpisodeTags} from '../../lib/queries'
-import {buildLocalMediaProfileSelectRegistry, isLocalMediaProfileAvailableForSite} from '../../types/local_media_profile'
+import {
+  buildLocalMediaProfileSelectRegistry,
+  type CollectionLocalMediaProfileContext,
+  isCollectionLocalMediaProfileAvailableFor,
+  isLocalMediaProfileAvailableForSite,
+} from '../../types/local_media_profile'
 import type {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import type {SeasonRead} from '../../types/schemas/season'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import NumberInput from '../../components/common/NumberInput'
 import './CollectionDownloadAllDialog.css'
 import {apiUrl} from '../../lib/api'
+import {collectionWords, CollectionWords, downloadsBySeason} from '../../lib/collectionWords'
+import {nameInText} from '../../lib/nameInText'
 
 const LimitByReg = createSelectRegistry('DownloadAllLimitBy', {
   none: {label: 'No limits'},
@@ -39,13 +46,15 @@ type DownloadAllForm = z.infer<typeof downloadAllFormSchema>
 type Props = {
   collectionSlug: string
   collectionTitle: string
-  collectionType: 'podcast' | 'series'
+  collectionType: CollectionLocalMediaProfileContext
   siteKey: string | null | undefined
   seasons: readonly SeasonRead[]
   localMediaProfiles: readonly LocalMediaProfileRead[]
   onDismiss: () => void
   /** The dialog closes as soon as the download starts; the page shows the starting state instead. */
   onStartingChange?: (starting: boolean) => void
+  /** What the collection calls its seasons and the downloads of its episodes, such as albums and tracks. */
+  words?: CollectionWords
 }
 
 export default function CollectionDownloadAllDialog({
@@ -57,15 +66,18 @@ export default function CollectionDownloadAllDialog({
   localMediaProfiles,
   onDismiss,
   onStartingChange,
+  words = collectionWords(collectionType),
 }: Props) {
+  const {season, episode} = words
   const selectId = useId()
   const startOperation = useStartOperation()
+  // Series and Music collections are downloaded by season; a podcast by date or number of episodes.
+  const bySeason = downloadsBySeason(collectionType)
   const [starting, setStarting] = useState(false)
 
   const compatibleProfiles = useMemo(
     () => localMediaProfiles.filter((profile) => (
-      profile.type === 'collection'
-      && (profile.collectionScope === 'both' || profile.collectionScope === collectionType)
+      isCollectionLocalMediaProfileAvailableFor(profile, collectionType)
       && isLocalMediaProfileAvailableForSite(profile, siteKey)
     )),
     [localMediaProfiles, collectionType, siteKey],
@@ -87,11 +99,11 @@ export default function CollectionDownloadAllDialog({
 
   const schema = useMemo(
     () => downloadAllFormSchema.superRefine((data, context) => {
-      if (collectionType === 'series' && data.seasonIds.length === 0) {
+      if (bySeason && data.seasonIds.length === 0) {
         context.addIssue({
           code: 'custom',
           path: ['seasonIds'],
-          message: 'Select at least one season.',
+          message: `Select at least one ${season.singular}.`,
         })
       }
       if (data.episodeTypes.length === 0) {
@@ -101,18 +113,18 @@ export default function CollectionDownloadAllDialog({
           message: 'Select at least one episode type.',
         })
       }
-      if (collectionType === 'podcast' && data.limitBy === 'date' && data.downloadDaysInPast < 1) {
+      if (!bySeason && data.limitBy === 'date' && data.downloadDaysInPast < 1) {
         context.addIssue({
           code: 'custom',
           path: ['downloadDaysInPast'],
           message: 'Enter a positive number of days.',
         })
       }
-      if (collectionType === 'podcast' && data.limitBy === 'episodes' && data.downloadEpisodeCount < 1) {
+      if (!bySeason && data.limitBy === 'episodes' && data.downloadEpisodeCount < 1) {
         context.addIssue({
           code: 'custom',
           path: ['downloadEpisodeCount'],
-          message: 'Enter a positive number of episodes.',
+          message: `Enter a positive number of ${episode.plural}.`,
         })
       }
     }),
@@ -170,19 +182,19 @@ export default function CollectionDownloadAllDialog({
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
           localMediaProfileId: values.localMediaProfileId,
-          seasonIds: collectionType === 'series' ? values.seasonIds : [],
+          seasonIds: bySeason ? values.seasonIds : [],
           episodeTypes: values.episodeTypes,
-          downloadDaysInPast: collectionType === 'podcast' && values.limitBy === 'date' ? values.downloadDaysInPast : 0,
-          downloadEpisodeCount: collectionType === 'podcast' && values.limitBy === 'episodes' ? values.downloadEpisodeCount : 0,
-          downloadStartingFrom: collectionType === 'podcast' && values.limitBy === 'none' ? values.downloadStartingFrom : null,
+          downloadDaysInPast: !bySeason && values.limitBy === 'date' ? values.downloadDaysInPast : 0,
+          downloadEpisodeCount: !bySeason && values.limitBy === 'episodes' ? values.downloadEpisodeCount : 0,
+          downloadStartingFrom: !bySeason && values.limitBy === 'none' ? values.downloadStartingFrom : null,
         }),
       })
       toast.success(result.queued
-        ? `Queued ${result.episodesQueued} episode downloads for ${collectionTitle}`
-        : `No new episodes to download for ${collectionTitle}`)
+        ? `Queued ${result.episodesQueued} ${episode.singular} downloads for ${nameInText(collectionTitle)}`
+        : `No new ${episode.plural} to download for ${nameInText(collectionTitle)}`)
     } catch (error) {
       const detail = error instanceof OperationStartError ? error.message : undefined
-      toast.error(detail || `Could not queue downloads for ${collectionTitle}`)
+      toast.error(detail || `Could not queue downloads for ${nameInText(collectionTitle)}`)
     } finally {
       setStarting(false)
       onStartingChange?.(false)
@@ -204,11 +216,11 @@ export default function CollectionDownloadAllDialog({
         disabled: starting || !compatibleProfiles.length,
       }}
     >
-      <p>Download the selected episodes from "{collectionTitle}". Existing downloaded files will not be replaced.</p>
-      {collectionType === 'series' ? (
+      <p>Download the selected {episode.plural} from "{collectionTitle}". Existing downloaded files will not be replaced.</p>
+      {bySeason ? (
         <div className="form-row">
           <div className="collection-download-all-label-row">
-            <label htmlFor={`${selectId}-season`}>Seasons to download</label>
+            <label htmlFor={`${selectId}-season`}>{season.Plural} to download</label>
             <button
               type="button"
               className="btn btn-link"
@@ -235,7 +247,7 @@ export default function CollectionDownloadAllDialog({
                 onBlur={field.onBlur}
                 closeMenuOnSelect={false}
                 isDisabled={starting || seasons.length === 0}
-                placeholder={seasons.length ? 'Select seasons' : 'No seasons available'}
+                placeholder={seasons.length ? `Select ${season.plural}` : `No ${season.plural} available`}
                 aria-invalid={!!errors.seasonIds}
               />
             )}
@@ -245,7 +257,7 @@ export default function CollectionDownloadAllDialog({
       ) : null}
       <div className="form-row">
         <div className="collection-download-all-label-row">
-            <label htmlFor={`${selectId}-type`}>Episode types to download</label>
+            <label htmlFor={`${selectId}-type`}>{episode.Singular} types to download</label>
             <button
               type="button"
               className="btn btn-link"
@@ -278,7 +290,7 @@ export default function CollectionDownloadAllDialog({
           />
           {errors.episodeTypes && <div className="error" role="alert">{errors.episodeTypes.message}</div>}
       </div>
-      {collectionType === 'podcast' && (
+      {!bySeason && (
         <>
           <div className="form-row">
             <label htmlFor={`${selectId}-limit`}>Limit by</label>
@@ -367,7 +379,7 @@ export default function CollectionDownloadAllDialog({
                       />
                     )}
                   />
-                  <div className="help">Optional. Leave blank to include all eligible episodes.</div>
+                  <div className="help">Optional. Leave blank to include all eligible {episode.plural}.</div>
                 </div>
               )}
         </>

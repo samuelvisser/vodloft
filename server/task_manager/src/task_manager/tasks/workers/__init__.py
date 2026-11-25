@@ -20,7 +20,6 @@ _WORKER_EXPORTS = {
     "reconcile_collection_assets": ".reconcile_collection_assets",
     "check_pending_episodes": ".monitor_pending_episode",
     "fetch_new_episodes": ".fetch_new_episodes",
-    "monitor_no_usable_media_episode": ".monitor_no_usable_media_episode",
     "refresh_episode_metadata": ".refresh_metadata",
     "refresh_metadata": ".refresh_metadata",
     "scan_existing_files": ".scan_existing_files",
@@ -28,6 +27,8 @@ _WORKER_EXPORTS = {
     "import_adopt_files": ".import_run",
     "manage_custom_indexes": ".manage_custom_indexes",
     "rename_collection_profile_files": ".rename_collection_profile_files",
+    "rewrite_collection_profile_metadata": ".rewrite_collection_profile_metadata",
+    "change_collection_identification": ".change_collection_identification",
     "rename_movie_profile_files": ".rename_movie_profile_files",
     "move_collection_profile_episodes": ".move_collection_profile_episodes",
 }

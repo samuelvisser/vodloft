@@ -60,8 +60,15 @@ They are deployment options, not keys inside `config.yml`.
 | --- | --- | --- | --- |
 | `databasePath` | `VL_DATABASE_PATH` | `<project>/config/vodloft.db` | Location of the SQLite database. The Docker image sets this to `/config/vodloft.db`. |
 | `logLevel` | `VL_LOG_LEVEL` | `INFO` | Logging detail: `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL`. |
+| `logFile.enabled` | `VL_LOG_FILE__ENABLED` | `false` | Also write the log to a file. See below. |
+| `logFile.maxMegabytes` | `VL_LOG_FILE__MAX_MEGABYTES` | `10` | Size at which the log file starts over in a new file. |
+| `logFile.keptFiles` | `VL_LOG_FILE__KEPT_FILES` | `5` | How many earlier log files are kept; the oldest is removed first. |
 | `timezone` | `TZ` | `UTC` | Timezone used for schedules and displayed time-sensitive behavior. Use an [IANA](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List) value such as `Europe/Amsterdam`. |
 | `loginSession.ttlSeconds` | `VL_LOGIN_SESSION__TTL_SECONDS` | `2592000` (30 days) | How long a signed-in browser remains authenticated. |
+
+### Log file
+
+The **Logs** page shows what VODLoft logged since it last started. To keep the log across restarts and updates, turn on **Write the log to a file** under **Settings › General**. VODLoft then writes everything it logs, at the log level you chose, to `vodloft.log` in a `logs` folder next to `config.yml`. In Docker that is `logs/vodloft.log` in the folder you mapped to `/config`. When the file reaches its size limit, VODLoft renames it to `vodloft.log.1` (moving older files up a number) and starts a new one.
 
 ### Administrator password
 
@@ -93,6 +100,7 @@ These settings are available under **Settings → Downloads**.
 | `downloadSettings.maxConcurrentDownloads` | `VL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS` | `5` | Maximum primary-media transfers running at once. Their slots are released while post-processing continues. |
 | `downloadSettings.maxDownloadAttempts` | `VL_DOWNLOAD_SETTINGS__MAX_DOWNLOAD_ATTEMPTS` | `3` | Automatic attempts before a download is left failed. |
 | `downloadSettings.episodeDownloadDelayMinutes` | `VL_DOWNLOAD_SETTINGS__EPISODE_DOWNLOAD_DELAY_MINUTES` | `10` | Delay after publication before automatically downloading an episode. Manual downloads can be scheduled until the delay expires or started immediately. |
+| `downloadSettings.dailyDownloadLimit` | `VL_DOWNLOAD_SETTINGS__DAILY_DOWNLOAD_LIMIT` | `0` | Automatic downloads one Site may start in 24 hours; `0` for no limit. Downloads you start yourself don't count. Each Site can have its own under [Per-Site scheduling](#per-site-scheduling). |
 | `downloadSettings.ensureSafeDelay` | `VL_DOWNLOAD_SETTINGS__ENSURE_SAFE_DELAY` | `false` | When enabled, post-publication delay is always calculated from a point in time VODLoft itself recorded the episode as published final. With this disabled, VODLoft makes a best- effort guess for publication time as The Daily Wire API does not accurately report it for every collection. |
 | `downloadSettings.downloadTimeoutSeconds` | `VL_DOWNLOAD_SETTINGS__DOWNLOAD_TIMEOUT_SECONDS` | `600` | Timeout for one download attempt. |
 | `downloadSettings.filenameRestrictionMode` | `VL_DOWNLOAD_SETTINGS__FILENAME_RESTRICTION_MODE` | `windows` | Filename compatibility: `unrestricted`, `windows`, or `restricted`. |
@@ -128,7 +136,7 @@ Below the system defaults, each Site has a row of its own, the same way as [Per-
 3 minutes as a different length. A Site can also have a **Download delay** of its own: the
 **Episode download delay** for its episodes only, or 0 for none. Some settings only
 exist on the Sites they are made for, so they have no Default: downloading with the countdown on The Daily Wire, and
-SponsorBlock and its segments on YouTube. The Daily Wire makes no subtitles, so it has no auto-generated subtitles.
+SponsorBlock and its segments on YouTube, and keeping chapters on the sites VODLoft downloads with yt-dlp. The Daily Wire makes no subtitles, so it has no auto-generated subtitles.
 
 ### Speed
 
@@ -199,11 +207,9 @@ These settings are available under **Settings → Automation**.
 | `newEpisodeSchedule.findEpisodesCronEnabled` | `VL_NEW_EPISODE_SCHEDULE__FIND_EPISODES_CRON_ENABLED` | `true` | Enables the recurring new-episode discovery schedule. |
 | `newEpisodeSchedule.findEpisodesCron` | `VL_NEW_EPISODE_SCHEDULE__FIND_EPISODES_CRON` | `*/30 * * * *` | Checks managed collections for new episodes every 30 minutes. YouTube channels and other yt-dlp collections get quick checks instead. |
 | `newEpisodeSchedule.quickCheckCronEnabled` | `VL_NEW_EPISODE_SCHEDULE__QUICK_CHECK_CRON_ENABLED` | `true` | Enables quick checks for new videos in yt-dlp collections. |
-| `newEpisodeSchedule.quickCheckCron` | `VL_NEW_EPISODE_SCHEDULE__QUICK_CHECK_CRON` | `*/5 * * * *` | Wakes the quick check. Each collection is checked as often as the YouTube API quota allows, and never more often than `youtubeApi.minCheckIntervalMinutes`. |
+| `newEpisodeSchedule.quickCheckCron` | `VL_NEW_EPISODE_SCHEDULE__QUICK_CHECK_CRON` | `*/5 * * * *` | Wakes the quick check. Each collection is checked as often as the YouTube API quota allows, and never more often than every 10 minutes. |
 | `newEpisodeSchedule.fullRescanCronEnabled` | `VL_NEW_EPISODE_SCHEDULE__FULL_RESCAN_CRON_ENABLED` | `true` | Enables the full re-scan of collections with quick checks. |
 | `newEpisodeSchedule.fullRescanCron` | `VL_NEW_EPISODE_SCHEDULE__FULL_RESCAN_CRON` | `0 4 * * *` | Lists collections with quick checks in full once a day, to catch anything a quick check missed, and refreshes their episodes (see [[Collections-and-Library#renamed-and-removed-videos]]). |
-| `newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled` | `VL_NEW_EPISODE_SCHEDULE__MONITOR_NO_USABLE_MEDIA_EPISODE_CRON_ENABLED` | `true` | Enables recurring checks for episodes without usable media. |
-| `newEpisodeSchedule.monitorNoUsableMediaEpisodeCron` | `VL_NEW_EPISODE_SCHEDULE__MONITOR_NO_USABLE_MEDIA_EPISODE_CRON` | `*/20 * * * *` | Rechecks episodes that temporarily have no usable Daily Wire media. |
 | `newEpisodeSchedule.metadataRefreshIntervals` | `VL_NEW_EPISODE_SCHEDULE__METADATA_REFRESH_INTERVALS` | `1h,6h,24h,3d` | The system schedule: follow-up metadata refreshes after publication, for every Site without a schedule of its own. |
 | `newEpisodeSchedule.upcomingAndLive` | `VL_NEW_EPISODE_SCHEDULE__UPCOMING_AND_LIVE` | `true` | Adds streams and premieres as soon as they are announced, and follows them until they are published. |
 | `newEpisodeSchedule.pendingUpcomingMinutes` | `VL_NEW_EPISODE_SCHEDULE__PENDING_UPCOMING_MINUTES` | `60` | How often an upcoming episode is looked up, until 15 minutes before it starts. |
@@ -240,6 +246,7 @@ siteSettings:
       live: 5
     upgradeAfterDays: default     # use the system default instead of The Daily Wire's 3 days
     downloadDelayMinutes: 30      # wait 30 minutes after publishing; 0 waits not at all
+    dailyDownloadLimit: 50        # start at most 50 automatic downloads a day; 0 for no limit
 ```
 
 ### Episode lifecycle safeguards
@@ -247,8 +254,7 @@ siteSettings:
 | Setting | Environment variable | Default | What it does |
 | --- | --- | --- | --- |
 | `episodeStatusTiming.publishedFinalAfterMinutes` | `VL_EPISODE_STATUS_TIMING__PUBLISHED_FINAL_AFTER_MINUTES` | `180` | Safety threshold for an episode that remains stuck on a countdown-style published version. |
-| `episodeStatusTiming.dwProcessingMaxMinutes` | `VL_EPISODE_STATUS_TIMING__DW_PROCESSING_MAX_MINUTES` | `60` | Maximum time an episode may remain in Daily Wire processing before VODLoft treats its media as unavailable. |
-| `episodeStatusTiming.noUsableMediaDeleteAfterMinutes` | `VL_EPISODE_STATUS_TIMING__NO_USABLE_MEDIA_DELETE_AFTER_MINUTES` | `240` | Waiting period before a persistently unavailable episode may be cleaned up. |
+| `episodeStatusTiming.dwProcessingMaxMinutes` | `VL_EPISODE_STATUS_TIMING__DW_PROCESSING_MAX_MINUTES` | `60` | Maximum time an episode may remain in Daily Wire processing before VODLoft treats it as an episode The Daily Wire no longer has. |
 
 These are safeguards for unusual Daily Wire publication states. Most users should leave them at their defaults. See [[Automation-and-Background-Tasks]].
 
@@ -318,6 +324,8 @@ To get a key, which takes about three minutes:
 
 **Test key** checks a saved key again, and explains what to fix in Google Cloud when Google refuses it. A key that stops working, or a quota that runs out, also shows under **Needs attention** on Home. The key is stored next to the cookies file and is never shown again or written to the log.
 
+While your Library has YouTube collections or creators and there is no key, Home shows a note that asks for one. **Remind me later** hides it for a week, and **Don't show again** hides it for good.
+
 Google gives each project 10,000 units a day, reset at midnight Pacific time. Most calls cost 1 unit; a search costs about 100. VODLoft counts the units it spends and splits the day like this:
 
 | Setting | Environment variable | Default | What it is for |
@@ -325,9 +333,14 @@ Google gives each project 10,000 units a day, reset at midnight Pacific time. Mo
 | `youtubeApi.dailyQuota` | `VL_YOUTUBE_API__DAILY_QUOTA` | `10000` | What Google gives the project. Only raise it if Google gave you more. |
 | `youtubeApi.checksQuota` | `VL_YOUTUBE_API__CHECKS_QUOTA` | `7000` | Checks for new videos and full re-scans of your YouTube collections. |
 | `youtubeApi.searchQuota` | `VL_YOUTUBE_API__SEARCH_QUOTA` | `2000` | YouTube searches on the Add media page, about 19 a day. When it is used up, or set to `0`, searches use yt-dlp. |
-| `youtubeApi.minCheckIntervalMinutes` | `VL_YOUTUBE_API__MIN_CHECK_INTERVAL_MINUTES` | `10` | The shortest time between two checks of the same collection. |
+| `youtubeApi.usageLogEnabled` | `VL_YOUTUBE_API__USAGE_LOG_ENABLED` | `false` | Keep a usage log file. See below. |
+| `youtubeApi.usageLogMaxLines` | `VL_YOUTUBE_API__USAGE_LOG_MAX_LINES` | `100000` | How many lines the usage log keeps; the oldest are removed first. |
 
 What the checks and search shares leave of the daily total is kept free for adding collections, testing the key and manual refreshes. Adding a collection uses the units kept free first and then the checks share; listing a channel costs about 2 units per 50 videos. The split is under **How to spend the YouTube API quota** on the yt-dlp card, and shows what each share means in practice, such as how often each collection gets checked.
+
+How often that is, VODLoft works out each day when the quota resets. It counts what a day of checks would cost: one unit per check for a collection that follows all of its channel's feeds, one unit per feed for a collection that follows only some of them, and a check at most every six hours for a collection set to be checked less often. It then checks every collection every 10 minutes when the checks share has room for that after the daily re-scan, and less often when it does not, so the checks share lasts the whole day.
+
+To see what VODLoft really spends, look in the log under **Logs**: once a new Pacific day starts, VODLoft logs a summary of what each share used the day before, split by kind of call, and how many calls a full share refused. With debug logging on (`logLevel: DEBUG`), the log also shows every YouTube API call with the share it came from. The log under **Logs** starts empty each time VODLoft restarts. To keep a record over days or weeks, turn on **Keep a usage log**: VODLoft then writes the same lines to `youtube-api-usage.log` in the `yt-dlp` folder next to `config.yml`, whatever the log level.
 
 ### Sites more than one Source handles
 

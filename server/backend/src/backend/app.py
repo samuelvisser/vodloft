@@ -178,9 +178,11 @@ async def _network_aware_http_exception_handler(
 
 
 def create_app() -> FastAPI:
+    from backend.log_file import configure_log_file
     from backend.logging_buffer import install_application_log_handler
     settings = get_settings()
     install_application_log_handler(settings.log_level)
+    configure_log_file(settings)
 
     app = FastAPI(
         title="VODLoft API",
@@ -300,6 +302,7 @@ def create_app() -> FastAPI:
         download_profile_router,
         media_download_router,
         collection_router,
+        creator_router,
         movie_router,
         video_router,
         library_router,
@@ -313,7 +316,6 @@ def create_app() -> FastAPI:
         setting_router,
         local_media_profile_router,
         collection_local_media_profile_router,
-        movie_local_media_profile_router,
         video_local_media_profile_router,
         meta_router,
         config_router,
@@ -354,6 +356,7 @@ def create_app() -> FastAPI:
     app.include_router(season_router, prefix="/api")
     app.include_router(media_download_router, prefix="/api")
     app.include_router(collection_router, prefix="/api")
+    app.include_router(creator_router, prefix="/api")
     app.include_router(movie_router, prefix="/api")
     app.include_router(video_router, prefix="/api")
     app.include_router(library_router, prefix="/api")
@@ -367,7 +370,6 @@ def create_app() -> FastAPI:
     app.include_router(regex_router, prefix="/api")
     app.include_router(local_media_profile_router, prefix="/api")
     app.include_router(collection_local_media_profile_router, prefix="/api")
-    app.include_router(movie_local_media_profile_router, prefix="/api")
     app.include_router(video_local_media_profile_router, prefix="/api")
     app.include_router(custom_metadata_router, prefix="/api")
     app.include_router(meta_router, prefix="/api")

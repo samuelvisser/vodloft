@@ -5,6 +5,7 @@ import {DownloadExecutionSchema, type DownloadExecution, type DownloadStage} fro
 import {formatBytes} from '../utils/formatting'
 import {waitingPresentation, workingPresentation} from './progressPresentation'
 import {faIcon} from '../icons/faIcon'
+import {planSteps} from './progressPlan'
 
 export const ACTIVE_OPERATION_STATUSES = new Set(['QUEUED', 'RUNNING', 'WAITING'])
 
@@ -77,39 +78,47 @@ export function presentDownloadProgress(download?: MediaDownloadDomainViewRead, 
     if (starting) return {status: 'preparing', ...workingPresentation('Starting', 'Starting the requested download.')}
     if (operation && ACTIVE_OPERATION_STATUSES.has(operation.status)) {
         const execution = downloadExecution(operation)
-        if (operation.progressMeta?.canceling === true || operation.context?.cancel_requested === true || execution?.canceling) {
-            return {status: 'canceling', ...workingPresentation('Canceling', 'Stopping the download and its owned auxiliary work before cleaning up.'), canCancel: false, canRetry: false}
-        }
-        if (operation.status === 'QUEUED') return {status: 'pending', ...waitingPresentation('download_capacity'), canRetry: false}
-        const main = execution?.stages.find(stage => stage.id === execution.main_activity)
-        const media = execution?.stages.find(stage => stage.id === 'media')
-        const transferPercent = execution?.phase === 'transferring' && main?.id === 'media' && media?.fraction != null
-            ? Math.max(0, Math.min(100, Math.floor(media.fraction * 100))) : null
-        const wait = (main?.wait || operation.progressMeta?.wait_state) as DownloadWaitState | undefined
-        if (wait?.reason) return {
-            status: 'waiting',
-            ...waitingPresentation(wait.reason, wait.message, transferPercent, wait.until),
-        }
-        if (operation.status === 'WAITING') return {status: 'waiting', ...waitingPresentation('dependency', operation.message, transferPercent)}
-        const secondary = execution?.stages.filter(stage => stage.id !== main?.id && ['running', 'waiting'].includes(stage.state))
-            .map(stage => stage.wait ? `${activityLabel(stage)}: waiting` : activityLabel(stage)).join(' / ')
-        if (execution?.phase === 'transferring' && main?.id === 'media') {
-            const basis = media?.segments_total
-                ? `${media.segments_done || 0}/${media.segments_total} media segments`
-                : media?.total_bytes
-                    ? `${formatBytes(media.bytes_received)} / ${formatBytes(media.total_bytes)} downloaded`
-                    : `${formatBytes(media?.bytes_received ?? 0)} downloaded; total size unknown`
-            if (transferPercent !== null) return {status: 'downloading', mode: 'determinate', active: true, percent: transferPercent,
-                label: `${transferPercent}%`, detail: `Primary media transfer: ${basis}.`, icon: faIcon('fass', 'download'), secondary,
-                canCancel: true, canRetry: true}
-            return {status: 'downloading', ...workingPresentation('Downloading', basis), secondary}
-        }
-        const compact = main?.code.startsWith('embed') ? 'Embedding' : main?.code.startsWith('publish') ? 'Publishing'
-            : execution?.phase === 'preparing' ? 'Preparing' : main ? activityLabel(main) : 'Preparing'
-        const label = main?.id === 'media' && execution?.primary_transfer_complete ? 'Finishing' : main ? activityLabel(main) : 'Preparing'
-        return {status: execution?.primary_transfer_complete ? 'local_processing' : 'preparing',
-            ...workingPresentation(label, `${label}.`, compact), secondary}
+        return {...presentActiveDownload(operation, execution), steps: execution && planSteps(execution.stages, activityLabel)}
     }
+    return presentSettledDownload(download, operation)
+}
+
+function presentActiveDownload(operation: TaskOperationRead, execution?: DownloadExecution): DownloadPresentation {
+    if (operation.progressMeta?.canceling === true || operation.context?.cancel_requested === true || execution?.canceling) {
+        return {status: 'canceling', ...workingPresentation('Canceling', 'Stopping the download and its owned auxiliary work before cleaning up.'), canCancel: false, canRetry: false}
+    }
+    if (operation.status === 'QUEUED') return {status: 'pending', ...waitingPresentation('download_capacity'), canRetry: false}
+    const main = execution?.stages.find(stage => stage.id === execution.main_activity)
+    const media = execution?.stages.find(stage => stage.id === 'media')
+    const transferPercent = execution?.phase === 'transferring' && main?.id === 'media' && media?.fraction != null
+        ? Math.max(0, Math.min(100, Math.floor(media.fraction * 100))) : null
+    const wait = (main?.wait || operation.progressMeta?.wait_state) as DownloadWaitState | undefined
+    if (wait?.reason) return {
+        status: 'waiting',
+        ...waitingPresentation(wait.reason, wait.message, transferPercent, wait.until),
+    }
+    if (operation.status === 'WAITING') return {status: 'waiting', ...waitingPresentation('dependency', operation.message, transferPercent)}
+    const secondary = execution?.stages.filter(stage => stage.id !== main?.id && ['running', 'waiting'].includes(stage.state))
+        .map(stage => stage.wait ? `${activityLabel(stage)}: waiting` : activityLabel(stage)).join(' / ')
+    if (execution?.phase === 'transferring' && main?.id === 'media') {
+        const basis = media?.segments_total
+            ? `${media.segments_done || 0}/${media.segments_total} media segments`
+            : media?.total_bytes
+                ? `${formatBytes(media.bytes_received)} / ${formatBytes(media.total_bytes)} downloaded`
+                : `${formatBytes(media?.bytes_received ?? 0)} downloaded; total size unknown`
+        if (transferPercent !== null) return {status: 'downloading', mode: 'determinate', active: true, percent: transferPercent,
+            label: `${transferPercent}%`, detail: `Primary media transfer: ${basis}.`, icon: faIcon('fass', 'download'), secondary,
+            canCancel: true, canRetry: true}
+        return {status: 'downloading', ...workingPresentation('Downloading', basis), secondary}
+    }
+    const compact = main?.code.startsWith('embed') ? 'Embedding' : main?.code.startsWith('publish') ? 'Publishing'
+        : execution?.phase === 'preparing' ? 'Preparing' : main ? activityLabel(main) : 'Preparing'
+    const label = main?.id === 'media' && execution?.primary_transfer_complete ? 'Finishing' : main ? activityLabel(main) : 'Preparing'
+    return {status: execution?.primary_transfer_complete ? 'local_processing' : 'preparing',
+        ...workingPresentation(label, `${label}.`, compact), secondary}
+}
+
+function presentSettledDownload(download?: MediaDownloadDomainViewRead, operation?: TaskOperationRead): DownloadPresentation {
     if (operation?.status === 'SUCCEEDED') return terminal(operation.context?.is_redownload ? 'redownloaded' : 'downloaded', 'Downloaded', 'All required outputs were published successfully.', 'success')
     if (download?.accessLocked && download.artifactStatus !== 'available' && !operation?.status?.match(/SUCCEEDED|CANCELED/)) return lockedPresentation(download)
     if (operation?.status === 'FAILED' || operation?.status === 'PARTIAL') return terminal('error', 'Failed', operation.error || operation.message || 'Download failed.', 'error')

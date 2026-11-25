@@ -94,7 +94,7 @@ def _make_profile(session, *, template: str):
         name="Indexed video",
         output_template=template,
         preferred_format="format_1080p",
-        collection_scope="both",
+        collection_scope="podcast-and-series",
     )
     session.add(profile)
     session.flush()
@@ -374,7 +374,7 @@ def test_profile_save_queues_index_work_before_optional_rename(db_session):
     body = CollectionLocalMediaProfileAPIUpdate(
         name=profile.name, preferred_format=profile.preferred_format,
         output_template="/downloads/{{ 'extras' | custom_index }}-{{ episode }}.ext",
-        collection_scope="both", indexing_values=[{"key": "extras", "name": "Extras"}],
+        collection_scope="podcast-and-series", indexing_values=[{"key": "extras", "name": "Extras"}],
     )
     update_collection_local_media_profile(db_session, profile.slug, body, rename_files=True)
 
@@ -855,7 +855,7 @@ def test_profile_save_skips_index_management_when_assignment_reachability_is_unc
         name=profile.name,
         preferred_format=profile.preferred_format,
         output_template=saved.replace("/downloads/", "/downloads/renamed/"),
-        collection_scope="both",
+        collection_scope="podcast-and-series",
         indexing_values=[{"key": "extras", "name": "Extras"}],
     )
     update_collection_local_media_profile(
@@ -896,7 +896,7 @@ def test_profile_save_ignores_unrelated_unsupported_jinja_for_index_management(d
         name=profile.name,
         preferred_format=profile.preferred_format,
         output_template=changed,
-        collection_scope="both",
+        collection_scope="podcast-and-series",
         indexing_values=[{"key": "extra", "name": "Extras"}],
     )
     update_collection_local_media_profile(
@@ -938,7 +938,7 @@ def test_profile_save_queues_index_management_when_assignment_reachability_chang
         name=profile.name,
         preferred_format=profile.preferred_format,
         output_template=changed,
-        collection_scope="both",
+        collection_scope="podcast-and-series",
         indexing_values=[{"key": "extras", "name": "Extras"}],
     )
     update_collection_local_media_profile(
@@ -972,7 +972,7 @@ def test_profile_save_conservatively_queues_index_management_when_analysis_is_un
         name=profile.name,
         preferred_format=profile.preferred_format,
         output_template=saved.replace("/downloads/", "/downloads/renamed/"),
-        collection_scope="both",
+        collection_scope="podcast-and-series",
         indexing_values=[{"key": "extras", "name": "Extras"}],
     )
     update_collection_local_media_profile(db_session, profile.slug, body)
@@ -1052,7 +1052,7 @@ def test_profile_save_unused_definition_change_does_not_queue_index_management(d
         name=profile.name,
         preferred_format=profile.preferred_format,
         output_template=template,
-        collection_scope="both",
+        collection_scope="podcast-and-series",
         indexing_values=[{"key": "extras", "name": "Extras"}],
     )
     update_collection_local_media_profile(db_session, profile.slug, body)
@@ -1213,3 +1213,132 @@ def test_keep_numbers_round_trips_through_the_api(db_session):
     db_session.flush()
     read = CollectionLocalMediaProfileAPIRead.model_validate(profile)
     assert [(item.key, item.keep_numbers) for item in read.indexing_values] == [("clips", True)]
+
+
+def test_album_variables_alias_the_season_variables(db_session):
+    from backend.utils.output_template import episode_output_template_values
+
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
+    episode = _make_episode(db_session, collection, season, index=1, slug="first", identifier="ep.1")
+
+    values = episode_output_template_values(episode)
+
+    assert values["album_slug"] == values["season"] == "season-1"
+    assert values["album_number"] == values["season_number"]
+
+
+def _count_statements(session):
+    from sqlalchemy import event
+
+    statements: list[str] = []
+    engine = session.get_bind()
+    listener = lambda _conn, _cursor, statement, *_args: statements.append(statement)  # noqa: E731
+    event.listen(engine, "before_cursor_execute", listener)
+    return statements, lambda: event.remove(engine, "before_cursor_execute", listener)
+
+
+def test_album_places_number_every_track_of_the_seasons_in_one_query(db_session):
+    from backend.db.models import Season
+    from backend.utils.music import AlbumPlace, album_places, music_track
+
+    collection = _make_collection(db_session)
+    first = _make_season(db_session, collection)
+    second = Season(collection=collection, index=2, slug="second", name="Second")
+    db_session.add(second)
+    db_session.flush()
+    a = _make_episode(db_session, collection, first, index=300, slug="a", identifier="aux.1")
+    b = _make_episode(db_session, collection, first, index=100, slug="b", identifier="aux.2")
+    c = _make_episode(db_session, collection, second, index=200, slug="c", identifier="aux.3")
+    d = _make_episode(db_session, collection, first, index=150, slug="d", identifier="ep.S1E7")
+
+    statements, stop = _count_statements(db_session)
+    places = album_places(db_session, {first.id, second.id})
+    stop()
+    assert len(statements) == 1
+    assert places == {
+        b.id: AlbumPlace(1, 3), d.id: AlbumPlace(2, 3), a.id: AlbumPlace(3, 3), c.id: AlbumPlace(1, 1),
+    }
+    # A track numbered by its identifier keeps that number; the others take their place on the album.
+    for episode, number in ((a, 3), (b, 1), (c, 1), (d, 7)):
+        assert music_track(episode, places) == music_track(episode)
+        assert (music_track(episode, places).track_number, music_track(episode).track_count) == (
+            number, 3 if episode is not c else 1,
+        )
+
+
+def test_a_reconciliation_takes_as_many_queries_for_a_long_album_as_for_a_short_one(db_session):
+    from backend.services.custom_indexes import plan_custom_index_reconciliation
+
+    profile = _make_profile(
+        db_session, template="/downloads/{{ album }}/{{ track_number_padded }}-{{ 'n' | custom_index }}.ext",
+    )
+    _define(profile, ("n", "N"))
+
+    def queries(tracks: int) -> int:
+        collection = _make_collection(db_session, slug=f"album-{tracks}")
+        season = _make_season(db_session, collection)
+        for index in range(1, tracks + 1):
+            _make_episode(db_session, collection, season, index=index, slug=f"t{tracks}-{index}", identifier=f"aux.{index}")
+        _request(db_session, collection, profile)
+        db_session.flush()
+        db_session.expire_all()
+        statements, stop = _count_statements(db_session)
+        plan = plan_custom_index_reconciliation(
+            db_session, collection_id=collection.id, local_media_profile_id=profile.id,
+        )
+        stop()
+        assert len(plan.changes) == tracks
+        return len(statements)
+
+    assert queries(3) == queries(40)
+
+
+def test_the_task_works_the_numbers_out_again_when_the_episodes_changed_meanwhile(db_session, monkeypatch):
+    from backend.db.core import get_session, run_write_transaction
+    from backend.db.models import CustomIndexState
+    from backend.services.custom_indexes import request_custom_index_reconciliation
+    from backend.utils.custom_index import get_episode_index_assignments
+    from task_manager.tasks.workers.manage_custom_indexes import service
+
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
+    profile = _make_profile(db_session, template="/downloads/{{ 'n' | custom_index }}-{{ episode }}.ext")
+    _define(profile, ("n", "N"))
+    _make_episode(db_session, collection, season, index=100, slug="first", identifier="ep.1")
+    _request(db_session, collection, profile)
+    db_session.commit()
+    collection_id, profile_id = collection.id, profile.id
+
+    real_plan = service.plan_custom_index_reconciliation
+    plans = []
+
+    def plan_then_add_an_episode(session, **kwargs):
+        plan = real_plan(session, **kwargs)
+        plans.append(plan)
+        if len(plans) == 1:
+            # An episode arrives while the numbers are worked out, and asks for a new generation.
+            def add(w):
+                from backend.db.models import Collection, Season
+                _make_episode(w, w.get(Collection, collection_id), w.scalar(select(Season)), index=50,
+                              slug="earlier", identifier="ep.0")
+                request_custom_index_reconciliation(
+                    w, collection_id=collection_id, local_media_profile_id=profile_id, dispatch=False,
+                )
+            run_write_transaction(add)
+        return plan
+
+    monkeypatch.setattr(service, "plan_custom_index_reconciliation", plan_then_add_an_episode)
+    result = service.run_manage_custom_indexes(
+        get_session(), collection_id=collection_id, local_media_profile_id=profile_id,
+    )
+
+    assert len(plans) == 2 and plans[1].generation == plans[0].generation + 1
+    assert result.data["episodes_considered"] == 2
+    db_session.expire_all()
+    state = db_session.scalar(select(CustomIndexState).where(CustomIndexState.collection_id == collection_id))
+    assert state.completed_generation == state.requested_generation
+    numbers = {
+        episode.slug: get_episode_index_assignments(episode, profile_id) for episode in collection.episodes
+    }
+    assert numbers == {"earlier": {"n": 1}, "first": {"n": 2}}

@@ -671,6 +671,7 @@ def seed_db() -> None:
     from backend.db.fake_data import episodes_for, collections as seed_collections
     from backend.db.models import Episode, Season, Collection
     from backend.services.sites import place_collection
+    from backend.types.season_types import SeasonOrigin
 
     def work(session):
         for collection_index, collection_data in enumerate(seed_collections, start=1):
@@ -678,7 +679,10 @@ def seed_db() -> None:
                 continue
             collection = Collection(**collection_data)
             place_collection(session, collection)
-            season = Season(collection=collection, index=1, slug=f"{collection.slug}-episodes", name="Episodes", season_number=1)
+            season = Season(
+                collection=collection, index=1, slug=f"{collection.slug}-episodes", name="Episodes", season_number=1,
+                origin=SeasonOrigin.SITE.value,
+            )
             session.add_all([collection, season])
             session.flush()
             session.add_all(

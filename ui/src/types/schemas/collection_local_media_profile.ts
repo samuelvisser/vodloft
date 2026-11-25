@@ -1,7 +1,7 @@
 import {z} from 'zod'
 import {IndexingValueEntrySchema} from './custom_metadata'
 
-import {PreferredFormatReg, CollectionLocalMediaProfileScopeReg} from '../local_media_profile'
+import {PreferredFormatReg, CollectionLocalMediaProfileScopeReg, EpisodeNfoReg} from '../local_media_profile'
 import {
     LocalMediaProfileCreateBaseSchema,
     LocalMediaProfileOutputTemplateSchema,
@@ -34,16 +34,24 @@ export const CollectionLocalMediaProfileIndexingValuesSchema = z.array(IndexingV
     })
 
 
+/** The templates that give each episode the title and description the site gives it. */
+export const SITE_TITLE_TEMPLATE = '{{ title }}'
+export const SITE_DESCRIPTION_TEMPLATE = '{{ description }}'
+/** Where a new Collection profile puts its episodes. */
+export const DEFAULT_COLLECTION_OUTPUT_TEMPLATE = '/downloads/shows/{{ collection }}/{{ episode_title }}.ext'
+
 // ---------- Strict request (create/update) ----------
 const CollectionLocalMediaProfileBaseSchema = LocalMediaProfileSchemaRequest.extend({
     type: z.literal('collection').default('collection'),
-    collectionScope: z.enum(CollectionLocalMediaProfileScopeReg.values).default('both'),
-    outputTemplate: LocalMediaProfileOutputTemplateSchema.default(
-        '/downloads/shows/{{ collection }}/{{ episode_title }}.ext',
-    ),
+    collectionScope: z.enum(CollectionLocalMediaProfileScopeReg.values).default('podcast-and-series'),
+    outputTemplate: LocalMediaProfileOutputTemplateSchema.default(DEFAULT_COLLECTION_OUTPUT_TEMPLATE),
     preferredFormat: z.enum(PreferredFormatReg.values).default('format_audio_only'),
     downloadCollectionAssets: z.boolean().nullable().default(null),
     showNfo: z.boolean().default(false),
+    episodeNfo: z.enum(EpisodeNfoReg.values).default('episode'),
+    /** Jinja templates for each episode's title and description in its metadata; empty keeps the site's. */
+    episodeTitleTemplate: z.string().max(1000).nullable().default(SITE_TITLE_TEMPLATE),
+    episodeDescriptionTemplate: z.string().max(4000).nullable().default(SITE_DESCRIPTION_TEMPLATE),
     indexingValues: CollectionLocalMediaProfileIndexingValuesSchema.default([]),
 })
 
@@ -68,9 +76,13 @@ export const CollectionLocalMediaProfileReadSchema = LocalMediaProfileSchemaResp
     collectionScope: z.enum(CollectionLocalMediaProfileScopeReg.values)
         .nullable()
         .optional()
-        .transform((value) => value ?? 'both'),
+        .transform((value) => value ?? 'podcast-and-series'),
     downloadCollectionAssets: z.boolean().nullable().default(null),
     showNfo: z.boolean().default(false),
+    episodeNfo: z.enum(EpisodeNfoReg.values).default('episode'),
+    // A profile without its own keeps the site's, which these templates show.
+    episodeTitleTemplate: z.string().nullable().default(null).transform((value) => value ?? SITE_TITLE_TEMPLATE),
+    episodeDescriptionTemplate: z.string().nullable().default(null).transform((value) => value ?? SITE_DESCRIPTION_TEMPLATE),
     indexingValues: z.array(IndexingValueEntrySchema).default([]),
 })
 export type CollectionLocalMediaProfileRead = z.infer<typeof CollectionLocalMediaProfileReadSchema>

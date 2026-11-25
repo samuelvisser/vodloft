@@ -6,12 +6,14 @@ facts (a response's actual size, a collision-resolved name) do not change policy
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from math import isfinite
 from typing import Literal
 from uuid import uuid4
+
+import progress_plan
 
 from .errors import DownloadError
 from .models import SubtitleRendition
@@ -61,6 +63,22 @@ class YtdlpSponsorBlock:
 
 
 @dataclass(frozen=True)
+class YtdlpChapters:
+    """What yt-dlp does with the chapters a video comes with."""
+    keep: bool = False
+    """Write them into the file."""
+    cut: tuple[str, ...] = ()
+    """Regular expressions: a chapter whose title matches one is cut out of the file."""
+
+    def __post_init__(self) -> None:
+        for pattern in self.cut:
+            try:
+                re.compile(pattern)
+            except re.error as error:
+                raise DownloadError(f"{pattern!r} is not a valid regular expression: {error}") from error
+
+
+@dataclass(frozen=True)
 class ResolvedDownloadSource:
     url: str
     format_downloaded: str
@@ -76,6 +94,7 @@ class ResolvedDownloadSource:
     """When set, yt-dlp downloads ``url`` (a web page) with this command line."""
     ytdlp_subtitles: YtdlpSubtitles = YtdlpSubtitles()
     ytdlp_sponsorblock: YtdlpSponsorBlock = YtdlpSponsorBlock()
+    ytdlp_chapters: YtdlpChapters = YtdlpChapters()
     ytdlp_throttle_guard: bool = False
     """Refuse a video yt-dlp only got in a throttled resolution (``ThrottledError``) instead of keeping it."""
 
@@ -100,7 +119,8 @@ class SidecarSpec:
     attempts: int = 3
     allowed_extensions: tuple[str, ...] = ()
     source_format: Literal["direct", "hls_webvtt", "ytdlp"] = "direct"
-    """``ytdlp``: the subtitles yt-dlp writes while it downloads the media, one file per language."""
+    """``ytdlp``: what yt-dlp writes while it downloads the media: the subtitles, one file per language, or the
+    video's info file."""
     language: str | None = None
     forced: bool = False
     title: str | None = None
@@ -130,29 +150,23 @@ class SidecarSpec:
         ):
             raise ValueError("HLS WebVTT assets must be remote subtitle playlists converted to SRT")
         if self.source_format == "ytdlp" and (
-            self.url is None or self.extension != "srt" or self.kind != "subtitle"
+            self.url is None or (self.kind, self.extension) not in (("subtitle", "srt"), ("info_json", "json"))
         ):
-            raise ValueError("yt-dlp subtitles are remote pages whose subtitles are saved as SRT")
+            raise ValueError("yt-dlp writes a remote page's subtitles as SRT, or its info file as JSON")
 
 
-@dataclass(frozen=True)
-class StageSpec:
-    id: str
-    code: str
+@dataclass(frozen=True, kw_only=True)
+class StageSpec(progress_plan.StageSpec):
+    """A step of a download attempt: its phase, and what it works on."""
     phase: Phase
     resource: Resource = "none"
-    weight: float = 1.0
     asset_id: str | None = None
-    depends_on: tuple[str, ...] = ()
-    deadline_seconds: float | None = None
 
-    def __post_init__(self) -> None:
-        if not isfinite(self.weight) or self.weight < 0:
-            raise ValueError("Stage work weights must be finite and nonnegative")
-        if self.deadline_seconds is not None and (
-            not isfinite(self.deadline_seconds) or self.deadline_seconds <= 0
-        ):
-            raise ValueError("Stage deadlines must be finite and positive")
+
+EMBEDS_ARTWORK = frozenset({"mp4", "m4a", "m4v", "mp3", "mkv", "flac"})
+"""The file types VODLoft embeds artwork in."""
+EMBEDS_METADATA = EMBEDS_ARTWORK | {"opus"}
+"""The file types VODLoft embeds tags in. An Opus file takes tags, but VODLoft cannot give it artwork."""
 
 
 @dataclass(frozen=True)
@@ -176,6 +190,8 @@ class DownloadPlan:
     """The first of these languages that a subtitle has becomes the track players pick by default; none marks no track."""
     file_date: datetime | None = None
     """The date the published files get, such as when the media was published; None keeps when they were written."""
+    square_artwork: bool = False
+    """Embedded artwork is cut to a square from its middle, as music players show album covers."""
 
     def __post_init__(self) -> None:
         stages = {stage.id: stage for stage in self.stages}
@@ -255,6 +271,7 @@ def build_download_plan(
     media_lane: tuple[str, int] | None = None,
     default_subtitle_languages: tuple[str, ...] = (),
     file_date: datetime | None = None,
+    square_artwork: bool = False,
 ) -> DownloadPlan:
     """Resolve optional work once; the coordinator executes this plan verbatim."""
     if download_mode not in ("direct", "temporary"):
@@ -268,7 +285,7 @@ def build_download_plan(
     if source.ytdlp_command and (source.use_hls or source.remux_to_mp4 or source.convert_video_to_m4a):
         raise DownloadError("yt-dlp downloads produce their final format themselves")
     if any(asset.source_format == "ytdlp" for asset in assets) and not source.ytdlp_command:
-        raise ValueError("Only a yt-dlp download writes yt-dlp subtitles")
+        raise ValueError("Only a yt-dlp download writes yt-dlp subtitles and info files")
     if len(set(subtitle_asset_ids)) != len(subtitle_asset_ids) or any(
         not any(asset.id == asset_id and asset.kind == "subtitle" for asset in assets)
         for asset_id in subtitle_asset_ids
@@ -280,8 +297,10 @@ def build_download_plan(
         raise DownloadError("A source cannot be remuxed to MP4 and converted to M4A")
     if source.convert_video_to_m4a and (not source.audio_only or source.extension != "m4a"):
         raise DownloadError("Video-to-M4A conversion requires an audio-only M4A output")
-    if (metadata_tags or artwork_asset_id) and source.extension not in {"mp4", "m4a", "m4v", "mp3", "mkv"}:
+    if (metadata_tags or artwork_asset_id) and source.extension not in EMBEDS_METADATA:
         raise DownloadError(f"Cannot embed artwork or metadata in .{source.extension}; select sidecars or an MP4 output")
+    if artwork_asset_id and source.extension not in EMBEDS_ARTWORK:
+        raise DownloadError(f"Cannot embed artwork in .{source.extension}; select a sidecar thumbnail")
     suffixes = [a.target_suffix for a in assets if a.publish and a.target_suffix]
     if len(set(suffixes)) != len(suffixes):
         raise ValueError("Two assets cannot publish the same sidecar suffix")
@@ -298,15 +317,15 @@ def build_download_plan(
     # Work units are estimates for batch aggregation.
     media_bytes = max(1, source.expected_bytes or 100 * 1024 * 1024)
     stages = [
-        StageSpec("prepare", "prepare", "preparing", weight=0.02),
-        StageSpec("media", "download_media", "transferring", "media", depends_on=("prepare",)),
+        StageSpec(id="prepare", code="prepare", phase="preparing", weight=0.02),
+        StageSpec(id="media", code="download_media", phase="transferring", resource="media", depends_on=("prepare",)),
     ]
     for asset in assets:
         weight = max(0.002, (len(asset.content) if asset.content is not None else 512 * 1024) / media_bytes)
         stages.append(StageSpec(
-            f"acquire:{asset.id}", "generate_sidecar" if asset.content is not None else "download_sidecar",
-            "transferring", "sidecar", weight=weight, asset_id=asset.id,
-            # yt-dlp writes its subtitles during the media transfer.
+            id=f"acquire:{asset.id}", code="generate_sidecar" if asset.content is not None else "download_sidecar",
+            phase="transferring", resource="sidecar", weight=weight, asset_id=asset.id,
+            # yt-dlp writes its subtitles and info file during the media transfer.
             depends_on=("media",) if asset.source_format == "ytdlp" else ("prepare",),
         ))
     # Dependencies and deadlines are policy, not runtime decisions. Auxiliary
@@ -316,13 +335,13 @@ def build_download_plan(
     media_ready = "media"
     if source.remux_to_mp4:
         stages.append(StageSpec(
-            "remux", "remux", "finishing", "processing", weight=remux_weight,
+            id="remux", code="remux", phase="finishing", resource="processing", weight=remux_weight,
             depends_on=(media_ready,), deadline_seconds=3600,
         ))
         media_ready = "remux"
     if source.convert_video_to_m4a:
         stages.append(StageSpec(
-            "convert_audio", "convert_audio", "finishing", "processing", weight=remux_weight,
+            id="convert_audio", code="convert_audio", phase="finishing", resource="processing", weight=remux_weight,
             depends_on=(media_ready,), deadline_seconds=3600,
         ))
         media_ready = "convert_audio"
@@ -339,28 +358,29 @@ def build_download_plan(
             + tuple(f"acquire:{asset_id}" for asset_id in subtitle_asset_ids)
         )
         stages.append(StageSpec(
-            "embed", code, "finishing", "processing", weight=embed_weight,
+            id="embed", code=code, phase="finishing", resource="processing", weight=embed_weight,
             depends_on=dependencies, deadline_seconds=3600,
         ))
         media_ready = "embed"
     stages.append(StageSpec(
-        "publish", "publish_media", "finishing", "processing", weight=publish_weight,
+        id="publish", code="publish_media", phase="finishing", resource="processing", weight=publish_weight,
         depends_on=(media_ready, *(f"acquire:{asset.id}" for asset in assets)),
         deadline_seconds=3600,
     ))
     for asset in assets:
         if asset.publish:
             stages.append(StageSpec(
-                f"publish:{asset.id}", "publish_sidecar", "finishing", "none", 0.002, asset.id,
+                id=f"publish:{asset.id}", code="publish_sidecar", phase="finishing", resource="none", weight=0.002,
+                asset_id=asset.id,
                 depends_on=("publish", f"acquire:{asset.id}"), deadline_seconds=1800,
             ))
     stages.extend((
         StageSpec(
-            "verify", "verify", "finishing", weight=0.01,
+            id="verify", code="verify", phase="finishing", weight=0.01,
             depends_on=("publish", *(f"publish:{asset.id}" for asset in assets if asset.publish)),
             deadline_seconds=120,
         ),
-        StageSpec("finalize", "finalize", "finishing", weight=0.01,
+        StageSpec(id="finalize", code="finalize", phase="finishing", weight=0.01,
                   depends_on=("verify",), deadline_seconds=120),
     ))
     return DownloadPlan(
@@ -369,5 +389,5 @@ def build_download_plan(
         artwork_asset_id, tuple(stages), copying, media_lane=media_lane,
         subtitle_asset_ids=tuple(subtitle_asset_ids),
         default_subtitle_languages=tuple(default_subtitle_languages),
-        file_date=file_date,
+        file_date=file_date, square_artwork=square_artwork,
     )

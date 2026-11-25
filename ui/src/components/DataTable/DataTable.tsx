@@ -1,4 +1,4 @@
-import {CSSProperties, HTMLAttributes, ReactNode, useId, useMemo, useState} from 'react'
+import {CSSProperties, HTMLAttributes, ReactNode, useId, useLayoutEffect, useMemo, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
 import {Link, useNavigate} from 'react-router-dom'
@@ -19,6 +19,19 @@ export type Column<T> = {
     mobileHidden?: boolean
     /** When set, the column header becomes clickable and sorts rows by this value. */
     sortAccessor?: (row: T) => string | number | Date | null | undefined
+    /**
+     * Keep this column in view at the table's right edge. When the table is wider than its box, the column
+     * sits over the columns beside it. Sticky columns next to each other line up side by side; the
+     * Actions column is always sticky.
+     */
+    sticky?: 'right'
+}
+
+const STICKY_CLASS = 'data-table-sticky'
+
+/** The style of the nth sticky column: its distance from the right edge is measured by the table. */
+function stickyStyle(index: number): CSSProperties {
+    return {right: `var(--sticky-right-${index}, 0px)`}
 }
 
 type SortDirection = 'asc' | 'desc'
@@ -122,6 +135,29 @@ export function DataTable<T>(props: DataTableProps<T>) {
     const tableId = useId().replace(/:/g, '')
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
 
+    // Each sticky column sits right of the sticky columns after it: measure their widths and keep the offsets
+    // on the table, so the header and every row read the same ones.
+    const tableRef = useRef<HTMLTableElement>(null)
+    const stickyIndex = new Map<Column<T>, number>()
+    columns.forEach((column) => { if (column.sticky) stickyIndex.set(column, stickyIndex.size) })
+    const actionsIndex = stickyIndex.size
+    useLayoutEffect(() => {
+        const table = tableRef.current
+        if (!table) return
+        const measure = () => {
+            const headers = [...table.querySelectorAll<HTMLElement>(`thead th.${STICKY_CLASS}`)]
+            let right = 0
+            for (let index = headers.length - 1; index >= 0; index--) {
+                table.style.setProperty(`--sticky-right-${index}`, `${right}px`)
+                right += headers[index].getBoundingClientRect().width
+            }
+        }
+        measure()
+        const observer = new ResizeObserver(measure)
+        table.querySelectorAll(`thead th.${STICKY_CLASS}`).forEach((header) => observer.observe(header))
+        return () => observer.disconnect()
+    })
+
     const colSpan = (columns.length + (actions ? 1 : 0) + (selection ? 1 : 0)) || 1
 
     const [sortState, setSortState] = useState<SortState | null>(null)
@@ -177,7 +213,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
 
     return (
         <div className={wrapperClassName ?? 'table-wrapper'}>
-            <table className={`${className ?? 'table'} desktop-data-table`} aria-label={ariaLabel}>
+            <table ref={tableRef} className={`${className ?? 'table'} desktop-data-table`} aria-label={ariaLabel}>
                 <thead>
                 <tr>
                     {selection && (
@@ -192,14 +228,17 @@ export function DataTable<T>(props: DataTableProps<T>) {
                     )}
                     {columns.map((c, idx) => {
                         const id = c.id ?? String(idx)
+                        const sticky = stickyIndex.get(c)
+                        const className = sticky === undefined ? undefined : STICKY_CLASS
                         const style: CSSProperties = {
                             width: c.width,
                             textAlign: c.align,
+                            ...(sticky === undefined ? {} : stickyStyle(sticky)),
                             ...c.headerStyle,
                         }
                         if (!c.sortAccessor) {
                             return (
-                                <th key={id} scope="col" style={style}>
+                                <th key={id} scope="col" className={className} style={style}>
                                     {c.header}
                                 </th>
                             )
@@ -208,7 +247,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
                         const direction = isSorted ? sortState!.direction : undefined
                         const sortIcon = direction === 'asc' ? (faIcon('fass', 'sort-up')) : direction === 'desc' ? (faIcon('fass', 'sort-down')) : (faIcon('fass', 'sort'))
                         return (
-                            <th key={id} scope="col" style={style} aria-sort={direction === 'asc' ? 'ascending' : direction === 'desc' ? 'descending' : 'none'}>
+                            <th key={id} scope="col" className={className} style={style} aria-sort={direction === 'asc' ? 'ascending' : direction === 'desc' ? 'descending' : 'none'}>
                                 <button type="button" className="th-sort-btn" onClick={() => toggleSort(id)}>
                                     <span>{c.header}</span>
                                     <FontAwesomeIcon className="th-sort-icon" icon={sortIcon as any}/>
@@ -217,7 +256,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
                         )
                     })}
                     {actions && (
-                        <th key="actions" scope="col" style={{width: 100, textAlign: 'right'}}>Actions</th>
+                        <th key="actions" scope="col" className={STICKY_CLASS} style={{width: 100, textAlign: 'right', ...stickyStyle(actionsIndex)}}>Actions</th>
                     )}
                 </tr>
                 </thead>
@@ -286,19 +325,21 @@ export function DataTable<T>(props: DataTableProps<T>) {
                                 )}
                                 {columns.map((c, idx) => {
                                     const content = cellContent(c, row)
+                                    const sticky = stickyIndex.get(c)
                                     const style: CSSProperties = {
                                         textAlign: c.align,
+                                        ...(sticky === undefined ? {} : stickyStyle(sticky)),
                                         ...c.cellStyle,
                                     }
                                     return (
-                                        <td key={(c.id ?? String(idx)) + '-cell'} style={style} data-label={c.dataLabel ?? String(c.header)}>
+                                        <td key={(c.id ?? String(idx)) + '-cell'} className={sticky === undefined ? undefined : STICKY_CLASS} style={style} data-label={c.dataLabel ?? String(c.header)}>
                                             {content}
                                         </td>
                                     )
                                 })}
                                 {actions && (
-                                    <td key={'actions-cell'} style={{textAlign: 'right'}} data-label={'Actions'}>
-                                        <div style={{display: 'inline-flex', gap: 6, flexWrap: 'wrap'}}>
+                                    <td key={'actions-cell'} className={STICKY_CLASS} style={{textAlign: 'right', ...stickyStyle(actionsIndex)}} data-label={'Actions'}>
+                                        <div style={{display: 'inline-flex', gap: 6, flexWrap: 'nowrap'}}>
                                             {actions(row).map((a, i) => a.href ? (
                                                 <Link
                                                     key={i}

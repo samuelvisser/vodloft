@@ -4,12 +4,14 @@ Each one records the event in the caller's transaction, so it is only sent once 
 """
 from __future__ import annotations
 
+from backend.utils.helpers import name_in_text
 from pathlib import Path
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Collection, DownloadProfile, Episode, User
+from backend.types.collection_contracts import collection_contract
+from backend.db.models import Collection, CollectionList, DownloadProfile, Episode, User
 
 from .events import Event, emit
 
@@ -61,7 +63,7 @@ def new_episodes_found(session: Session, collection: Collection, count: int) -> 
         return
     emit(
         session, Event.NEW_EPISODES,
-        title=f"{count} new episode{'s' if count != 1 else ''} in {collection.title}",
+        title=f"{count} new episode{'s' if count != 1 else ''} in {name_in_text(collection.title)}",
         body="Nothing downloads them automatically.", collection_id=collection.id,
         url=f"/collection/{collection.slug}", data={"collection": collection.title},
     )
@@ -73,4 +75,24 @@ def quick_download_finished(session: Session, *, owner: str | None, title: str) 
     emit(
         session, Event.QUICK_DOWNLOAD_FINISHED, title=f"Ready to save: {title}",
         body="Your Quick download finished.", user_id=user_id, url="/quick-download",
+    )
+
+
+def link_seasons_found(session: Session, collection: Collection, playlists: list[CollectionList]) -> None:
+    """A collection whose selected playlists are seasons found playlists that wait for the user's choice."""
+    if not playlists:
+        return
+    names = ", ".join(playlist.title for playlist in playlists[:3]) + (f" and {len(playlists) - 3} more" if len(playlists) > 3 else "")
+    one = len(playlists) == 1
+    season = collection_contract(collection.type).words.season
+    # The Site's own word for what it found, such as playlist on YouTube or album on Bandcamp.
+    from backend.services.link_seasons import section_list_names
+    lists = section_list_names(collection)
+    emit(
+        session, Event.NEW_LISTS_FOUND,
+        title=f"New {lists.singular} for {name_in_text(collection.title)}" if one else f"{len(playlists)} new {lists.plural} for {name_in_text(collection.title)}",
+        body=f"{names}. Choose in the collection's {season.plural} whether {f'it becomes {season.a}' if one else f'they become {season.plural}'}.",
+        url=f"/edit-collection/{collection.id}?seasons=1",
+        data={"collection": collection.title, "playlists": [playlist.title for playlist in playlists]},
+        dedupe_key=f"collection-playlists:{collection.id}:{','.join(sorted(playlist.ref for playlist in playlists))}",
     )

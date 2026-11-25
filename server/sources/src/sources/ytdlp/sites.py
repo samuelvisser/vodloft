@@ -11,85 +11,20 @@ Telling the extractor needs no network request, only VODLoft's own copy of yt-dl
 from __future__ import annotations
 
 import threading
-
-from dataclasses import replace
+from functools import cache
 from pathlib import Path
-from types import MappingProxyType
 
-from ..contract import (
-    Access, DownloadOptions, Site, SiteSetting, SiteSettings, StreamMethod, UpgradeChecks, UpgradeImprovement, domain_site, link_host,
-)
+from ..contract import DownloadOptions, Site, domain_site, link_host, on_domain
 from ..cookies import site_cookies
 from ..registry import named_site_for
+from .site_contracts import CONTRACTS, MEMBERS_KEY, PREMIUM_KEY, OtherSites
+from .site_contracts.other_sites import SITE_FIELDS
+from .site_contracts.soundcloud import ALBUM_LIST, PLAYLIST_LIST
 
-# How VODLoft names the sites most people use; any other Site is named after its domain.
-_NAMES = {
-    "bandcamp": "Bandcamp", "bbc": "BBC", "bilibili": "Bilibili", "bitchute": "BitChute", "dailymotion": "Dailymotion",
-    "facebook": "Facebook", "instagram": "Instagram", "kick": "Kick", "nebula": "Nebula", "niconico": "Niconico",
-    "odysee": "Odysee", "patreon": "Patreon", "peertube": "PeerTube", "reddit": "Reddit", "rumble": "Rumble",
-    "soundcloud": "SoundCloud", "tiktok": "TikTok", "twitch": "Twitch", "twitter": "X", "vimeo": "Vimeo",
-    "youtube": "YouTube",
-}
-# How RSS feeds can stream each Site without downloading first. Each needs its streams checked against
-# podcast apps before it is added. YouTube has its 360p MP4 with sound as one file, and every other
-# resolution as separate H.264 video and M4A audio, which VODLoft lists in an HLS playlist or joins.
-# Above 1080p, YouTube only has VP9 and AV1, which podcast apps often cannot play. Its links play
-# for any address, so apps can be sent straight to them.
-_STREAM_METHODS = {"youtube": frozenset({StreamMethod.FILE, StreamMethod.HLS, StreamMethod.LIVE})}
-_STREAM_VIDEO_HEIGHTS = {"youtube": (360, 720, 1080)}
-_STREAM_FILE_HEIGHTS = {"youtube": 360}
-_STREAM_PROXY_CHOICE = {"youtube"}
-# YouTube's MP4 plays at once, as its own 360p file or one VODLoft joins, so nothing waits for a download.
-_VIDEO_OUTPUT_HELP = {
-    "youtube": {
-        "mp4_hls": "Streams video using HLS, and provides mp4 as the fallback. This ensures the podcasting app will "
-                   "always play video if it supports video at all.",
-    },
-}
-# The Sites whose separate H.264 video and M4A audio Local Media Profiles can keep as an HLS bundle, at these
-# resolutions.
-_HLS_DOWNLOADS = {"youtube": (360, 720, 1080)}
-_API_KEY_SITES = {"youtube"}
-# A channel's members-only videos sit among its open ones, so its collections start without them.
-_HIDES_LOCKED = {"youtube"}
-"""The Sites yt-dlp's API key is for: the YouTube Data API key."""
-# yt-dlp tells a video's resolutions, codecs, subtitles and length on every site; SponsorBlock only has YouTube's videos.
-_UPGRADE_CHECKS = UpgradeChecks((
-    UpgradeImprovement.RESOLUTION, UpgradeImprovement.SUBTITLES, UpgradeImprovement.CODEC, UpgradeImprovement.LENGTH,
-))
-_SITE_UPGRADE_CHECKS = {"youtube": UpgradeChecks((
-    UpgradeImprovement.RESOLUTION, UpgradeImprovement.SPONSORBLOCK, UpgradeImprovement.SUBTITLES, UpgradeImprovement.CODEC,
-    UpgradeImprovement.LENGTH,
-))}
-_SITE_SETTINGS = {"youtube": SiteSettings(
-    # SponsorBlock only has YouTube's videos.
-    shows=frozenset({SiteSetting.SPONSORBLOCK, SiteSetting.SPONSORBLOCK_SEGMENTS}),
-    presets=MappingProxyType({
-        # Creators keep changing titles and thumbnails for days, and YouTube tests them for up to two weeks.
-        SiteSetting.METADATA_REFRESH: "30m,2h,6h,24h,3d,7d,14d",
-        SiteSetting.UPGRADE_IMPROVEMENTS: [UpgradeImprovement.RESOLUTION.value, UpgradeImprovement.SPONSORBLOCK.value],
-        # A creator trimming a video in YouTube Studio usually cuts a few minutes at most.
-        SiteSetting.UPGRADE_LENGTH_MINUTES: 3,
-    }),
-)}
-# What yt-dlp says a video needs: ``subscriber_only`` is a membership of the channel and ``premium_only`` the
-# site's paid subscription. Each Site calls them its own way; others get the general names.
-MEMBERS_KEY, PREMIUM_KEY = "members", "premium"
-_ACCESSES = (
-    Access(MEMBERS_KEY, "Subscribers only", "Only subscribers of the channel can watch this."),
-    Access(PREMIUM_KEY, "Premium only", "Only the site's paying subscribers can watch this."),
-)
-_SITE_ACCESSES = {
-    "youtube": (
-        Access(MEMBERS_KEY, "Members only", "Only members of the channel can watch this."),
-        Access(PREMIUM_KEY, "YouTube Premium", "Only YouTube Premium subscribers can watch this."),
-    ),
-    "floatplane": (Access(MEMBERS_KEY, "Subscribers only", "Only subscribers of the creator can watch this."),),
-    "niconico": (
-        Access(MEMBERS_KEY, "Channel members only", "Only members of the channel can watch this."),
-        Access(PREMIUM_KEY, "Niconico Premium", "Only Niconico Premium members can watch this."),
-    ),
-}
+__all__ = [
+    "ALBUM_LIST", "MEMBERS_KEY", "PLAYLIST_LIST", "PREMIUM_KEY", "api_key_sites", "cookies_for", "download_options", "search_sites", "site_for", "site_of",
+]
+
 _PREFIX = "yt_dlp.extractor."
 _extractors: list | None = None
 _lock = threading.Lock()
@@ -115,11 +50,20 @@ def _family(extractor) -> str:
 
 
 def site_for(url: str) -> Site:
+    host = link_host(url)
+    if shared := next((key for key, contract in CONTRACTS.items() if host in getattr(contract, "share_hosts", ())), None):
+        # yt-dlp has no extractor of an app's share links; they are their Site's all the same.
+        return site_of(shared, domain_site(url).name)
     extractor = next((candidate for candidate in _extractor_classes() if candidate.suitable(url)), None)
+    domain = domain_site(url)
     if extractor is None or extractor.ie_key() == "Generic":
-        return replace(domain_site(url), upgrade_checks=_UPGRADE_CHECKS, accesses=_ACCESSES)
-    host = domain_site(url).name
-    return site_of(_family(extractor), host)
+        # A page only the generic extractor handles, such as a site's home page, is on the site whose domain it is,
+        # or else a Site of its own per domain, with what OtherSites offers.
+        contract = next((
+            contract for contract in CONTRACTS.values() if any(on_domain(host, own) for own in contract.domains)
+        ), None)
+        return site_of(contract.key if contract else domain.key, domain.name)
+    return site_of(_family(extractor), domain.name)
 
 
 def cookies_for(url: str, use: bool = True) -> Path | None:
@@ -132,35 +76,39 @@ def cookies_for(url: str, use: bool = True) -> Path | None:
     return site_cookies(site.key) if use and site.takes_cookies else None
 
 
+@cache
 def site_of(key: str, host: str | None = None) -> Site:
-    """The Site with the key, as yt-dlp fetches it; a link's host names a Site without a name of its own."""
-    return Site(
-        key, _NAMES.get(key, host or key), (host,) if host else (), stream_methods=_STREAM_METHODS.get(key, frozenset()),
-        stream_video_heights=_STREAM_VIDEO_HEIGHTS.get(key, ()), stream_file_height=_STREAM_FILE_HEIGHTS.get(key),
-        stream_proxy_choice=key in _STREAM_PROXY_CHOICE, video_output_help=_VIDEO_OUTPUT_HELP.get(key, {}),
-        downloads=_downloads(key), upgrade_checks=_SITE_UPGRADE_CHECKS.get(key, _UPGRADE_CHECKS),
-        settings=_SITE_SETTINGS.get(key, SiteSettings()), accesses=_accesses(key),
-        takes_api_key=key in _API_KEY_SITES, shows_locked=key not in _HIDES_LOCKED,
-    )
+    """The Site with the key, as yt-dlp fetches it: its own contract, and ``OtherSites`` for whatever that leaves out,
+    or for a site without a contract. A link's host names a Site without a name of its own. A contract never changes,
+    so each Site is built once per key and host."""
+    contract = CONTRACTS.get(key, OtherSites)
+    values = {name: getattr(contract, name) for name in SITE_FIELDS if hasattr(contract, name)}
+    values["accesses"] = _accesses(contract)
+    if values.get("audio_only"):
+        # On a site with sound only, what yt-dlp offers every site is for sound, unless its contract says otherwise.
+        for name in ("downloads", "upgrade_checks"):
+            if values[name] is getattr(OtherSites, name):
+                values[name] = values[name].for_audio_only()
+    return Site(key, contract.name or host or key, (host,) if host else (), **values)
 
 
 def api_key_sites() -> tuple[Site, ...]:
-    """The Sites the YouTube Data API key is for, with the domain yt-dlp names them by."""
-    return tuple(site_of(key, f"{key}.com") for key in sorted(_API_KEY_SITES))
+    """The Sites yt-dlp's API key is for, such as YouTube for the YouTube Data API key, with the domain yt-dlp names
+    them by."""
+    return tuple(site_of(key, f"{key}.com") for key, contract in sorted(CONTRACTS.items()) if getattr(contract, "takes_api_key", False))
 
 
-def _accesses(key: str) -> tuple[Access, ...]:
-    """The Site's own names for the accesses yt-dlp tells, and the general ones for those it has none for."""
-    own = _SITE_ACCESSES.get(key, ())
-    return own + tuple(access for access in _ACCESSES if access.key not in {mine.key for mine in own})
+def search_sites() -> tuple[Site, ...]:
+    """The Sites VODLoft can search through yt-dlp, such as YouTube and SoundCloud, in the order of their contracts."""
+    return tuple(site_of(key, f"{key}.com") for key, contract in CONTRACTS.items() if getattr(contract, "searchable", False))
 
 
-def _downloads(key: str) -> DownloadOptions:
-    # yt-dlp chooses among every version a site has, so each one has the quality choices, and it gets the
-    # subtitles of any site.
-    return DownloadOptions(hls_heights=_HLS_DOWNLOADS.get(key, ()), subtitles=True, quality_choices=True)
+def _accesses(contract: type[OtherSites]):
+    """The site's own names for the accesses yt-dlp tells, and the general ones for those it has none for."""
+    own = contract.accesses
+    return own + tuple(access for access in OtherSites.accesses if access.key not in {mine.key for mine in own})
 
 
 def download_options() -> DownloadOptions:
     """What any Site yt-dlp downloads from offers: the quality choices and subtitles, and an HLS bundle from some."""
-    return DownloadOptions.combined((_downloads(""), *(_downloads(key) for key in _HLS_DOWNLOADS)))
+    return DownloadOptions.combined((OtherSites.downloads, *(contract.downloads for contract in CONTRACTS.values())))
