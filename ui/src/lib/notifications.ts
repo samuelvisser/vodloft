@@ -138,7 +138,10 @@ export function destinationPayload(form: DestinationFormValues) {
     if (kind === 'script') {
         return {kind, script: {script: form.script, timeoutSeconds: Number(form.timeoutSeconds ?? 60)}}
     }
-    return {kind, mediaServer: {address: form.address, apiKey: form.apiKey, scope: form.scope, pathFrom: form.pathFrom, pathTo: form.pathTo}}
+    return {kind, mediaServer: {
+        address: (form.address ?? '').trim(), apiKey: (form.apiKey ?? '').trim(), scope: form.scope,
+        pathFrom: (form.pathFrom ?? '').trim(), pathTo: (form.pathTo ?? '').trim(),
+    }}
 }
 
 export async function previewDestination(form: DestinationFormValues, signal?: AbortSignal): Promise<DestinationPreviewRead> {

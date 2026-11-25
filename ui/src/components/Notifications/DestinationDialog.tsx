@@ -19,10 +19,12 @@ import {
 } from '../../lib/notifications'
 import {
     DestinationFormSchema,
+    MEDIA_SERVER_EXAMPLES,
     type AppriseServiceRead,
     type DestinationFormValues,
     type DestinationKind,
     type DestinationRead,
+    type PathExampleRead,
     type ServiceFieldRead,
     type TestRead,
 } from '../../types/schemas/notifications'
@@ -138,7 +140,9 @@ export default function DestinationDialog({destination, onDismiss}: Props) {
     const service = services.find(({key}) => key === serviceKey)
 
     const [search, setSearch] = useState('')
-    const [preview, setPreview] = useState<{masked: string | null; hint: string | null}>({masked: null, hint: null})
+    const [preview, setPreview] = useState<{masked: string | null; hint: string | null; pathExample: PathExampleRead | null}>(
+        {masked: null, hint: null, pathExample: null},
+    )
     const [testing, setTesting] = useState(false)
     const [testResult, setTestResult] = useState<TestRead | null>(null)
 
@@ -155,21 +159,21 @@ export default function DestinationDialog({destination, onDismiss}: Props) {
     // Show the destination as it will be listed (or why it cannot be yet) while it is filled in.
     const watched = watch()
     const previewKey = JSON.stringify([watched.kind, watched.mode, watched.service, watched.values, watched.url,
-        watched.address, watched.apiKey, watched.webhookUrl, watched.method, watched.script, changeSettings])
+        watched.address, watched.apiKey, watched.scope, watched.pathFrom, watched.pathTo, watched.webhookUrl, watched.method, watched.script, changeSettings])
     useEffect(() => {
         setTestResult(null)
         if (!changeSettings || !readyToCheck(apiForm())) {
-            setPreview({masked: null, hint: null})
+            setPreview({masked: null, hint: null, pathExample: null})
             return
         }
         const controller = new AbortController()
         const timer = window.setTimeout(async () => {
             try {
                 const result = await previewDestination(apiForm(), controller.signal)
-                setPreview({masked: result.masked, hint: null})
+                setPreview({masked: result.masked, hint: null, pathExample: result.pathExample})
             } catch (cause) {
                 if (controller.signal.aborted) return
-                setPreview({masked: null, hint: cause instanceof Error ? cause.message : null})
+                setPreview({masked: null, hint: cause instanceof Error ? cause.message : null, pathExample: null})
             }
         }, 400)
         return () => {
@@ -395,7 +399,7 @@ export default function DestinationDialog({destination, onDismiss}: Props) {
                         <div className="form-row">
                             <label htmlFor="notif-address">Address</label>
                             <input id="notif-address" className="input"
-                                   placeholder={kind === 'plex' ? 'http://plex:32400' : kind === 'emby' ? 'http://emby:8096' : 'http://jellyfin:8096'}
+                                   placeholder={MEDIA_SERVER_EXAMPLES[kind]}
                                    aria-invalid={errors.address ? 'true' : undefined} {...register('address')}/>
                             {errors.address ? <span className="error">{errors.address.message}</span> : null}
                         </div>
@@ -423,16 +427,28 @@ export default function DestinationDialog({destination, onDismiss}: Props) {
                             <div className="notif-advanced__body">
                                 <span className="help">
                                     Only needed when {KIND_LABELS[kind]} sees the files under another path, for example
-                                    /downloads in VODLoft and /media in {KIND_LABELS[kind]}.
+                                    /downloads in VODLoft and /media in {KIND_LABELS[kind]}, or W:\ when {KIND_LABELS[kind]} runs on Windows.
                                 </span>
                                 <div className="form-row">
                                     <label htmlFor="notif-path-from">Path in VODLoft</label>
-                                    <input id="notif-path-from" className="input" placeholder="/downloads" {...register('pathFrom')}/>
+                                    <input id="notif-path-from" className="input" placeholder="/downloads"
+                                           aria-invalid={errors.pathFrom ? 'true' : undefined} {...register('pathFrom')}/>
+                                    {errors.pathFrom ? <span className="error">{errors.pathFrom.message}</span> : null}
                                 </div>
                                 <div className="form-row">
                                     <label htmlFor="notif-path-to">Path in {KIND_LABELS[kind]}</label>
-                                    <input id="notif-path-to" className="input" placeholder="/media" {...register('pathTo')}/>
+                                    <input id="notif-path-to" className="input" placeholder="/media"
+                                           aria-invalid={errors.pathTo ? 'true' : undefined} {...register('pathTo')}/>
+                                    {errors.pathTo ? <span className="error">{errors.pathTo.message}</span> : null}
                                 </div>
+                                {preview.pathExample ? (
+                                    <div className="notif-preview" aria-live="polite">
+                                        <span>{KIND_LABELS[kind]} sees</span>
+                                        <code>{preview.pathExample.vodloft}</code>
+                                        <span className="help">as</span>
+                                        <code>{preview.pathExample.server}</code>
+                                    </div>
+                                ) : null}
                             </div>
                         </details>
                     </>
@@ -547,7 +563,7 @@ function readyToCheck(form: DestinationFormValues): boolean {
         case 'script':
             return Boolean(form.script)
         default:
-            return /^https?:\/\/./.test(form.address ?? '') && Boolean(form.apiKey)
+            return /^https?:\/\/./.test((form.address ?? '').trim()) && Boolean((form.apiKey ?? '').trim())
     }
 }
 

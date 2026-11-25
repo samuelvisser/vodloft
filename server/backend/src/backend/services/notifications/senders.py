@@ -18,6 +18,7 @@ from backend.db.models import NotificationEvent as EventRow
 from .apprise_services import InvalidDestination, parse_destination
 from .destinations import Kind, script_path
 from .events import DEFINITIONS, Event, Tone
+from .paths import holds, mapped_path
 
 logger = logging.getLogger(__name__)
 
@@ -61,14 +62,6 @@ def send_message(config: dict[str, Any], *, title: str, body: str, tone: Tone) -
     return Outcome(False, _short((lines[-1] if lines else "The service did not accept the message").replace(url, "[destination]")))
 
 
-def _mapped(path: str, config: dict[str, Any]) -> str:
-    """The path as the media server sees it."""
-    source, target = config.get("path_from") or "", config.get("path_to") or ""
-    if source and path.startswith(source):
-        return target + path[len(source):]
-    return path
-
-
 def _request(method: str, url: str, **kwargs) -> Outcome:
     try:
         response = requests.request(method, url, timeout=_TIMEOUT_SECONDS, allow_redirects=False, **kwargs)
@@ -85,7 +78,7 @@ def _jellyfin_refresh(config: dict[str, Any], folders: Sequence[str]) -> Outcome
     headers = {"X-Emby-Token": config["api_key"]}
     if config["scope"] == "library" or not folders:
         return _request("POST", f"{config['address']}/Library/Refresh", headers=headers)
-    updates = [{"Path": _mapped(folder, config), "UpdateType": "Modified"} for folder in folders]
+    updates = [{"Path": mapped_path(folder, config), "UpdateType": "Modified"} for folder in folders]
     return _request("POST", f"{config['address']}/Library/Media/Updated", headers=headers, json={"Updates": updates})
 
 
@@ -102,6 +95,27 @@ def _plex_sections(config: dict[str, Any]) -> list[tuple[str, list[str]]]:
     ]
 
 
+def _section_holding(sections: list[tuple[str, list[str]]], path: str) -> str | None:
+    return next((key for key, locations in sections if any(holds(location, path) for location in locations)), None)
+
+
+def _plex_check(config: dict[str, Any], sample: EventRow | None) -> Outcome:
+    """Reach Plex, and when it refreshes only the changed folder, check that a library holds the newest download's
+    folder as Plex sees it, so a wrong path mapping shows up in the test."""
+    outcome = _request("GET", f"{config['address']}/library/sections", headers={"X-Plex-Token": config["api_key"]})
+    folder = (sample.data or {}).get("folder") if sample is not None else None
+    if not outcome.delivered or config["scope"] == "library" or not folder:
+        return outcome
+    try:
+        sections = _plex_sections(config)
+    except (requests.RequestException, ValueError) as error:
+        return Outcome(False, f"Could not list Plex's libraries ({type(error).__name__})")
+    path = mapped_path(str(folder), config)
+    if _section_holding(sections, path) is None:
+        return Outcome(False, f"No Plex library holds {path}. Check the path mapping")
+    return Outcome(True)
+
+
 def _plex_refresh(config: dict[str, Any], folders: Sequence[str]) -> Outcome:
     headers = {"X-Plex-Token": config["api_key"]}
     if config["scope"] == "library" or not folders:
@@ -111,8 +125,8 @@ def _plex_refresh(config: dict[str, Any], folders: Sequence[str]) -> Outcome:
     except (requests.RequestException, ValueError) as error:
         return Outcome(False, f"Could not list Plex's libraries ({type(error).__name__})")
     for folder in folders:
-        path = _mapped(folder, config)
-        section = next((key for key, locations in sections if any(path.startswith(location) for location in locations)), None)
+        path = mapped_path(folder, config)
+        section = _section_holding(sections, path)
         if section is None:
             return Outcome(False, f"No Plex library holds {path}. Check the path mapping")
         outcome = _request("GET", f"{config['address']}/library/sections/{section}/refresh?path={quote(path)}", headers=headers)
@@ -196,7 +210,7 @@ def test_destination(destination_kind: Kind, config: dict[str, Any], sample: Eve
             tone=Tone.INFO,
         )
     if destination_kind == Kind.PLEX:
-        return _request("GET", f"{config['address']}/library/sections", headers={"X-Plex-Token": config["api_key"]})
+        return _plex_check(config, sample)
     if destination_kind in (Kind.JELLYFIN, Kind.EMBY):
         return _request("GET", f"{config['address']}/System/Info", headers={"X-Emby-Token": config["api_key"]})
     event = sample or EventRow(

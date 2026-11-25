@@ -101,7 +101,7 @@ def check_config(kind: Kind, config: dict[str, Any]) -> Checked:
         return Checked(service_key_for_url(url), {"url": url}, masked_url(url))
     if kind in MEDIA_SERVERS:
         address = _http_address(
-            str(config.get("address") or ""), "The address", "http://plex:32400" if kind == Kind.PLEX else f"http://{kind.value}:8096",
+            str(config.get("address") or ""), "The address", "http://<server IP>:32400" if kind == Kind.PLEX else f"http://{kind.value}:8096",
         )
         key = str(config.get("api_key") or "").strip()
         if not key:
@@ -109,9 +109,15 @@ def check_config(kind: Kind, config: dict[str, Any]) -> Checked:
         scope = config.get("scope") or "folder"
         if scope not in {"folder", "library"}:
             raise InvalidDestination("Refresh the changed folder or the whole library")
+        path_from, path_to = str(config.get("path_from") or "").strip(), str(config.get("path_to") or "").strip()
+        if bool(path_from) != bool(path_to):
+            raise InvalidDestination(
+                "Fill in both paths of the path mapping, or neither", field="pathTo" if path_from else "pathFrom",
+            )
+        if path_from and not path_from.startswith("/"):
+            raise InvalidDestination("The path in VODLoft starts with /, such as /downloads", field="pathFrom")
         return Checked(kind.value, {
-            "address": address, "api_key": key, "scope": scope,
-            "path_from": str(config.get("path_from") or "").strip(), "path_to": str(config.get("path_to") or "").strip(),
+            "address": address, "api_key": key, "scope": scope, "path_from": path_from, "path_to": path_to,
         }, address)
     if kind == Kind.WEBHOOK:
         url = _http_address(str(config.get("url") or ""), "The webhook address", "https://example.com/hooks/vodloft")
