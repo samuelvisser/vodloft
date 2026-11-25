@@ -18,6 +18,7 @@ from backend.services.download_relocation import relocations_held_off
 from backend.services.media_download_history import record_media_download_history
 from downloader.storage.identity import ArtifactIdentity, inspect_artifact
 from config import get_settings
+from task_manager.scheduler.results import TaskResult
 from downloader import hls_asset_marker, hls_asset_root, missing_hls_bundle_files
 
 from ._helpers import get_tracked_downloads
@@ -56,7 +57,7 @@ async def run_file_watcher(
     collection_id: Optional[int] = None,
     collection_slug: Optional[str] = None,
     progress=None,
-) -> None:
+) -> TaskResult:
     """Reconcile persistent MediaDownload artifact facts with the filesystem.
 
     Database access is intentionally split from filesystem access. The watcher
@@ -68,7 +69,7 @@ async def run_file_watcher(
     settings = get_settings().file_watcher
     if not settings.enabled:
         print("file_watcher is disabled (file_watcher.enabled=false), skipping")
-        return
+        return TaskResult(summary="Skipped: watching local files is off", data={"checked": 0, "updated": 0})
 
     print("Starting file_watcher")
     downloads = get_tracked_downloads(s, collection_id=collection_id, collection_slug=collection_slug)
@@ -91,6 +92,10 @@ async def run_file_watcher(
 
     updated = _apply_reconciliations(s, changes)
     print(f"file_watcher completed: checked {len(downloads)} artifact(s), updated {updated}")
+    return TaskResult(
+        summary=f"Checked {len(downloads)} downloaded file(s): {updated} changed on disk",
+        data={"checked": len(downloads), "updated": updated},
+    )
 
 
 def resolve_media_download_file(

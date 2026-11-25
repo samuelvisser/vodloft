@@ -705,6 +705,7 @@ def test_task_ledger_can_leave_out_the_runs_that_found_nothing(monkeypatch):
         "plain": TaskMeta(key="plain", title="Plain"),
     }
     monkeypatch.setattr(findings, "task_meta", metas.get)
+    monkeypatch.setattr(findings, "all_definitions", lambda: list(metas.values()))
 
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
@@ -752,3 +753,12 @@ def test_task_ledger_can_leave_out_the_runs_that_found_nothing(monkeypatch):
     plain_page = service.query_ledger(session, definition_key="plain", hide_empty=True)
     assert not plain_page.can_hide_empty
     assert [item.id for item in plain_page.items] == [plain_run]
+
+    # The log of every task leaves out the runs that found nothing of each task that names its findings.
+    every_page = service.query_ledger(session, definition_key=None, hide_empty=True, limit=3)
+    assert every_page.can_hide_empty
+    assert every_page.total == 6
+    ids = [item.id for item in every_page.items]
+    every_page = service.query_ledger(session, definition_key=None, hide_empty=True, limit=3, cursor=every_page.next_cursor)
+    ids += [item.id for item in every_page.items]
+    assert ids == [plain_run, running, failed, flagged, failed_refresh, found]

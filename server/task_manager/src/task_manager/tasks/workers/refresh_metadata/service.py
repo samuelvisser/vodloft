@@ -98,7 +98,15 @@ class SweepResult:
         return "; ".join(parts)
 
     def as_data(self) -> dict:
-        return {name: vars(counts) for name, counts in self.sites.items()}
+        sites = list(self.sites.values())
+        return {
+            # Across every Site, so a task log can tell a sweep that changed something from one that did not.
+            "checked": sum(counts.checked for counts in sites),
+            "updated": sum(counts.updated for counts in sites),
+            "removed": sum(counts.removed for counts in sites),
+            "failed": sum(counts.failed for counts in sites),
+            "sites": {name: vars(counts) for name, counts in self.sites.items()},
+        }
 
 
 @dataclass(frozen=True)

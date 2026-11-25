@@ -86,7 +86,7 @@ export default function CronTaskLedgerModal({
 }: Props) {
     const [hideEmpty, setHideEmpty] = useLedgerHideEmpty()
     // Each page from the backend says whether the task names what its runs find; remember it while a stand-in page shows.
-    const [canHideEmpty, setCanHideEmpty] = useState(false)
+    const [canHideEmpty, setCanHideEmpty] = useState(true)
     const ledger = useTaskLedgerInfinite({
         ...query,
         // A task that names nothing its runs find lists every run, whatever this asks.

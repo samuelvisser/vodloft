@@ -4,6 +4,8 @@ import {useEffect, useMemo, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
 import Select from '../components/common/Select'
+import DialogSwitch from '../components/common/DialogSwitch'
+import {useLedgerHideEmpty} from '../components/common/LedgerModal'
 import {faIcon} from '../icons/faIcon'
 
 import {Column, DataTable} from '../components/DataTable/DataTable'
@@ -12,7 +14,7 @@ import PageSubtitle from '../components/common/PageSubtitle'
 import {useTaskLedgerInfinite} from '../lib/taskLedger'
 import {useFilterChipPress} from '../lib/useFilterChipPress'
 import {waitingPresentation} from '../lib/progressPresentation'
-import {TaskDefinitionReadSchema, type TaskLedgerEntryRead} from '../types/schemas/task'
+import {TaskDefinitionReadSchema, type TaskLedgerEntryRead, type TaskLedgerPageRead} from '../types/schemas/task'
 import {createSelectRegistry} from '../utils/selectRegistry'
 import './TasksPage.css'
 import {apiUrl} from '../lib/api'
@@ -138,6 +140,9 @@ function setsEqual(left: Set<string>, right: Set<string>): boolean {
 export default function TasksPage() {
     const [definitionKey, setDefinitionKey] = useState('')
     const [statuses, setStatuses] = useState<Set<string>>(() => new Set(DEFAULT_STATUSES))
+    const [hideEmpty, setHideEmpty] = useLedgerHideEmpty()
+    // Each page says whether the chosen task names what its runs find; remember it while a stand-in page shows.
+    const [canHideEmpty, setCanHideEmpty] = useState(true)
     const filterPress = useFilterChipPress()
     const sentinelRef = useRef<HTMLDivElement | null>(null)
     const selectedStatuses = useMemo(
@@ -170,11 +175,17 @@ export default function TasksPage() {
     const query = useTaskLedgerInfinite({
         definitionKey: definitionKey || undefined,
         status: selectedStatuses,
+        hideEmpty,
         orderBy: 'workflow',
         limit: 100,
         enabled: statuses.size > 0,
     })
     const rows = query.items
+    const firstPage = query.isPlaceholderData ? undefined : query.data?.pages[0] as TaskLedgerPageRead | undefined
+    const reportedCanHideEmpty = firstPage?.canHideEmpty
+    useEffect(() => {
+        if (reportedCanHideEmpty !== undefined) setCanHideEmpty(reportedCanHideEmpty)
+    }, [reportedCanHideEmpty])
     const total = query.total
     const totalIsProvisional = query.isTotalProvisional
 
@@ -302,6 +313,9 @@ export default function TasksPage() {
                     isClearable={false}
                     isLoading={definitions.isPending}
                 />
+                {canHideEmpty ? (
+                    <DialogSwitch checked={hideEmpty} onChange={setHideEmpty} label="Only runs that found something"/>
+                ) : null}
             </div>
 
             <div className="task-filter-row">
