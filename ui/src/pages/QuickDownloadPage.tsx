@@ -8,6 +8,7 @@ import {faIcon} from '../icons/faIcon'
 import {toImageUrl} from '../components/Episode/EpisodeCard'
 import SourceBadge from '../components/Source/SourceBadge'
 import {ClearInputButton} from '../components/common/ClearInputButton'
+import {useAutoLookup} from '../lib/useAutoLookup'
 import {useOperations} from '../components/OperationNotifier/OperationNotifier'
 import QuickOptionList from '../components/QuickDownload/QuickOptionList'
 import QuickFormatPanel from '../components/QuickDownload/QuickFormatPanel'
@@ -90,6 +91,7 @@ export default function QuickDownloadPage() {
         if (!trimmed) return
         if (!sourceKey) setCandidates([])
         setAskedSource(sourceKey ?? null)
+        autoLookup.remember(trimmed)
         requestRef.current?.abort()
         const controller = new AbortController()
         requestRef.current = controller
@@ -113,9 +115,24 @@ export default function QuickDownloadPage() {
         } catch (exc) {
             if (!controller.signal.aborted) setError(exc instanceof Error ? exc.message : String(exc))
         } finally {
-            if (!controller.signal.aborted) setResolving(false)
+            if (!controller.signal.aborted) {
+                setResolving(false)
+                requestRef.current = null
+            }
         }
     }
+
+    // Stops the lookup of a link the user has since changed.
+    const cancelLookup = () => {
+        if (!requestRef.current) return false
+        requestRef.current.abort()
+        requestRef.current = null
+        setResolving(false)
+        setPreview(null)
+        return true
+    }
+
+    const autoLookup = useAutoLookup({lookUp: (value) => void lookUp(value), cancel: cancelLookup})
 
     useEffect(() => {
         const initial = params.get('url')
@@ -127,6 +144,7 @@ export default function QuickDownloadPage() {
 
     const clear = () => {
         requestRef.current?.abort()
+        autoLookup.reset()
         setUrl('')
         setOptions(null)
         setError(null)
@@ -244,7 +262,11 @@ export default function QuickDownloadPage() {
                             autoComplete="off"
                             placeholder="https://…"
                             value={url}
-                            onChange={(event) => setUrl(event.target.value)}
+                            onPaste={autoLookup.onPaste}
+                        onChange={(event) => {
+                            setUrl(event.target.value)
+                            autoLookup.changed(event.target.value)
+                        }}
                         />
                         {url && <ClearInputButton onClear={clear} label="Clear the link"/>}
                     </span>

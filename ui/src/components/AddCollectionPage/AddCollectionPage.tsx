@@ -371,7 +371,7 @@ function AddCollectionWizard({onCancel, onCreated, initialUrl, initialCreator, o
     const examples = useCollectionExamplesQuery(collectionSubmit, seasonsSubmit)
 
     const totalSteps = collectionAction === 'download-stream' ? 5 : collectionAction === 'download' ? 4 : collectionAction === 'stream' ? 3 : 2
-    const stepTitle = step === 1 ? 'Choose collection'
+    const stepTitle = step === 1 ? 'Set up collection'
         : step === 2 ? 'Choose what VODLoft should do'
         : collectionAction === 'stream' ? 'Stream Profile'
         : step === 3 ? 'Media Profile'
