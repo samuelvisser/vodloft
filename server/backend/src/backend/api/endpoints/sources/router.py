@@ -7,15 +7,17 @@ from backend.api.models.source import (
     ApiKeyAPIUpdate, ApiKeyNoteAPIIn, ApiKeyNoteAPIRead, ApiStatusAPIRead, EpisodeTagAPIRead, PublishStatusLabelAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, MediaLinksAPIRequest, MediaLinksAPIRead, SearchResultsAPIRead,
     CollectionDetailsAPIRead, SourceAPIRead, SourceSiteAPIRead, SourceSiteAPIUpdate, UpgradeChecksAPIRead,
     SiteAddAPIRequest, SiteAddedAPIRead, SiteChoiceAPIRead, SitesPickAPIRequest, SiteApiValuesAPIUpdate, SiteAuthenticationAPIRead,
+    AccountValuesAPIUpdate, CodeSignInAPIRead,
 )
 from backend.app import db_session
 from backend.api.steps import STEPS_RESPONSE, plan_lines, stream_steps
 from progress_plan import PlanTracker
-from sources import ApiKeyRejected, Feature, Source, UnknownSourceError, get_source, source_site
+from sources import ApiKeyRejected, Feature, SignInCodeEnded, SignInRejected, Source, UnknownSourceError, get_source, source_site
 from sources.ytdlp_options import check_ytdlp_options
 from backend.services.site_cookies import (
     SiteAuthentication, SiteNotKnownError, list_site_authentication, pick_sites, remove_known_site, remove_site_api, remove_site_cookies,
-    save_site_api, save_site_cookies, test_site_api,
+    save_site_api, save_site_cookies, test_site_api, cancel_code_sign_in, finish_code_sign_in, sign_in_account, sign_out_account,
+    start_code_sign_in,
 )
 from backend.services.errors import ServiceError
 from backend.services.sites import SiteLinkError, add_site, episode_tags_named, media_links, site_choices, site_of_link
@@ -360,9 +362,72 @@ def remove_site_api_values(site_key: str):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+def _sign_in_rejected(exc: SignInRejected) -> HTTPException:
+    """Under the value it is about, or under the form as a whole."""
+    loc = ["body", "values", exc.field] if exc.field else ["body"]
+    return HTTPException(status_code=422, detail=[{"loc": loc, "msg": str(exc), "type": "value_error"}])
+
+
+@router.put("/sources/authentication/{site_key}/account", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SiteAuthenticationAPIRead)
+def sign_in_with_account(site_key: str, body: AccountValuesAPIUpdate):
+    """Sign in with the user's account on the Site, with what they filled in, such as an email address and password,
+    and keep the sign-in for every lookup and download on the Site."""
+    try:
+        listing = sign_in_account(site_key, body.values)
+    except SiteNotKnownError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SignInRejected as exc:
+        raise _sign_in_rejected(exc) from exc
+    _sign_in_changed(listing)
+    return SiteAuthenticationAPIRead.model_validate(listing)
+
+
+@router.post("/sources/authentication/{site_key}/account/code", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=CodeSignInAPIRead)
+def start_sign_in_with_code(site_key: str):
+    """Ask the Site for a code the user enters on its own page, such as twitch.tv/activate."""
+    try:
+        return CodeSignInAPIRead.model_validate(start_code_sign_in(site_key))
+    except SiteNotKnownError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SignInRejected as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/sources/authentication/{site_key}/account/code/{flow_id}", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SiteAuthenticationAPIRead)
+def finish_sign_in_with_code(site_key: str, flow_id: str):
+    """Wait until the user entered the code, then keep the sign-in. Answers 410 when the code ran out, was turned
+    down, or the sign-in was cancelled."""
+    try:
+        listing = finish_code_sign_in(site_key, flow_id)
+    except SiteNotKnownError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SignInCodeEnded as exc:
+        raise HTTPException(status_code=410, detail=str(exc)) from exc
+    except SignInRejected as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    _sign_in_changed(listing)
+    return SiteAuthenticationAPIRead.model_validate(listing)
+
+
+@router.delete("/sources/authentication/{site_key}/account/code/{flow_id}", status_code=204, dependencies=[requires(Area.SOURCES, Level.MANAGE)])
+def cancel_sign_in_with_code(site_key: str, flow_id: str):
+    """Stop waiting for the code, such as when the user chose Cancel."""
+    cancel_code_sign_in(site_key, flow_id)
+
+
+@router.delete("/sources/authentication/{site_key}/account", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SiteAuthenticationAPIRead)
+def sign_out_of_account(site_key: str):
+    try:
+        listing = sign_out_account(site_key)
+    except SiteNotKnownError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _sign_in_changed(listing)
+    return SiteAuthenticationAPIRead.model_validate(listing)
+
+
 def _sign_in_changed(listing: SiteAuthentication) -> None:
     # The new sign-in may give videos VODLoft could not download before.
-    for source_key in listing.cookie_source_keys:
+    for source_key in dict.fromkeys((*listing.cookie_source_keys, *filter(None, (listing.account_source_key,)))):
         access_changed(source_key)
 
 

@@ -359,6 +359,26 @@ export const SiteApiReadSchema = z.object({
 })
 export type SiteApiRead = z.infer<typeof SiteApiReadSchema>
 
+/** How the user signs in with their account on a Site: an email and password, a token, or a code on the Site's page. */
+export const AccountSignInReadSchema = z.object({
+    kind: z.enum(['password', 'token', 'device_code']),
+    benefits: z.string(),
+    fields: z.array(z.object({key: z.string(), label: z.string(), secret: z.boolean()})),
+    steps: z.array(z.object({text: z.string(), button: z.string().nullable(), url: z.string().nullable()})),
+    /** What the user should know before signing in, such as that the Site may stop allowing it. */
+    caution: z.string().nullable(),
+})
+export type AccountSignInRead = z.infer<typeof AccountSignInReadSchema>
+
+/** A sign-in with a code that has started: the user enters ``userCode`` at ``verificationUrl``. */
+export const CodeSignInReadSchema = z.object({
+    id: z.string(),
+    userCode: z.string(),
+    verificationUrl: z.string(),
+    expiresIn: z.number(),
+})
+export type CodeSignInRead = z.infer<typeof CodeSignInReadSchema>
+
 export const SiteAuthenticationReadSchema = z.object({
     key: z.string(),
     name: z.string(),
@@ -382,6 +402,14 @@ export const SiteAuthenticationReadSchema = z.object({
         hints: z.record(z.string(), z.string()),
         problem: z.string().nullable(),
         setUp: z.boolean(),
+    }).nullable().default(null),
+    /** How the user signs in with their account on the Site, on a Site that offers it. */
+    accountSignIn: AccountSignInReadSchema.nullable().default(null),
+    /** Whether the user signed in with their account, as who, and the last problem with the sign-in. */
+    accountStatus: z.object({
+        signedIn: z.boolean(),
+        account: z.string().nullable(),
+        problem: z.string().nullable(),
     }).nullable().default(null),
     /** The user can remove the Site: VODLoft has nothing from it and no Source is made for it. */
     removable: z.boolean(),

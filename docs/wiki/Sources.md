@@ -9,7 +9,7 @@ VODLoft calls the services it adds media from **Sources**. Each Source knows how
 | Source | Sites | Adds | Account |
 |---|---|---|---|
 | The Daily Wire | dailywire.com | Shows, podcasts, movies and movie extras | Optional, needed for member content |
-| yt-dlp | YouTube and [well over a thousand other sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md), plus any other page with a video | Channels and playlists as collections, single videos | Optional cookies file and YouTube API key |
+| yt-dlp | YouTube and [well over a thousand other sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md), plus any other page with a video | Channels and playlists as collections, single videos | Optional cookies file, a sign-in with your account on some sites, and a YouTube API key |
 | NPO Start | npo.nl | Series as collections, programmes outside a series as single videos | Not needed; NPO Plus is not supported yet |
 
 ### The Daily Wire
@@ -24,7 +24,7 @@ Some sites give their videos no real title. Instagram calls every post "Video by
 
 yt-dlp also tries any site no other Source claims. Such a link is labelled "Other sites · best effort": it often works for a plain page with one video, but not always.
 
-Sites change often, and yt-dlp has to keep up. VODLoft updates yt-dlp once a week, and **Update now** on its card does it straight away. A cookies file per site lets yt-dlp reach videos that need a signed-in viewer (see [[Settings#authentication]]), and an optional free YouTube Data API key makes YouTube channels much faster to list and check. **Search YouTube** on the Add media page finds YouTube channels, playlists and videos by name, with or without a key, and **Search SoundCloud** finds SoundCloud accounts, albums, playlists and tracks. See [[Settings#yt-dlp]], [[Collections-and-Library#search-youtube]] and [[Collections-and-Library#search-soundcloud]].
+Sites change often, and yt-dlp has to keep up. VODLoft updates yt-dlp once a week, and **Update now** on its card does it straight away. A cookies file per site lets yt-dlp reach videos that need a signed-in viewer, and Twitch, Nebula, CuriosityStream, Dropout, Niconico and SoundCloud also let you sign in with your account (see [[Settings#authentication]]), and an optional free YouTube Data API key makes YouTube channels much faster to list and check. **Search YouTube** on the Add media page finds YouTube channels, playlists and videos by name, with or without a key, and **Search SoundCloud** finds SoundCloud accounts, albums, playlists and tracks. See [[Settings#yt-dlp]], [[Collections-and-Library#search-youtube]] and [[Collections-and-Library#search-soundcloud]].
 
 ### NPO Start
 

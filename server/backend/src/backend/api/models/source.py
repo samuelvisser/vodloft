@@ -12,7 +12,7 @@ from backend.services.media_access import access_granted, access_locked, site_ac
 from backend.types.collection_types import CollectionType
 from backend.types.link_season_types import CollectionKind
 from config.settings.site_settings import UpgradeRepeat
-from sources import Feature, ProfileSeasons, ReleaseDate, SiteSetting, StreamMethod, UnknownSourceError, UpgradeImprovement, get_source, site_of
+from sources import Feature, ProfileSeasons, SignInKind, ReleaseDate, SiteSetting, StreamMethod, UnknownSourceError, UpgradeImprovement, get_source, site_of
 from sources.ytdlp_options import MAX_OPTIONS_LENGTH, OptionsRefused, ytdlp_option_arguments
 
 
@@ -311,6 +311,40 @@ class SiteApiValuesAPIUpdate(RequestBase):
     """The values by their field's key. A secret left empty keeps the one stored."""
 
 
+class AccountSignInAPIRead(ResponseBase):
+    """How the user signs in with their account on a Site, such as Nebula's email and password or Twitch's code."""
+
+    kind: SignInKind
+    benefits: str
+    fields: list[ApiFieldAPIRead]
+    """What the user fills in, for an email and password or a token."""
+    steps: list[GuideStepAPIRead]
+    """How to get what the fields ask for, when that is not plain."""
+    caution: Optional[str] = None
+
+
+class AccountStatusAPIRead(ResponseBase):
+    signed_in: bool
+    account: Optional[str] = None
+    """The name or email address of the account, when the Site tells it."""
+    problem: Optional[str] = None
+
+
+class AccountValuesAPIUpdate(RequestBase):
+    values: dict[str, str] = Field(max_length=8)
+    """What the user filled in, by its field's key."""
+
+
+class CodeSignInAPIRead(ResponseBase):
+    """A sign-in with a code that has started: the user enters ``user_code`` at ``verification_url``."""
+
+    id: str
+    """What the UI waits for the sign-in with."""
+    user_code: str
+    verification_url: str
+    expires_in: int
+
+
 class SiteAuthenticationAPIRead(ResponseBase):
     """A Site, and how VODLoft signs in on it or gets at its API: a Source's own sign-in, the Site's cookies
     file, or a Source's API key."""
@@ -331,6 +365,9 @@ class SiteAuthenticationAPIRead(ResponseBase):
     site_api: Optional[SiteApiAPIRead] = None
     """The Site's own API, on a Site that has one a Source uses."""
     site_api_status: Optional[SiteApiStatusAPIRead] = None
+    account_sign_in: Optional[AccountSignInAPIRead] = None
+    """How the user signs in with their account on the Site, on a Site that offers it."""
+    account_status: Optional[AccountStatusAPIRead] = None
     removable: bool
     """The user can remove the Site: VODLoft has nothing from it and no Source is made for it."""
 

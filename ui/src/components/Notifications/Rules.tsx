@@ -154,7 +154,7 @@ export default function Rules({rules, events, destinations, personal}: RulesProp
                     icon={faIcon('fass', 'trash')}
                     iconTone="danger"
                     onDismiss={() => setDeleting(null)}
-                    confirmButton={{label: 'Delete', className: 'btn-danger', onClick: () => remove(deleting)}}
+                    confirmButton={{label: 'Delete', className: 'btn btn-danger', onClick: () => remove(deleting)}}
                 >
                     <RuleSentence rule={deleting} events={events} destinations={destinations} collections={collections} personal={personal}/>
                     {deleting.defaultKey && !personal ? <p className="help">Restore default rules brings it back.</p> : null}

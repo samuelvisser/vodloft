@@ -8,7 +8,7 @@ import logging
 import re
 from collections import Counter
 from dataclasses import replace
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import ClassVar
 from urllib.parse import urlsplit, urlunsplit
@@ -17,10 +17,11 @@ import requests
 
 from progress_plan import PlanTracker, StageSpec
 
-from ...contract import CollectionDetails, CreatorDetails, SearchResults, SectionKind, SectionRef
+from ...contract import CollectionDetails, CreatorDetails, SearchResults, SectionKind, SectionRef, SignInRejected
+from ...site_accounts import SignedIn, cookie_line
 from ... import ytdlp_runner as runner
-from .. import sites, soundcloud_search, thumbnails
-from ..site_contracts.soundcloud import ALBUM_LIST, PLAYLIST_LIST
+from .. import sites, soundcloud_account, soundcloud_search, thumbnails
+from ..site_contracts.soundcloud import ALBUM_LIST, PLAYLIST_LIST, SOUNDCLOUD_TOKEN
 from .other_sites import OtherSitesImplementation
 from sources.ytdlp_options import keep_call_options
 
@@ -237,6 +238,22 @@ class SoundCloudImplementation(ArtistImplementation):
 
     key = "soundcloud"
     list_keys = frozenset({ALBUM_LIST, PLAYLIST_LIST, "single"})
+
+    def sign_in(self, values: Mapping[str, str]) -> SignedIn:
+        """SoundCloud signs in with the token its website keeps in the ``oauth_token`` cookie, which yt-dlp reads."""
+        token = (values.get(SOUNDCLOUD_TOKEN) or "").strip()
+        if not token:
+            raise SignInRejected("Fill in your sign-in token", SOUNDCLOUD_TOKEN)
+        try:
+            account = soundcloud_account.account_of(token)
+        except Exception:
+            raise SignInRejected("Could not reach SoundCloud. Try again in a moment.") from None
+        if account is None:
+            raise SignInRejected(
+                "SoundCloud does not accept this token. Copy it again while you are signed in on soundcloud.com.",
+                SOUNDCLOUD_TOKEN,
+            )
+        return SignedIn(cookies=(cookie_line("soundcloud.com", "oauth_token", token),), account=account)
     music_pages = frozenset({"", "tracks"})
     # SoundCloud's own pages, which are not an artist's.
     _own_pages = frozenset({"discover", "search", "stream", "upload", "you", "charts", "pages", "people", "settings", "messages", "jobs"})

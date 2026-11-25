@@ -7,6 +7,7 @@ import SourceSection from './SourceSection'
 import {sourceComponents} from './sourceComponents'
 import AddSiteByLink from '../Settings/AddSiteByLink'
 import SiteApiSettings from './SiteApiSettings'
+import SiteAccountSettings from './SiteAccountSettings'
 import SiteRow, {SiteBadge, SiteRows} from '../Settings/SiteRow'
 import './SiteAuthenticationCard.css'
 
@@ -123,6 +124,11 @@ function useApiKeyBadge(sourceKey: string | null) {
 function badges(site: SiteAuthenticationRead, apiKey: ReturnType<typeof useApiKeyBadge>) {
     const shown = []
     if (site.signInSourceKey) shown.push(<SiteBadge key="sign-in" tone="own">Own sign-in</SiteBadge>)
+    if (site.accountStatus?.signedIn) {
+        shown.push(site.accountStatus.problem
+            ? <SiteBadge key="account" tone="problem">Sign-in not working</SiteBadge>
+            : <SiteBadge key="account" tone="on">Signed in</SiteBadge>)
+    }
     if (site.cookiesStatus) {
         shown.push(<SiteBadge key="status" tone={site.cookiesStatus.ok ? 'on' : 'problem'}>{site.cookiesStatus.label}</SiteBadge>)
     } else if (site.hasCookies) {
@@ -156,9 +162,10 @@ function SiteAuthenticationRow({site, onSaved, alone}: {
         >
             {SignIn ? <SignIn/> : null}
             {ApiKey ? <ApiKey/> : null}
+            {site.accountSignIn ? <SiteAccountSettings site={site} onSaved={onSaved}/> : null}
             {site.siteApi ? <SiteApiSettings site={site} onSaved={onSaved}/> : null}
             {takesCookies ? <SiteCookies site={site} onSaved={onSaved}/> : null}
-            {!SignIn && !ApiKey && !site.siteApi && !takesCookies ? <p className="settings-field__help">VODLoft can't sign in on {site.name}.</p> : null}
+            {!SignIn && !ApiKey && !site.accountSignIn && !site.siteApi && !takesCookies ? <p className="settings-field__help">VODLoft can't sign in on {site.name}.</p> : null}
         </SiteRow>
     )
 }

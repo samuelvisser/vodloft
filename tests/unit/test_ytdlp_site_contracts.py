@@ -71,12 +71,11 @@ def test_soundcloud_and_bandcamp_name_their_sections_and_seasons():
 def test_every_site_implementation_answers_the_section_types_of_its_contract():
     from sources.ytdlp.site_implementations import IMPLEMENTATIONS
 
-    generic = site_of("example").section_types
     for key, implementation in IMPLEMENTATIONS.items():
         site = site_of(key)
-        if site.section_types == generic:
-            # A Site whose implementation only adds its search keeps the generic types, read the generic way.
-            assert not implementation.list_keys, key
+        if not site.creators:
+            # Like every Site without an implementation of its own, it has no creators whose sections VODLoft reads;
+            # its implementation is there for something else, such as its account sign-in.
             continue
         answered = implementation(site, lambda url: {})
         assert {type_.key for type_ in site.section_types} == (

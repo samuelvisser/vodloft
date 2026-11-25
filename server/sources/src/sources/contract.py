@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from enum import StrEnum
@@ -92,6 +92,9 @@ class Feature(StrEnum):
     """A collection can hold only what lists the user picks have, from any of the Source's Sites, as its link seasons:
     the Source lists them with ``list_items`` and looks their videos up with ``item_details``, and such a collection
     needs no link of its own."""
+    ACCOUNT_SIGN_IN = "account_sign_in"
+    """Signing in with the user's account on a Site that offers it (``Site.account_sign_in``), with
+    ``account_status``, ``sign_in``, ``start_code_sign_in``, ``finish_code_sign_in`` and ``sign_out``."""
     CHAPTERS = "chapters"
     """A video's chapters come with its details (``VideoDetails.chapters``), and a download can keep one
     stretch of a video, so a collection can split each video into a part per chapter."""
@@ -936,6 +939,70 @@ class ApiKeyRejected(ValueError):
         self.field = field
 
 
+class SignInKind(StrEnum):
+    """How the user signs in with their account on a Site (``AccountSignIn``)."""
+
+    PASSWORD = "password"
+    """With the account's email and password, in VODLoft."""
+    TOKEN = "token"
+    """With a sign-in token the user copies from the Site in their browser."""
+    DEVICE_CODE = "device_code"
+    """With a code VODLoft shows, which the user enters on the Site's own page, the way a TV app signs in."""
+
+
+@dataclass(frozen=True)
+class AccountSignIn:
+    """Signing in on a Site with the user's own account there, which a Source with ``Feature.ACCOUNT_SIGN_IN`` does
+    itself, such as Twitch's sign-in with a code. It stands in for a cookies file on the Site, and works beside one."""
+
+    kind: SignInKind
+    benefits: str
+    """What signing in gives, as a sentence."""
+    fields: tuple[ApiField, ...] = ()
+    """What the user fills in, for a ``PASSWORD`` or ``TOKEN`` sign-in."""
+    steps: tuple[GuideStep, ...] = ()
+    """How to get what the ``fields`` ask for, when that is not plain, such as where a token is found."""
+    caution: str | None = None
+    """What the user should know before signing in, such as that the Site may stop allowing it."""
+
+
+@dataclass(frozen=True)
+class AccountStatus:
+    """Whether the Site's account sign-in is set up, who it signs in as, and the last problem it had."""
+
+    signed_in: bool
+    account: str | None = None
+    """The name or email address of the account, when the Site tells it."""
+    problem: str | None = None
+
+
+@dataclass(frozen=True)
+class DeviceCode:
+    """A sign-in with a code that has started: the user enters ``user_code`` at ``verification_url``."""
+
+    device_code: str
+    """What the Source asks the Site with whether the user entered the code; never shown."""
+    user_code: str
+    verification_url: str
+    expires_in: int
+    """Seconds until the code runs out."""
+    interval: int
+    """Seconds between two questions to the Site."""
+
+
+class SignInRejected(ValueError):
+    """The Site did not sign in; the message says why and what to do, and ``field`` which value it is about, when it
+    is about one."""
+
+    def __init__(self, message: str, field: str | None = None):
+        super().__init__(message)
+        self.field = field
+
+
+class SignInCodeEnded(SignInRejected):
+    """A sign-in with a code ended before the user entered it: it ran out, or the user turned it down."""
+
+
 ANY_DOMAIN = "*"
 
 
@@ -1055,6 +1122,9 @@ class Site:
     site_api: SiteApi | None = None
     """The Site's own free API that the user can register VODLoft with, through a Source with ``Feature.SITE_API``,
     such as Twitch's for its search."""
+    account_sign_in: AccountSignIn | None = None
+    """How the user can sign in with their account on the Site, through a Source with ``Feature.ACCOUNT_SIGN_IN``,
+    such as Nebula's email and password. Without it, only a cookies file signs in."""
     accesses: tuple[Access, ...] = ()
     """What the Site only gives some of its videos with, such as NPO Plus or a channel membership,
     by the keys its Sources tell."""
@@ -1513,6 +1583,29 @@ class Source(ABC):
 
     def remove_site_api(self, site: Site) -> None:
         raise NotImplementedError(f"{self.name} uses no API of {site.name}")
+
+    def account_status(self, site: Site) -> AccountStatus:
+        """Whether the user signed in with their account on the Site. Only Sources with ``Feature.ACCOUNT_SIGN_IN``
+        implement it."""
+        raise NotImplementedError(f"{self.name} signs in on {site.name} with a cookies file only")
+
+    def sign_in(self, site: Site, values: Mapping[str, str]) -> AccountStatus:
+        """Sign in on the Site with what the user filled in for its ``PASSWORD`` or ``TOKEN`` sign-in, and keep the
+        sign-in. Raises SignInRejected when the Site does not accept it."""
+        raise NotImplementedError(f"{self.name} signs in on {site.name} with a cookies file only")
+
+    def start_code_sign_in(self, site: Site) -> DeviceCode:
+        """Ask the Site for a code the user enters on its own page, for a ``DEVICE_CODE`` sign-in."""
+        raise NotImplementedError(f"{self.name} signs in on {site.name} with a cookies file only")
+
+    def finish_code_sign_in(self, site: Site, code: DeviceCode, stop: Callable[[float], bool]) -> AccountStatus:
+        """Wait until the user entered the code, and keep the sign-in. ``stop`` waits the seconds it is given and
+        tells whether to give up. Raises SignInCodeEnded when the code ran out or the user turned it down."""
+        raise NotImplementedError(f"{self.name} signs in on {site.name} with a cookies file only")
+
+    def sign_out(self, site: Site) -> None:
+        """Forget the account sign-in on the Site."""
+        raise NotImplementedError(f"{self.name} signs in on {site.name} with a cookies file only")
 
     def program_status(self) -> ProgramStatus:
         """The program this Source runs. Only Sources with ``Feature.PROGRAM_UPDATES`` implement it."""

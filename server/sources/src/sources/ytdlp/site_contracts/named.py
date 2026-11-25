@@ -21,7 +21,6 @@ class BitChute(OtherSites):
     domains = ("bitchute.com",)
 
 
-
 class Facebook(OtherSites):
     key, name = "facebook", "Facebook"
     initials = "FB"
@@ -29,15 +28,11 @@ class Facebook(OtherSites):
     icon = "fab:facebook"
 
 
-
-
-
 class Patreon(OtherSites):
     key, name = "patreon", "Patreon"
     initials = "PA"
     domains = ("patreon.com",)
     icon = "fab:patreon"
-
 
 
 class Reddit(OtherSites):

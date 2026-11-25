@@ -80,7 +80,7 @@ import {VideoRead, VideoReadSchema} from "../types/schemas/video";
 import {
     ApiKeyNoteRead, ApiKeyNoteReadSchema, ApiStatusRead, ApiStatusReadSchema, EpisodeTagRead, EpisodeTagReadSchema, PublishStatusLabelRead, PublishStatusLabelReadSchema, ProgramStatusRead, SourceProblemRead,
     SourceProblemReadSchema, ProgramStatusReadSchema, ResolvedLinkRead,
-    ResolvedLinkReadSchema, LinkFirstLookRead, LinkFirstLookReadSchema, MediaLinksReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SiteReadSchema, SourceRead, SiteAuthenticationRead, SiteAuthenticationReadSchema, SiteChoiceRead, SiteChoiceReadSchema,
+    ResolvedLinkReadSchema, LinkFirstLookRead, LinkFirstLookReadSchema, MediaLinksReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SiteReadSchema, SourceRead, SiteAuthenticationRead, SiteAuthenticationReadSchema, CodeSignInRead, CodeSignInReadSchema, SiteChoiceRead, SiteChoiceReadSchema,
     SourceReadSchema,
     YtdlpOptionsReadSchema,
 } from "../types/schemas/source";
@@ -538,6 +538,44 @@ export async function changeSiteApi(
         const detail = body?.detail
         if (typeof detail?.message === 'string') throw new ApiKeyRejectedError(detail.message, detail.fixUrl ?? null)
     }
+    if (!response.ok) throw await responseError(response)
+    return SiteAuthenticationReadSchema.parse(await response.json())
+}
+
+/** The address of a Site's account sign-in. */
+const accountUrl = (siteKey: string) => `${apiUrl()}/sources/authentication/${encodeURIComponent(siteKey)}/account`
+
+/** Ask the Site for a code to sign in with on its own page. */
+export async function startCodeSignIn(siteKey: string): Promise<CodeSignInRead> {
+    const response = await fetch(`${accountUrl(siteKey)}/code`, {method: 'POST', credentials: 'include'})
+    if (!response.ok) throw await responseError(response)
+    return CodeSignInReadSchema.parse(await response.json())
+}
+
+/** A sign-in with a code that ended without signing in: the code ran out, was turned down, or was cancelled. */
+export class CodeSignInEndedError extends Error {}
+
+/** Wait until the user entered the code of a sign-in that started. */
+export async function finishCodeSignIn(siteKey: string, flowId: string, signal: AbortSignal): Promise<SiteAuthenticationRead> {
+    const response = await fetch(`${accountUrl(siteKey)}/code/${encodeURIComponent(flowId)}`, {
+        method: 'POST', credentials: 'include', signal,
+    })
+    if (response.status === 410) {
+        const body = await response.json().catch(() => null)
+        throw new CodeSignInEndedError(typeof body?.detail === 'string' ? body.detail : 'The code is no longer valid.')
+    }
+    if (!response.ok) throw await responseError(response)
+    return SiteAuthenticationReadSchema.parse(await response.json())
+}
+
+/** Stop waiting for the code of a sign-in that started. */
+export async function cancelCodeSignIn(siteKey: string, flowId: string): Promise<void> {
+    await fetch(`${accountUrl(siteKey)}/code/${encodeURIComponent(flowId)}`, {method: 'DELETE', credentials: 'include'})
+}
+
+/** Forget the account sign-in on a Site. */
+export async function signOutOfSite(siteKey: string): Promise<SiteAuthenticationRead> {
+    const response = await fetch(accountUrl(siteKey), {method: 'DELETE', credentials: 'include'})
     if (!response.ok) throw await responseError(response)
     return SiteAuthenticationReadSchema.parse(await response.json())
 }

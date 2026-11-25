@@ -23,3 +23,39 @@
     font-size: 13px;
     font-weight: 600;
 }
+
+/* A sign-in with a code: open the Site's page, then enter the code shown there. */
+.code-sign-in {
+    display: grid;
+    gap: 10px;
+    max-width: 520px;
+}
+
+.code-sign-in__steps {
+    display: grid;
+    gap: 10px;
+    margin: 0;
+    padding-left: 1.4em;
+    list-style: decimal;
+    font-size: 13px;
+}
+
+.code-sign-in__step {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 12px;
+}
+
+.code-sign-in__code {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.code-sign-in__code code {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+}
