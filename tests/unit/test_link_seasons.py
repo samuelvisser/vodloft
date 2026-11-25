@@ -1568,6 +1568,9 @@ def test_the_seasons_list_marks_the_channel_season_while_it_holds_the_whole_chan
     collection.channel_season = "unlisted"
     session.commit()
     assert not any(season.whole_channel for season in get_seasons_list(session, "creator"))
+    # The season of what is in no list stays marked, so a collection page lists it first.
+    assert [season.name for season in get_seasons_list(session, "creator") if season.loose] == [
+        next(season.name for season in collection.seasons if season.loose)]
 
 
 def test_a_channel_collection_takes_links_in_the_same_save_that_makes_it_hold_only_its_playlists(links_source, session):

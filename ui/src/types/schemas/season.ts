@@ -44,6 +44,8 @@ export const SeasonReadSchema = z.looseObject({
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,
     newestPublishedAt: ApiDateTimeSchema.nullish(),
+    /** The channel season, or the season of what is in no list, such as Singles. */
+    loose: z.boolean().default(false),
     /** The channel season while it holds the whole channel, such as Channel on YouTube. */
     wholeChannel: z.boolean().default(false),
 })
