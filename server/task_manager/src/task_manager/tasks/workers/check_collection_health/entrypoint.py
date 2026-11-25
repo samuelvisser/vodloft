@@ -106,6 +106,9 @@ def _check_all() -> TaskResult:
     allowed_resource_types=("system",),
     default_max_retries=1,
     tracks_progress=False,
+    # Looking up creators is routine; only collections that need the user, drift it set right and creators to
+    # group make a run worth seeing in its log.
+    findings=("unhealthy", "set_right", "suggestions"),
 )
 async def check_collection_health(*, resource_id: int | None = None, progress=None) -> TaskResult:
     del resource_id, progress
