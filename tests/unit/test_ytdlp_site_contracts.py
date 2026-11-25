@@ -71,8 +71,13 @@ def test_soundcloud_and_bandcamp_name_their_sections_and_seasons():
 def test_every_site_implementation_answers_the_section_types_of_its_contract():
     from sources.ytdlp.site_implementations import IMPLEMENTATIONS
 
+    generic = site_of("example").section_types
     for key, implementation in IMPLEMENTATIONS.items():
         site = site_of(key)
+        if site.section_types == generic:
+            # A Site whose implementation only adds its search keeps the generic types, read the generic way.
+            assert not implementation.list_keys, key
+            continue
         answered = implementation(site, lambda url: {})
         assert {type_.key for type_ in site.section_types} == (
             {type_.key for type_ in answered.feed_types} | implementation.list_keys

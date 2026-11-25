@@ -114,6 +114,12 @@ export default function SourceSearchPage({sourceId: givenSourceId, siteKey: give
                 </button>
             </form>
 
+            {site?.searchNote && (
+                <p className="search-notice search-notice--note" role="note">
+                    <FontAwesomeIcon icon={faIcon('fass', 'circle-info')} aria-hidden="true"/>
+                    <span>{site.searchNote}</span>
+                </p>
+            )}
             {query && results.data?.notice && <SearchNotice notice={results.data.notice}/>}
 
             {!query ? null : results.isPending ? <p>Searching {sourceName}…</p> : results.error ? (

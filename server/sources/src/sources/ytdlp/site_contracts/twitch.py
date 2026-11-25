@@ -42,6 +42,7 @@ class Twitch(OtherSites):
     )
     # Twitch's own API finds channels by name. It is free, with an application the user registers at dev.twitch.tv.
     searchable = True
+    search_note = "Twitch's search only finds channels. To add a single video or a playlist, paste its link on Add media."
     site_api = SiteApi(
         "Twitch API",
         (ApiField("client_id", "Client ID"), ApiField("client_secret", "Client secret", secret=True)),
