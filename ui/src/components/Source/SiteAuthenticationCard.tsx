@@ -1,8 +1,13 @@
 import {ChangeEvent, useRef, useState} from 'react'
 import {useQueryClient} from '@tanstack/react-query'
+import {useForm} from 'react-hook-form'
+import {z} from 'zod'
+import {zodResolver} from '@hookform/resolvers/zod'
 
 import {saveSiteCookies, useSiteAuthentication, useSourceApi} from '../../lib/queries'
-import type {SiteAuthenticationRead} from '../../types/schemas/source'
+import {apiFetch} from '../../lib/api'
+import {SiteAuthenticationReadSchema, type SiteAuthenticationRead} from '../../types/schemas/source'
+import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import SourceSection from './SourceSection'
 import {sourceComponents} from './sourceComponents'
 import AddSiteByLink from '../Settings/AddSiteByLink'
@@ -39,6 +44,9 @@ function CookiesFileButton({label, ariaLabel, disabled, onFile}: {
     )
 }
 
+/** How to install VODLoft's browser extension, which sends a site's cookies to VODLoft. */
+const EXTENSION_GUIDE = 'https://github.com/samuelvisser/vodloft/wiki/Browser-Extension'
+
 const sitesNamed = (names: string[]) => names.length <= 1
     ? names.join('')
     : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
@@ -47,9 +55,60 @@ function cookieCount(count: number) {
     return `${count} ${count === 1 ? 'cookie' : 'cookies'}`
 }
 
+const PastedCookiesSchema = z.object({
+    content: z.string().trim().min(1, 'Paste the cookies here first').default(''),
+})
+type PastedCookiesIn = z.input<typeof PastedCookiesSchema>
+type PastedCookies = z.output<typeof PastedCookiesSchema>
+
+/** Cookies pasted as the text of a cookies.txt file, for when saving them as a file first is a detour. */
+function PasteCookiesForm({site, onSaved, onClose}: {
+    site: SiteAuthenticationRead
+    onSaved: (site: SiteAuthenticationRead) => void
+    onClose: () => void
+}) {
+    const form = useForm<PastedCookiesIn, unknown, PastedCookies>({resolver: zodResolver(PastedCookiesSchema), defaultValues: PastedCookiesSchema.parse({})})
+    const {register, formState: {errors, isSubmitting}} = form
+    const onSubmit = buildServerAwareSubmit<PastedCookiesIn, PastedCookies, SiteAuthenticationRead>(
+        form,
+        async (data) => apiFetch(`/sources/authentication/${encodeURIComponent(site.key)}/cookies`, {
+            method: 'PUT', json: {content: data.content},
+        }),
+        {
+            fallbackField: 'content',
+            parseSuccess: async (response) => SiteAuthenticationReadSchema.parse(await response.json()),
+            onSuccess: async (listing) => {
+                onSaved(listing)
+                onClose()
+            },
+        },
+    )
+    return (
+        <form className="site-cookies-paste" onSubmit={onSubmit} noValidate>
+            <label className="site-api-form__field">
+                <span>Cookies</span>
+                <textarea
+                    className="input site-cookies-paste__text" rows={6} spellCheck={false} autoComplete="off"
+                    placeholder={'# Netscape HTTP Cookie File\n.example.com\tTRUE\t/\tTRUE\t0\tname\tvalue'}
+                    aria-invalid={Boolean(errors.content)} {...register('content')}
+                />
+                {errors.content && <span className="error" role="alert">{String(errors.content.message)}</span>}
+            </label>
+            {errors.root && <div className="error" role="alert">{String(errors.root.message)}</div>}
+            <div className="youtube-api-key">
+                <button className="btn btn-primary" type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? 'Saving…' : 'Save cookies'}
+                </button>
+                <button className="btn" type="button" onClick={onClose} disabled={isSubmitting}>Cancel</button>
+            </div>
+        </form>
+    )
+}
+
 /** The cookies file of one Site. */
 function SiteCookies({site, onSaved}: {site: SiteAuthenticationRead; onSaved: (site: SiteAuthenticationRead) => void}) {
     const [saving, setSaving] = useState(false)
+    const [pasting, setPasting] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
     const save = async (content: string | null) => {
@@ -88,6 +147,10 @@ function SiteCookies({site, onSaved}: {site: SiteAuthenticationRead; onSaved: (s
                     it for every lookup and download on {site.name}.
                 </p>
                 <p>
+                    You can also paste the cookies, or send them from your browser in one click with{' '}
+                    <a href={EXTENSION_GUIDE} target="_blank" rel="noreferrer">VODLoft&apos;s browser extension</a>.
+                </p>
+                <p>
                     {site.hasCookies
                         ? `The cookies file has ${cookieCount(site.cookieCount)} for ${site.name}.`
                         : `${site.name} has no cookies file.`}
@@ -96,12 +159,18 @@ function SiteCookies({site, onSaved}: {site: SiteAuthenticationRead; onSaved: (s
                     <p className={site.cookiesStatus.ok ? 'youtube-api-ok' : 'source-setting-error'}>{site.cookiesStatus.detail}</p>
                 )}
                 {error && <p className="source-setting-error" role="alert">{error}</p>}
+                {pasting && <PasteCookiesForm site={site} onSaved={onSaved} onClose={() => setPasting(false)}/>}
             </div>
             <div className="source-setting-actions">
                 <CookiesFileButton
                     label={site.hasCookies ? 'Replace file' : 'Choose file'} ariaLabel={`Cookies file for ${site.name}`}
                     disabled={saving} onFile={(content) => void save(content)}
                 />
+                {!pasting && (
+                    <button className="btn" type="button" onClick={() => setPasting(true)} disabled={saving}>
+                        Paste cookies
+                    </button>
+                )}
                 {site.hasCookies && (
                     <button className="btn" type="button" onClick={() => void save(null)} disabled={saving}>
                         Remove
