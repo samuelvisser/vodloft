@@ -1,4 +1,4 @@
-import {useState} from 'react'
+import {useRef, useState} from 'react'
 import {useQueryClient} from '@tanstack/react-query'
 import {toast} from '../../lib/toast'
 import type {DataTableSelection} from '../DataTable/DataTable'
@@ -39,6 +39,8 @@ export default function ProfileBulkEdit({selection, endpoint, noun, names, field
     const [dialog, setDialog] = useState<'change' | 'delete' | null>(null)
     const [busy, setBusy] = useState(false)
     const [ids, setIds] = useState<number[]>([])
+    // Whether the open dialog changed or deleted anything: closing it then ends bulk edit.
+    const applied = useRef(false)
 
     const refresh = () => Promise.allSettled([
         ...invalidate.map((queryKey) => queryClient.invalidateQueries({queryKey})),
@@ -48,7 +50,12 @@ export default function ProfileBulkEdit({selection, endpoint, noun, names, field
 
     const open = (kind: 'change' | 'delete') => {
         setIds(selection.ids)
+        applied.current = false
         setDialog(kind)
+    }
+    const close = () => {
+        setDialog(null)
+        if (applied.current) selection.stop()
     }
 
     const setEnabled = async (enableProfile: boolean) => {
@@ -56,6 +63,7 @@ export default function ProfileBulkEdit({selection, endpoint, noun, names, field
         try {
             const result = await bulkChange(endpoint, selection.ids, {enableProfile})
             await refresh()
+            selection.stop()
             const verb = enableProfile ? 'Enabled' : 'Disabled'
             if (result.skipped.length) {
                 toast(`${verb} ${countOf(result.done, noun)}; ${countOf(result.skipped.length, noun)} left as they were`)
@@ -86,8 +94,9 @@ export default function ProfileBulkEdit({selection, endpoint, noun, names, field
                     noun={noun}
                     names={shownNames}
                     fields={fields}
-                    onClose={() => setDialog(null)}
+                    onClose={close}
                     onChanged={(result) => {
+                        applied.current = true
                         void refresh()
                         if (result.done) toast.success(`Changed ${countOf(result.done, noun)}`)
                     }}
@@ -100,9 +109,9 @@ export default function ProfileBulkEdit({selection, endpoint, noun, names, field
                     noun={noun}
                     names={shownNames}
                     note={deleteNote}
-                    onClose={() => setDialog(null)}
+                    onClose={close}
                     onDeleted={() => {
-                        selection.clear()
+                        applied.current = true
                         void refresh()
                     }}
                 />
