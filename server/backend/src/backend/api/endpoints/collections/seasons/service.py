@@ -21,10 +21,12 @@ from backend.services.link_seasons import (
     collection_list_kinds, collection_new_lists,
     LinkListing, channel_feeds, holds_only_link_seasons, is_in, leaving_outside, section_list_names,
     lists_playlists, loose_season_name, made_from_list, offers_link_seasons, outside_only_in, place_in_link_seasons, save_lists,
-    active_lists, let_go_of_seasons, rehome_removed, season_removable, seasons_with_parts,
+    active_lists, let_go_of_seasons, moved_episodes, rehome_removed, season_removable, seasons_with_parts,
 )
 from backend.services.sites import collection_creator_names, collection_site, collection_words, preferred_sources, site_record
 from backend.services.season_moves import queue_season_folder_moves
+from backend.services.move_causes import note_move_causes, settings_of
+from backend.types.move_cause_types import MoveCauseOrigin
 from backend.services.season_order import (
     arrange_seasons, link_first_videos, lists_by_season, match_seasons_of_downloaded, renumber_seasons, season_year,
 )
@@ -111,8 +113,6 @@ class _View:
 
 def moved_view(s: Session, collection_slug: str) -> MovedEpisodesAPIRead:
     """The collection's episodes that belong in another season now. Reading only."""
-    from backend.services.link_seasons import moved_episodes
-
     collection = _collection(s, collection_slug)
     return MovedEpisodesAPIRead(episode_slugs=[episode.slug for episode in moved_episodes(s, collection)])
 
@@ -243,6 +243,8 @@ def update_seasons(
 
     ``s`` is a write transaction's session."""
     collection = _collection(s, collection_slug)
+    # As the settings are before saving, for what the Move dialog shows changed.
+    was_settings = settings_of(collection, MoveCauseOrigin.SEASONS)
     seasons = {season.id: season for season in collection.seasons}
     if sorted(change.id for change in body.seasons) != sorted(seasons):
         season = collection_contract(collection.type).words.season
@@ -417,6 +419,9 @@ def update_seasons(
         queue_season_folder_moves(s, collection, sorted(moving))
     if relisting:
         reindex_collection(s, collection)
+    s.flush()
+    # Downloads the new settings put in another season wait for the Move action, which shows what changed.
+    note_move_causes(collection, MoveCauseOrigin.SEASONS, was_settings, waiting=bool(moved_episodes(s, collection)))
     s.flush()
     s.refresh(collection)
     return seasons_view(s, collection_slug)

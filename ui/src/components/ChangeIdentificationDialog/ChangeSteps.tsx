@@ -69,6 +69,17 @@ export function ChangeList({changes, total = changes.length, titlesOnly = false}
     )
 }
 
+/** A setting as it was and as it becomes, as two chips with an arrow between them. */
+export function ChangeChips({before, after}: {before: ReactNode, after: ReactNode}) {
+    return (
+        <p className="change-identification-change">
+            <span className="change-identification-chip">{before}</span>
+            <span className="change-identification-arrow" aria-label="to">→</span>
+            <span className="change-identification-chip is-target">{after}</span>
+        </p>
+    )
+}
+
 /** One thing the change does: an icon, what it is, and how many it touches. */
 export function Step({icon, headline, detail, value, danger = false, children}: {
     /** How many it touches, or a word where that is not known yet, such as After. */

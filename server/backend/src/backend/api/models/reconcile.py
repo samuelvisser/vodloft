@@ -12,6 +12,7 @@ from backend.api.models.collection import (
 from backend.api.models.collection_contract import CollectionWordsAPIRead
 from backend.api.models.source import NamesAPIRead
 from backend.types.collection_types import EpisodeIdentifier
+from backend.types.move_cause_types import MoveCauseOrigin, MoveCauseValue
 
 
 class MovedPartAPIRead(ResponseBase):
@@ -28,6 +29,19 @@ class MovedPartAPIRead(ResponseBase):
     """Downloads whose files move along into their new season."""
 
 
+class MoveCauseAPIRead(ResponseBase):
+    """One setting change that made downloads wait for the Move action, as it was and is now. The UI shows it in the
+    words of its origin, such as the options of the Seasons dialog."""
+
+    origin: MoveCauseOrigin
+    setting: str
+    before: MoveCauseValue
+    after: MoveCauseValue
+    subject_id: Optional[int] = None
+    """For a setting of one thing in the collection, such as one of its lists: that thing."""
+    subject_title: Optional[str] = None
+
+
 class MovePreviewAPIRead(ResponseBase):
     """What the Move action does to the collection."""
 
@@ -36,8 +50,10 @@ class MovePreviewAPIRead(ResponseBase):
     type: str
     episode_identifier: EpisodeIdentifier
     parts: list[MovedPartAPIRead]
+    causes: list[MoveCauseAPIRead]
+    """The setting changes that made them wait, in the order they were made; none when VODLoft recorded none."""
     seasons_plan: str
-    """Why they move: what the collection's settings make its seasons now, in words."""
+    """What the collection's settings make its seasons now, in words: why they move when no change was recorded."""
     renumber_offered: bool
     """Whether it can number its episodes again: not when it numbers them by date."""
     changes: list[CollectionIdentificationChangeItemAPIRead]

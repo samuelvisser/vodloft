@@ -6,6 +6,7 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import toast from '../../lib/toast'
 
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
+import MoveCauses from './MoveCauses'
 import '../ChangeIdentificationDialog/ChangeIdentificationDialog.css'
 import {faIcon} from '../../icons/faIcon'
 import {previewReconcile, reconcile} from '../../lib/queries'
@@ -103,12 +104,15 @@ function CollectionMoves({preview, renumber, onRenumber}: {preview: MovePreview,
     const metadata = touched ? preview.profiles.reduce((sum, profile) => sum + profile.metadataRewritten, 0) : 0
     return (
         <section className="move-sections-collection" aria-label={preview.title}>
-            <p className="help move-reason">
-                <b>Why they move:</b> {preview.seasonsPlan}{' '}
-                Not what you want? Change it under{' '}
-                <Link to={`/edit-collection/${encodeURIComponent(preview.slug)}?seasons=1`}>{season.Plural}</Link>
-                {' '}instead of moving them.
-            </p>
+            {preview.causes.length > 0 ? <MoveCauses collectionSlug={preview.slug} causes={preview.causes}/> : (
+                // Downloads can wait without a recorded change, such as after an older VODLoft placed them differently.
+                <p className="help move-reason">
+                    <b>Why they move:</b> {preview.seasonsPlan}{' '}
+                    Not what you want? Change it under{' '}
+                    <Link to={`/edit-collection/${encodeURIComponent(preview.slug)}?seasons=1`}>{season.Plural}</Link>
+                    {' '}instead of moving them.
+                </p>
+            )}
             <ul className="change-identification-steps">
                 {preview.parts.map((part, index) => <PartStep key={index} part={part} season={season.singular}/>)}
                 {renumbered.length > 0 && (
