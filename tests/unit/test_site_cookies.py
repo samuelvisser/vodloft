@@ -100,6 +100,16 @@ def test_a_sites_cookies_file_keeps_only_its_own_cookies(session):
     assert _stored("twitch") is None
 
 
+def test_a_site_first_seen_through_a_short_link_takes_cookies_of_its_own_domain(session):
+    from backend.services import site_cookies
+
+    # YouTube added by a youtu.be link, such as one pasted in onboarding: its cookies are on youtube.com.
+    _site(session, "youtube", "YouTube", "youtu.be")
+    listing = site_cookies.save_site_cookies(session, "youtube", _file(YOUTUBE))
+    assert listing.domains[0] == "youtube.com"
+    assert _stored("youtube") == [YOUTUBE]
+
+
 def test_one_cookies_file_is_sorted_into_the_sites(session):
     from backend.services import site_cookies
     from sources import cookies
@@ -251,7 +261,7 @@ def test_youtube_is_listed_for_its_api_key_before_anything_from_it(session):
     _fresh(session)
     # A fresh install has seen no YouTube video yet, but onboarding still offers the YouTube API key.
     youtube = {site.key: site for site in site_cookies.list_site_authentication(session)}["youtube"]
-    assert (youtube.name, youtube.domains, youtube.api_key_source_key) == ("YouTube", ("youtube.com",), "ytdlp")
+    assert (youtube.name, youtube.domains, youtube.api_key_source_key) == ("YouTube", ("youtube.com", "youtu.be"), "ytdlp")
     assert youtube.cookie_source_names == ("yt-dlp",)
 
 

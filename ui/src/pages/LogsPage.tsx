@@ -112,9 +112,10 @@ export default function LogsPage() {
         setError(null)
     }
 
-    // Load the newest page, then keep adding what comes in after the last record shown.
+    // Load the newest page, then keep adding what comes in after the last record shown. A page the user is not
+    // looking at, such as in a window without focus, still shows the newest page, and waits to look for more.
     useEffect(() => {
-        if (!pageActive) return
+        if (!pageActive && windowRef.current !== null) return
         const controller = new AbortController()
         let timer: ReturnType<typeof setTimeout> | undefined
         const poll = async () => {
@@ -137,7 +138,7 @@ export default function LogsPage() {
                 if (controller.signal.aborted) return
                 setError(caught instanceof Error ? caught.message : 'Could not load logs.')
             }
-            timer = setTimeout(poll, delay)
+            if (pageActive || windowRef.current === null) timer = setTimeout(poll, delay)
         }
         void poll()
         return () => {

@@ -233,6 +233,9 @@ def _index_listed_collection(s: Session, *, collection_id: int, source: Source, 
                 Episode.collection_id == collection_id, Episode.video_slug.in_([details.slug for details in outside]),
             )):
                 episode.from_link_season = True
+            # Placing them reads the flag back, so another creator's video goes to its playlist's season only, not to
+            # the channel season as a video of the channel's own.
+            w.flush()
         if collection is None:
             return added
         place_in_link_seasons(w, collection, by_user=by_user)

@@ -107,3 +107,30 @@ def test_model_validator_field_errors_land_on_their_field() -> None:
     assert [(item["loc"], item["msg"]) for item in detail] == [
         (["body", "indexingValues"], "Indexing Value keys must be unique"),
     ]
+
+
+def test_a_validators_own_words_reach_the_form_without_pydantics_prefix() -> None:
+    from fastapi.exceptions import RequestValidationError
+    from pydantic import BaseModel, ValidationError, field_validator
+    import pytest
+
+    from backend.api.errors import validation_error_handler
+
+    class Timezone(BaseModel):
+        timezone: str
+
+        @field_validator("timezone")
+        @classmethod
+        def _known(cls, value: str) -> str:
+            raise ValueError("Enter a valid IANA timezone, such as Europe/Amsterdam")
+
+    with pytest.raises(ValidationError) as invalid:
+        Timezone.model_validate({"timezone": "Mars/Olympus_Mons"})
+    errors = [{**error, "loc": ("body", *error["loc"])} for error in invalid.value.errors()]
+
+    response = asyncio.run(validation_error_handler(None, RequestValidationError(errors)))  # type: ignore[arg-type]
+    detail = json.loads(response.body)["detail"]
+
+    assert [(item["loc"], item["msg"]) for item in detail] == [
+        (["body", "timezone"], "Enter a valid IANA timezone, such as Europe/Amsterdam"),
+    ]

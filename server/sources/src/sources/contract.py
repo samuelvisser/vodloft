@@ -1289,10 +1289,14 @@ def link_host(url: str) -> str:
     return (urlsplit(url).hostname or "").lower().rstrip(".")
 
 
+GENERIC_PREFIX = "generic:"
+"""The start of the key of a Site of its own domain, such as ``generic:example.com``."""
+
+
 def domain_site(url: str) -> Site:
     """The Site of a link that belongs to no known site: its own domain, without www."""
     host = link_host(url).removeprefix("www.")
-    return Site(f"generic:{host}", host, (host,))
+    return Site(f"{GENERIC_PREFIX}{host}", host, (host,))
 
 
 def names_a_podcast(name: str | None) -> bool:

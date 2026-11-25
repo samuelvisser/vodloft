@@ -27,6 +27,8 @@ import ReconcileDialog from '../../components/ReconcileDialog/ReconcileDialog'
 import PageHeader, {PageHeaderAction} from '../../components/common/PageHeader'
 import {collectionWords, wordsFor} from '../../lib/collectionWords'
 import Breadcrumb from '../../components/common/Breadcrumb/Breadcrumb'
+import DialogSwitch from '../../components/common/DialogSwitch'
+import {useAccess} from '../../lib/access'
 
 
 type RouteParams = { id?: string }
@@ -63,6 +65,9 @@ export default function EditCollectionPage() {
   const [urlCopied, setUrlCopied] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [optionsError, setOptionsError] = useState<string | null>(null)
+  const [nameError, setNameError] = useState<string | null>(null)
+  const [deleteFiles, setDeleteFiles] = useState(false)
+  const mayDeleteFiles = !!useAccess().access?.deleteFiles
   const {data: collection} = useCollection(id)
   // A Music collection that is one album, such as one made from an album, has no albums to group its tracks by.
   const {data: seasons} = useCollectionSeasons(id)
@@ -134,6 +139,11 @@ export default function EditCollectionPage() {
   const onCancel = () => navigate(`/collection/${id ?? ''}`)
   const onSave = async () => {
     if (!id || !collection) return
+    if (!form.name.trim()) {
+      setNameError('Give the collection a name.')
+      document.getElementById('collection-name')?.focus()
+      return
+    }
     const payload = {
       title: form.name,
       description: collection.description,
@@ -167,6 +177,12 @@ export default function EditCollectionPage() {
       const problemAt = (...names: string[]) => (body?.detail ?? []).find(
         (item: any) => Array.isArray(item?.loc) && names.some((name) => item.loc.includes(name)),
       )
+      const titleProblem = problemAt('title')
+      if (titleProblem) {
+        setNameError(String(titleProblem.msg).replace(/^Value error, /, ''))
+        document.getElementById('collection-name')?.focus()
+        return
+      }
       const problem = problemAt('ytdlpOptions')
       if (problem) {
         setOptionsError(String(problem.msg).replace(/^Value error, /, ''))
@@ -207,10 +223,10 @@ export default function EditCollectionPage() {
     navigate(`/collection/${id ?? ''}`)
   }
 
-  const closeDeleteConfirm = () => setDeleteConfirm(false)
+  const closeDeleteConfirm = () => { setDeleteConfirm(false); setDeleteFiles(false) }
   const onConfirmDelete = async () => {
     if (!id) return
-    const url = `${apiUrl()}/collections/${id}`
+    const url = `${apiUrl()}/collections/${id}${deleteFiles ? '?deleteFiles=true' : ''}`
     const r = await fetch(url, { method: 'DELETE', credentials: 'include' })
     if (!r.ok) {
       let friendly = `Failed to delete collection (HTTP ${r.status})`
@@ -228,7 +244,7 @@ export default function EditCollectionPage() {
       toast.error(friendly)
       return
     }
-    setDeleteConfirm(false)
+    closeDeleteConfirm()
     await forgetDeletedCollection(qc, id)
     navigate('/library?type=collections')
   }
@@ -325,7 +341,8 @@ export default function EditCollectionPage() {
 
         <CollectionForm
           value={form}
-          onChange={(v: CollectionFormValue) => setForm((prev) => ({ ...prev, ...v }))}
+          onChange={(v: CollectionFormValue) => { setForm((prev) => ({ ...prev, ...v })); setNameError(null) }}
+          nameError={nameError}
           creator={collection?.creatorSlug && collection.creatorTitle && collection.creatorNames ? {
             slug: collection.creatorSlug,
             title: collection.creatorTitle,
@@ -380,7 +397,7 @@ export default function EditCollectionPage() {
           />
           {typeError && <div id="collection-type-error" className="error" role="alert">{typeError}</div>}
           <div className="help" id="collection-type-help">
-            {CollectionTypeReg.getHelp(form.type) ?? ''} The Local Media Profiles offered for this collection depend on
+            {CollectionTypeReg.getHelp(form.type) ? `${CollectionTypeReg.getHelp(form.type)}. ` : ''}The Local Media Profiles offered for this collection depend on
             its type: a Music collection takes profiles available for Music.
           </div>
         </div>
@@ -623,6 +640,15 @@ export default function EditCollectionPage() {
         }}
       >
         <p>Are you sure you want to delete "{collection?.title ?? id}"? This action cannot be undone.</p>
+        {mayDeleteFiles && (
+          <DialogSwitch
+            checked={deleteFiles} onChange={setDeleteFiles}
+            label="Delete all downloaded media for this collection"
+            help={deleteFiles
+              ? 'Its downloaded files, and the files VODLoft saved beside them, are deleted from disk.'
+              : 'Off, the downloaded files stay on disk.'}
+          />
+        )}
       </ConfirmDialog>
     </section>
   )

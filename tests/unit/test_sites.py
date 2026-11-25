@@ -274,3 +274,10 @@ def test_a_new_collection_of_a_set_keeps_only_a_type_of_list_its_site_has():
 
     with pytest.raises(ServiceError):
         set_kind(Collection(sharing_url="https://soundcloud.com/flume/sets/palaces", source_key="ytdlp", list_type="tracks"))
+
+
+def test_a_site_of_its_own_domain_is_named_after_it_by_its_key():
+    from sources import site_of
+
+    site = site_of("generic:example.com")
+    assert (site.name, site.initials, site.domains) == ("example.com", "EX", ("example.com",))

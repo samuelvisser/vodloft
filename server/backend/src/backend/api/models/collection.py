@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import ClassVar, Literal, Optional, Union
+from typing import Annotated, ClassVar, Literal, Optional, Union
 from datetime import date, datetime
 
-from pydantic import AliasChoices, AliasPath, computed_field, Field, ValidationInfo, field_validator, model_validator
+from pydantic import AliasChoices, AliasPath, computed_field, Field, StringConstraints, ValidationInfo, field_validator, model_validator
 
 from backend.api.models.base import RequestBase, ResponseBase, response_model_config
 from backend.api.models.custom_metadata import CustomMetadataResponseBase
@@ -28,7 +28,7 @@ from sources.ytdlp_options import MAX_OPTIONS_LENGTH
 class _CollectionAPIBaseIn(RequestBase):
     """Fields for requests: validate here if needed."""
 
-    title: str
+    title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
     description: Optional[str] = None
     sharing_url: Optional[str] = None
     """The collection's own link; only a collection that holds only what its link seasons have may go without."""
