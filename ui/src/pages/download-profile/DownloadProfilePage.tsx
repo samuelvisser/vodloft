@@ -203,7 +203,9 @@ export default function DownloadProfilePage() {
                             <OpaqueOutputTemplateCode
                                 source={profile.localMediaProfileOutputTemplate}
                                 sourceMode="compact"
+                                renderMode="path"
                                 label="Output path template"
+                                className="wraps-path-sections"
                             />
                         </dd>
                     </div>
