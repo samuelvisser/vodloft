@@ -795,7 +795,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
             {roles.length > 1 && (
                 <ChoiceBar
                     tiles ariaLabel={`Set ${all.toLowerCase()}`} options={roleOptions(seasonsToo ? ['season', 'part', 'off'] : ['part', 'off'])}
-                    onChange={onRole}
+                    value={roles.every((role) => role === roles[0]) ? roles[0] : null} onChange={onRole}
                 />
             )}
         </div>

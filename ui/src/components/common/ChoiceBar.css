@@ -37,7 +37,7 @@
 .choice-bar-option:has(input:focus-visible) { outline: 2px solid #60a5fa; outline-offset: -2px; }
 .choice-bar-option:has(input:disabled) { opacity: .5; cursor: not-allowed; }
 
-/* Tiles set many rows at once: they stand apart and none is chosen. */
+/* Tiles set many rows at once: they stand apart, and one is chosen only while every row has it. */
 .choice-bar.is-tiles {
     gap: .25rem;
     border: 0;
@@ -55,5 +55,6 @@
     font-weight: 600;
 }
 .choice-bar.is-tiles .choice-bar-option:hover { border-style: solid; border-color: #60a5fa; }
+.choice-bar.is-tiles .choice-bar-option.is-chosen { border-style: solid; border-color: #2563eb; background: #2563eb; color: #fff; }
 .choice-bar.is-tiles .choice-bar-option:focus-visible { outline: 2px solid #60a5fa; outline-offset: 1px; }
 .choice-bar.is-tiles .choice-bar-option:disabled { opacity: .5; cursor: not-allowed; }

@@ -14,8 +14,8 @@ export type ChoiceBarOption<T extends string> = {
  * A choice of a few short options, all in view and each one tap away, no bigger than a dropdown. It sits beside the
  * name of what it chooses for, one per row.
  *
- * With ``tiles``, it sets a value for many rows at once instead: the options stand apart as tiles and none shows as
- * chosen, since the rows below each keep their own.
+ * With ``tiles``, it sets a value for many rows at once instead: the options stand apart as tiles. One shows as
+ * chosen only while every row has it, as ``value`` then says.
  */
 export default function ChoiceBar<T extends string>({value, options, onChange, ariaLabel, tiles = false, disabled = false, className}: {
     value?: T | null
@@ -33,7 +33,8 @@ export default function ChoiceBar<T extends string>({value, options, onChange, a
                   style={{'--choice-count': options.length} as CSSProperties}>
                 {options.map((option) => (
                     <button
-                        key={option.value} type="button" className="choice-bar-option" disabled={disabled}
+                        key={option.value} type="button" className={`choice-bar-option${option.value === value ? ' is-chosen' : ''}`}
+                        disabled={disabled} aria-pressed={option.value === value}
                         title={option.title} aria-label={`${ariaLabel}: ${option.title ?? option.label}`}
                         onClick={() => onChange(option.value)}
                     >
