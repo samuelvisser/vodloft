@@ -302,7 +302,9 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     // as soon as it is made. The names play no part in it, so typing one asks nothing.
     const formValues = watch()
     const previewBody = useMemo(() => {
-        if (!view || !isDirty) return null
+        // Also before any change: downloads that wait to move, such as after a creator moved a video, already move
+        // when you save, so the list shows that from the start rather than after the first change.
+        if (!view) return null
         const parsed = CollectionSeasonsFormSchema.safeParse(formValues)
         if (!parsed.success) return null
         const named = new Map(view.seasons.map((x) => [x.id, x.name]))
@@ -310,7 +312,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
             ...parsed.data, seasons: parsed.data.seasons.map((x) => ({id: x.id, name: named.get(x.id) ?? x.name})),
         }))
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [view, isDirty, JSON.stringify(formValues)])
+    }, [view, JSON.stringify(formValues)])
     const [askedPreview, setAskedPreview] = useState<string | null>(null)
     useEffect(() => {
         const timer = setTimeout(() => setAskedPreview(previewBody), 300)
@@ -480,16 +482,19 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
             : view.listTypes.find((type) => type.key === playlist?.typeKey)?.names ?? view.listTypes[0]?.names ?? view.sectionListNames
     // The seasons that sources are in, which other sources can join: lists, and the feeds that are a season.
     type Source = {key: string, title: string, home: boolean, own: () => void, kind: Names, tone: BadgeTone}
+    // The season a source splits off to: the one it had before it joined another, while no other source took it since.
+    const homeOf = (seasonId: number | null | undefined): number | null => seasonId !== null && seasonId !== undefined && seasonsById.has(seasonId)
+        && !removedSeasons.includes(seasonId) && sourcesIn(seasonId).length === 0 ? seasonId : null
     const sourcesIn = (seasonId: number): Source[] => [
         ...channelFeeds.filter((feed) => roleOfFeed(feed.ref) === 'season' && feedSeasons[feed.ref] === seasonId).map((feed) => ({
             key: `feed-${feed.ref}`, title: capitalized(feed.names.plural), home: feed.seasonId === seasonId,
-            own: () => setValue('feedSeasons', {...feedSeasons, [feed.ref]: null}, {shouldDirty: true}),
+            own: () => setValue('feedSeasons', {...feedSeasons, [feed.ref]: homeOf(feed.seasonId)}, {shouldDirty: true}),
             kind: feed.names, tone: 'feed' as const,
         })),
         ...playlistChoices.filter((choice) => roleOfList(choice) === 'season' && choice.seasonId === seasonId).map((choice) => ({
             key: `list-${choice.id}`, title: playlistsById.get(choice.id)?.title ?? '', home: playlistsById.get(choice.id)?.seasonId === seasonId,
-            // A list that leaves a season it shared gets a season of its own when you save.
-            own: () => setValue('playlists', playlistChoices.map((x) => x.id === choice.id ? {...x, seasonId: null} : x), {shouldDirty: true}),
+            // A list that leaves a season it shared goes back to its own season, or gets a new one when you save.
+            own: () => setValue('playlists', playlistChoices.map((x) => x.id === choice.id ? {...x, seasonId: homeOf(playlistsById.get(choice.id)?.seasonId)} : x), {shouldDirty: true}),
             kind: listKind(playlistsById.get(choice.id)), tone: 'list' as const,
         })),
     ]
