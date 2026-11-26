@@ -39,6 +39,17 @@ def _set_playlist(data, view, title, **fields):
             playlist.update(fields)
 
 
+def _preview(service, body):
+    """The preview, in a session that refuses to write: the planner saves nothing."""
+    from backend.db.core import get_session
+
+    s = get_session()
+    try:
+        return service.preview_seasons(s, "creator", body)
+    finally:
+        s.close()
+
+
 def _preview_matches_saving(session, source, collection, change, monkeypatch, *, listed=True):
     """Preview ``change``, check it saved nothing, then save it, list the collection again and move what waits for
     the Move dialog: the preview showed the seasons that leaves."""
@@ -53,7 +64,7 @@ def _preview_matches_saving(session, source, collection, change, monkeypatch, *,
     monkeypatch.setattr(service, "queue_season_folder_moves", lambda s, c, ids: None)
     before = _seasons(session)
     body = _body(session, change)
-    preview = run_write_transaction(lambda s: service.preview_seasons(s, "creator", body))
+    preview = _preview(service, body)
     assert _seasons(session) == before
 
     run_write_transaction(lambda s: service.update_seasons(s, "creator", body))
@@ -226,6 +237,6 @@ def test_a_list_switched_on_whose_videos_are_not_listed_yet_shows_the_season_it_
     session.expire_all()
     assert "The Tour" not in [name for name, _number, _episodes in _seasons(session)]
     body = _body(session, lambda view, data: _set_playlist(data, view, "The Tour", enabled=True, as_season=True, season_id=None))
-    preview = run_write_transaction(lambda s: service.preview_seasons(s, "creator", body))
+    preview = _preview(service, body)
     assert [x.title for x in preview.waiting] == ["The Tour"]
     assert "The Tour" not in [x.name for x in preview.seasons]

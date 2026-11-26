@@ -21,8 +21,9 @@ from backend.services.episode_identification import (
 )
 from backend.services.errors import ServiceError
 from backend.services.link_seasons import (
-    _holders, belongs_elsewhere, lists_in, moved_episodes, place_in_link_seasons, seasons_plan,
+    belongs_elsewhere, holder_titles, moved_episodes, place_in_link_seasons, seasons_plan,
 )
+from backend.services.season_state import load_state
 from backend.services.move_causes import clear_move_causes, move_causes
 from backend.services.season_order import match_seasons_of_downloaded
 from backend.services.sites import collection_words
@@ -82,11 +83,6 @@ class _Done:
     """The episodes whose files move into their new season's folder."""
 
 
-def _holder_title(s: Session, collection: Collection, slug: str) -> str | None:
-    holder = _holders(s, lists_in(collection)).get(slug)
-    return holder.title if holder is not None else None
-
-
 def _apply(s: Session, scope: ReconcileScope) -> _Done:
     collection = scope.collection
     episodes = _moved(s, scope)
@@ -97,7 +93,8 @@ def _apply(s: Session, scope: ReconcileScope) -> _Done:
         raise ServiceError(busy)
     ids = {episode.id for episode in episodes}
     names = collection_words(collection).episode
-    labels = {episode.id: _holder_title(s, collection, episode.source_slug) for episode in episodes}
+    titles = holder_titles(load_state(s, collection))
+    labels = {episode.id: titles.get(episode.source_slug) for episode in episodes}
     before = {episode.id: episode.season_id for episode in episodes}
     place_in_link_seasons(s, collection, with_files=ids, drop=False)
     s.expire_all()

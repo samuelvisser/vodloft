@@ -552,7 +552,7 @@ def _episode_list(episode: "Episode"):
     from sqlalchemy.orm import object_session
 
     from backend.db.models import CollectionListItem
-    from backend.services.season_order import lists_by_season
+    from backend.services.season_order import season_lists
 
     s = object_session(episode)
     if s is None:
@@ -562,7 +562,7 @@ def _episode_list(episode: "Episode"):
     )))
     if search:
         return next((link for link in links if link.id in holding), None)
-    ordered = lists_by_season(s, collection).get(episode.season_id, links)
+    ordered = season_lists(s, collection, episode.season_id) or links
     return next((link for link in ordered if link.id in holding), ordered[0])
 
 

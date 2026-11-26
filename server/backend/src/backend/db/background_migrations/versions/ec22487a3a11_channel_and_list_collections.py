@@ -25,11 +25,12 @@ import logging
 from sqlalchemy import select
 
 from backend.db.core import get_session, run_write_transaction
-from backend.db.models import Collection, MediaDownloadBase
+from backend.db.models import Collection, MediaDownloadBase, Season
 from backend.db.models.media_item import Episode
 from backend.services.episode_identification import apply_identification, plan_identification
 from backend.services.link_seasons import SeasonFinder, made_from_list
 from backend.services.season_order import arrange_seasons, season_year
+from backend.services.season_state import apply_state, load_state
 from backend.services.sites import collection_kind
 from backend.types.collection_types import EpisodeIdentifier, EpisodeOrder
 from backend.types.link_season_types import CollectionKind, LooseVideos
@@ -122,7 +123,11 @@ def _apply(collection_id: int, order: list[str]) -> None:
         years = {season.id for season in collection.seasons if season_year(season) is not None}
         if not years:
             return
-        album = SeasonFinder(s, collection).list_own_season()
+        state = load_state(s, collection)
+        draft = SeasonFinder(state).list_own_season()
+        apply_state(s, state)
+        # Saved, the season has its own id.
+        album = s.get(Season, draft.id)
         episodes = list(s.scalars(
             select(Episode).where(Episode.collection_id == collection_id).order_by(Episode.index, Episode.id)
         ))

@@ -58,13 +58,14 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Collection, Episode, Season
+from backend.db.models import Collection, Episode
 from backend.db.core import run_write_transaction
 from backend.services.creator_tiers import keep_tiers, tiers_at_source
 from backend.services.media_access import lock_refused, set_access
 from backend.types.season_types import SeasonOrigin
 from backend.services.notifications.emitters import link_seasons_found
-from backend.services.season_order import arrange_seasons
+from backend.services.season_order import arrange
+from backend.services.season_state import EpisodeDraft, SeasonDraft, apply_state, load_state
 from backend.services.source_options import ytdlp_call_options
 from backend.services.sites import collection_site
 from backend.services.link_seasons import (
@@ -106,7 +107,7 @@ def _order_key(details: VideoDetails, fallback: datetime):
 
 
 def _identifier(
-    collection: Collection, season: Season, details: VideoDetails, identifiers: set[str], numbers: SeasonNumbers,
+    collection: Collection, season: SeasonDraft, details: VideoDetails, identifiers: set[str], numbers: SeasonNumbers,
     fallback: datetime,
 ) -> str:
     if details.tag != MAIN_TAG:
@@ -250,17 +251,18 @@ def _index_listed_collection(s: Session, *, collection_id: int, source: Source, 
 
 
 class _Placer(SeasonFinder):
-    """Finds the season each new video goes to, and the identifier it gets there."""
+    """Finds the season each new video goes to, and the identifier it gets there, in the planner's copy of the
+    collection."""
 
-    def __init__(self, s: Session, collection: Collection, now: datetime):
-        super().__init__(s, collection, now)
-        self.identifiers = set(s.scalars(select(Episode.episode_identifier).where(Episode.collection_id == collection.id)))
+    def __init__(self, state):
+        super().__init__(state)
+        self.identifiers = {episode.episode_identifier for episode in state.episodes.values()}
 
-    def season(self, ref: SeasonRef | None, published_at: datetime | None, tag: str | None = None) -> Season:
+    def season(self, ref: SeasonRef | None, published_at: datetime | None, tag: str | None = None) -> SeasonDraft:
         """The Source's own season, or where a new video of the feed with episode ``tag`` goes (``home_season``)."""
         if ref is None:
             return self.home_season(published_at, tag)
-        season = self._by_slug.get(ref.slug)
+        season = self.by_slug(ref.slug)
         if season is not None and season.season_number != ref.number:
             # A season picked when the collection was added, before VODLoft knew its number.
             season.season_number = ref.number
@@ -268,7 +270,7 @@ class _Placer(SeasonFinder):
             season = self.create(slug=ref.slug, name=ref.name, number=ref.number, origin=SeasonOrigin.SITE)
         return season
 
-    def part_identifier(self, season: Season, details: VideoDetails, number: int) -> str:
+    def part_identifier(self, season: SeasonDraft, details: VideoDetails, number: int) -> str:
         """A part's identifier: its chapter's number in its video's season, whatever the collection's numbering, so the
         parts of one video never share a date or a number. A Short or another tag counts on its own as always."""
         if details.tag != MAIN_TAG:
@@ -278,14 +280,14 @@ class _Placer(SeasonFinder):
         self.identifiers.add(identifier)
         return identifier
 
-    def identifier(self, season: Season, details: VideoDetails) -> str:
+    def identifier(self, season: SeasonDraft, details: VideoDetails) -> str:
         identifier = _identifier(self._collection, season, details, self.identifiers, self.numbers, self._now)
         self.identifiers.add(identifier)
         return identifier
 
 
 def _new_episode(
-    s: Session, collection: Collection, season: Season, index: int, identifier: str,
+    s: Session, collection: Collection, index: int, identifier: str,
     details: VideoDetails, *, part: tuple[int, Chapter] | None = None, source_key: str | None = None,
 ) -> Episode:
     """A listed video as an episode, or with ``part``, the chapter of it with that number. ``source_key`` is the
@@ -302,7 +304,6 @@ def _new_episode(
         source_key=source_key,
         collection_id=collection.id,
         collection=collection,
-        season_id=season.id,
         index=index,
         episode_identifier=identifier,
         slug=_episode_slug(s, collection, source_slug),
@@ -375,7 +376,10 @@ def add_listed_episodes(
     new = [details for slug, details in listed.items() if slug not in known]
     ordered = _in_adding_order(collection, new, now)
 
-    placer = _Placer(s, collection, now)
+    # The new videos go into the planner's copy of the collection, which places them and saves them with any season
+    # they make.
+    state = load_state(s, collection, now)
+    placer = _Placer(state)
     split = splits_chapters(collection)
     next_index = (s.scalar(select(func.max(Episode.index)).where(Episode.collection_id == collection.id)) or 0) + 1
     created: list[tuple[Episode, EpisodePublishStatus]] = []
@@ -384,28 +388,32 @@ def add_listed_episodes(
         if split and len(chapters) > 1 and details.publish_status not in PENDING_EPISODE_PUBLISH_STATUSES:
             season = placer.own_season(details.title)
             episodes = [
-                _new_episode(
-                    s, collection, season, next_index + offset, placer.part_identifier(season, details, number), details,
+                (season, _new_episode(
+                    s, collection, next_index + offset, placer.part_identifier(season, details, number), details,
                     part=(number, chapter), source_key=(sources or {}).get(details.slug),
-                )
+                ))
                 for offset, (number, chapter) in enumerate(enumerate(chapters, start=1))
             ]
         else:
             # A video of a list, rather than of the channel's feeds, is placed in its list's season afterwards.
             own = details.slug not in (sources or {})
             season = placer.season(details.season, details.published_at, details.tag if own else None)
-            episodes = [_new_episode(
-                s, collection, season, next_index, placer.identifier(season, details), details,
+            episodes = [(season, _new_episode(
+                s, collection, next_index, placer.identifier(season, details), details,
                 source_key=(sources or {}).get(details.slug),
-            )]
-        for episode in episodes:
-            s.add(episode)
-            s.flush()
+            ))]
+        for season, episode in episodes:
+            state.add_episode(EpisodeDraft(
+                id=state.new_id(), slug=episode.slug, source_slug=episode.source_slug, part_of=episode.part_of,
+                season_id=season.id, from_link_season=False, episode_identifier=episode.episode_identifier,
+                published_date=episode.published_date, index=episode.index, removed_from_source=False, has_files=False,
+                record=episode,
+            ))
             created.append((episode, details.publish_status))
         next_index += len(episodes)
 
-    s.flush()
-    arrange_seasons(s, collection)
+    arrange(state)
+    apply_state(s, state)
     for episode, status in created:
         queue_episode_status_events(
             s, episode=episode, collection=collection, old_status=None, new_status=status, was_created=True,

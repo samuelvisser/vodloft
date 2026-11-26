@@ -78,6 +78,7 @@ def test_a_downloaded_extra_leaves_with_its_files_when_the_user_made_it_one_and_
     from backend.db.models import Collection
     from backend.db.core import run_write_transaction
     from backend.services.link_seasons import active_lists, extra_episodes, held_back, place_in_link_seasons
+    from backend.services.season_state import load_state
 
     source.videos = [_video("a", 2024, 1), _video("b", 2024, 2)]
     source.lists = [_list("PLfirst", "First Album"), _list("PLbest", "Best Of")]
@@ -85,7 +86,7 @@ def test_a_downloaded_extra_leaves_with_its_files_when_the_user_made_it_one_and_
     collection = _collection(session, music=True)
     _index(session, collection, source)
     # Files for the episode of a on the album that does not come first, which it loses.
-    first_season = active_lists(session, session.get(Collection, collection.id))[0].season_id
+    first_season = active_lists(load_state(session, session.get(Collection, collection.id)))[0].season_id
     a_later = next(episode for episode in _episodes(session, "a") if episode.season_id != first_season)
     _give_files_to(session, a_later.id)
 
@@ -101,7 +102,7 @@ def test_a_downloaded_extra_leaves_with_its_files_when_the_user_made_it_one_and_
     kept, extra = sorted(_episodes(session, "a"), key=lambda episode: episode.id != a_later.id)[::-1]
     assert (kept.season_id, kept.removed_from_source) == (first_season, False)
     assert extra.id == a_later.id
-    assert extra_episodes(session, session.get(Collection, collection.id)) == {extra.id}
+    assert extra_episodes(load_state(session, session.get(Collection, collection.id))) == {extra.id}
     if by_user:
         # The user was told its files go: the task that deletes them removes it, and Home asks nothing.
         assert not extra.removed_from_source and extra.downloads[0].removal_answered_at is not None

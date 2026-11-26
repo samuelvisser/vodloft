@@ -75,7 +75,8 @@ def _look_up(collection_slug: str, url: str):
 )
 def collection_seasons_preview(collection_slug: str, body: CollectionSeasonsAPIUpdate):
     """The seasons saving the Seasons dialog with these settings would leave. Nothing is saved."""
-    return _found(lambda: run_write_transaction(lambda s: preview_seasons(s, collection_slug, body)))
+    with db_session() as s:
+        return _found(lambda: preview_seasons(s, collection_slug, body))
 
 
 @router.post(
