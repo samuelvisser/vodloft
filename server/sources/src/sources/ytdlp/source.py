@@ -11,6 +11,7 @@ import requests
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import replace
 from datetime import date, datetime, timezone
+from typing import Generic, TypeVar
 from urllib.parse import parse_qs, urlsplit
 
 from config import get_settings
@@ -126,6 +127,53 @@ def _youtube_video_id(url: str) -> str | None:
         return YoutubeIE.get_temp_id(url)
     # A video in a playlist, which yt-dlp looks up as the video alone.
     return (parse_qs(urlsplit(url).query).get("v") or [None])[0]
+
+
+T = TypeVar("T")
+
+
+class _SharedLookups(Generic[T]):
+    """Lookups kept a while by link. Asking for one again reuses it, and asking for one that is still running waits
+    for it instead of asking the Site again, such as Add collection asking for a link Add media is still looking up.
+    A failed lookup is not kept: whoever waited for it gets its error, and the next ask tries again."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._kept: dict[str, tuple[float, T]] = {}
+        self._running: dict[str, Future[T]] = {}
+
+    def kept(self, key: str) -> T | None:
+        """The answer kept for the key, without asking for it."""
+        with self._lock:
+            found = self._kept.get(key)
+        return found[1] if found is not None and time.monotonic() - found[0] < _CACHE_SECONDS else None
+
+    def get(self, key: str, look_up: Callable[[], T], *, also_by: Callable[[T], str | None] = lambda _: None) -> T:
+        """The answer for the key: kept, from the lookup running for it, or from ``look_up``, which then keeps it by
+        ``also_by`` of the answer too, such as the link the Site answered at."""
+        now = time.monotonic()
+        with self._lock:
+            self._kept = {kept: value for kept, value in self._kept.items() if now - value[0] < _CACHE_SECONDS}
+            if key in self._kept:
+                return self._kept[key][1]
+            running = self._running.get(key)
+            ours = None if running is not None else self._running.setdefault(key, Future())
+        if ours is None:
+            return running.result()
+        try:
+            value = look_up()
+        except BaseException as exc:
+            with self._lock:
+                del self._running[key]
+            ours.set_exception(exc)
+            raise
+        with self._lock:
+            self._kept[key] = (now, value)
+            if (other := also_by(value)) is not None:
+                self._kept.setdefault(other, (now, value))
+            del self._running[key]
+        ours.set_result(value)
+        return value
 
 
 def _lookup_key(url: str) -> str:
@@ -442,11 +490,11 @@ class YtDlpSource(Source):
     api_key_sites = sites.api_key_sites()
 
     def __init__(self):
-        self._cache: dict[str, tuple[float, dict]] = {}
+        # yt-dlp's info for a link, and a YouTube collection from the API, each kept a while by link.
+        self._infos: _SharedLookups[dict] = _SharedLookups()
+        self._api_collections: _SharedLookups[CollectionDetails] = _SharedLookups()
         self._searches: dict[tuple[str, str], tuple[float, SearchResults]] = {}
         self._cache_lock = threading.Lock()
-        # The lookups running now, by link, which another ask for the same link waits for.
-        self._running: dict[str, Future] = {}
         # A channel's handle never changes its ID, so it is looked up once.
         self._channel_ids: dict[str, str] = {}
         # The check interval of a quota day, worked out once when that day starts, with the checks share it was for.
@@ -477,34 +525,12 @@ class YtDlpSource(Source):
         """The video info for a link. Adding a video right after looking up its link reuses the lookup, and asking
         for a link that is being looked up waits for that lookup, such as adding a video while Add media still looks
         it up. A YouTube video is the same lookup by whichever of its links."""
-        key = _lookup_key(url)
-        now = time.monotonic()
-        with self._cache_lock:
-            self._cache = {cached: value for cached, value in self._cache.items() if now - value[0] < _CACHE_SECONDS}
-            if key in self._cache:
-                return self._cache[key][1]
-            running = self._running.get(key)
-            if running is not None:
-                ours = None
-            else:
-                running = ours = self._running[key] = Future()
-        if ours is None:
-            return running.result()
-        try:
-            info = _lookup("--no-playlist", "--flat-playlist", "--playlist-items", "1", url)
-        except BaseException as exc:
-            with self._cache_lock:
-                del self._running[key]
-            ours.set_exception(exc)
-            raise
-        with self._cache_lock:
-            self._cache[key] = (now, info)
+        return self._infos.get(
+            _lookup_key(url),
+            lambda: _lookup("--no-playlist", "--flat-playlist", "--playlist-items", "1", url),
             # The link yt-dlp found it at is the same lookup, such as the one Add collection asks with next.
-            if isinstance(info.get("webpage_url"), str):
-                self._cache.setdefault(_lookup_key(info["webpage_url"]), (now, info))
-            del self._running[key]
-        ours.set_result(info)
-        return info
+            also_by=lambda info: _lookup_key(info["webpage_url"]) if isinstance(info.get("webpage_url"), str) else None,
+        )
 
     @staticmethod
     def _catalogue(*, adding: bool) -> Catalogue | None:
@@ -547,9 +573,14 @@ class YtDlpSource(Source):
         catalogue = self._catalogue(adding=True)
         if catalogue is None or mapping.youtube_ref(url) is None:
             return None
-        try:
+        def look_up() -> CollectionDetails | None:
             ref = self._youtube_ref(url)
             return catalogue.collection(ref, url) if ref is not None else None
+
+        try:
+            # Add media looks the link up and then the collection, and Add collection asks for both again, often
+            # while Add media's are still running: they all share one answer, which also spends the quota once.
+            return self._api_collections.get(url, look_up, also_by=lambda collection: collection and collection.url)
         except (YouTubeApiError, runner.YtDlpError) as exc:
             logger.info("Looking %s up with yt-dlp, because the YouTube API could not: %s", url, exc)
             return None
@@ -561,10 +592,8 @@ class YtDlpSource(Source):
         yt-dlp's full lookup takes several seconds; this shows the video while it runs, and lets the user go on
         with it. A video already looked up is answered from that lookup. A channel has no oEmbed.
         """
-        with self._cache_lock:
-            cached = self._cache.get(_lookup_key(collection_url(url)))
-        if cached is not None and cached[1].get("_type") != "playlist":
-            info = cached[1]
+        info = self._infos.kept(_lookup_key(collection_url(url)))
+        if info is not None and info.get("_type") != "playlist":
             return LinkPreview(
                 title=info.get("title") or url, image_url=_thumbnail(info),
                 author_name=info.get("uploader") or info.get("channel"), site=_site(info, self._implementation(url).site),

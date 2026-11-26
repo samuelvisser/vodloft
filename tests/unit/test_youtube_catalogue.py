@@ -345,7 +345,37 @@ def test_a_channel_link_is_resolved_through_the_api(youtube, lookups):
         "UC1", "All about A", "https://yt3.example/a.jpg", "https://www.youtube.com/channel/UC1",
     )
     assert calls == []
-    assert quota.status().usage(Share.RESERVE).used == 2
+    # Looking the collection up for Add collection right after Add media looked the link up asks YouTube once.
+    assert quota.status().usage(Share.RESERVE).used == 1
+
+
+def test_add_collection_waits_for_the_channel_add_media_is_still_looking_up(youtube, lookups):
+    import threading
+
+    started, release = threading.Event(), threading.Event()
+    answer = youtube.get
+
+    def slow_get(url, params=None, headers=None, timeout=None):
+        started.set()
+        release.wait(5)
+        return answer(url, params, headers, timeout)
+
+    youtube.get = slow_get
+    source = YtDlpSource()
+    found = {}
+    add_media = threading.Thread(target=lambda: found.setdefault("link", source.resolve("https://www.youtube.com/@a-channel")))
+    add_media.start()
+    started.wait(5)
+    add_collection = threading.Thread(
+        target=lambda: found.setdefault("details", source.collection_details("https://www.youtube.com/@a-channel")),
+    )
+    add_collection.start()
+    release.set()
+    add_media.join(5)
+    add_collection.join(5)
+
+    assert found["link"].slug == found["details"].slug == "UC1"
+    assert _calls(youtube, "channels") == 1
 
 
 def test_an_unknown_channel_is_left_to_ytdlp(youtube, lookups):
