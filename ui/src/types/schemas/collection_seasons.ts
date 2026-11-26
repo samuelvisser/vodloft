@@ -32,7 +32,11 @@ export const CollectionSeasonReadSchema = z.object({
 export type CollectionSeasonRead = z.infer<typeof CollectionSeasonReadSchema>
 
 /** The seasons saving the Seasons dialog would leave, in their order. */
-export const SeasonsPreviewReadSchema = z.object({seasons: z.array(CollectionSeasonReadSchema)})
+export const SeasonsPreviewReadSchema = z.object({
+    seasons: z.array(CollectionSeasonReadSchema),
+    /** The lists that become a season of their own once VODLoft has listed their videos, after saving. */
+    waiting: z.array(z.object({listId: z.number(), title: z.string()})).default([]),
+})
 export type SeasonsPreviewRead = z.infer<typeof SeasonsPreviewReadSchema>
 
 export const CollectionListReadSchema = z.object({

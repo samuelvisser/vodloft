@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.api.models.collection_seasons import (
-    CollectionSeasonsAPIRead, CollectionSeasonsAPIUpdate, MovedEpisodesAPIRead, SeasonsPreviewAPIRead,
+    CollectionSeasonsAPIRead, CollectionSeasonsAPIUpdate, MovedEpisodesAPIRead, SeasonsPreviewAPIRead, WaitingSeasonAPIRead,
 )
 from backend.db.models import Collection, CollectionList, CollectionListItem, Episode, Season
 from backend.db.models import MediaDownloadBase
@@ -499,8 +499,15 @@ def preview_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPI
         place_in_link_seasons(s, collection, with_files=waiting, drop=False)
         s.flush()
     view = seasons_view(s, collection_slug)
+    # A list that is a season of its own but has none yet waits for VODLoft to list its videos.
+    s.expire(collection, ["lists"])
+    shown = {season.id for season in view.seasons}
+    waiting = [
+        WaitingSeasonAPIRead(list_id=playlist.id, title=playlist.title)
+        for playlist in active_lists(s, collection) if playlist.season_id not in shown
+    ]
     s.rollback()
-    return SeasonsPreviewAPIRead(seasons=view.seasons)
+    return SeasonsPreviewAPIRead(seasons=view.seasons, waiting=waiting)
 
 
 def _regroup_feeds(collection: Collection, playlists: dict[int, CollectionList], wanted: dict[str, int | None]) -> set[int]:

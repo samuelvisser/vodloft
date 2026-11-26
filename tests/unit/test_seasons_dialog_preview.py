@@ -74,6 +74,14 @@ def _preview_matches_saving(session, source, collection, change, monkeypatch, *,
     ]
 
 
+def _view(session):
+    from backend.api.endpoints.collections.seasons.service import seasons_view
+
+    view = seasons_view(session, "creator")
+    session.rollback()
+    return view
+
+
 def _season_id(view, name):
     return next(x.id for x in view.seasons if x.name == name)
 
@@ -191,3 +199,33 @@ def test_a_collection_with_links_the_user_adds(links_source, session, change, fi
         _give_files(session, *session.scalars(select(Episode.source_slug).where(Episode.source_slug.in_(("a", "b", "c")))))
 
     _preview_matches_saving(session, source, collection, LINKS_CHANGES[change], monkeypatch)
+
+
+def test_a_list_switched_on_whose_videos_are_not_listed_yet_shows_the_season_it_waits_for(source, session):
+    """The preview does not fetch a list that may be long: a list VODLoft has not listed yet shows the season it
+    becomes once it has."""
+    from backend.api.endpoints.collections.seasons import service
+    from backend.db.core import run_write_transaction
+    from backend.db.models import CollectionList, CollectionListItem
+    from sqlalchemy import delete
+
+    source.videos = [_video("a", 2024), _video("b", 2024, 2)]
+    source.lists = [_list("PLtour", "The Tour")]
+    source.items = {"PLtour": ("b",)}
+    collection = _collection(session, loose="one_season")
+    _index(session, collection, source)
+
+    # Switched off, it lost its season; VODLoft never listed it, as a list the collection skipped.
+    _update(session, playlists=[{"id": _playlist(_view(session), "The Tour").id, "enabled": False, "season_id": None}])
+
+    def never_listed(s):
+        tour = s.scalars(select(CollectionList).where(CollectionList.ref == "PLtour")).one()
+        s.execute(delete(CollectionListItem).where(CollectionListItem.list_id == tour.id))
+
+    run_write_transaction(never_listed)
+    session.expire_all()
+    assert "The Tour" not in [name for name, _number, _episodes in _seasons(session)]
+    body = _body(session, lambda view, data: _set_playlist(data, view, "The Tour", enabled=True, as_season=True, season_id=None))
+    preview = run_write_transaction(lambda s: service.preview_seasons(s, "creator", body))
+    assert [x.title for x in preview.waiting] == ["The Tour"]
+    assert "The Tour" not in [x.name for x in preview.seasons]

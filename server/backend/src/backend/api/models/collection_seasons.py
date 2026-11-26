@@ -151,9 +151,18 @@ class CollectionSeasonsAPIRead(ResponseBase):
     playlists: list[CollectionListAPIRead]
 
 
+class WaitingSeasonAPIRead(ResponseBase):
+    list_id: int
+    title: str
+    """The name its season gets: its list's title."""
+
+
 class SeasonsPreviewAPIRead(ResponseBase):
     seasons: list[CollectionSeasonAPIRead]
     """The collection's seasons as saving the dialog leaves them, in their order."""
+    waiting: list[WaitingSeasonAPIRead] = Field(default_factory=list)
+    """The lists that become a season of their own once VODLoft has listed their videos, which it does after saving:
+    the preview shows their season without fetching a list that may be long."""
 
 
 class MovedEpisodesAPIRead(ResponseBase):

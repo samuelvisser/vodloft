@@ -991,6 +991,16 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                 )
                                             })}
                                             {(added.get(null) ?? []).map(addedRow)}
+                                            {previewBody && (previewed?.waiting ?? []).map((list) => (
+                                                <li key={`waiting-${list.listId}`} className="seasons-dialog-season is-new">
+                                                    <span className="seasons-dialog-grip" aria-hidden="true"><FontAwesomeIcon icon={faIcon('fass', 'grip-vertical')}/></span>
+                                                    <span className="seasons-dialog-number" aria-hidden="true"/>
+                                                    <span className="seasons-dialog-season-copy">
+                                                        <input className="input" value={list.title} readOnly aria-label={`Name of the new ${words.season.singular} ${list.title}`}/>
+                                                        <span>New when you save · Not indexed yet: VODLoft lists its {words.videos} after saving</span>
+                                                    </span>
+                                                </li>
+                                            ))}
                                         </ol>
                                         {leavingSeasons.length > 0 && (
                                             <div className="seasons-dialog-leaving">
