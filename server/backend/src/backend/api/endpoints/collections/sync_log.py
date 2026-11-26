@@ -82,12 +82,7 @@ def collection_scans(
         and_(TaskRun.resource_type == ResourceType.COLLECTION, TaskRun.resource_id == collection.id),
         _lists_collection(collection.id),
     )
-    # A scan of several collections names each by its id, and SQLite gives a new collection the id of a deleted one
-    # that had the highest, so a scan from before the collection was added looked at another one.
-    where = [
-        TaskDefinition.key.in_(_SCAN_TASK_KEYS), TaskRun.status.in_(_FINISHED), included,
-        TaskRun.created_at >= collection.created_at,
-    ]
+    where = [TaskDefinition.key.in_(_SCAN_TASK_KEYS), TaskRun.status.in_(_FINISHED), included]
     if hide_empty:
         where.append(or_(TaskRun.status != TaskStatus.SUCCEEDED, _lists_collection(collection.id, found_something=True)))
     total = s.scalar(select(func.count()).select_from(TaskRun).join(TaskRun.definition).where(*where)) or 0
