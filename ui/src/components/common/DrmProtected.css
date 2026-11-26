@@ -47,6 +47,11 @@
     background: rgba(124, 58, 237, 0.08);
 }
 
+.access-notice-action {
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
 @media (prefers-color-scheme: dark) {
     .drm-badge {
         background: #fdba74;
