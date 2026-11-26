@@ -40,6 +40,29 @@ def queue_season_folder_moves(s: Session, collection: Collection, episode_ids: l
     return operation.id, bool(profile_ids)
 
 
+def queue_metadata_rewrite(s: Session, collection: Collection, episode_ids: list[int]) -> None:
+    """Write the metadata of these episodes' downloads again, such as after they changed season while their files
+    stayed where they are. Their files are renamed too, should their names have changed after all.
+
+    ``s`` is a write transaction's session."""
+    profile_ids = sorted(set(s.scalars(
+        select(EpisodeMediaDownload.local_media_profile_id).where(
+            EpisodeMediaDownload.media_item_id.in_(episode_ids),
+            EpisodeMediaDownload.artifact_status.in_((
+                MediaDownloadArtifactStatus.AVAILABLE.value, MediaDownloadArtifactStatus.CORRUPTED.value,
+            )),
+        )
+    )))
+    if not profile_ids:
+        return
+    operation = create_operation(s, CollectionFileRenameOperation(
+        collection, local_media_profile_ids=profile_ids, season_folders=True, episode_ids=list(episode_ids),
+        rewrite_metadata=True,
+    ))
+    for profile_id in profile_ids:
+        queue_operation_target_dispatch(s, operation.id, f"profile:{profile_id}")
+
+
 def follow_new_place(s: Session, download: EpisodeMediaDownload) -> bool:
     """A download that was running when its episode moved, such as to another season, finishes under the name and with
     the metadata the episode had when it started. Rename it into its new place and write its metadata again, as the

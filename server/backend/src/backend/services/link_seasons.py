@@ -887,8 +887,9 @@ def place(
         _drop_outside(state, by_user=by_user, extras=places.extras)
     if not places.anything:
         return 0
+    # Files whose names don't depend on the season stay where they are, so their episodes move like any other.
     kept = set() if with_files is True else {
-        episode.id for episode in state.episodes.values() if episode.has_files
+        episode.id for episode in state.episodes.values() if episode.has_files and episode.files_in_season
     } - (with_files or set())
     finder = SeasonFinder(state)
     moved = 0
@@ -927,10 +928,24 @@ def place_in_link_seasons(
 
     ``s`` is a write transaction's session."""
     state = load_state(s, collection, now)
+    staying = {
+        episode.id: episode.season_id for episode in state.episodes.values()
+        if episode.has_files and not episode.files_in_season
+    }
     moved = place(state, with_files=with_files, by_user=by_user, drop=drop, left=left)
     apply_state(s, state)
     _note_health(s, collection)
     s.flush()
+    if with_files is not True:
+        # Downloads that changed season while their files stay where they are: their metadata names the season.
+        changed = [
+            episode_id for episode_id, season_id in staying.items()
+            if episode_id in state.episodes and state.episodes[episode_id].season_id != season_id
+        ]
+        if changed:
+            from backend.services.season_moves import queue_metadata_rewrite
+
+            queue_metadata_rewrite(s, collection, changed)
     return moved
 
 
@@ -1181,13 +1196,15 @@ def belongs_elsewhere(s: Session, episode: Episode) -> Belonging | None:
 
 def moved(state: SeasonsState) -> list[EpisodeDraft]:
     """The collection's videos that its playlists put in another season than the one they are in: downloaded ones,
-    which wait for the user to move them, since moving renames their files."""
+    which wait for the user to move them, since moving renames their files. Downloads whose file names don't depend on
+    the season never wait: their episodes move like any other, and their files stay."""
     places = _Places(state)
     if not places.anything:
         return []
     return [
         episode for episode in sorted(state.episodes.values(), key=lambda episode: episode.id)
-        if episode.season_id in places.movable and places.belonging(episode) is not None
+        if (not episode.has_files or episode.files_in_season)
+        and episode.season_id in places.movable and places.belonging(episode) is not None
     ]
 
 

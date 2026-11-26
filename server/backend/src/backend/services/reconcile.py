@@ -100,7 +100,9 @@ def _plan(s: Session, state: SeasonsState, scope: ReconcileScope) -> MovesMade:
     before = seasons_of(state)
     labels = list_labels(state)
     place(state, with_files=ids, drop=False)
-    return moves_made(s, state, {episode_id: before[episode_id] for episode_id in ids}, labels)
+    # Downloads whose files stay where they are move along too, so their metadata is written again.
+    downloaded = ids | {episode.id for episode in state.episodes.values() if episode.has_files}
+    return moves_made(s, state, {episode_id: before[episode_id] for episode_id in downloaded if episode_id in before}, labels)
 
 
 def seasons_of(state: SeasonsState) -> dict[int, int | None]:
@@ -118,7 +120,8 @@ def moves_made(
 ) -> MovesMade:
     """What planning moved: the episodes of ``before`` that are in another season now, grouped by their new season
     and the list that holds them (``labels``, by video slug). Downloaded ones take their new season's number, as their
-    files move into its folder. Changes the copy, saves nothing."""
+    files move into its folder. Downloads whose file names don't depend on their season stay where they are: they are
+    in no group, but among ``renamed``, so their metadata is written again. Changes the copy, saves nothing."""
     names = collection_words(state.record).episode
     done = MovesMade()
     moved_ids = [
@@ -138,6 +141,9 @@ def moves_made(
         done.renamed = sorted(downloaded)
     grouped: dict[tuple[str, str | None], list[int]] = {}
     for episode_id in moved_ids:
+        if episode_id in downloaded and not state.episodes[episode_id].files_in_season:
+            # Its files stay where they are: only its metadata is written again.
+            continue
         season = state.seasons[state.episodes[episode_id].season_id]
         grouped.setdefault((season.name, labels.get(state.episodes[episode_id].source_slug)), []).append(episode_id)
     for (season, label), episode_ids in grouped.items():

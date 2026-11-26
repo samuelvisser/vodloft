@@ -196,7 +196,7 @@ def _give_files_to(session, episode_id):
     if session.get(CollectionLocalMediaProfile, 1) is None:
         session.add(CollectionLocalMediaProfile(
             id=1, slug="videos", name="Videos", preferred_format="format_1080p",
-            output_template="/downloads/{{ collection_title }}/{{ episode_title }}.ext",
+            output_template="/downloads/{{ collection_title }}/{{ season_name }}/{{ episode_title }}.ext",
         ))
         session.flush()
     session.add(EpisodeMediaDownload(

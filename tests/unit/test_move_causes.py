@@ -210,3 +210,36 @@ def test_a_download_that_finishes_under_its_old_name_is_renamed_into_its_new_pla
         ))
     run_write_transaction(renamed)
     assert not run_write_transaction(lambda w: follow_new_place(w, w.get(EpisodeMediaDownload, download.id)))
+
+
+def test_files_whose_names_skip_the_season_stay_where_they_are(source, session, monkeypatch):
+    """A Local Media Profile whose file names don't name the season keeps its files where they are when their episodes
+    change season: nothing waits to move, and the review shows no files moving, only the season change."""
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Collection, CollectionLocalMediaProfile
+    from backend.services import season_moves
+    from backend.services.link_seasons import moved_episodes, place_in_link_seasons
+
+    _waiting(source, session)
+    session.get(CollectionLocalMediaProfile, 1).output_template = "/downloads/{{ collection_title }}/{{ episode_title }}.ext"
+    session.commit()
+
+    def one_season(s):
+        s.query(Collection).one().loose_videos = "one_season"
+
+    run_write_transaction(one_season)
+    session.expire_all()
+    assert moved_episodes(session, session.query(Collection).one()) == []
+    session.rollback()
+
+    review = _review(session)
+    assert review.moves.parts == [] and review.already_waiting.count == 0
+    assert review.deleted_seasons == ["2024", "2025"]
+
+    # The next look at the collection moves them like any other episode, and writes their metadata again.
+    rewritten = []
+    monkeypatch.setattr(season_moves, "queue_metadata_rewrite", lambda s, collection, ids: rewritten.append(sorted(ids)))
+    run_write_transaction(lambda s: place_in_link_seasons(s, s.query(Collection).one()))
+    session.expire_all()
+    assert [(name, slugs) for name, _, slugs in _seasons(session)] == [("Collection", ["a", "b"])]
+    assert len(rewritten) == 1 and len(rewritten[0]) == 2
