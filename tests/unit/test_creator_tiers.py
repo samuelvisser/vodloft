@@ -132,3 +132,16 @@ def test_a_link_names_its_tier_by_the_sites_id_of_it(tiered, session):  # noqa: 
     run_write_transaction(lambda w: keep_tiers(w, "patreon", tiered.tiers))
     assert link_access("ytdlp", "https://www.patreon.com/posts/a-1", "tier:fiver").label == "Fiver"
     assert link_access("ytdlp", "https://www.patreon.com/posts/a-1", "tier:other").label == "Paid tier"
+
+
+def test_a_tier_without_a_name_is_named_by_its_amount(tiered, session):  # noqa: F811
+    from backend.db.models import Episode
+    from task_manager.tasks.helpers.listed_collections import index_listed_collection
+
+    collection = _creator(session)
+    tiered.tiers = (SiteTier("fiver", None, "$5", 500),)
+    tiered.videos = [_post("paid", "tier:fiver")]
+    index_listed_collection(session, collection_id=collection.id, source=tiered)
+    session.commit()
+
+    assert _label(session.query(Episode).one()) == "Patrons from $5"

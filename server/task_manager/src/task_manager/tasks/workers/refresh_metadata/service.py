@@ -38,7 +38,7 @@ from sqlalchemy.orm import Session, object_session
 from backend.db.datetime_types import utc_datetime
 from backend.db.core import run_write_transaction
 from backend.db.models import Collection, Episode, Site, Video
-from backend.services.creator_tiers import keep_tiers, unnamed_tiers
+from backend.services.creator_tiers import keep_tiers, unknown_tiers
 from backend.services.media_access import lock_refused
 from backend.services.removed_downloads import back_at_source, left_source
 from backend.services.sites import episode_site_key
@@ -245,7 +245,7 @@ def _refresh(s: Session, due: list[_Watched], now: datetime) -> dict[str, SiteCo
     # What the creators call the tiers the items need, for tiers VODLoft does not know the names of yet.
     tiers = [
         learned for source_key, answer in answers.items()
-        for learned in unnamed_tiers(s, get_source(source_key), [
+        for learned in unknown_tiers(s, get_source(source_key), [
             (item.ref.url, _told_access(answer, item.ref.slug)) for item in batched if item.source_key == source_key
         ])
     ]

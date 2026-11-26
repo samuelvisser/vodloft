@@ -39,7 +39,8 @@ def keep_tiers(s: Session, site_key: str, tiers: Iterable[SiteTier] | None) -> N
 
 
 def tier_row(s: Session, site_key: str, site_tier_id: str) -> CreatorTier:
-    """The tier VODLoft keeps for a tier on a Site, made when it is new; its name follows when VODLoft learns it."""
+    """The tier VODLoft keeps for a tier on a Site, made when it is new; its name and amount follow when VODLoft
+    learns them."""
     row = next((
         pending for pending in s.new
         if isinstance(pending, CreatorTier) and (pending.site_key, pending.site_tier_id) == (site_key, site_tier_id)
@@ -51,15 +52,15 @@ def tier_row(s: Session, site_key: str, site_tier_id: str) -> CreatorTier:
 
 
 def site_tier(row: CreatorTier | None) -> SiteTier | None:
-    """A kept tier as its Site names it; None for a tier VODLoft does not know the name of yet."""
-    if row is None or not row.name:
+    """A kept tier as its Site tells it; None for a tier VODLoft knows nothing of yet but its id."""
+    if row is None or (row.name is None and row.amount is None):
         return None
     return SiteTier(site_id=row.site_tier_id, name=row.name, amount=row.amount, rank=row.rank)
 
 
-def unnamed_tiers(s: Session, source: Source, links: Iterable[tuple[str, str | None]]) -> list[tuple[str, tuple[SiteTier, ...]]]:
-    """The tiers of the creators of links whose access, as the Source told it, is a tier VODLoft does not know the name
-    of yet, by the key of their Site: one lookup per creator. Asked before a write transaction, as it asks the Site."""
+def unknown_tiers(s: Session, source: Source, links: Iterable[tuple[str, str | None]]) -> list[tuple[str, tuple[SiteTier, ...]]]:
+    """The tiers of the creators of links whose access, as the Source told it, is a tier VODLoft knows nothing of yet
+    but its id, by the key of their Site: one lookup per creator. Asked before a write transaction, as it asks the Site."""
     found: list[tuple[str, tuple[SiteTier, ...]]] = []
     known: set[tuple[str, str]] = set()
     for url, key in links:
@@ -69,7 +70,7 @@ def unnamed_tiers(s: Session, source: Source, links: Iterable[tuple[str, str | N
         if site_tier_id is None or (site.key, site_tier_id) in known:
             continue
         known.add((site.key, site_tier_id))
-        if s.scalar(select(CreatorTier.name).where(CreatorTier.site_key == site.key, CreatorTier.site_tier_id == site_tier_id)):
+        if s.scalar(select(CreatorTier.amount).where(CreatorTier.site_key == site.key, CreatorTier.site_tier_id == site_tier_id)):
             continue
         if tiers := tiers_at_source(source, site, url):
             found.append((site.key, tiers))
