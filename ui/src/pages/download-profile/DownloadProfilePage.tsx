@@ -5,6 +5,7 @@ import {Link, useNavigate, useParams} from 'react-router-dom'
 import toast from '../../lib/toast'
 
 import ActionMenu, {type ActionMenuItem} from '../../components/ActionMenu/ActionMenu'
+import OpaqueOutputTemplateCode from '../../components/LocalMediaProfile/OpaqueOutputTemplateCode'
 import RunningActions from '../../components/RunningActions/RunningActions'
 import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
 import OutOfScopeDownloadsDialog, {leftOutByText, mayDeleteOutOfScope} from '../../components/DownloadProfile/OutOfScopeDownloadsDialog'
@@ -194,6 +195,16 @@ export default function DownloadProfilePage() {
                             {localMediaProfile && can('local_media_profiles')
                                 ? <Link className="quiet-link" to={`/local-media-profile/${encodeURIComponent(localMediaProfile.slug)}`}>{profile.localMediaProfileName}</Link>
                                 : profile.localMediaProfileName}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>Output path template</dt>
+                        <dd>
+                            <OpaqueOutputTemplateCode
+                                source={profile.localMediaProfileOutputTemplate}
+                                sourceMode="compact"
+                                label="Output path template"
+                            />
                         </dd>
                     </div>
                     <div>

@@ -12,6 +12,8 @@ export const DownloadProfileReadViewSchema = DownloadProfileReadSchema.extend({
     collectionEpisodeIdentifier: z.string(),
     localMediaProfileName: z.string(),
     localMediaProfilePreferredFormat: z.string(),
+    // The path template its downloads are saved under, from its Local Media Profile
+    localMediaProfileOutputTemplate: z.string(),
     // Disk space this profile's downloaded files take
     storageSizeBytes: z.number(),
 })
