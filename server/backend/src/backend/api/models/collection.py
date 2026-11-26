@@ -7,13 +7,13 @@ from pydantic import AliasChoices, AliasPath, computed_field, Field, StringConst
 
 from backend.api.models.base import RequestBase, ResponseBase, response_model_config
 from backend.api.models.custom_metadata import CustomMetadataResponseBase
-from backend.api.models.profile_bulk import BulkChangesIn
+from backend.api.models.profile_bulk import BulkChangeIn, BulkChangesIn, BulkFieldSummaryRead, BulkSummaryRead
 from backend.api.models.source import NamesAPIRead, SiteAPIRead, SourcedResponse
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.collection_contracts import collection_contract
 from backend.types.collection_health_types import HealthIssueKind
 from backend.types.collection_types import CheckFrequency, CollectionType, CookiesMode, EpisodeIdentifier, EpisodeOrder
-from backend.types.link_season_types import CollectionKind, OutsideVideos
+from backend.types.link_season_types import CollectionKind, LinkSeasons, OutsideVideos, SourceRole
 from backend.types.resource_names import CUSTOM_COLLECTION_NAMES
 from config.settings.cron_validation import CronExpressionError, validate_cron_expression
 from backend.types.download_profile_types import EpisodeTagKey
@@ -424,7 +424,21 @@ class CollectionBulkChangesIn(BulkChangesIn):
     content_rating: Optional[str] = Field(default=None, max_length=50)
     """Empty removes the content rating."""
 
+    link_seasons: Optional[LinkSeasons] = None
+    """Whether each Collection takes its channel's lists and the links added to it, as the Seasons dialog's switch
+    sets it; only Collections of a whole channel on a Site whose lists can be seasons have it."""
+    feeds: Optional[dict[str, SourceRole]] = Field(default=None, max_length=50)
+    """What some feeds of the Collections' channels become, by the key of the feed (``CollectionBulkFeedRead.key``).
+    A Collection takes only the feeds its channel has; the others keep what they are."""
+
     nullable: ClassVar[frozenset[str]] = frozenset({"genre", "content_rating"})
+
+    @field_validator("feeds")
+    @classmethod
+    def _some_feed(cls, value: Optional[dict[str, SourceRole]]) -> Optional[dict[str, SourceRole]]:
+        if value is not None and not value:
+            raise ValueError("Choose what a feed becomes")
+        return value
 
     @field_validator("check_frequency")
     @classmethod
@@ -437,3 +451,29 @@ class CollectionBulkChangesIn(BulkChangesIn):
     @classmethod
     def _strip_metadata(cls, value: Optional[str]) -> Optional[str]:
         return (value or "").strip() or None
+
+
+class CollectionBulkChangeIn(BulkChangeIn[CollectionBulkChangesIn]):
+    keep_numbers: list[int] = Field(default_factory=list, max_length=10_000)
+    """The Collections, by id, that keep their episodes' numbers when their downloads move into other seasons, as
+    the review let the user choose; the others number them again, as the Seasons dialog does by default."""
+
+
+class CollectionBulkFeedRead(ResponseBase):
+    """One feed of the chosen Collections' channels, such as YouTube's Shorts, and what it is in each now."""
+
+    key: str
+    """The feed by its Site and its ref, as the changes name it."""
+    names: NamesAPIRead
+    """What the Site calls the feed's videos; the feed is named after them."""
+    site: str
+    """The name of its Site, such as YouTube."""
+    summary: BulkFieldSummaryRead
+    """What the feed is now in each Collection whose channel has it: season, part or off."""
+
+
+class CollectionBulkSummaryRead(BulkSummaryRead):
+    feeds: list[CollectionBulkFeedRead] = Field(default_factory=list)
+    list_names: Optional[NamesAPIRead] = None
+    """What the lists of the Collections that can take them are called, joined, such as playlists."""
+

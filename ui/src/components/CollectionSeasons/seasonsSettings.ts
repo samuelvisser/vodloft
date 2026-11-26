@@ -1,3 +1,4 @@
+import {useEffect, useState} from 'react'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import {capitalized, type ListKind} from '../../types/creator'
 import type {Names} from '../../types/schemas/source'
@@ -81,4 +82,18 @@ export function registries(names: ListNames, words: Words, view: CollectionSeaso
             },
         }),
     }
+}
+
+/** A phone, where a seasons dialog fills the screen and its review cards fold to one line. */
+export function useNarrow(query = '(max-width: 640px)') {
+    const [matches, setMatches] = useState(() => window.matchMedia?.(query).matches ?? false)
+    useEffect(() => {
+        const media = window.matchMedia?.(query)
+        if (!media) return
+        const changed = () => setMatches(media.matches)
+        changed()
+        media.addEventListener('change', changed)
+        return () => media.removeEventListener('change', changed)
+    }, [query])
+    return matches
 }

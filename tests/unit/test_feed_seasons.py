@@ -117,3 +117,77 @@ def test_only_a_feed_the_collection_takes_can_be_a_season(feeds_source, session)
     from backend.db.models import Collection
 
     assert session.get(Collection, collection.id).feed_seasons == {}
+
+
+def _bulk(ids, **changes):
+    from backend.api.models.collection import CollectionBulkChangeIn
+
+    return CollectionBulkChangeIn.model_validate({"ids": ids, "changes": changes})
+
+
+def test_the_library_bulk_edit_makes_a_feed_a_season_after_its_review(feeds_source, session):
+    from backend.api.endpoints.collections.bulk import change_collections, review_collections, summarize_collections
+    from backend.api.models.profile_bulk import BulkSelectionIn
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Collection
+    from backend.services.link_seasons import moved_episodes
+
+    source = feeds_source
+    source.videos = [_video("a", 2024), _short("s1", 2024, 3), _short("s2", 2024, 4)]
+    collection = _collection(session, mode="off", loose="one_season")
+    _index(session, collection, source)
+    _give_files(session, "s1")
+    session.commit()
+
+    # Every feed of the chosen collections, by its Site and ref, with what it is in each.
+    summary = summarize_collections(session, BulkSelectionIn(ids=[collection.id]))
+    session.rollback()
+    shorts = next(feed for feed in summary.feeds if feed.names.plural == "shorts")
+    assert [(item.value, item.count) for item in shorts.summary.values] == [("part", 1)]
+    assert summary.fields["linkSeasons"].offered == 1
+    assert summary.list_names is not None
+
+    # The review says what saving does, as the Seasons dialog's review does.
+    review = review_collections(session, _bulk([collection.id], feeds={shorts.key: "season"}))
+    session.rollback()
+    [item] = review.collections
+    assert item.skipped is None and item.review.new_seasons == ["Shorts"]
+    assert item.review.moves.parts[0].count == 1  # the downloaded short moves to the new season
+
+    # A change that leaves the collection as it is has nothing to review.
+    assert review_collections(session, _bulk([collection.id], feeds={shorts.key: "part"})).collections == []
+    session.rollback()
+
+    result = run_write_transaction(lambda s: change_collections(s, _bulk([collection.id], feeds={shorts.key: "season"})))
+    assert (result.done, result.skipped) == (1, [])
+    assert dict(_filled(session)) == {"Collection": ["a"], "Shorts": ["s1", "s2"]}
+    assert moved_episodes(session, session.get(Collection, collection.id)) == []
+
+    # Off, the collection no longer takes the feed.
+    result = run_write_transaction(lambda s: change_collections(s, _bulk([collection.id], feeds={shorts.key: "off"})))
+    assert (result.done, result.skipped) == (1, [])
+    session.expire_all()
+    assert session.get(Collection, collection.id).feeds == ["videos"]
+
+
+def test_the_library_bulk_edit_skips_a_collection_its_seasons_change_would_leave_empty(feeds_source, session):
+    from backend.api.endpoints.collections.bulk import change_collections, summarize_collections
+    from backend.api.models.profile_bulk import BulkSelectionIn
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Collection
+
+    source = feeds_source
+    source.videos = [_video("a", 2024)]
+    collection = _collection(session, mode="off", loose="one_season")
+    _index(session, collection, source)
+    keys = [feed.key for feed in summarize_collections(session, BulkSelectionIn(ids=[collection.id])).feeds]
+    session.rollback()
+
+    # Every feed off without lists leaves nothing: the collection keeps its settings, the genre too.
+    result = run_write_transaction(lambda s: change_collections(
+        s, _bulk([collection.id], feeds={key: "off" for key in keys}, genre="Talk"),
+    ))
+    assert result.done == 0 and len(result.skipped) == 1
+    session.expire_all()
+    stored = session.get(Collection, collection.id)
+    assert (stored.feeds, stored.genre) == (None, None)

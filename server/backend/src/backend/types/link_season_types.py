@@ -2,7 +2,7 @@ from enum import StrEnum
 
 from sources import ChannelSeason
 
-__all__ = ["ChannelSeason", "CollectionKind", "LinkSeasons", "ListStatus", "LooseVideos", "NewLinkSeasonAction", "OutsideVideos", "RepeatVideos"]
+__all__ = ["ChannelSeason", "CollectionKind", "LinkSeasons", "ListStatus", "LooseVideos", "NewLinkSeasonAction", "OutsideVideos", "RepeatVideos", "SourceRole"]
 
 
 class LinkSeasons(StrEnum):
@@ -12,6 +12,15 @@ class LinkSeasons(StrEnum):
 
     OFF = "off"
     ON = "on"
+
+
+class SourceRole(StrEnum):
+    """What one source of a collection is, such as a feed of its channel: a season of its own, part of the
+    collection, or off."""
+
+    SEASON = "season"
+    PART = "part"
+    OFF = "off"
 
 
 class NewLinkSeasonAction(StrEnum):

@@ -318,3 +318,20 @@ class SeasonsReviewAPIRead(ResponseBase):
     """The downloaded files of the episodes that go, which are deleted."""
     joining: int = 0
     """New videos that join the collection from its lists, which its Download Profiles then download as they say."""
+
+
+class CollectionBulkReviewItemRead(ResponseBase):
+    """What saving the bulk edit does to the seasons of one collection, as its Seasons dialog's review says it."""
+
+    id: int
+    title: str
+    view: Optional[CollectionSeasonsAPIRead] = None
+    """Its Seasons dialog as it is now, which the review's changes are read against."""
+    review: Optional[SeasonsReviewAPIRead] = None
+    skipped: Optional[str] = None
+    """Why it can't take the changes; it is left as it is."""
+
+
+class CollectionBulkReviewRead(ResponseBase):
+    collections: list[CollectionBulkReviewItemRead]
+    """The chosen collections whose seasons the changes change, in the order they were chosen."""

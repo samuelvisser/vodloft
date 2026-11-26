@@ -25,7 +25,7 @@ import {
     SeasonsListingsReadSchema, SeasonsReviewReadSchema,
 } from '../../types/schemas/collection_seasons'
 import './SeasonsDialog.css'
-import {dialogWords, namesOf, readSeasons, registries, type SourceRole, type Words} from './seasonsSettings'
+import {dialogWords, namesOf, readSeasons, registries, type SourceRole, useNarrow, type Words} from './seasonsSettings'
 import SeasonsReview from './SeasonsReview'
 import type {CauseRow} from '../ReconcileDialog/MoveCauses'
 import {collectionWords, CollectionWords, wordsOf} from '../../lib/collectionWords'
@@ -48,20 +48,6 @@ type Props = {
 /** The open dialog's token, which keeps what it listed for its review apart from other open dialogs'. Not
  * crypto.randomUUID, which a browser only offers on HTTPS, and VODLoft is often reached over plain HTTP at home. */
 const newToken = () => Array.from({length: 4}, () => Math.random().toString(36).slice(2, 10)).join('-')
-
-/** A phone, where the dialog fills the screen and each row has one dropdown instead of a row of choices. */
-function useNarrow(query = '(max-width: 640px)') {
-    const [matches, setMatches] = useState(() => window.matchMedia?.(query).matches ?? false)
-    useEffect(() => {
-        const media = window.matchMedia?.(query)
-        if (!media) return
-        const changed = () => setMatches(media.matches)
-        changed()
-        media.addEventListener('change', changed)
-        return () => media.removeEventListener('change', changed)
-    }, [query])
-    return matches
-}
 
 async function failure(response: Response, fallback: string): Promise<Error> {
     const body = await response.json().catch(() => null)

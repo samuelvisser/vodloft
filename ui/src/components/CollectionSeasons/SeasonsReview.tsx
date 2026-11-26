@@ -12,7 +12,7 @@ import type {Words} from './seasonsSettings'
 /** The second step of the Seasons dialog: what saving does, as the Move dialog shows a move, with the cards only the
  * Seasons dialog needs besides: the seasons it makes, the videos that get downloaded, the ones that leave, and the
  * downloaded files deleted with them. Nothing is saved until the user agrees to it. */
-export default function SeasonsReview({view, review, failed, changes, words, listName, listing, listed, renumber, onRenumber, onBack, folded}: {
+export default function SeasonsReview({view, review, failed, changes, words, listName, listing, listed, renumber, onRenumber, onBack, folded, alone = true}: {
     view: CollectionSeasonsRead
     review: SeasonsReviewRead | undefined
     failed: string | null
@@ -30,6 +30,8 @@ export default function SeasonsReview({view, review, failed, changes, words, lis
     onBack: () => void
     /** On a phone, each card folds to one line. */
     folded: boolean
+    /** The review of one collection on its own; among the reviews of several, what they share is said once above them. */
+    alone?: boolean
 }) {
     const {season} = words
     if (failed) return <p className="error" role="alert">{failed}</p>
@@ -136,10 +138,7 @@ export default function SeasonsReview({view, review, failed, changes, words, lis
     )
     return (
         <div className="change-identification-dialog seasons-review">
-            <p className="help">
-                Nothing has changed yet. Saving does all of this at once: what is downloaded is renamed into its new
-                place, or downloaded again there when that place uses another Local Media Profile.
-            </p>
+            {alone && <SavingDoes/>}
             {rows.length > 0 && (
                 <section className="seasons-review-changes" aria-labelledby="seasons-review-changed">
                     <h3 id="seasons-review-changed">What you changed</h3>
@@ -155,9 +154,7 @@ export default function SeasonsReview({view, review, failed, changes, words, lis
                     </ul>
                 </section>
             )}
-            <p className="help">
-                Not what you want? Go <button type="button" className="seasons-review-back" onClick={onBack}>back</button> and change it.
-            </p>
+            {alone && <GoBack onBack={onBack}/>}
             <FoldSteps.Provider value={folded}>
                 {moves && moving ? (
                     <CollectionMoves preview={moves} renumber={renumber} onRenumber={onRenumber} reason={false} leading={<>{newSeasons}{alreadyWaiting}</>} trailing={others}/>
@@ -175,5 +172,23 @@ export default function SeasonsReview({view, review, failed, changes, words, lis
                 </p>
             )}
         </div>
+    )
+}
+
+/** What saving does, said once above a review. */
+export function SavingDoes() {
+    return (
+        <p className="help">
+            Nothing has changed yet. Saving does all of this at once: what is downloaded is renamed into its new
+            place, or downloaded again there when that place uses another Local Media Profile.
+        </p>
+    )
+}
+
+export function GoBack({onBack}: {onBack: () => void}) {
+    return (
+        <p className="help">
+            Not what you want? Go <button type="button" className="seasons-review-back" onClick={onBack}>back</button> and change it.
+        </p>
     )
 }

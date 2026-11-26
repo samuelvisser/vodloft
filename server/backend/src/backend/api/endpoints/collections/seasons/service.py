@@ -11,7 +11,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from backend.api.models.collection_seasons import (
-    CollectionSeasonsAPIRead, CollectionSeasonsAPIUpdate, MovedEpisodesAPIRead, ReviewFilesAPIRead, ReviewVideosAPIRead,
+    CollectionListChangeAPIIn, CollectionSeasonsAPIRead, CollectionSeasonsAPIUpdate, MovedEpisodesAPIRead, SeasonChangeAPIIn, ReviewFilesAPIRead, ReviewVideosAPIRead,
     SeasonsListingsAPIIn, SeasonsPreviewAPIRead, SeasonsReviewAPIRead, WaitingSeasonAPIRead,
 )
 from backend.db.models import Collection, CollectionList, CollectionListItem, Episode, LocalMediaProfileBase, MediaDownloadBase
@@ -44,7 +44,7 @@ from backend.types.collection_types import EpisodeIdentifier
 from backend.types.season_types import SeasonType
 from backend.types.resource_names import OWN_LINK_NAMES, RESOURCE_NAMES
 from backend.types.link_season_types import (
-    CollectionKind, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos, RepeatVideos,
+    CollectionKind, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos, RepeatVideos, SourceRole,
 )
 from backend.services.source_options import ytdlp_call_options
 from sources import Feature, Names, SectionKind, get_source, sources_for
@@ -158,16 +158,92 @@ def _feeds(collection: Collection) -> list[_Feed]:
             type_, not only and (collection.feeds is None or type_.feed_ref in collection.feeds),
             type_.feed_ref in (collection.feed_seasons or {}), seasons.get(type_.feed_ref),
         )
-        for type_ in _channel_feeds(collection)
+        for type_ in channel_feeds(collection)
     ]
 
 
-def _channel_feeds(collection: Collection):
+def channel_feeds(collection: Collection):
     """The feeds of a channel collection's channel, also while it holds only what its lists have, when it takes
     none of them."""
     if collection.kind != CollectionKind.CHANNEL.value or collection.sharing_url is None:
         return []
     return list(collection_site(collection).types_of(SectionKind.FEED))
+
+
+def feed_key(collection: Collection, ref: str) -> str:
+    """A feed of the collection's channel by its Site and its ref, the same for every collection on that Site."""
+    return f"{collection_site(collection).key}:{ref}"
+
+
+def feed_roles(collection: Collection) -> dict[str, SourceRole]:
+    """What each feed of the collection's channel is now, by its key (``feed_key``)."""
+    return {
+        feed_key(collection, feed.ref): SourceRole.OFF if not feed.on else SourceRole.SEASON if feed.as_season else SourceRole.PART
+        for feed in _feeds(collection)
+    }
+
+
+def takes_lists(collection: Collection) -> bool:
+    """Whether the collection's lists can be switched on and off, as the Seasons dialog's switch does: a collection of
+    a whole channel whose lists can be seasons."""
+    return collection.sharing_url is not None and offers_link_seasons(collection)
+
+
+def settings_with(
+    collection: Collection, roles: Mapping[str, SourceRole], link_seasons: LinkSeasons | None, renumber: bool = True,
+) -> CollectionSeasonsAPIUpdate | None:
+    """The Seasons dialog's settings as the collection has them, with ``roles`` for the feeds of its channel (by
+    ``feed_key``; a feed its channel lacks is left out) and its lists switched as ``link_seasons`` says, when it can
+    take them. None when that changes nothing. Everything else stays as it is: its seasons, their names and order, and
+    what each list is."""
+    feeds = _feeds(collection)
+    was = feed_roles(collection)
+    wanted = {key: role for key, role in roles.items() if key in was}
+    lists_on = collection.link_seasons != LinkSeasons.OFF.value
+    if link_seasons is not None and takes_lists(collection):
+        lists_on = link_seasons != LinkSeasons.OFF
+    if all(was[key] == role for key, role in wanted.items()) and lists_on == (collection.link_seasons != LinkSeasons.OFF.value):
+        return None
+    now = {**was, **wanted}
+    taken = [feed.ref for feed in feeds if now[feed_key(collection, feed.ref)] != SourceRole.OFF]
+    seasons = feed_season_ids(collection)
+    if feeds:
+        # As the dialog says it: a channel collection whose feeds are all off holds only what its lists have.
+        only = lists_on and not taken
+        outside = OutsideVideos.ONLY if only else (
+            OutsideVideos.LEAVE_OUT if holds_only_link_seasons(collection) else OutsideVideos(collection.outside_videos)
+        )
+        feed_settings = {
+            "feeds": taken,
+            # A feed that is a season already keeps the season it is in, also one it shares.
+            "feed_seasons": {
+                feed.ref: seasons.get(feed.ref) for feed in feeds
+                if now[feed_key(collection, feed.ref)] == SourceRole.SEASON
+            },
+        }
+    else:
+        outside, feed_settings = OutsideVideos(collection.outside_videos), {}
+    if outside == OutsideVideos.ONLY:
+        lists_on = True
+    return CollectionSeasonsAPIUpdate(
+        seasons=[
+            SeasonChangeAPIIn(id=season.id, name=season.name)
+            for season in sorted(collection.seasons, key=lambda season: season.index)
+        ],
+        custom_season_order=collection.custom_season_order,
+        **feed_settings,
+        link_seasons=LinkSeasons.ON if lists_on else LinkSeasons.OFF,
+        loose_videos=LooseVideos(collection.loose_videos),
+        outside_videos=outside,
+        playlists=[
+            CollectionListChangeAPIIn(
+                id=playlist.id, enabled=playlist.enabled, as_season=playlist.as_season, season_id=playlist.season_id,
+                is_default=playlist.is_default,
+            )
+            for playlist in collection.lists
+        ],
+        renumber=renumber,
+    )
 
 
 def _channel_season_names(collection: Collection) -> dict[str, str]:
