@@ -405,7 +405,9 @@ export default function LocalMediaProfilePage() {
                             <OpaqueOutputTemplateCode
                                 source={profile.outputTemplate}
                                 sourceMode="compact"
+                                renderMode="path"
                                 label="Output path template"
+                                className="wraps-path-sections"
                             />
                         </dd>
                     </div>

@@ -102,3 +102,14 @@
         background: rgba(251, 146, 60, 0.13);
     }
 }
+
+/* Where a path has the room to be read in full, such as on a profile's own page, a section too long
+   for a line wraps inside itself instead of being cut off. It still starts on a line of its own. */
+.read-only-output-template-code-editor.is-path.wraps-path-sections .cm-path-section {
+    display: inline-block;
+    max-width: 100%;
+    overflow: visible;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    vertical-align: bottom;
+}
