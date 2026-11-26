@@ -48,6 +48,7 @@ function component(advisories) {
             renderEditorOutputTemplate: (source) => ({value: source}),
         },
         './CustomIndexAdvisories.css': {},
+        './IndexingValuesEditorButton': {default: 'indexing-values-editor-button'},
         './OutputTemplateEditor.css': {},
         './ReadOnlyOutputTemplateCode.css': {},
     }

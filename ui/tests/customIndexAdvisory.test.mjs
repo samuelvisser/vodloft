@@ -213,6 +213,7 @@ function componentTree(props, advisoryState = {advisories: [], unavailable: fals
         './outputTemplateCodeMirror': {outputTemplateSyntaxExtensions: ['jinja', 'highlighting']},
         './outputTemplateFormatting': formatting,
         './CustomIndexAdvisories.css': {},
+        './IndexingValuesEditorButton': {default: 'indexing-values-editor-button'},
         './OutputTemplateEditor.css': {},
         './ReadOnlyOutputTemplateCode.css': {},
     }
@@ -240,6 +241,11 @@ test('component shows one nonblocking missing-definition warning per key without
     assert.equal(result.sentRequest, null)
     assert.equal(result.elements.filter((node) => node.props.role === 'status').length, 2)
     assert.equal(result.elements.filter((node) => node.type === 'button').length, 0)
+    // Each warning offers to add its key through the Indexing values editor.
+    assert.deepEqual(
+        result.elements.filter((node) => node.type === 'indexing-values-editor-button').map((node) => node.props.addKey),
+        ['a', 'b'],
+    )
 })
 
 test('suggestions require explicit review/apply; warnings without suggestions remain visible', () => {
