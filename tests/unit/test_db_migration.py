@@ -33,7 +33,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "3106a907fdd4"
+HEAD_REVISION = "aa8710c37ebc"
 EACH_SOURCE_ITS_OWN_CHOICE_REVISION = "a79d0f6c0f17"
 
 
@@ -1914,7 +1914,8 @@ def test_existing_tables_keep_their_rows_and_never_give_a_deleted_id_again(migra
             "SELECT name, sql FROM sqlite_master WHERE type = 'index' ORDER BY name"
         ).all()
 
-    command.upgrade(config, HEAD_REVISION)
+    # The migration that rebuilt the tables, before later ones add indexes of their own.
+    command.upgrade(config, "d0386f2772fc")
 
     with engine.begin() as connection:
         assert connection.execute(text("SELECT id FROM users ORDER BY id")).scalars().all() == [1, 2]

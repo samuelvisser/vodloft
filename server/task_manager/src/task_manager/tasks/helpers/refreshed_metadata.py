@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Video
-from backend.services.media_access import lock_refused
+from backend.services.media_access import lock_refused, set_access
 from backend.services.sites import episode_site
 from backend.services.thumbnails import is_own_thumbnail
 from backend.services.upgrade_check import check_refreshed_changes_now
@@ -38,7 +38,6 @@ def apply_refreshed_details(item: Episode | Video, details: VideoDetails, *, now
         "title": title, "description": details.description, "author_name": details.author_name,
         # A length of zero means the Source did not say.
         "duration": details.duration or None,
-        "access": details.access,
     }
     # A frame VODLoft took stays until the Source has a picture again; refreshes do not say which.
     if details.image_url and not is_own_thumbnail(item.thumbnail_landscape_path):
@@ -48,6 +47,10 @@ def apply_refreshed_details(item: Episode | Video, details: VideoDetails, *, now
         if value is not None and getattr(item, name) != value:
             setattr(item, name, value)
             changed = True
+    if details.access is not None:
+        stored = (item.access, item.creator_tier)
+        set_access(item, details.access)
+        changed = changed or (item.access, item.creator_tier) != stored
     if details.access_refused and details.access is not None and item.access_refused_at is None:
         # The Source refused it for lack of the access, as a download would be.
         lock_refused(item, details.access, now=item.metadata_refreshed_at)

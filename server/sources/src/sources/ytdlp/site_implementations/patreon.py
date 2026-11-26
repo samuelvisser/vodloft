@@ -15,12 +15,11 @@ import re
 from datetime import datetime
 from urllib.parse import urlsplit
 
+from progress_plan import PlanTracker, StageSpec
 from yt_dlp.utils import clean_html
 
-from progress_plan import PlanTracker, StageSpec
-
-from ...contract import LIST_TYPE, CreatorDetails, SectionRef, Site, cheapest, pledge_key
 from ... import ytdlp_runner as runner
+from ...contract import LIST_TYPE, CreatorDetails, CreatorTier, SectionRef, Site
 from .. import sites
 from .other_sites import OtherSitesImplementation
 
@@ -34,7 +33,14 @@ _OWN_PAGES = frozenset({
     "messages", "notifications", "explore", "checkout", "join", "membership", "library", "file", "user", "bePatron",
 })
 _NAME = re.compile(r"^[\w.-]+$")
+_POST = re.compile(r"/posts/(?:[^/]*-)?(\d+)/?$")
 _COLLECTION = re.compile(r"^/collection/(\d+)/?$")
+_ACCESS_INCLUDES = "access_rules.tier,campaign.rewards"
+"""What tells which of the creator's tiers can view a post: its access rules, and the tiers of its creator."""
+_ACCESS_FIELDS = {
+    "fields[access_rule]": "access_rule_type,amount_cents,currency", "fields[reward]": "title,amount_cents,currency",
+    "fields[campaign]": "name",
+}
 _POST_FIELDS = "title,post_type,published_at,current_user_can_view,teaser_text,thumbnail,image,url"
 _PAGE_SIZE = 50
 # Patreon's API gives some posts, such as embedded videos and links, a picture on its own media-u address, which
@@ -92,22 +98,57 @@ class _Included:
 
 
 def post_access(site: Site, post: dict, included: _Included) -> str:
-    """The key of the access a post the account may not view needs: the cheapest tier that unlocks it, a pledge of at
-    least some amount, or else any patron's."""
-    pledges: list[str] = []
+    """The key of the access a post the account may not view needs: the cheapest of the creator's tiers that unlocks
+    it, or else any patron's."""
+    found: dict[str, int] = {}
+    campaign_tiers = [
+        tier for campaign in included.related(post, "campaign") for tier in included.related(campaign, "rewards")
+        if _paid(tier)
+    ]
     for rule in included.related(post, "access_rules"):
         attributes = rule.get("attributes") or {}
         kind = attributes.get("access_rule_type")
-        currency = str(attributes.get("currency") or "USD")
-        if kind == "min_cents_pledged" and isinstance(attributes.get("amount_cents"), int) and attributes["amount_cents"] > 0:
-            pledges.append(pledge_key(attributes["amount_cents"], currency))
-        elif kind == "tier":
-            for tier in included.related(rule, "tier"):
-                values = tier.get("attributes") or {}
-                if isinstance(values.get("amount_cents"), int) and values["amount_cents"] > 0:
-                    pledges.append(pledge_key(values["amount_cents"], str(values.get("currency") or currency)))
-    found = cheapest(site.access(key) for key in pledges)
-    return found.key if found is not None else sites.MEMBERS_KEY
+        if kind == "tier":
+            found |= {str(tier["id"]): _cents(tier) for tier in included.related(rule, "tier") if _paid(tier)}
+        elif kind == "min_cents_pledged" and isinstance(cents := attributes.get("amount_cents"), int) and cents > 0:
+            # A post for patrons who pledge at least an amount is for every tier that costs that much.
+            enough = [tier for tier in campaign_tiers if _cents(tier) >= cents]
+            if enough:
+                cheapest = min(enough, key=_cents)
+                found[str(cheapest["id"])] = _cents(cheapest)
+    if site.creator_tiers is not None and found:
+        return site.creator_tiers.key_of(min(found, key=lambda tier_id: found[tier_id]))
+    return sites.MEMBERS_KEY
+
+
+def _cents(tier: dict) -> int:
+    cents = (tier.get("attributes") or {}).get("amount_cents")
+    return cents if isinstance(cents, int) else 0
+
+
+def _paid(tier: dict) -> bool:
+    """A tier patrons pay for: not Patreon's own "Everyone", nor a creator's free tier."""
+    return str(tier.get("id")) != "-1" and _cents(tier) > 0
+
+
+_CURRENCY_SIGNS = {"usd": "$", "eur": "€", "gbp": "£", "cad": "CA$", "aud": "A$", "nzd": "NZ$"}
+
+
+def _amount(cents: int, currency: str | None) -> str:
+    """An amount as people write it, such as "$5", "€2.50" or "7 SEK"."""
+    whole, part = divmod(cents, 100)
+    number = f"{whole}" if part == 0 else f"{whole}.{part:02d}"
+    code = (currency or "usd").lower()
+    sign = _CURRENCY_SIGNS.get(code)
+    return f"{sign}{number}" if sign else f"{number} {code.upper()}"
+
+
+def creator_tier(tier: dict) -> CreatorTier:
+    attributes = tier.get("attributes") or {}
+    return CreatorTier(
+        site_id=str(tier["id"]), name=str(attributes.get("title") or "").strip() or _amount(_cents(tier), attributes.get("currency")),
+        amount=_amount(_cents(tier), attributes.get("currency")), rank=_cents(tier),
+    )
 
 
 class PatreonImplementation(OtherSitesImplementation):
@@ -128,7 +169,7 @@ class PatreonImplementation(OtherSitesImplementation):
                 extractor = ydl.get_info_extractor("PatreonCampaign")
                 extractor.initialize()
                 return extractor._call_api(endpoint, endpoint, query=query, note=False)
-        except Exception as exc:  # noqa: BLE001 - yt-dlp raises its own errors, and Patreon's API is undocumented
+        except Exception as exc:
             raise runner.YtDlpError(f"Patreon's API did not answer: {exc}") from exc
 
     def _posts(self, campaign_id: str, *, collection_id: str | None = None, limit: int | None = None) -> tuple[list[dict], _Included]:
@@ -141,8 +182,7 @@ class PatreonImplementation(OtherSitesImplementation):
                 "filter[campaign_id]": campaign_id, "filter[is_draft]": "false", "sort": "-published_at",
                 **({"filter[collection_id]": collection_id} if collection_id else {}),
                 "page[count]": str(min(limit or _PAGE_SIZE, _PAGE_SIZE)), "json-api-use-default-includes": "false",
-                "fields[post]": _POST_FIELDS, "include": "access_rules.tier",
-                "fields[access_rule]": "access_rule_type,amount_cents,currency", "fields[reward]": "amount_cents,currency",
+                "fields[post]": _POST_FIELDS, "include": _ACCESS_INCLUDES, **_ACCESS_FIELDS,
                 **({"page[cursor]": cursor} if cursor else {}),
             })
             posts += [post for post in answer.get("data") or [] if isinstance(post, dict) and post.get("id")]
@@ -277,14 +317,14 @@ class PatreonImplementation(OtherSitesImplementation):
         return f"{_HOME}/{campaign['vanity']}" if campaign.get("vanity") else campaign.get("url") or None
 
     def refused_access(self, info: dict, key: str) -> str:
-        """The least pledge that unlocks a post yt-dlp could not get, as Patreon's API tells it."""
+        """The cheapest of the creator's tiers that unlocks a post yt-dlp could not get, as Patreon's API tells it."""
         post_id = str(info.get("id") or "")
         if not post_id.isdigit():
             return key
         try:
             answer = self.call(f"posts/{post_id}", {
-                "fields[post]": "current_user_can_view", "include": "access_rules.tier", "json-api-use-default-includes": "false",
-                "fields[access_rule]": "access_rule_type,amount_cents,currency", "fields[reward]": "amount_cents,currency",
+                "fields[post]": "current_user_can_view", "include": _ACCESS_INCLUDES, "json-api-use-default-includes": "false",
+                **_ACCESS_FIELDS,
             })
         except runner.YtDlpError as exc:
             logger.info("Not telling what unlocks Patreon post %s: %s", post_id, exc)
@@ -293,6 +333,29 @@ class PatreonImplementation(OtherSitesImplementation):
 
     def served_picture(self, url: str | None) -> str | None:
         return None if url and _UNSERVED in url else url
+
+    def creator_tiers(self, url: str) -> tuple[CreatorTier, ...]:
+        """The paid tiers of the creator of a page, a playlist or a post."""
+        path = urlsplit(url).path
+        if (urlsplit(url).hostname or "").lower() not in _HOSTS:
+            return ()
+        if found := _COLLECTION.match(path):
+            campaign_id = self._collection(found.group(1))[1].get("id")
+        elif found := _POST.search(path):
+            answer = self.call(f"posts/{found.group(1)}", {
+                "fields[post]": "title", "include": "campaign", "fields[campaign]": "name", "json-api-use-default-includes": "false",
+            })
+            campaign_id = next((item.get("id") for item in answer.get("included") or [] if item.get("type") == "campaign"), None)
+        else:
+            campaign_id = (self._campaign(url) or {}).get("id")
+        if not campaign_id:
+            return ()
+        answer = self.call(f"campaigns/{campaign_id}", {
+            "include": "rewards", "fields[campaign]": "name", "fields[reward]": "title,amount_cents,currency",
+            "json-api-use-default-includes": "false",
+        })
+        tiers = [item for item in answer.get("included") or [] if item.get("type") == "reward" and _paid(item)]
+        return tuple(creator_tier(tier) for tier in sorted(tiers, key=_cents))
 
     # Creators
 

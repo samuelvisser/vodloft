@@ -60,7 +60,8 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Collection, Episode, Season
 from backend.db.core import run_write_transaction
-from backend.services.media_access import lock_refused
+from backend.services.creator_tiers import keep_tiers, tiers_at_source
+from backend.services.media_access import lock_refused, set_access
 from backend.types.season_types import SeasonOrigin
 from backend.services.notifications.emitters import link_seasons_found
 from backend.services.season_order import arrange_seasons
@@ -198,7 +199,7 @@ def _index_listed_collection(s: Session, *, collection_id: int, source: Source, 
     collection = s.get(Collection, collection_id)
     if collection is None:
         return 0
-    title = collection.title
+    title, site, url = collection.title, collection_site(collection), collection.sharing_url
     found = _list_new_episodes(s, collection, source, progress)
     s.rollback()
     if dry_run:
@@ -220,7 +221,11 @@ def _index_listed_collection(s: Session, *, collection_id: int, source: Source, 
     if outside:
         update_progress(progress, _SAVING_PROGRESS, f"Saving {len(outside)} videos of the {lists} of '{title}'")
 
+    # What the creator calls their tiers now, which name the tiers the new episodes need.
+    tiers = tiers_at_source(source, site, url)
+
     def save(w: Session) -> int:
+        keep_tiers(w, site.key, tiers)
         collection = w.get(Collection, collection_id)
         if collection is not None and listing is not None:
             link_seasons_found(w, collection, save_lists(w, collection, listing))
@@ -296,6 +301,7 @@ def _new_episode(
         type=MediaType.EPISODE.value,
         source_key=source_key,
         collection_id=collection.id,
+        collection=collection,
         season_id=season.id,
         index=index,
         episode_identifier=identifier,
@@ -321,11 +327,11 @@ def _new_episode(
         thumbnail_landscape_path=details.image_url,
         background_image_path=details.image_url,
         drm_protected=details.drm_protected,
-        access=details.access,
         part_of=None if chapter is None else details.slug,
         part_start=None if chapter is None else chapter.start,
         part_end=None if chapter is None else chapter.end,
     )
+    set_access(episode, details.access)
     if details.access_refused and details.access is not None:
         # The Source already refused it for lack of the access, as a download would be.
         lock_refused(episode, details.access)
@@ -428,7 +434,7 @@ def refresh_listed_collection(s: Session, *, collection_id: int, source: Source)
 
 
 def _refresh_listed_collection(s: Session, collection: Collection, source: Source) -> RefreshCounts:
-    collection_id, title, url = collection.id, collection.title, collection.sharing_url
+    collection_id, title, url, site = collection.id, collection.title, collection.sharing_url, collection_site(collection)
     # A collection that only holds its link seasons has no listing of its own to read its videos from.
     one_by_one = url is None or not lists_own_link(collection)
     # The parts of a split video are asked about once, as their video.
@@ -444,8 +450,14 @@ def _refresh_listed_collection(s: Session, collection: Collection, source: Sourc
     if not items:
         return RefreshCounts()
     refresh = source.refresh_metadata(items) if one_by_one else source.refresh_items(url, items)
+    tiers = tiers_at_source(source, site, url)
     slugs = frozenset(item.slug for item in items)
-    counts = run_write_transaction(lambda w: _apply_refresh(w, collection_id, refresh, slugs))
+
+    def apply(w: Session) -> RefreshCounts:
+        keep_tiers(w, site.key, tiers)
+        return _apply_refresh(w, collection_id, refresh, slugs)
+
+    counts = run_write_transaction(apply)
     if counts.removed or counts.returned:
         logger.info("'%s': %d episodes no longer at the Source, %d back", title, counts.removed, counts.returned)
     return counts

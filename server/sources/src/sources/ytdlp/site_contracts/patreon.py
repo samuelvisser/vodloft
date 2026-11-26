@@ -1,4 +1,4 @@
-from ...contract import LIST_TYPE, Access, ListOrder, Names, SectionKind, SectionType
+from ...contract import LIST_TYPE, Access, CreatorTierAccess, ListOrder, Names, SectionKind, SectionType
 from .feed_section_type import YtdlpFeedSectionType
 from .other_sites import MEMBERS_KEY, OtherSites
 
@@ -22,4 +22,8 @@ class Patreon(OtherSites):
     # VODLoft lists a playlist's posts the first first, whichever order Patreon keeps it in.
     list_order = ListOrder.OLDEST_FIRST
     accesses = (Access(MEMBERS_KEY, "Patrons only", "Only the creator's patrons can watch this."),)
-    pledge_access = Access("pledge", "Patrons from {amount}", "Only the creator's patrons who pledge {amount} or more can watch this.")
+    # Each creator sets up tiers of their own.
+    creator_tiers = CreatorTierAccess(
+        "tier", "{name}", "Only patrons on the creator's “{name}” tier ({amount}) or higher can watch this.",
+        "Paid tier", "Only the creator's patrons on one of their paid tiers can watch this.",
+    )

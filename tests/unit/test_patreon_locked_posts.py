@@ -1,12 +1,12 @@
-"""Patreon through its own API: a creator's posts with their video or sound, locked by the least pledge that unlocks
-them without a failing yt-dlp lookup each, and their collections as playlists."""
+"""Patreon through its own API: a creator's posts with their video or sound, locked by the cheapest of the creator's
+tiers that unlocks them without a failing yt-dlp lookup each, and their collections as playlists."""
 from __future__ import annotations
 
 import pytest
 
 from sources import ItemRef, ListOrder
 from sources import ytdlp_runner as runner
-from sources.contract import Access, cheapest, pledge_amount, pledge_key
+from sources.contract import Access, CreatorTier, cheapest
 from sources.ytdlp import YtDlpSource, sites
 from sources.ytdlp.site_implementations.patreon import PatreonImplementation
 
@@ -32,20 +32,35 @@ def _post(name: str, *, kind: str = "video_embed", viewable: bool = False, rules
             "published_at": f"{DATES[name]}T12:00:00.000+00:00", "teaser_text": f"About {name}",
             "thumbnail": {"large": f"https://c10.patreonusercontent.com/p/post/{IDS[name]}/1.jpg?token-hash=x"},
         },
-        "relationships": {"access_rules": {"data": [{"type": "access-rule", "id": rule} for rule in rules]}},
+        "relationships": {
+            "access_rules": {"data": [{"type": "access-rule", "id": rule} for rule in rules]},
+            "campaign": {"data": {"type": "campaign", "id": "9"}},
+        },
     }
 
 
+# The creator's tiers, Patreon's own "Everyone" and a free one among them.
+TIERS = [
+    {"type": "reward", "id": "-1", "attributes": {"amount_cents": 0, "description": "Everyone"}},
+    {"type": "reward", "id": "free", "attributes": {"title": "Free", "amount_cents": 0, "currency": "USD"}},
+    {"type": "reward", "id": "bronze", "attributes": {"title": "Bronze", "amount_cents": 100, "currency": "USD"}},
+    {"type": "reward", "id": "silver", "attributes": {"title": "Silver", "amount_cents": 300, "currency": "USD"}},
+    {"type": "reward", "id": "fiver", "attributes": {"title": "Fiver", "amount_cents": 500, "currency": "USD"}},
+    {"type": "reward", "id": "gold", "attributes": {"title": "Gold", "amount_cents": 1000, "currency": "USD"}},
+]
+CAMPAIGN_RECORD = {
+    "type": "campaign", "id": "9", "attributes": {"name": "The Creator", "vanity": "creator", "url": ROOT},
+    "relationships": {"rewards": {"data": [{"type": "reward", "id": tier["id"]} for tier in TIERS]}},
+}
+
 # Patreon's access rules: any patron, a pledge of at least $5, or either of two tiers, the cheapest $3.
-RULES = [
+RULES = [CAMPAIGN_RECORD, *TIERS,
     {"type": "access-rule", "id": "patrons", "attributes": {"access_rule_type": "patrons", "currency": "USD"}},
     {"type": "access-rule", "id": "five", "attributes": {"access_rule_type": "min_cents_pledged", "amount_cents": 500, "currency": "USD"}},
     {"type": "access-rule", "id": "gold", "attributes": {"access_rule_type": "tier", "currency": "USD"},
      "relationships": {"tier": {"data": {"type": "reward", "id": "gold"}}}},
     {"type": "access-rule", "id": "silver", "attributes": {"access_rule_type": "tier", "currency": "USD"},
      "relationships": {"tier": {"data": {"type": "reward", "id": "silver"}}}},
-    {"type": "reward", "id": "gold", "attributes": {"amount_cents": 1000, "currency": "USD"}},
-    {"type": "reward", "id": "silver", "attributes": {"amount_cents": 300, "currency": "USD"}},
 ]
 
 
@@ -71,11 +86,14 @@ class FakePatreon:
 
     def __call__(self, endpoint: str, query: dict[str, str]) -> dict:
         self.asked.append(endpoint)
-        campaign = {"type": "campaign", "id": "9", "attributes": {"name": "The Creator", "vanity": "creator", "url": ROOT}}
+        campaign = CAMPAIGN_RECORD
         if endpoint == "search":
             return {"data": [{"type": "campaign-document", "id": "campaign_9", "attributes": {"url": ROOT}}]}
         if endpoint == "campaigns/9":
-            return {"data": {**campaign, "attributes": {**campaign["attributes"], "summary": "Videos", "avatar_photo_url": "https://c10/a.jpg"}}}
+            return {
+                "data": {**campaign, "attributes": {**campaign["attributes"], "summary": "<p>Videos</p>", "avatar_photo_url": "https://c10/a.jpg"}},
+                "included": TIERS if "rewards" in query.get("include", "") else [],
+            }
         if endpoint == "posts":
             wanted = self.posts.values()
             if collection := query.get("filter[collection_id]"):
@@ -134,10 +152,10 @@ def test_locked_posts_come_from_patreons_api_and_only_open_ones_are_looked_up(pa
     assert set(found) == {f"patreon-{IDS[name]}" for name in ("open", "paid", "tier")}
     assert found[f"patreon-{IDS['open']}"].access is None
     paid = found[f"patreon-{IDS['paid']}"]
-    assert (paid.title, paid.access, paid.access_refused, paid.description) == ("Post paid", "pledge-500-usd", True, "About paid")
+    assert (paid.title, paid.access, paid.access_refused, paid.description) == ("Post paid", "tier:fiver", True, "About paid")
     assert paid.image_url.startswith("https://c10.patreonusercontent.com/")
     # Of two tiers, the cheapest unlocks the post.
-    assert found[f"patreon-{IDS['tier']}"].access == "pledge-300-usd"
+    assert found[f"patreon-{IDS['tier']}"].access == "tier:silver"
     # yt-dlp only looked up the post the account may view.
     assert looked_up == [_post_url("open")]
 
@@ -148,24 +166,37 @@ def test_a_known_post_is_not_looked_up_again(patreon):
     assert list(YtDlpSource().list_episodes(CAMPAIGN, known=known)) == []
 
 
-def test_a_locked_post_looked_up_on_its_own_gets_the_pledge_that_unlocks_it(patreon):
+def test_a_locked_post_looked_up_on_its_own_gets_the_tier_that_unlocks_it(patreon):
     refresh = YtDlpSource().check_pending([ItemRef("paid", _post_url("paid"))])
 
-    assert refresh.details["paid"].access == "pledge-500-usd"
+    # A post for patrons who pledge at least $5 is for the cheapest tier of that much.
+    assert refresh.details["paid"].access == "tier:fiver"
     assert refresh.details["paid"].access_refused
 
 
-def test_patreon_names_its_tiers_by_their_least_pledge():
-    site = sites.site_for(CAMPAIGN)
+def test_the_tiers_of_a_creator_are_their_paid_ones(patreon):
+    tiers = YtDlpSource().creator_tiers(CAMPAIGN)
 
-    assert site.access(sites.MEMBERS_KEY).label == "Patrons only"
-    five = site.access(pledge_key(500, "USD"))
-    assert (five.label, five.tier) == ("Patrons from $5", 500)
-    assert five.description == "Only the creator's patrons who pledge $5 or more can watch this."
-    assert pledge_amount(pledge_key(250, "EUR")) == "€2.50"
-    assert pledge_amount(pledge_key(700, "SEK")) == "7 SEK"
-    # A site without tiers of its creators' own knows no pledges.
-    assert sites.site_for("https://www.youtube.com/watch?v=a").access(pledge_key(500, "USD")) is None
+    assert tiers == (
+        CreatorTier("bronze", "Bronze", "$1", 100), CreatorTier("silver", "Silver", "$3", 300),
+        CreatorTier("fiver", "Fiver", "$5", 500), CreatorTier("gold", "Gold", "$10", 1000),
+    )
+    # A post or a playlist is of the same creator.
+    assert YtDlpSource().creator_tiers("https://www.patreon.com/collection/71") == tiers
+    # Other sites' creators have no tiers of their own.
+    assert YtDlpSource().creator_tiers("https://www.youtube.com/@creator") == ()
+
+
+def test_patreon_names_a_tier_as_its_creator_does():
+    tiers = sites.site_for(CAMPAIGN).creator_tiers
+
+    assert sites.site_for(CAMPAIGN).access(sites.MEMBERS_KEY).label == "Patrons only"
+    assert tiers.key_of("123") == "tier:123" and tiers.tier_id("tier:123") == "123" and tiers.tier_id("members") is None
+    fiver = tiers.access(CreatorTier("fiver", "Fiver", "$5", 500))
+    assert (fiver.key, fiver.label, fiver.tier) == ("tier", "Fiver", 500)
+    assert fiver.description == "Only patrons on the creator's “Fiver” tier ($5) or higher can watch this."
+    assert tiers.access(None).label == "Paid tier"
+    assert sites.site_for("https://www.youtube.com/watch?v=a").creator_tiers is None
 
 
 def test_a_higher_tier_gives_what_a_lower_one_does():

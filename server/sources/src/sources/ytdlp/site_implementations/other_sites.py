@@ -15,7 +15,7 @@ from urllib.parse import urljoin
 
 from progress_plan import PlanTracker, StageSpec
 
-from ...contract import MAIN_TAG, CollectionDetails, CreatorDetails, DeviceCode, SearchResults, SectionRef, SectionRole, SignInRejected, Site, link_host
+from ...contract import MAIN_TAG, CollectionDetails, CreatorDetails, CreatorTier, DeviceCode, SearchResults, SectionRef, SectionRole, SignInRejected, Site, link_host
 from ...site_accounts import SignedIn
 import requests
 
@@ -76,8 +76,12 @@ class OtherSitesImplementation:
 
     def refused_access(self, info: dict, key: str) -> str:
         """The access a video needs that yt-dlp could not get for lack of ``key``, where the Site tells it more
-        exactly, such as the least pledge that unlocks a Patreon post."""
+        exactly, such as the cheapest of the creator's tiers that unlocks a Patreon post."""
         return key
+
+    def creator_tiers(self, url: str) -> tuple[CreatorTier, ...]:
+        """The paid tiers of the creator a link is of, on a Site whose creators set up tiers of their own."""
+        return ()
 
     def served_picture(self, url: str | None) -> str | None:
         """The picture yt-dlp gives a video, or None when the Site is known not to serve it, so that VODLoft shows its

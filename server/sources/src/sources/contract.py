@@ -887,8 +887,9 @@ class Access:
     description: str
     """One sentence on who can watch what needs it, such as "Only NPO Plus subscribers can watch this"."""
     tier: int | None = None
-    """Where the access stands among the Site's paid tiers, such as a membership level or a pledge in cents: a tier
-    gives everything a lower one gives. None for an access that is no tier, such as a channel membership."""
+    """Where the access stands among the Site's paid tiers, such as a membership level, or a creator's tier by its price
+    in cents: a tier gives everything a lower one gives. None for an access that is no tier, such as a channel
+    membership."""
 
     def gives(self, needed: Access) -> bool:
         """Whether having this access lets one watch what needs ``needed``: it is that access, or a tier at least as
@@ -904,32 +905,51 @@ def cheapest(accesses: Iterable[Access | None]) -> Access | None:
     return min(tiers, key=lambda access: access.tier) if tiers else next(iter(found), None)
 
 
-PLEDGE_PREFIX = "pledge-"
-_CURRENCY_SIGNS = {"usd": "$", "eur": "€", "gbp": "£", "cad": "CA$", "aud": "A$", "nzd": "NZ$"}
+@dataclass(frozen=True)
+class CreatorTier:
+    """A paid tier a creator set up on a Site whose creators make their own tiers, such as a Patreon tier."""
+
+    site_id: str
+    """The Site's own id of the tier, which stays when the creator renames it or changes its amount."""
+    name: str
+    amount: str | None
+    """What the tier costs, as people write it, such as "$5"."""
+    rank: int | None
+    """Where the tier stands among the creator's tiers, such as its price in cents: a tier gives what a lower one gives."""
 
 
-def pledge_key(cents: int, currency: str) -> str:
-    """The key of the access to what supporters who pledge at least ``cents`` in ``currency`` can watch."""
-    return f"{PLEDGE_PREFIX}{cents}-{currency.lower()}"
+@dataclass(frozen=True)
+class CreatorTierAccess:
+    """What a Site calls the access to a tier its creators set up themselves, such as a Patreon tier. The Source
+    tells such an access by ``key_of`` the tier's id on the Site; VODLoft stores the access by ``key``, and the tier
+    beside it."""
 
+    key: str
+    label: str
+    """What the Site calls a tier, with ``{name}`` and ``{amount}`` where the tier's go."""
+    description: str
+    """Who can watch what needs a tier, with ``{name}`` and ``{amount}``."""
+    unknown_label: str
+    """What VODLoft calls a tier it knows nothing of yet but its id."""
+    unknown_description: str
 
-def pledge_cents(key: str | None) -> int | None:
-    """The cents a ``pledge_key`` names, the pledge's tier; None for any other key."""
-    cents = key.removeprefix(PLEDGE_PREFIX).partition("-")[0] if key and key.startswith(PLEDGE_PREFIX) else ""
-    return int(cents) if cents.isdigit() else None
+    def key_of(self, site_tier_id: str) -> str:
+        return f"{self.key}:{site_tier_id}"
 
+    def tier_id(self, key: str | None) -> str | None:
+        """The id on the Site of the tier a key from ``key_of`` names; None for any other key."""
+        prefix = f"{self.key}:"
+        return key[len(prefix):] or None if key and key.startswith(prefix) else None
 
-def pledge_amount(key: str | None) -> str | None:
-    """The amount a ``pledge_key`` names, as people write it, such as "$5" or "€2.50"; None for any other key."""
-    if not key or not key.startswith(PLEDGE_PREFIX):
-        return None
-    cents, _, currency = key.removeprefix(PLEDGE_PREFIX).partition("-")
-    if not cents.isdigit() or not currency:
-        return None
-    whole, part = divmod(int(cents), 100)
-    number = f"{whole}" if part == 0 else f"{whole}.{part:02d}"
-    sign = _CURRENCY_SIGNS.get(currency)
-    return f"{sign}{number}" if sign else f"{number} {currency.upper()}"
+    def access(self, tier: CreatorTier | None) -> Access:
+        """The access to a tier, or to a tier VODLoft knows nothing of yet."""
+        if tier is None:
+            return Access(self.key, self.unknown_label, self.unknown_description)
+        amount = tier.amount or ""
+        return Access(
+            self.key, self.label.format(name=tier.name, amount=amount).strip(),
+            self.description.format(name=tier.name, amount=amount).replace(" ()", ""), tier=tier.rank,
+        )
 
 
 @dataclass(frozen=True)
@@ -1189,10 +1209,9 @@ class Site:
     accesses: tuple[Access, ...] = ()
     """What the Site only gives some of its videos with, such as NPO Plus or a channel membership,
     by the keys its Sources tell."""
-    pledge_access: Access | None = None
-    """What the Site calls the access to what only supporters who pledge some amount can watch, such as Patreon's
-    "Patrons from $5", with ``{amount}`` where the amount goes. Its key is unused: each amount has its own
-    ``pledge_key``."""
+    creator_tiers: CreatorTierAccess | None = None
+    """The Site's creators set up paid tiers of their own, such as Patreon's, and what the Site calls them. The tiers
+    themselves are each creator's, so VODLoft learns them from the Source and keeps them."""
     creators: bool = False
     """The Site has creators VODLoft can add, through a Source with ``Feature.CREATORS``."""
     audio_only: bool = False
@@ -1346,14 +1365,8 @@ class Site:
         return found
 
     def access(self, key: str | None) -> Access | None:
-        """One of ``accesses`` by its key, or the ``pledge_access`` of the amount a ``pledge_key`` names."""
-        found = next((access for access in self.accesses if access.key == key), None)
-        if found is None and self.pledge_access is not None and (amount := pledge_amount(key)) is not None:
-            found = Access(
-                key, self.pledge_access.label.format(amount=amount), self.pledge_access.description.format(amount=amount),
-                tier=pledge_cents(key),
-            )
-        return found
+        """One of ``accesses`` by its key. A creator's tier is named by the backend, which keeps the tiers."""
+        return next((access for access in self.accesses if access.key == key), None)
 
     @property
     def streams(self) -> bool:
@@ -1476,6 +1489,11 @@ class Source(ABC):
     def preview(self, url: str) -> LinkPreview | None:
         """A title and image for a link, faster than ``resolve``, or None when this Source has no faster way."""
         return None
+
+    def creator_tiers(self, url: str) -> tuple[CreatorTier, ...]:
+        """The paid tiers of the creator a link is of, on a Site with ``creator_tiers``, such as a Patreon creator's
+        page or one of their posts. Empty when the Site has no such tiers or the Source cannot tell them."""
+        return ()
 
     def own_picture(self, url: str, image_url: str | None, *, locked: bool = False) -> bytes | None:
         """A JPEG VODLoft keeps as the video's picture: a copy of its picture, ``image_url``, on a Site whose pictures

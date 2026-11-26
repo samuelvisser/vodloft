@@ -22,7 +22,7 @@ from progress_plan import PlanTracker
 from ..contract import (
     AccountStatus, DeviceCode, SignInKind, SignInRejected,
     Chapter,
-    ANY_DOMAIN, ApiKeyRejected, combined_tags, CreatorDetails, SectionRef, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, ApiQuotaShare, ApiStatus, QuickCheckCollection, QuickCheckCost, DownloadOptions, Feature, LinkKind, LinkPreview, LiveStream, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
+    ANY_DOMAIN, ApiKeyRejected, combined_tags, CreatorDetails, CreatorTier, SectionRef, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, ApiQuotaShare, ApiStatus, QuickCheckCollection, QuickCheckCost, DownloadOptions, Feature, LinkKind, LinkPreview, LiveStream, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
     ResolvedLink, SearchResults, CollectionDetails, Site, SiteApiStatus, SiteSetting, Source, SourceProblem, SponsorBlockSegment, StreamMethod, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
     link_host, on_domain,
 )
@@ -795,6 +795,9 @@ class YtDlpSource(Source):
         if info.get("_type") == "playlist":
             raise runner.YtDlpError("This link is a playlist or channel, not a single video")
         return self._video(info, url)
+
+    def creator_tiers(self, url: str) -> tuple[CreatorTier, ...]:
+        return self._implementation(url).creator_tiers(url)
 
     def own_picture(self, url: str, image_url: str | None, *, locked: bool = False) -> bytes | None:
         if image_url and sites.site_for(url).pictures_expire:
