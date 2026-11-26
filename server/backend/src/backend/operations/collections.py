@@ -111,6 +111,7 @@ class CollectionFileRenameOperation(_CollectionOperation):
         local_media_profile_ids: Sequence[int],
         season_folders: bool = True,
         episode_ids: Sequence[int] | None = None,
+        rewrite_metadata: bool = False,
     ) -> None:
         super().__init__(collection)
         self.local_media_profile_ids = tuple(
@@ -118,6 +119,7 @@ class CollectionFileRenameOperation(_CollectionOperation):
         )
         self.season_folders = season_folders
         self.episode_ids = list(episode_ids) if episode_ids is not None else None
+        self.rewrite_metadata = rewrite_metadata
 
     def targets(self) -> tuple[OperationTargetSpec, ...]:
         return tuple(
@@ -128,6 +130,7 @@ class CollectionFileRenameOperation(_CollectionOperation):
                 task_kwargs={
                     "local_media_profile_id": profile_id, "season_folders": self.season_folders,
                     **({"episode_ids": self.episode_ids} if self.episode_ids is not None else {}),
+                    **({"rewrite_metadata": True} if self.rewrite_metadata else {}),
                 },
                 slot_key=f"profile:{profile_id}",
             )

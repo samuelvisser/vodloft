@@ -12,13 +12,17 @@ from task_manager.tasks.helpers.progress import update_progress
 logger = logging.getLogger(__name__)
 
 
-def run_rewrite_collection_profile_metadata(*, collection_id: int, local_media_profile_id: int, progress=None) -> TaskResult:
-    """Plan from a read, then rewrite each file outside any transaction and record what it is now."""
+def run_rewrite_collection_profile_metadata(
+    *, collection_id: int, local_media_profile_id: int, episode_ids: list[int] | None = None, progress=None,
+) -> TaskResult:
+    """Plan from a read, then rewrite each file outside any transaction and record what it is now. With
+    ``episode_ids``, only the files of those episodes."""
     update_progress(progress, 0, "Looking for files to rewrite")
     session = get_session()
     try:
         rewrites, untaggable = plan_metadata_rewrites(
             session, collection_id=collection_id, local_media_profile_id=local_media_profile_id,
+            episode_ids=episode_ids,
         )
     finally:
         session.rollback()

@@ -11,6 +11,7 @@ from __future__ import annotations
 from backend.utils.helpers import name_in_text
 import logging
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -124,9 +125,10 @@ def request_metadata_rewrite(
 
 
 def plan_metadata_rewrites(
-        s: Session, *, collection_id: int, local_media_profile_id: int,
+        s: Session, *, collection_id: int, local_media_profile_id: int, episode_ids: Sequence[int] | None = None,
 ) -> tuple[list[MetadataRewrite], int]:
-    """The rewrites a collection's files of one Local Media Profile need, and how many files take no tags."""
+    """The rewrites a collection's files of one Local Media Profile need, or only the files of ``episode_ids``, and
+    how many files take no tags."""
     profile = s.get(CollectionLocalMediaProfile, local_media_profile_id)
     if profile is None:
         return [], 0
@@ -143,6 +145,7 @@ def plan_metadata_rewrites(
             EpisodeMediaDownload.local_media_profile_id == local_media_profile_id,
             EpisodeMediaDownload.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value,
             EpisodeMediaDownload.file_path.is_not(None),
+            *([Episode.id.in_(episode_ids)] if episode_ids is not None else []),
         )
         .order_by(Episode.index, EpisodeMediaDownload.id)
     ).unique()

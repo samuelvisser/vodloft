@@ -85,9 +85,11 @@ def test_a_downloaded_extra_leaves_with_its_files_when_the_user_made_it_one_and_
     source.items = {"PLfirst": ("a", "b"), "PLbest": ("a", "b")}
     collection = _collection(session, music=True)
     _index(session, collection, source)
-    # Files for the episode of a on the album that does not come first, which it loses.
+    # Files for both episodes of a: the one on the album that does not come first is the one it loses. (With files
+    # only there, that one would stay instead, and the episode without files would go.)
     first_season = active_lists(load_state(session, session.get(Collection, collection.id)))[0].season_id
-    a_later = next(episode for episode in _episodes(session, "a") if episode.season_id != first_season)
+    a_first, a_later = sorted(_episodes(session, "a"), key=lambda episode: episode.season_id != first_season)
+    _give_files_to(session, a_first.id)
     _give_files_to(session, a_later.id)
 
     def one_season(w):
@@ -191,11 +193,12 @@ def _give_files_to(session, episode_id):
     from backend.db.models.media_download import EpisodeMediaDownload
     from conftest import available_artifact
 
-    session.add(CollectionLocalMediaProfile(
-        id=1, slug="videos", name="Videos", preferred_format="format_1080p",
-        output_template="/downloads/{{ collection_title }}/{{ episode_title }}.ext",
-    ))
-    session.flush()
+    if session.get(CollectionLocalMediaProfile, 1) is None:
+        session.add(CollectionLocalMediaProfile(
+            id=1, slug="videos", name="Videos", preferred_format="format_1080p",
+            output_template="/downloads/{{ collection_title }}/{{ episode_title }}.ext",
+        ))
+        session.flush()
     session.add(EpisodeMediaDownload(
         type="episode", media_item_id=episode_id, local_media_profile_id=1, file_path=f"/downloads/{episode_id}.mp4",
         **available_artifact(),

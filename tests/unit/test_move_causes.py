@@ -122,3 +122,69 @@ def test_the_review_waits_while_vodloft_works_on_the_collection_but_not_for_down
     monkeypatch.setattr(service, "collection_work", lambda s, c: CollectionWork(c.title, downloads=True))
     ready = _review(session, loose_videos="one_season")
     assert ready.busy is None and [part.count for part in ready.moves.parts] == [2]
+
+
+def test_a_downloaded_episode_stays_over_an_undownloaded_copy(source, session, monkeypatch):
+    """The channel season held everything, so a video in a playlist had an episode in both. When the channel season
+    stops holding it, the downloaded episode is the one that stays: it moves to the playlist's season, and the copy
+    that has nothing downloaded goes."""
+    from backend.api.endpoints.collections.seasons import service
+    from backend.db.models import Episode
+    from sqlalchemy import select
+    from test_link_seasons import _list
+    from test_repeat_videos import _give_files_to
+
+    monkeypatch.setattr(service, "queue_renumber", lambda s, collection, renumber: None)
+    source.videos = [_video("a", 2024), _video("b", 2025)]
+    source.lists = [_list("PLone", "One")]
+    source.items = {"PLone": ("a",)}
+    collection = _collection(session, loose="everything")
+    _index(session, collection, source)
+    channel = next(name for name, _, slugs in _seasons(session) if slugs == ["a", "b"])
+    assert ("One", ["a"]) in [(name, slugs) for name, _, slugs in _seasons(session)]
+    downloaded = session.scalars(select(Episode.id).where(
+        Episode.source_slug == "a", Episode.season.has(name=channel))).one()
+    _give_files_to(session, downloaded)
+
+    review = _review(session, loose_videos="by_year")
+    assert review.deleted_files.count == 0
+    assert [(part.to_season, part.count) for part in review.moves.parts] == [("One", 1)]
+
+    _save(session, loose_videos="by_year")
+    assert ("One", ["a"]) in [(name, slugs) for name, _, slugs in _seasons(session)]
+    assert session.scalars(select(Episode.id).where(Episode.source_slug == "a")).all() == [downloaded]
+
+
+
+def test_a_download_that_finishes_under_its_old_name_is_renamed_into_its_new_place(source, session, monkeypatch):
+    """A download that was running when the save moved its episode finishes under the name the episode had when it
+    started; it gets its new name and metadata after, as the files that were there already did."""
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Episode
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from task_manager.scheduler.db.TaskOperation import TaskOperation
+    from backend.services.download_options import effective_filename_mode
+    from backend.services.season_moves import follow_new_place
+    from backend.utils.output_template import resolve_episode_output_path
+    from task_manager.scheduler import operations
+
+    monkeypatch.setattr(operations, "queue_operation_target_dispatch", lambda *args, **kwargs: None)
+    _waiting(source, session)
+    download = session.query(EpisodeMediaDownload).join(Episode, Episode.id == EpisodeMediaDownload.media_item_id).filter(
+        Episode.source_slug == "a").one()
+
+    assert run_write_transaction(lambda w: follow_new_place(w, w.get(EpisodeMediaDownload, download.id)))
+    operation = session.query(TaskOperation).filter(TaskOperation.kind == "collection.rename_files").one()
+    assert [(target.task_kwargs["episode_ids"], target.task_kwargs["rewrite_metadata"]) for target in operation.targets] == [
+        ([download.media_item_id], True)]
+
+    # Under the name it has now, nothing follows.
+    def renamed(w):
+        found = w.get(EpisodeMediaDownload, download.id)
+        profile = found.local_media_profile
+        found.file_path = str(resolve_episode_output_path(
+            profile.output_template, episode=found.media, local_media_profile=profile, media_download=found,
+            filename_mode=effective_filename_mode(profile), extension="mp4",
+        ))
+    run_write_transaction(renamed)
+    assert not run_write_transaction(lambda w: follow_new_place(w, w.get(EpisodeMediaDownload, download.id)))

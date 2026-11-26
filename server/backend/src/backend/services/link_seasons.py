@@ -780,15 +780,19 @@ class _Places:
                 self._feed_of.setdefault(episode.source_slug, self.feeds.get(episode_tag(episode)))
             if episode.season_id in self.movable:
                 placed.setdefault(episode.source_slug, []).append((episode.id, episode.season_id))
+        downloaded = {episode.id for episode in self._state.episodes.values() if episode.has_files}
         for slug, episodes in placed.items():
             seats = self.seats(slug)
             if len(episodes) == 1 and len(seats) <= 1:
                 continue
+            # A downloaded episode goes first, so that an extra is one with nothing downloaded where there is one.
+            episodes.sort(key=lambda episode: episode[0] not in downloaded)
             if not seats:
                 # One season it belongs in: the first episode goes there.
                 self.extras.update(episode_id for episode_id, _ in episodes[1:])
                 continue
             open_seats, others = list(seats), []
+            kept: list[tuple[int, _Seat]] = []
             for episode_id, season_id in episodes:
                 seat = next((seat for seat in open_seats if _seat_holds(seat, season_id)), None)
                 if seat is None:
@@ -796,11 +800,21 @@ class _Places:
                     continue
                 open_seats.remove(seat)
                 self._planned[episode_id] = None
+                kept.append((episode_id, seat))
             for episode_id in others:
                 if open_seats:
                     self._planned[episode_id] = open_seats.pop(0)
-                else:
+                    continue
+                # No season left for it: a downloaded episode takes the place of one with nothing downloaded, which
+                # is the extra instead, so no download is lost to a copy.
+                swap = next((one for one in kept if one[0] not in downloaded), None) if episode_id in downloaded else None
+                if swap is None:
                     self.extras.add(episode_id)
+                    continue
+                kept.remove(swap)
+                self._planned.pop(swap[0])
+                self.extras.add(swap[0])
+                self._planned[episode_id] = swap[1]
             if open_seats:
                 self.missing[slug] = open_seats
 
