@@ -1,6 +1,5 @@
-"""Sites whose own contract only names them the way most people know them, and what they call a locked video."""
-from ...contract import Access
-from .other_sites import MEMBERS_KEY, OtherSites
+"""Sites whose own contract only names them the way most people know them."""
+from .other_sites import OtherSites
 
 
 class BBC(OtherSites):
@@ -29,14 +28,6 @@ class Facebook(OtherSites):
     icon = "fab:facebook"
 
 
-class Patreon(OtherSites):
-    key, name = "patreon", "Patreon"
-    initials = "PA"
-    domains = ("patreon.com",)
-    icon = "fab:patreon"
-    accesses = (Access(MEMBERS_KEY, "Patrons only", "Only the creator's patrons can watch this."),)
-
-
 class Reddit(OtherSites):
     key, name = "reddit", "Reddit"
     initials = "RD"
@@ -58,4 +49,4 @@ class Vimeo(OtherSites):
     pitch = "Channels, showcases and videos"
 
 
-NAMED = (BBC, Bilibili, BitChute, Facebook, Patreon, Reddit, Rumble, Vimeo)
+NAMED = (BBC, Bilibili, BitChute, Facebook, Reddit, Rumble, Vimeo)
