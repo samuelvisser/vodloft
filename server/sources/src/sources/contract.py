@@ -1164,9 +1164,6 @@ class Site:
     link_seasons: bool = False
     """A collection made from a creator's channel can make the channel's lists, such as its playlists, its seasons:
     link seasons, through its Source's ``is_creator_page``, ``season_lists`` and ``list_items``."""
-    every_list_a_season: bool = True
-    """A new channel collection makes every one of the channel's lists a season, as a channel shows all its lists.
-    A Site whose contract says False makes only the lists the user picks seasons."""
     whole_lists: bool = True
     """A new channel collection puts a video in every list season that has it, so each list is whole. A Site whose
     contract says False puts a video in the first of them only, unless the collection's type says otherwise."""

@@ -11,7 +11,7 @@ from backend.api.models.base import RequestBase, ResponseBase
 from backend.api.models.collection_contract import CollectionWordsAPIRead
 from backend.api.models.source import ListKindAPIRead, NamesAPIRead, SectionTypeAPIRead
 from backend.types.link_season_types import (
-    CollectionKind, ListLayout, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos, RepeatVideos,
+    CollectionKind, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos, RepeatVideos,
 )
 
 
@@ -40,6 +40,9 @@ class CollectionListAPIRead(ResponseBase):
     title: str
     image_url: Optional[str] = Field(default=None, validation_alias=AliasChoices("image_path", "image_url"))
     item_count: Optional[int] = None
+    type_key: Optional[str] = None
+    """The key of the list's type on its Site, such as album or playlist; None for a link the user added, or a list
+    VODLoft has not listed since it learned types."""
     enabled: bool
     status: ListStatus
     """new while it waits for the user's choice."""
@@ -70,6 +73,10 @@ class CollectionFeedAPIRead(ResponseBase):
     names: NamesAPIRead
     """What the Site calls the feed's videos, such as shorts; the feed is named after them."""
     on: bool
+    as_season: bool = False
+    """The feed is a season of its own; otherwise its videos are part of the collection."""
+    season_id: Optional[int] = None
+    """The feed's own season, once it has one, which lists or other feeds may share."""
 
 
 class CollectionNewListAPIRead(ListKindAPIRead):
@@ -105,11 +112,8 @@ class CollectionSeasonsAPIRead(ResponseBase):
     channel_names: NamesAPIRead
     """What the collection's Site calls a channel, such as channel, or account on SoundCloud."""
     link_seasons: LinkSeasons
-    lists_as_seasons: bool
-    """While every list is in: each is a season of its own, or only adds its videos to the channel's own seasons."""
     new_lists: list[CollectionNewListAPIRead]
     """What happens with a list the channel adds, for each kind of list of the collection's Site."""
-    list_layout: ListLayout
     loose_videos: LooseVideos
     repeat_videos: RepeatVideos
     """Whether a video that belongs in several seasons has an episode in the first of them, or in each."""
@@ -166,10 +170,10 @@ class CollectionListChangeAPIIn(RequestBase):
     id: int
     enabled: bool
     as_season: bool = True
-    """False adds the list's videos to the collection's other seasons, without a season of its own."""
+    """False makes the list's videos part of the collection, without a season of its own."""
     season_id: Optional[int] = None
-    """The season the list is in: its own, or that of another of the collection's lists, which it then shares. None
-    gives it a season of its own."""
+    """The season the list is in: its own, or that of another of the collection's lists or feeds, which it then
+    shares. None gives it a season of its own."""
     is_default: bool = False
     """For a collection without a link of its own: the user's default link. One link at most; without one, the first
     link that stays is the default."""
@@ -184,12 +188,13 @@ class CollectionSeasonsAPIUpdate(RequestBase):
     """False puts the seasons back in VODLoft's order by date, whatever ``seasons`` says about their order."""
     feeds: Optional[list[str]] = Field(default=None, max_length=20)
     """For a channel collection: the refs of the feeds it takes; None takes all of them."""
+    feed_seasons: Optional[dict[str, Optional[int]]] = Field(default=None, max_length=20)
+    """For a channel collection: the feeds it takes that are a season of their own, by ref, each with the season it
+    is in: its own, or that of a list or another feed, which it then shares. None gives it a season of its own. The
+    whole setting left out keeps the collection's."""
     link_seasons: LinkSeasons = LinkSeasons.OFF
-    lists_as_seasons: Optional[bool] = None
-    """While every list is in: each is a season of its own, or contents only. None keeps the collection's setting."""
     new_lists: dict[str, NewLinkSeasonAction] = Field(default_factory=dict, max_length=20)
     """What happens with a list the channel adds, by the key of its kind; a kind left out keeps its setting."""
-    list_layout: ListLayout = ListLayout.SEASON_EACH
     loose_videos: LooseVideos = LooseVideos.ONE_SEASON
     repeat_videos: Optional[RepeatVideos] = None
     """None keeps the collection's setting."""
@@ -200,13 +205,13 @@ class CollectionSeasonsAPIUpdate(RequestBase):
     added_links: list[Annotated[str, Field(min_length=1, max_length=2000, pattern=r"^https?://")]] = Field(
         default_factory=list, max_length=200,
     )
-    """Links the user adds to a collection that holds only what its links have, saved with the rest."""
+    """Links the user adds, saved with the rest."""
     removed_seasons: list[int] = Field(default_factory=list, max_length=2000)
     """Seasons the user removes, by id. Their videos go where the settings put them, which can be a season like it."""
 
 
 class CollectionListAddAPIIn(RequestBase):
-    """A link the user adds to a collection that holds only its link seasons: a playlist, channel or video."""
+    """A link the user adds to a collection: a playlist, channel or video."""
 
     url: str = Field(min_length=1, max_length=2000, pattern=r"^https?://")
 

@@ -532,19 +532,15 @@ def _creator_values(episode: "Episode") -> dict[str, str]:
 def _episode_list(episode: "Episode"):
     """The list of the episode's season that has it: the season's own list, or, in a season of several lists, the
     first of them that has the episode. In a season no list holds, such as the channel's own or a year, the first list
-    included as contents only that has it; in a collection that lays its lists out by year, the first list that has it."""
+    that is part of the collection that has it."""
     if not episode.collection.lists:
         return None
-    from backend.services.link_seasons import is_season, lists_by_year, lists_in
+    from backend.services.link_seasons import is_season, lists_in
 
     collection = episode.collection
-    by_year = lists_by_year(collection)
-    links = [
-        link for link in collection.lists
-        if by_year or (episode.season_id is not None and link.season_id == episode.season_id)
-    ]
+    links = [link for link in collection.lists if episode.season_id is not None and link.season_id == episode.season_id]
     # Search every list found for the one that has the episode, rather than take the season's own.
-    search = by_year
+    search = False
     if not links:
         links = [link for link in lists_in(collection) if not is_season(collection, link)]
         search = True
