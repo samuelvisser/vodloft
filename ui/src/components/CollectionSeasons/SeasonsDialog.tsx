@@ -280,8 +280,21 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     const listingOf = (id: number) => listings?.listings.find((listing) => listing.listId === id)
     const listingOfLink = (url: string) => listings?.listings.find((listing) => listing.link === url)
 
-    // The review: what saving these settings does. It waits while VODLoft still lists a list it needs.
-    const reviewBody = reviewing ? JSON.stringify(requestBody(reviewing)) : null
+    // The review: what saving these settings does. It waits while VODLoft still lists a list it needs. It starts as
+    // soon as a change is made on the first step, so it is usually ready, or well on its way, once the user gets there.
+    const formNow = watch()
+    const aheadOf = useMemo(() => {
+        if (!view || !isDirty) return null
+        const parsed = CollectionSeasonsFormSchema.safeParse(formNow)
+        return parsed.success ? JSON.stringify(requestBody(parsed.data)) : null
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [view, isDirty, JSON.stringify(formNow)])
+    const [ahead, setAhead] = useState<string | null>(null)
+    useEffect(() => {
+        const timer = setTimeout(() => setAhead(aheadOf), 500)
+        return () => clearTimeout(timer)
+    }, [aheadOf])
+    const reviewBody = reviewing ? JSON.stringify(requestBody(reviewing)) : ahead
     const {data: review, error: reviewError} = useQuery({
         queryKey: [...queryKey, 'review', reviewBody],
         enabled: open && !!reviewBody,

@@ -13,8 +13,9 @@ import contextvars
 import logging
 import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 from backend.services.source_options import ytdlp_call_options
@@ -69,6 +70,10 @@ class Listing:
 class _Dialog:
     jobs: dict[tuple[int | None, str | None], Future]
     asked: float
+    reviews: int = 0
+    """How many reviews the dialog asked for: only the latest is still wanted."""
+    kept: dict = field(default_factory=dict)
+    """What the dialog's previews and reviews read of the collection, kept for the next one."""
 
 
 _lock = threading.Lock()
@@ -129,10 +134,44 @@ def listings(collection_slug: str, token: str | None) -> list[Listing]:
     return found
 
 
+def newest_review(collection_slug: str, token: str | None) -> Callable[[], bool]:
+    """Start a review for this dialog, which replaces the review it asked for before. Returns whether this review is
+    still the dialog's newest, so a review the user's next change replaced can stop early instead of running on."""
+    if token is None:
+        return lambda: True
+    with _lock:
+        now = time.monotonic()
+        _forget_old(now)
+        dialog = _dialogs.setdefault((collection_slug, token), _Dialog({}, now))
+        dialog.asked = now
+        dialog.reviews += 1
+        this = dialog.reviews
+
+    def wanted() -> bool:
+        with _lock:
+            dialog = _dialogs.get((collection_slug, token))
+            return dialog is not None and dialog.reviews == this
+
+    return wanted
+
+
+def kept_for_dialog(collection_slug: str, token: str | None) -> dict | None:
+    """Where the dialog's previews and reviews keep what they read of the collection while it is open, so the next one
+    need not read it again. None without a dialog to keep it for."""
+    if token is None:
+        return None
+    with _lock:
+        now = time.monotonic()
+        _forget_old(now)
+        dialog = _dialogs.setdefault((collection_slug, token), _Dialog({}, now))
+        dialog.asked = now
+        return dialog.kept
+
+
 def forget_listings(collection_slug: str, token: str) -> None:
     """The dialog closed: what it listed is not needed any more. A listing still running finishes unseen."""
     with _lock:
         _dialogs.pop((collection_slug, token), None)
 
 
-__all__ = ["Listing", "ListingState", "ListToList", "forget_listings", "listings", "start_listings"]
+__all__ = ["Listing", "ListingState", "ListToList", "forget_listings", "kept_for_dialog", "listings", "newest_review", "start_listings"]

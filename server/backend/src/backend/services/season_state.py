@@ -194,6 +194,9 @@ class SeasonsState:
         self.gone_lists: set[int] = set()
         self.made: set[int] = set()
         """The seasons the planner made, which a collection in the user's own order slots in by date."""
+        self.files_memo: dict | None = None
+        """What an open Seasons dialog's reviews read of the collection's downloaded files, kept between them
+        (``backend.services.file_moves``)."""
         self._was = self._snapshot()
 
     def _snapshot(self):

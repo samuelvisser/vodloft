@@ -7,16 +7,17 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, object_session
 
-from backend.db.models import Episode
+from backend.db.models import Collection, Episode, LocalMediaProfileBase, MediaDownloadBase, Season
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.download_options import effective_filename_mode
 from backend.services.season_state import EpisodeDraft, SeasonDraft, SeasonsState
 from backend.types.collection_types import EpisodeIdentifier
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.episode import EpisodeIdentifierInfo
+from config.settings.submodels import FilenameRestrictionMode
 from backend.utils.output_template import (
     episode_output_template_values, output_template_custom_index_keys, output_template_fields,
     resolve_episode_output_path_with_index_values,
@@ -48,24 +49,68 @@ def number_in(state: SeasonsState, identifier: str | None, season: SeasonDraft) 
     return f"ep.S{season.season_number:02d}E{match.group(2)}" if match else identifier
 
 
+@dataclass(frozen=True)
+class _Download:
+    """A downloaded file, with what renders its path."""
+
+    id: int
+    episode_id: int
+    file_path: str
+    template: str | None
+    mode: FilenameRestrictionMode | None
+
+
+def files_stamp(s: Session, collection_id: int) -> tuple:
+    """What changes when anything a file's path is rendered from changes: the collection, its seasons, episodes and
+    downloads, and the templates of the Local Media Profiles. What an open dialog kept is only good while it stays."""
+    episodes = select(Episode.id).where(Episode.collection_id == collection_id)
+    return tuple(s.execute(select(
+        select(Collection.updated_at).where(Collection.id == collection_id).scalar_subquery(),
+        select(func.max(Season.updated_at)).where(Season.collection_id == collection_id).scalar_subquery(),
+        select(func.count(Season.id)).where(Season.collection_id == collection_id).scalar_subquery(),
+        select(func.max(Episode.updated_at)).where(Episode.collection_id == collection_id).scalar_subquery(),
+        select(func.count(Episode.id)).where(Episode.collection_id == collection_id).scalar_subquery(),
+        select(func.max(MediaDownloadBase.updated_at)).where(MediaDownloadBase.media_item_id.in_(episodes)).scalar_subquery(),
+        select(func.count(MediaDownloadBase.id)).where(MediaDownloadBase.media_item_id.in_(episodes)).scalar_subquery(),
+        select(func.max(LocalMediaProfileBase.updated_at)).scalar_subquery(),
+    )).one())
+
+
 class FileMoves:
-    """The downloaded files of the planner's copy of a collection, to tell which of them a change of season moves."""
+    """The downloaded files of the planner's copy of a collection, to tell which of them a change of season moves.
+    What it reads of them is kept in the copy's ``files_memo`` when it has one, such as for the reviews of an open
+    Seasons dialog, so the next review reads nothing again."""
 
     def __init__(self, state: SeasonsState, s: Session | None = None):
         self._state = state
         self._s = s or object_session(state.record)
-        self._downloads: dict[int, list[EpisodeMediaDownload]] | None = None
+        self._memo = state.files_memo if state.files_memo is not None else {}
 
-    def _of(self, episode_id: int) -> list[EpisodeMediaDownload]:
-        if self._downloads is None:
-            self._downloads = {}
+    def _of(self, episode_id: int) -> list[_Download]:
+        downloads = self._memo.get("downloads")
+        if downloads is None:
+            downloads = {}
             for download in self._s.scalars(
                 select(EpisodeMediaDownload).join(Episode, Episode.id == EpisodeMediaDownload.media_item_id).where(
                     Episode.collection_id == self._state.record.id, EpisodeMediaDownload.artifact_status.in_(_ON_DISK),
                 )
             ):
-                self._downloads.setdefault(download.media_item_id, []).append(download)
-        return self._downloads.get(episode_id, [])
+                profile = download.local_media_profile
+                downloads.setdefault(download.media_item_id, []).append(_Download(
+                    download.id, download.media_item_id, download.file_path or "",
+                    profile.output_template if profile is not None else None,
+                    effective_filename_mode(profile) if profile is not None else None,
+                ))
+            self._memo["downloads"] = downloads
+        return downloads.get(episode_id, [])
+
+    def _was(self, episode_id: int) -> tuple[dict[str, str], int | None]:
+        """The episode's template values as saved, and its season."""
+        was = self._memo.setdefault("was", {})
+        if episode_id not in was:
+            record = self._s.get(Episode, episode_id)
+            was[episode_id] = (episode_output_template_values(record), record.season_id)
+        return was[episode_id]
 
     def moving(self, episode: EpisodeDraft, season: SeasonDraft, identifier: str | None) -> list[FileMove]:
         """The episode's downloads that get another path in ``season`` with ``identifier`` than where the episode as
@@ -73,8 +118,7 @@ class FileMoves:
         downloads = self._of(episode.id)
         if not downloads:
             return []
-        record = self._s.get(Episode, episode.id)
-        was = episode_output_template_values(record)
+        was, was_season = self._was(episode.id)
         info = EpisodeIdentifierInfo.from_identifier(identifier or "")
         now = {
             **was,
@@ -85,18 +129,14 @@ class FileMoves:
             "episode_extra_type": info.extra_type or "", "episode_number": info.episode_number or "",
             "episode_sub_number": info.sub_episode_number or "", "episode_label": info.label,
         }
-        season_changed = record.season_id != season.id
+        season_changed = was_season != season.id
         return [move for download in downloads if (move := self._move(download, was, now, season_changed)) is not None]
 
-    @staticmethod
-    def _move(
-        download: EpisodeMediaDownload, was: dict[str, str], now: dict[str, str], season_changed: bool,
-    ) -> FileMove | None:
+    def _move(self, download: _Download, was: dict[str, str], now: dict[str, str], season_changed: bool) -> FileMove | None:
         def unknown() -> FileMove:
-            return FileMove(download.id, download.media_item_id, download.file_path or "", None)
+            return FileMove(download.id, download.episode_id, download.file_path, None)
 
-        profile = download.local_media_profile
-        template = profile.output_template if profile is not None else None
+        template = download.template
         if not template:
             return unknown()
         try:
@@ -105,19 +145,22 @@ class FileMoves:
                 return unknown()
             if season_changed and output_template_fields(template) & _TRACK_FIELDS:
                 return unknown()
-            mode = effective_filename_mode(profile)
             extension = Path(download.file_path).suffix.removeprefix(".") if download.file_path else None
 
             def path(values: dict[str, str]) -> Path:
+                # Without custom indexes, rendering reads only the values.
                 return resolve_episode_output_path_with_index_values(
-                    template, episode=download.media, index_definitions=frozenset(), index_values={},
-                    filename_mode=mode, extension=extension, values=values,
+                    template, episode=None, index_definitions=frozenset(), index_values={},  # type: ignore[arg-type]
+                    filename_mode=download.mode, extension=extension, values=values,
                 )
 
-            before, after = path(was), path(now)
+            paths = self._memo.setdefault("paths", {})
+            if download.id not in paths:
+                paths[download.id] = path(was)
+            before, after = paths[download.id], path(now)
         except Exception:
             # A template that does not render says nothing: its files move, so nothing is left behind.
             return unknown()
         if before == after:
             return None
-        return FileMove(download.id, download.media_item_id, download.file_path or str(before), str(after))
+        return FileMove(download.id, download.episode_id, download.file_path or str(before), str(after))

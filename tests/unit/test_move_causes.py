@@ -247,3 +247,64 @@ def test_files_whose_names_skip_the_season_stay_where_they_are(source, session, 
     session.expire_all()
     assert [(name, slugs) for name, _, slugs in _seasons(session)] == [("Collection", ["a", "b"])]
     assert len(rewritten) == 1 and len(rewritten[0]) == 2
+
+
+def test_a_review_the_dialog_replaced_stops(source, session):
+    """The dialog asks for a review with each change: a review a newer one replaced stops instead of running on."""
+    from backend.services.errors import ServiceError
+    from backend.services.list_previews import forget_listings, newest_review
+    import pytest
+
+    _waiting(source, session)
+    older = newest_review("creator", "dialog")
+    newer = newest_review("creator", "dialog")
+    try:
+        assert (older(), newer()) == (False, True)
+        with pytest.raises(ServiceError):
+            _review_with(session, older, loose_videos="one_season")
+        assert _review_with(session, newer, loose_videos="one_season").moves.parts
+    finally:
+        forget_listings("creator", "dialog")
+
+
+def _review_with(session, wanted, **settings):
+    from backend.api.endpoints.collections.seasons.service import review_seasons
+    from backend.db.core import get_session
+
+    body = _body(session, **settings)
+    reading = get_session()
+    try:
+        return review_seasons(reading, "creator", body, wanted=wanted)
+    finally:
+        reading.close()
+
+
+def test_an_open_dialog_keeps_what_its_reviews_read_of_the_files(source, session):
+    """The reviews of an open dialog read the downloaded files once, and again only when something they are named
+    from changed, such as a new download."""
+    from backend.api.endpoints.collections.seasons.service import review_seasons
+    from backend.db.core import get_session
+    from backend.db.models import Collection
+
+    _waiting(source, session)
+    kept: dict = {}
+
+    def review():
+        body = _body(session, loose_videos="one_season")
+        reading = get_session()
+        try:
+            return review_seasons(reading, "creator", body, kept=kept)
+        finally:
+            reading.close()
+
+    assert [part.files_moved for part in review().moves.parts] == [2]
+    files = kept["files"]
+    assert set(files["downloads"]) and set(files["paths"])
+    review()
+    assert kept["files"] is files
+
+    source.videos = [*source.videos, _video("c", 2025, 3)]
+    _index(session, session.query(Collection).one(), source)
+    _give_files(session, "c")
+    assert [part.files_moved for part in review().moves.parts] == [3]
+    assert kept["files"] is not files

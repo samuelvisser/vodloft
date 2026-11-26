@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from backend.utils.helpers import name_in_text
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 
@@ -17,6 +17,7 @@ from backend.api.models.collection_seasons import (
 from backend.db.models import Collection, CollectionList, CollectionListItem, Episode, LocalMediaProfileBase, MediaDownloadBase
 from backend.services.collections import reindex_collection
 from backend.services.errors import ServiceError
+from backend.services.file_moves import files_stamp
 from backend.services.new_lists import checked_new_link_seasons
 from backend.services.collection_health import note_collection_health
 from backend.services.episode_identification import collection_work, queue_renumber
@@ -563,7 +564,9 @@ class _Copy:
     """The downloaded episodes that already waited to move before the dialog's changes."""
 
 
-def _plan_copy(s: Session, collection: Collection, body: CollectionSeasonsAPIUpdate, listed: Listed) -> _Copy:
+def _plan_copy(
+    s: Session, collection: Collection, body: CollectionSeasonsAPIUpdate, listed: Listed, kept: dict | None = None,
+) -> _Copy:
     """Plan saving the dialog with ``body`` on the planner's copy of the collection, with what the dialog listed, and
     then what the save sets going: downloaded videos that leave are removed with their files by a task, a collection
     that now holds only what its lists have loses the videos in none of them once its lists are listed again, and the
@@ -571,6 +574,12 @@ def _plan_copy(s: Session, collection: Collection, body: CollectionSeasonsAPIUpd
     _check_added(collection, body, bool(body.added_links))
     was_settings = settings_of(collection, MoveCauseOrigin.SEASONS)
     state = load_state(s, collection)
+    if kept is not None:
+        # What the open dialog read of the downloaded files before stays good while nothing they are named from changed.
+        stamp = files_stamp(s, collection.id)
+        if kept.get("files_stamp") != stamp:
+            kept["files"], kept["files_stamp"] = {}, stamp
+        state.files_memo = kept["files"]
     was_seasons = {season.id: season.name for season in state.seasons.values()}
     downloaded = {episode.id: episode.season_id for episode in state.episodes.values() if episode.has_files}
     was_waiting = {playlist.id for playlist in active_lists(state) if playlist.season_id not in state.seasons}
@@ -629,13 +638,13 @@ def _waiting_seasons(state: SeasonsState) -> list[WaitingSeasonAPIRead]:
 
 
 def preview_seasons(
-    s: Session, collection_slug: str, body: CollectionSeasonsAPIUpdate, listed: Listed = Listed(),
+    s: Session, collection_slug: str, body: CollectionSeasonsAPIUpdate, listed: Listed = Listed(), kept: dict | None = None,
 ) -> SeasonsPreviewAPIRead:
     """The seasons saving the dialog with ``body`` would leave, as the planner plans the save on its copy of the
     collection (``_plan_copy``): nothing is saved.
 
     Reading only."""
-    state = _plan_copy(s, _collection(s, collection_slug), body, listed).state
+    state = _plan_copy(s, _collection(s, collection_slug), body, listed, kept).state
     return SeasonsPreviewAPIRead(seasons=_seasons(state), waiting=_waiting_seasons(state))
 
 
@@ -645,6 +654,7 @@ _EXAMPLES = 50
 
 def review_seasons(
     s: Session, collection_slug: str, body: CollectionSeasonsAPIUpdate, listed: Listed = Listed(),
+    wanted: Callable[[], bool] = lambda: True, kept: dict | None = None,
 ) -> SeasonsReviewAPIRead:
     """What saving the dialog with ``body`` does, for its review: the settings it changes, the seasons it makes and
     removes, the downloads it moves and the numbering after that, the videos that leave and the files deleted with
@@ -669,9 +679,12 @@ def review_seasons(
             f"Listing the videos of {Names.joined([Names(name_in_text(title), name_in_text(title)) for title in still]).plural}, "
             "to show exactly what saving changes."
         ))
-    copy = _plan_copy(s, collection, body, listed)
+    _still(wanted)
+    copy = _plan_copy(s, collection, body, listed, kept)
+    _still(wanted)
     state = copy.state
     done = moves_made(s, state, copy.downloaded, list_labels(state))
+    _still(wanted)
     moves = move_preview(s, collection, state, done)
     # An episode that goes while its video stays in another season, such as a list's copy of a video the collection
     # has elsewhere, is no video leaving the collection.
@@ -701,6 +714,12 @@ def review_seasons(
         deleted_files=ReviewFilesAPIRead(count=len(deleted), examples=_titles(s, deleted), profiles=_profiles(s, deleted)),
         joining=joining,
     )
+
+
+def _still(wanted: Callable[[], bool]) -> None:
+    """Stop a review the dialog replaced with a newer one, such as after the user changed another setting."""
+    if not wanted():
+        raise ServiceError("A newer review of the dialog's settings replaced this one", status_code=409)
 
 
 def _titles(s: Session, episode_ids: list[int]) -> list[str]:

@@ -15,7 +15,7 @@ from backend.api.models.collection_seasons import (
 from backend.db.core import run_write_transaction
 from backend.security.access import Area, Level
 from backend.security.deps import requires
-from backend.services.list_previews import forget_listings, listings, start_listings
+from backend.services.list_previews import forget_listings, kept_for_dialog, listings, newest_review, start_listings
 
 from .service import (
     CollectionNotFoundError, Listed, check_added_link, link_to_add, lists_to_list, look_up_added_link, look_up_links,
@@ -90,7 +90,7 @@ def collection_seasons_preview(collection_slug: str, body: CollectionSeasonsAPIU
     listed = _listed(collection_slug, body.listing_token)
     with db_session() as s:
         try:
-            return _found(lambda: preview_seasons(s, collection_slug, body, listed))
+            return _found(lambda: preview_seasons(s, collection_slug, body, listed, kept_for_dialog(collection_slug, body.listing_token)))
         finally:
             s.rollback()
 
@@ -102,10 +102,14 @@ def collection_seasons_preview(collection_slug: str, body: CollectionSeasonsAPIU
 def collection_seasons_review(collection_slug: str, body: CollectionSeasonsAPIUpdate):
     """What saving the Seasons dialog with these settings does: what moves, what leaves, what gets deleted. The user
     agrees to it before saving. Nothing is saved."""
+    # The dialog asks again for each change: an older review it still runs stops.
+    wanted = newest_review(collection_slug, body.listing_token)
     listed = _listed(collection_slug, body.listing_token)
     with db_session() as s:
         try:
-            return _found(lambda: review_seasons(s, collection_slug, body, listed))
+            return _found(lambda: review_seasons(
+                s, collection_slug, body, listed, wanted, kept_for_dialog(collection_slug, body.listing_token),
+            ))
         finally:
             s.rollback()
 
