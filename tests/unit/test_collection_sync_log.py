@@ -14,6 +14,16 @@ def _definitions(session):
     session.commit()
     return definitions
 
+ADDED = datetime(2026, 11, 5, 17, tzinfo=timezone.utc)
+"""When the collections of these tests were added: before their scans."""
+
+
+def _added(session, collection, at=ADDED):
+    collection.created_at = at
+    session.commit()
+    return collection
+
+
 def _run(session, definition, *, minute: int, status: str = "SUCCEEDED", resource_id=None, resource_type="collection", collections=None):
     from task_manager.scheduler.db import TaskRun
     from task_manager.scheduler.types import ResourceType, TaskStatus
@@ -31,8 +41,8 @@ def _run(session, definition, *, minute: int, status: str = "SUCCEEDED", resourc
 def test_the_sync_log_lists_only_scans_that_looked_at_the_collection(quick, listed_too, session):
     from backend.api.endpoints.collections.sync_log import collection_scans
 
-    channel = _collection(session, "UC1")
-    playlist = _collection(session, "PL1", source_key="listed")
+    channel = _added(session, _collection(session, "UC1"))
+    playlist = _added(session, _collection(session, "PL1", source_key="listed"))
     tasks = _definitions(session)
     _run(session, tasks["fetch_new_episodes"], minute=0, collections=[{"collection_id": playlist.id, "episodes_found": 2}])
     _run(session, tasks["fetch_new_episodes"], minute=1, status="FAILED")
@@ -69,7 +79,7 @@ def test_sync_now_runs_the_scan_the_regular_checks_give_the_collection(quick, li
 def test_the_sync_log_can_leave_out_the_syncs_that_found_nothing(quick, listed_too, session):
     from backend.api.endpoints.collections.sync_log import collection_scans
 
-    channel = _collection(session, "UC1")
+    channel = _added(session, _collection(session, "UC1"))
     tasks = _definitions(session)
     _run(session, tasks["fetch_new_episodes"], minute=0, resource_id=channel.id,
          collections=[{"collection_id": channel.id, "episodes_found": 0}])
@@ -91,3 +101,25 @@ def test_the_sync_log_can_leave_out_the_syncs_that_found_nothing(quick, listed_t
     assert total == 3
     assert [scan.id for scan in scans] == [failed_check.id, failed.id, found.id]
     assert collection_scans(session, "UC1", offset=0, limit=10)[1] == 5
+
+
+def test_the_sync_log_leaves_out_scans_from_before_the_collection_was_added(quick, listed_too, session):
+    # SQLite gives a new collection the id of a deleted one, which older scans still name.
+    from backend.api.endpoints.collections.sync_log import collection_scans
+
+    tasks = _definitions(session)
+    channel = _collection(session, "UC1")
+    _run(
+        session, tasks["quick_check_new_videos"], minute=0, resource_type="system", resource_id=0,
+        collections=[{"collection_id": channel.id, "episodes_found": 0}],
+    )
+    _added(session, channel, ADDED + timedelta(hours=1, minutes=30))
+    own = _run(
+        session, tasks["quick_check_new_videos"], minute=40, resource_type="system", resource_id=0,
+        collections=[{"collection_id": channel.id, "episodes_found": 0}],
+    )
+
+    scans, total = collection_scans(session, "UC1", offset=0, limit=10)
+
+    assert total == 1
+    assert [scan.id for scan in scans] == [own.id]
