@@ -130,8 +130,8 @@ export default function CreatorPage() {
     }), [others, slug])
 
     const linkFit = useLinkFit(creator?.accounts.filter((account) => account.url).length ?? 0, can('library', 'manage'))
-    // The creator's collections follow the Library's order, and choosing another order here changes it there too.
-    const {order: collectionSort, known: collectionSortKnown, choose: chooseCollectionSort} = useCollectionSortOrder()
+    // Creator pages list their collections in an order of their own, apart from the Library's.
+    const {order: collectionSort, known: collectionSortKnown, choose: chooseCollectionSort} = useCollectionSortOrder('creator')
     const collections = useMemo(
         () => [...(creator?.collections ?? [])].sort((a, b) => compareCollections(a, b, collectionSort)),
         [creator?.collections, collectionSort],

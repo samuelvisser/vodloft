@@ -161,7 +161,7 @@ export default function LibraryPage() {
     const {data: videos, isLoading: videosLoading, error: videosError} = useVideos()
     const {data: downloads} = useLibraryDownloads()
     const {data: libraryCounts, error: libraryCountsError} = useLibraryCounts()
-    const {order: collectionSort, known: collectionSortKnown, choose: chooseCollectionSort} = useCollectionSortOrder()
+    const {order: collectionSort, known: collectionSortKnown, choose: chooseCollectionSort} = useCollectionSortOrder('library')
     // Every Site the library has media from, by name.
     const siteOptions = useMemo(() => {
         const names = new Map<string, string>()

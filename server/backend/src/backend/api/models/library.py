@@ -11,16 +11,20 @@ class LibraryCountsRead(ResponseBase):
 
 
 class LibraryPreferences(RequestBase):
-    """How the user lists the Library's Collections."""
+    """How the user lists Collections: in the Library, and on a creator's page. What is left out stays as it was."""
 
-    collection_sort: LibraryCollectionSort
-    collection_sort_reversed: bool = False
+    collection_sort: LibraryCollectionSort | None = None
+    collection_sort_reversed: bool | None = None
+    creator_collection_sort: LibraryCollectionSort | None = None
+    creator_collection_sort_reversed: bool | None = None
 
 
 class LibraryPreferencesRead(ResponseBase):
-    """How the user lists the Library's Collections; without user accounts, VODLoft keeps none."""
+    """How the user lists Collections in the Library and on creator pages; without user accounts, VODLoft keeps none."""
 
     collection_sort: LibraryCollectionSort = LibraryCollectionSort.RECENTLY_USED
     collection_sort_reversed: bool = False
+    creator_collection_sort: LibraryCollectionSort = LibraryCollectionSort.RECENTLY_USED
+    creator_collection_sort_reversed: bool = False
     saved: bool
     """Whether VODLoft keeps the choice for this user; without user accounts the browser keeps it."""
