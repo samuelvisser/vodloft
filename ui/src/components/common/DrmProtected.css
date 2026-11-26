@@ -47,6 +47,18 @@
     background: rgba(124, 58, 237, 0.08);
 }
 
+.access-notice {
+    flex-wrap: wrap;
+}
+
+/* The message keeps a readable width; where the notice is narrower, the action moves below it. */
+.access-notice-message {
+    display: flex;
+    flex: 1 1 min(20rem, 100%);
+    align-items: center;
+    gap: 8px;
+}
+
 .access-notice-action {
     flex-shrink: 0;
     margin-left: auto;

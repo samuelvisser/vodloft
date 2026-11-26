@@ -44,8 +44,10 @@ export function AccessNotice({item, action}: {item: Lockable, action?: ReactNode
         : ''
     return (
         <div className="drm-notice access-notice" role="status">
-            <FontAwesomeIcon icon={faIcon('fass', 'lock')} aria-hidden="true"/>
-            <span>{item.accessDescription ?? 'Only members or subscribers can watch this.'} VODLoft cannot download it.{check}</span>
+            <div className="access-notice-message">
+                <FontAwesomeIcon icon={faIcon('fass', 'lock')} aria-hidden="true"/>
+                <span>{item.accessDescription ?? 'Only members or subscribers can watch this.'} VODLoft cannot download it.{check}</span>
+            </div>
             {action && <div className="access-notice-action">{action}</div>}
         </div>
     )
