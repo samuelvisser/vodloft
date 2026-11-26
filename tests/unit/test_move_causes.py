@@ -45,19 +45,21 @@ def _waiting(source, session):
 
 def test_a_change_that_leaves_downloads_waiting_is_what_the_move_dialog_shows(source, session):
     from backend.db.models import Collection
+    from backend.db.core import get_session
     from backend.services.reconcile import ReconcileScope, preview_reconcile
-    from backend.db.core import run_write_transaction
 
     _waiting(source, session)
 
     _save(session, loose_videos="one_season")
 
     assert _causes(session) == [("loose_videos", "by_year", "one_season")]
-    preview = run_write_transaction(
-        lambda s: preview_reconcile(s, ReconcileScope.of_collection(s.query(Collection).one()))
-    )
+    # Planned in a session that refuses to write: the preview saves nothing.
+    reading = get_session()
+    preview = preview_reconcile(reading, ReconcileScope.of_collection(reading.query(Collection).one()))
+    reading.close()
     assert [(c.setting, c.before, c.after) for c in preview.causes] == [("loose_videos", "by_year", "one_season")]
-    # The preview rolls back, so the move is still to come and so is what caused it.
+    assert [(part.to_season, part.count, part.files_moved) for part in preview.parts] == [("Collection", 2, 2)]
+    # The move is still to come and so is what caused it.
     assert _causes(session) == [("loose_videos", "by_year", "one_season")]
 
 

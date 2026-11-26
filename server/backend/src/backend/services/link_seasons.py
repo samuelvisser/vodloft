@@ -25,7 +25,7 @@ from __future__ import annotations
 import contextvars
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 
 from sqlalchemy import delete, select
@@ -947,11 +947,9 @@ def _add_placements(state: SeasonsState, finder: SeasonFinder, missing: dict[str
             index += 1
             identifier = _identifier_in(state.collection, season, original.episode_identifier, identifiers, finder.numbers)
             identifiers.add(identifier)
-            state.add_episode(EpisodeDraft(
-                id=state.new_id(), slug=original.slug, source_slug=slug, part_of=None, season_id=season.id,
-                from_link_season=original.from_link_season, episode_identifier=identifier,
-                published_date=original.published_date, index=index, removed_from_source=False, has_files=False,
-                copy_of=original.id,
+            state.add_episode(replace(
+                original, id=state.new_id(), season_id=season.id, episode_identifier=identifier, index=index,
+                removed_from_source=False, has_files=False, copy_of=original.id, record=None,
             ))
 
 
@@ -1154,12 +1152,17 @@ def rehome_removed(state: SeasonsState, slugs: dict[int, tuple[str, bool]]) -> N
     arrange(state)
 
 
+def belonging(state: SeasonsState, episode_id: int) -> Belonging | None:
+    """Where the copy's episode belongs, when its collection's playlists put it in another season than the one it is
+    in. None when it is where it belongs."""
+    places = _Places(state)
+    return places.belonging(state.episodes[episode_id]) if places.anything else None
+
+
 def belongs_elsewhere(s: Session, episode: Episode) -> Belonging | None:
     """Where a video belongs now, when its collection's playlists put it in another season than the one it is in.
     None when it is where it belongs."""
-    state = load_state(s, episode.collection)
-    places = _Places(state)
-    return places.belonging(state.episodes[episode.id]) if places.anything else None
+    return belonging(load_state(s, episode.collection), episode.id)
 
 
 def moved(state: SeasonsState) -> list[EpisodeDraft]:

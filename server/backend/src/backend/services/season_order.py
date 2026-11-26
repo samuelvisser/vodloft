@@ -211,15 +211,6 @@ def number_lists(state: SeasonsState) -> None:
             episode.episode_identifier = identifier
 
 
-def number_in_link_order(s: Session, collection: Collection) -> None:
-    """``number_lists`` for the collection as it is.
-
-    ``s`` is a write transaction's session."""
-    state = load_state(s, collection)
-    number_lists(state)
-    apply_state(s, state)
-
-
 def _set_indices(ordered: list[SeasonDraft]) -> None:
     for offset, season in enumerate(ordered, start=1):
         season.index = offset

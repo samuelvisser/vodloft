@@ -79,12 +79,13 @@ def _identifiers(s, collection) -> dict[str, str]:
 
 
 def _change(s, collection, identification):
-    from backend.services.episode_identification import apply_identification, plan_identification
+    from backend.services.episode_identification import number_episodes, save_numbers
+    from backend.services.season_state import load_state
     from backend.types.collection_types import EpisodeIdentifier
 
-    plan = plan_identification(s, collection, EpisodeIdentifier(identification))
-    apply_identification(s, collection, plan)
-    s.flush()
+    state = load_state(s, collection)
+    plan = number_episodes(state, EpisodeIdentifier(identification))
+    save_numbers(s, state, plan)
     return plan
 
 
@@ -161,13 +162,14 @@ def test_a_counted_collection_counts_its_videos_again_and_leaves_shorts_alone(se
 def test_a_season_without_a_number_refuses_seasonal_numbering(session):
     from backend.services.episode_identification import plan_identification
     from backend.services.errors import ServiceError
+    from backend.services.season_state import load_state
     from backend.types.collection_types import EpisodeIdentifier
 
     collection = _collection(session, source_key="dailywire", identification="date_based", season_number=0)
     _episode(session, collection, 1, _date(1), number="100")
 
     with pytest.raises(ServiceError) as refused:
-        plan_identification(session, collection, EpisodeIdentifier.SEASONAL)
+        plan_identification(load_state(session, collection), EpisodeIdentifier.SEASONAL)
     assert refused.value.field == "episodeIdentifier"
 
 

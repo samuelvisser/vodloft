@@ -2,8 +2,8 @@
 moving renames their files; the Move action of a collection or of one episode moves them.
 
 Afterwards the collection numbers its episodes again, unless the user said not to, renames their files and rewrites
-their metadata. ``preview_reconcile`` makes the same moves and rolls them back, so what the dialog shows is what the
-Move action does.
+their metadata. ``preview_reconcile`` plans the same moves and numbering on the planner's copy of the collection
+without saving it, so what the dialog shows is what the Move action does.
 """
 from __future__ import annotations
 
@@ -16,16 +16,17 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Collection, Episode, EpisodeMediaDownload
 from backend.services.episode_identification import (
-    IdentificationChange, ProfileFilesChange, collection_busy, plan_identification, profile_file_changes,
-    queue_renumber, renumber_changes,
+    IdentificationChange, ProfileFilesChange, collection_busy, profile_file_changes, queue_renumber, renumber_changes,
+    renumbers,
 )
 from backend.services.errors import ServiceError
 from backend.services.link_seasons import (
-    belongs_elsewhere, holder_titles, moved_episodes, place_in_link_seasons, seasons_plan,
+    belonging, holder_titles, moved, moved_episodes, place, seasons_plan,
 )
-from backend.services.season_state import load_state
+from backend.services.collection_health import note_collection_health
+from backend.services.season_state import SeasonsState, apply_state, load_state
 from backend.services.move_causes import clear_move_causes, move_causes
-from backend.services.season_order import match_seasons_of_downloaded
+from backend.services.season_order import match_downloaded
 from backend.services.sites import collection_words
 from backend.types.collection_contracts import CollectionWords
 from backend.types.collection_types import EpisodeIdentifier
@@ -54,15 +55,16 @@ class ReconcileScope:
         return cls(episode.collection, episode)
 
 
-def _moved(s: Session, scope: ReconcileScope) -> list[Episode]:
+def _waiting(state: SeasonsState, scope: ReconcileScope) -> list[int]:
+    """The ids of the scope's videos that wait to be moved, in the planner's copy of the collection."""
     if scope.episode is not None:
-        return [scope.episode] if belongs_elsewhere(s, scope.episode) is not None else []
-    return list(moved_episodes(s, scope.collection))
+        return [scope.episode.id] if belonging(state, scope.episode.id) is not None else []
+    return [episode.id for episode in moved(state)]
 
 
 def waiting(s: Session, scope: ReconcileScope) -> int:
     """How many of the scope's videos wait to be moved. Reading only."""
-    return len(_moved(s, scope))
+    return len(_waiting(load_state(s, scope.collection), scope))
 
 
 @dataclass(frozen=True)
@@ -83,38 +85,41 @@ class _Done:
     """The episodes whose files move into their new season's folder."""
 
 
-def _apply(s: Session, scope: ReconcileScope) -> _Done:
+def _plan(s: Session, state: SeasonsState, scope: ReconcileScope) -> _Done:
+    """Move the scope's videos where they belong in the planner's copy of the collection, as the Move action does,
+    and say what moved where. Saves nothing."""
     collection = scope.collection
-    episodes = _moved(s, scope)
-    if not episodes:
+    ids = set(_waiting(state, scope))
+    if not ids:
         raise ServiceError("Everything is where it belongs already", status_code=409)
     busy = collection_busy(s, collection, "moving its episodes")
     if busy is not None:
         raise ServiceError(busy)
-    ids = {episode.id for episode in episodes}
     names = collection_words(collection).episode
-    titles = holder_titles(load_state(s, collection))
-    labels = {episode.id: titles.get(episode.source_slug) for episode in episodes}
-    before = {episode.id: episode.season_id for episode in episodes}
-    place_in_link_seasons(s, collection, with_files=ids, drop=False)
-    s.expire_all()
+    titles = holder_titles(state)
+    labels = {episode_id: titles.get(state.episodes[episode_id].source_slug) for episode_id in ids}
+    before = {episode_id: state.episodes[episode_id].season_id for episode_id in ids}
+    place(state, with_files=ids, drop=False)
     done = _Done()
-    moved = [episode_id for episode_id in sorted(ids) if s.get(Episode, episode_id).season_id != before[episode_id]]
-    if not moved:
+    moved_ids = [
+        episode_id for episode_id in sorted(ids)
+        if episode_id in state.episodes and state.episodes[episode_id].season_id != before[episode_id]
+    ]
+    if not moved_ids:
         return done
     downloaded = set(s.scalars(
         select(EpisodeMediaDownload.media_item_id).where(
-            EpisodeMediaDownload.media_item_id.in_(moved), EpisodeMediaDownload.artifact_status.in_(_ON_DISK),
+            EpisodeMediaDownload.media_item_id.in_(moved_ids), EpisodeMediaDownload.artifact_status.in_(_ON_DISK),
         )
     ))
-    collection = s.get(Collection, collection.id)
     if downloaded:
         # Their files move into their new season's folder, so they take its number.
-        match_seasons_of_downloaded(s, collection, downloaded)
+        match_downloaded(state, downloaded)
         done.renamed = sorted(downloaded)
     grouped: dict[tuple[str, str | None], list[int]] = {}
-    for episode_id in moved:
-        grouped.setdefault((s.get(Episode, episode_id).season.name, labels[episode_id]), []).append(episode_id)
+    for episode_id in moved_ids:
+        season = state.seasons[state.episodes[episode_id].season_id]
+        grouped.setdefault((season.name, labels[episode_id]), []).append(episode_id)
     for (season, label), episode_ids in grouped.items():
         done.groups.append(_Group(
             names, label or names.plural, season, episode_ids, len(downloaded.intersection(episode_ids)),
@@ -166,40 +171,34 @@ def _newest_first(episodes: list[tuple[str, datetime | None]]) -> list[str]:
 
 
 def preview_reconcile(s: Session, scope: ReconcileScope) -> MovePreview:
-    """What the Move action does: the moves are made and rolled back.
-
-    ``s`` is a write transaction's session; it is rolled back."""
+    """What the Move action does, as it plans the moves and the numbering after them on the planner's copy of the
+    collection: nothing is saved. Reading only."""
     collection = scope.collection
-    slug, title, type_ = collection.slug, collection.title, collection.type
-    plan = seasons_plan(collection)
-    causes = move_causes(collection)
-    before = {
-        episode.id: (episode.title, episode.published_date)
-        for episode in s.scalars(select(Episode).where(Episode.collection_id == collection.id))
+    state = load_state(s, collection)
+    done = _plan(s, state, scope)
+    titles = {
+        episode_id: (title, published) for episode_id, title, published in s.execute(
+            select(Episode.id, Episode.title, Episode.published_date).where(Episode.collection_id == collection.id)
+        )
     }
-    done = _apply(s, scope)
-    s.flush()
-    s.expire_all()
-    collection = s.get(Collection, collection.id)
     parts = [
         MovedPart(
             label=group.label, names=group.names, count=len(group.episode_ids), to_season=group.to_season,
-            examples=_newest_first([before[episode_id] for episode_id in group.episode_ids if episode_id in before]),
+            examples=_newest_first([titles[episode_id] for episode_id in group.episode_ids if episode_id in titles]),
             files_moved=group.files_moved,
         )
         for group in done.groups
     ]
     identification = EpisodeIdentifier(collection.episode_identifier)
     offered = identification is not EpisodeIdentifier.DATE_BASED
-    changes, changed_ids = renumber_changes(s, collection) if offered else ([], set())
+    changes, changed_ids = renumber_changes(s, state) if offered else ([], set())
     follow = bool(done.renamed)
-    preview = MovePreview(
-        slug=slug, title=title, type=type_, episode_identifier=identification, parts=parts, causes=causes, seasons_plan=plan,
+    return MovePreview(
+        slug=collection.slug, title=collection.title, type=collection.type, episode_identifier=identification,
+        parts=parts, causes=move_causes(collection), seasons_plan=seasons_plan(collection),
         renumber_offered=offered and bool(changes), changes=changes,
         profiles=profile_file_changes(s, collection, changed_ids) if follow or changes else [], files_follow=follow,
     )
-    s.rollback()
-    return preview
 
 
 def reconcile(s: Session, scope: ReconcileScope, *, renumber: Mapping[str, bool]) -> None:
@@ -208,16 +207,17 @@ def reconcile(s: Session, scope: ReconcileScope, *, renumber: Mapping[str, bool]
     instead.
 
     ``s`` is a write transaction's session."""
-    done = _apply(s, scope)
+    state = load_state(s, scope.collection)
+    done = _plan(s, state, scope)
+    apply_state(s, state)
     collection = s.get(Collection, scope.collection.id)
+    note_collection_health(s, collection)
     if not moved_episodes(s, collection):
         clear_move_causes(collection)
     again = EpisodeIdentifier(collection.episode_identifier) is not EpisodeIdentifier.DATE_BASED and renumber.get(
         collection.slug, True,
     )
-    if done.renamed or (again and plan_identification(
-        s, collection, EpisodeIdentifier(collection.episode_identifier),
-    ).identifiers):
+    if done.renamed or (again and renumbers(s, collection)):
         queue_renumber(s, collection, renumber=again)
 
 

@@ -215,7 +215,8 @@ def collection_rename_files(collection_slug: str, body: CollectionFileRenameAPIR
 )
 def collection_reconcile_preview(collection_slug: str):
     """What moving the collection's Moved episodes to the seasons they belong in now does. Changes nothing."""
-    return run_write_transaction(lambda s: preview_move(s, collection_scope(collection_slug)))
+    with db_session() as s:
+        return preview_move(s, collection_scope(collection_slug))
 
 
 @router.post(

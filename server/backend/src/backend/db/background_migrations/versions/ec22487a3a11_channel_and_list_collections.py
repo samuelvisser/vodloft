@@ -27,7 +27,7 @@ from sqlalchemy import select
 from backend.db.core import get_session, run_write_transaction
 from backend.db.models import Collection, MediaDownloadBase, Season
 from backend.db.models.media_item import Episode
-from backend.services.episode_identification import apply_identification, plan_identification
+from backend.services.episode_identification import number_episodes, save_numbers
 from backend.services.link_seasons import SeasonFinder, made_from_list
 from backend.services.season_order import arrange_seasons, season_year
 from backend.services.season_state import apply_state, load_state
@@ -154,7 +154,8 @@ def _apply(collection_id: int, order: list[str]) -> None:
         identification = EpisodeIdentifier(collection.episode_identifier)
         if identification is EpisodeIdentifier.SEASONAL:
             identification = EpisodeIdentifier.NUMBERED
-        apply_identification(s, collection, plan_identification(s, collection, identification))
+        numbered = load_state(s, collection)
+        save_numbers(s, numbered, number_episodes(numbered, identification))
         collection.episode_order = EpisodeOrder.OLDEST_FIRST.value
         collection.loose_videos = LooseVideos.ONE_SEASON.value
         arrange_seasons(s, collection)

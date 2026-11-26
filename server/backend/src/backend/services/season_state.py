@@ -18,7 +18,7 @@ from backend.db.models import Collection, CollectionList, CollectionListItem, Ep
 # The collection's settings the planner reads, which the Seasons dialog changes in the copy before planning.
 SETTINGS = (
     "link_seasons", "outside_videos", "feeds", "feed_seasons", "loose_videos", "repeat_videos", "custom_season_order",
-    "new_lists",
+    "new_lists", "episode_identifier",
 )
 
 
@@ -75,6 +75,11 @@ class EpisodeDraft:
     index: int
     removed_from_source: bool
     has_files: bool
+    went_live_date: datetime | None = None
+    scheduled_date: datetime | None = None
+    created_at: datetime | None = None
+    source_number: str | None = None
+    """The Source's own episode number, such as The Daily Wire's, which its numbering follows."""
     copy_of: int | None = None
     """For an episode the planner makes of a video in another season: the episode it copies."""
     record: Episode | None = field(default=None, repr=False)
@@ -168,13 +173,15 @@ class SeasonsState:
                 id=row.id, slug=row.slug, source_slug=row.source_slug, part_of=row.part_of, season_id=row.season_id,
                 from_link_season=row.from_link_season, episode_identifier=row.episode_identifier,
                 published_date=row.published_date, index=row.index, removed_from_source=row.removed_from_source,
-                has_files=row.id in with_files,
+                has_files=row.id in with_files, went_live_date=row.went_live_date, scheduled_date=row.scheduled_date,
+                created_at=row.created_at, source_number=row.source_number,
             )
             for row in s.execute(
                 select(
                     Episode.id, Episode.slug, Episode.source_slug, Episode.part_of, Episode.season_id,
                     Episode.from_link_season, Episode.episode_identifier, Episode.published_date, Episode.index,
-                    Episode.removed_from_source,
+                    Episode.removed_from_source, Episode.went_live_date, Episode.scheduled_date, Episode.created_at,
+                    Episode.source_number,
                 ).where(Episode.collection_id == record.id).order_by(Episode.id)
             )
         }
@@ -196,6 +203,14 @@ class SeasonsState:
             {episode.id: tuple(getattr(episode, name) for name in _EPISODE_FIELDS) for episode in self.episodes.values()},
             {name: getattr(self.collection, name) for name in SETTINGS},
         )
+
+    def changed_identifiers(self) -> dict[int, tuple[str | None, str | None]]:
+        """The saved episodes whose identifier the planner changed: the one each had, and the one it has now."""
+        was = self._was[2]
+        return {
+            episode.id: (was[episode.id][1], episode.episode_identifier) for episode in self.episodes.values()
+            if episode.id in was and was[episode.id][1] != episode.episode_identifier
+        }
 
     def new_id(self) -> int:
         self._next -= 1
