@@ -48,6 +48,11 @@ type Props = {
     className?: string
     /** Show the trigger as a round button with this icon, and `label` only for screen readers and as a tooltip. */
     triggerIcon?: any
+    /** A click on the trigger runs this instead of opening the menu, which then opens only through `open`. */
+    onTriggerClick?: () => void
+    /** Whether the menu is open, for a menu its page opens itself; it then reports each change to `onOpenChange`. */
+    open?: boolean
+    onOpenChange?: (open: boolean) => void
 }
 
 function normalizedProgress(value: number | undefined) {
@@ -55,8 +60,16 @@ function normalizedProgress(value: number | undefined) {
     return Math.max(0, Math.min(100, Math.round(value)))
 }
 
-export default function ActionMenu({label = 'Actions', items, note, className = '', triggerIcon}: Props) {
-    const [open, setOpen] = useState(false)
+export default function ActionMenu({
+    label = 'Actions', items, note, className = '', triggerIcon, onTriggerClick, open: openProp, onOpenChange,
+}: Props) {
+    const [openState, setOpenState] = useState(false)
+    const open = openProp ?? openState
+    const setOpen = (value: boolean | ((open: boolean) => boolean)) => {
+        const next = typeof value === 'function' ? value(open) : value
+        setOpenState(next)
+        onOpenChange?.(next)
+    }
     const rootRef = useRef<HTMLDivElement>(null)
     const triggerRef = useRef<HTMLButtonElement>(null)
     const menuId = useId()
@@ -138,12 +151,12 @@ export default function ActionMenu({label = 'Actions', items, note, className = 
                 ref={triggerRef}
                 type="button"
                 className={`btn btn-secondary action-menu-trigger${triggerIcon ? ' action-menu-trigger--icon' : ''}`}
-                aria-haspopup="menu"
-                aria-expanded={open}
+                aria-haspopup={onTriggerClick ? undefined : 'menu'}
+                aria-expanded={onTriggerClick ? undefined : open}
                 aria-controls={menuId}
                 aria-label={triggerIcon ? label : undefined}
                 title={triggerIcon ? label : undefined}
-                onClick={() => setOpen((value) => !value)}
+                onClick={() => onTriggerClick ? onTriggerClick() : setOpen((value) => !value)}
             >
                 {triggerIcon ? <FontAwesomeIcon icon={triggerIcon} aria-hidden="true"/> : (
                     <>
