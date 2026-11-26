@@ -43,7 +43,7 @@ from backend.types.link_season_types import (
     CollectionKind, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos, RepeatVideos,
 )
 from backend.utils.helpers import generate_uuid, slugify
-from sources import MAIN_TAG, Feature, ItemRef, Names, SectionKind, SectionRef, SectionType, Source, VideoDetails, get_source
+from sources import MAIN_TAG, Feature, ItemRef, ListOrder, Names, SectionKind, SectionRef, SectionType, Source, VideoDetails, get_source
 from sources.ytdlp_options import keep_call_options
 
 logger = logging.getLogger(__name__)
@@ -109,8 +109,8 @@ def made_from_list(collection: Collection) -> bool:
 
 def numbered_in_list_order(collection: Collection) -> bool:
     """Whether the collection numbers and shows its videos in the order they were added, which is its list's order:
-    a collection made from one list on a Site whose lists keep an order of their own."""
-    return made_from_list(collection) and collection_site(collection).lists_in_order
+    a collection made from one list on a Site that lists in an order VODLoft trusts."""
+    return made_from_list(collection) and collection_site(collection).list_order is not ListOrder.NONE
 
 
 def list_in_one_season(collection: Collection) -> bool:

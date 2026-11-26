@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from progress_plan import PlanTracker, StageSpec
-from sources import CreatorDetails, Feature, Names, SectionKind, SectionRef, SectionRole, SectionType, Site, registry
+from sources import CreatorDetails, Feature, ListOrder, Names, SectionKind, SectionRef, SectionRole, SectionType, Site, registry
 from test_ytdlp_collections import ListedSource, session  # noqa: F401
 
 ROOT = "https://tube.example/@workshop"
@@ -29,7 +29,7 @@ class CreatorSource(ListedSource):
     domains = ("tube.example",)
     features = ListedSource.features | {Feature.CREATORS}
     sites = (Site(
-        "tube", "Tube", ("tube.example",), creators=True, section_types=(VIDEOS, SHORTS, PLAYLISTS), link_seasons=True,
+        "tube", "Tube", ("tube.example",), creators=True, section_types=(VIDEOS, SHORTS, PLAYLISTS), link_seasons=True, list_order=ListOrder.OLDEST_FIRST,
         channel_collection_names=Names("channel", "channels"), list_collection_names=Names("playlist", "playlists"),
     ),)
 

@@ -138,8 +138,7 @@ def test_every_post_is_kept_when_patreon_does_not_tell_their_kinds(patreon, monk
     assert found == {"patreon-125257910", "patreon-121848656", "patreon-116397886"}
 
 
-def test_a_patreon_collection_numbers_its_posts_by_date(session):
-    # Patreon lists a creator's posts newest first, so the order they come in is no order of the creator's own.
+def _listed_titles(session, sharing_url, listed):
     from datetime import datetime, timezone
 
     from backend.db.models import Collection, Episode
@@ -147,19 +146,43 @@ def test_a_patreon_collection_numbers_its_posts_by_date(session):
     from task_manager.tasks.helpers.listed_collections import add_listed_episodes
 
     collection = Collection(
-        uuid="uuid-patreon", slug="david-wood", source_key="ytdlp", title="David Wood", kind="list",
-        sharing_url=CAMPAIGN, membership_level="FREE", type="series", episode_identifier="numbered",
+        uuid="uuid-list", slug="a-list", source_key="ytdlp", title="A list", kind="list",
+        sharing_url=sharing_url, membership_level="FREE", type="series", episode_identifier="numbered",
         author_name="A", author_slug="a",
     )
     session.add(collection)
     session.commit()
-    newest_first = [
-        VideoDetails(slug=f"patreon-{day}", url=_post_url(name), title=name, published_at=datetime(2024, 1, day, tzinfo=timezone.utc))
-        for name, day in (("open", 3), ("paid", 2), ("text", 1))
+    found = [
+        VideoDetails(
+            slug=f"video-{name}", url=url, title=name,
+            published_at=datetime(2024, 1, day, tzinfo=timezone.utc) if day else None,
+        )
+        for name, url, day in listed
     ]
-
-    add_listed_episodes(session, collection_id=collection.id, found=newest_first)
+    add_listed_episodes(session, collection_id=collection.id, found=found)
     session.commit()
-
     episodes = session.query(Episode).filter(Episode.collection_id == collection.id).order_by(Episode.index)
-    assert [episode.title for episode in episodes] == ["text", "paid", "open"]
+    return [episode.title for episode in episodes]
+
+
+def test_a_patreon_collection_adds_its_newest_first_posts_the_other_way_around(session):
+    # Patreon lists a creator's posts newest first: the oldest is the first episode, whatever the posts' dates say.
+    listed = [(name, _post_url(name), None) for name in ("open", "paid", "text")]
+
+    assert _listed_titles(session, CAMPAIGN, listed) == ["text", "paid", "open"]
+
+
+def test_a_collection_on_a_site_without_an_order_of_its_own_numbers_by_date(session):
+    # A site VODLoft has no contract for lists in no order it can trust.
+    listed = [(name, f"https://videos.example.com/watch/{name}", day) for name, day in (("b", 2), ("c", 3), ("a", 1))]
+
+    assert _listed_titles(session, "https://videos.example.com/list/1", listed) == ["a", "b", "c"]
+
+
+def test_a_playlist_keeps_its_own_order():
+    from sources import ListOrder
+    from sources.ytdlp import sites
+
+    assert sites.site_for("https://www.youtube.com/playlist?list=PL1").list_order is ListOrder.OLDEST_FIRST
+    assert sites.site_for("https://www.patreon.com/c/davidwood").list_order is ListOrder.NEWEST_FIRST
+    assert sites.site_for("https://videos.example.com/list/1").list_order is ListOrder.NONE

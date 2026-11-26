@@ -1,4 +1,4 @@
-from ...contract import Names, SectionKind, SectionType
+from ...contract import ListOrder, Names, SectionKind, SectionType
 from .other_sites import OtherSites
 
 
@@ -10,6 +10,8 @@ class Bandcamp(OtherSites):
     icon = "fab:bandcamp"
     audio_only = True
     creators = True
+    # Its albums keep an order of their own, the first first.
+    list_order = ListOrder.OLDEST_FIRST
     creator_names = Names("artist", "artists")
     # An artist has albums, and tracks of their own: singles.
     section_types = (

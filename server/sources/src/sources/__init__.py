@@ -4,7 +4,7 @@ A Source is everything VODLoft knows about one service. Each lives in its own
 subpackage (``sources.dailywire``); the rest of VODLoft reaches it through the
 contract in ``sources.contract`` and the registry below.
 """
-from .contract import ANY_DOMAIN, GENERIC_PREFIX, AccountSignIn, AccountStatus, DeviceCode, SignInCodeEnded, SignInKind, SignInRejected, LINK_KIND_NAMES, LIST_TYPE, SECTION_KIND_NAMES, Access, Chapter, Names, SectionType, CreatorDetails, ChannelSeason, ProfileSeasons, SectionKind, SectionRef, SectionRole, ApiField, ApiKeyRejected, ApiQuotaShare, QuickCheckCollection, QuickCheckCost, GuideStep, Retention, SiteApi, SiteApiStatus, ApiStatus, EpisodeMedia, EpisodePublishStatus, EpisodeTag, PublishStatusLabel, ReleaseDate, Feature, ItemRef, ItemRefresh, MAIN_TAG, MIN_NEWEST_EPISODES, LinkKind, LinkPreview, LiveStream, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus, ResolvedLink, RssEpisodeType, SearchNotice, SearchResults, SeasonRef, CollectionDetails, CookiesStatus, DownloadOptions, Site, SiteSetting, SiteSettings, Source, SourceProblem, SponsorBlockSegment, StreamMethod, UpgradeChecks, UpgradeImprovement, UpgradeOffer, VIDEO_HEIGHTS, VideoDetails, VideoFormat, VideoFormats, names_a_podcast
+from .contract import ANY_DOMAIN, GENERIC_PREFIX, AccountSignIn, AccountStatus, DeviceCode, SignInCodeEnded, SignInKind, SignInRejected, LINK_KIND_NAMES, LIST_TYPE, SECTION_KIND_NAMES, Access, Chapter, Names, SectionType, CreatorDetails, ChannelSeason, ProfileSeasons, SectionKind, SectionRef, SectionRole, ApiField, ApiKeyRejected, ApiQuotaShare, QuickCheckCollection, QuickCheckCost, GuideStep, Retention, SiteApi, SiteApiStatus, ApiStatus, EpisodeMedia, EpisodePublishStatus, EpisodeTag, PublishStatusLabel, ReleaseDate, Feature, ItemRef, ItemRefresh, MAIN_TAG, MIN_NEWEST_EPISODES, LinkKind, LinkPreview, ListOrder, LiveStream, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus, ResolvedLink, RssEpisodeType, SearchNotice, SearchResults, SeasonRef, CollectionDetails, CookiesStatus, DownloadOptions, Site, SiteSetting, SiteSettings, Source, SourceProblem, SponsorBlockSegment, StreamMethod, UpgradeChecks, UpgradeImprovement, UpgradeOffer, VIDEO_HEIGHTS, VideoDetails, VideoFormat, VideoFormats, names_a_podcast
 from .registry import UnknownSourceError, all_sources, collection_on_site, get_source, has_site_contract, named_site_for, named_sites, register, site_for, site_of, source_site, sources_for
 from .dailywire import DailyWireSource
 from .npo import NpoSource
@@ -70,6 +70,7 @@ __all__ = [
     "ChannelSeason",
     "ProfileSeasons",
     "SectionKind",
+    "ListOrder",
     "SectionRef",
     "LIST_TYPE",
     "Names",

@@ -15,6 +15,7 @@ from .feed_section_type import YtdlpFeedSectionType
 from .other_sites import MEMBERS_KEY, PREMIUM_KEY, OtherSites
 from .patreon import Patreon
 from .peertube import PeerTube
+from .rumble import Rumble
 from .soundcloud import SoundCloud
 from .tiktok import TikTok
 from .twitch import Twitch
@@ -23,7 +24,7 @@ from .youtube import YouTube
 
 CONTRACTS: dict[str, type[OtherSites]] = {contract.key: contract for contract in (
     YouTube, Twitch, X, Instagram, TikTok, SoundCloud, Bandcamp, Dailymotion, Kick, Nebula, Odysee, PeerTube, Niconico,
-    Floatplane, CuriosityStream, Dropout, Patreon, *NAMED,
+    Floatplane, CuriosityStream, Dropout, Patreon, Rumble, *NAMED,
 )}
 
 __all__ = ["CONTRACTS", "MEMBERS_KEY", "PREMIUM_KEY", "OtherSites", "YtdlpFeedSectionType"]

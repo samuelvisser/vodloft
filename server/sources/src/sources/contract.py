@@ -180,6 +180,19 @@ SECTION_KIND_NAMES = {
 """VODLoft's own word for each kind of section, for a kind a Site names no section type for."""
 
 
+class ListOrder(StrEnum):
+    """In what order the Site lists what a collection made from one of its links holds."""
+
+    NEWEST_FIRST = "newest_first"
+    """Newest first, like a feed, such as a creator's posts on Patreon: VODLoft adds them the other way around, so
+    they are numbered oldest first without looking at their dates."""
+    OLDEST_FIRST = "oldest_first"
+    """In an order of the list's own, the first first, as a playlist, an album or a series sets it: VODLoft numbers
+    them in that order."""
+    NONE = "none"
+    """In no order VODLoft can trust: VODLoft numbers them by date."""
+
+
 class SectionRole(StrEnum):
     """What a section holds, which only steers the defaults when a creator is added."""
 
@@ -1168,10 +1181,10 @@ class Site:
     link_seasons: bool = False
     """A collection made from a creator's channel can make the channel's lists, such as its playlists, its seasons:
     link seasons, through its Source's ``is_creator_page``, ``season_lists`` and ``list_items``."""
-    lists_in_order: bool = True
-    """A collection made from one of the Site's lists numbers and shows its videos in the list's order, as a playlist
-    or an album sets it. A Site whose contract says False lists newest first, like a feed, such as Patreon's posts:
-    VODLoft numbers and shows them by date instead."""
+    list_order: ListOrder = ListOrder.NONE
+    """In what order the Site lists what a collection made from one of its lists holds, such as a playlist, an album
+    or, on a Site without creators, any link. A collection made from one list numbers and shows its videos in that
+    order; on a Site whose contract tells no order, by date."""
     whole_lists: bool = True
     """A new channel collection puts a video in every list season that has it, so each list is whole. A Site whose
     contract says False puts a video in the first of them only, unless the collection's type says otherwise."""

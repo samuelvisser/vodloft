@@ -35,12 +35,6 @@ class Reddit(OtherSites):
     icon = "fab:reddit"
 
 
-class Rumble(OtherSites):
-    key, name = "rumble", "Rumble"
-    initials = "RU"
-    domains = ("rumble.com",)
-
-
 class Vimeo(OtherSites):
     key, name = "vimeo", "Vimeo"
     initials = "VM"
@@ -49,4 +43,4 @@ class Vimeo(OtherSites):
     pitch = "Channels, showcases and videos"
 
 
-NAMED = (BBC, Bilibili, BitChute, Facebook, Reddit, Rumble, Vimeo)
+NAMED = (BBC, Bilibili, BitChute, Facebook, Reddit, Vimeo)

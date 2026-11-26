@@ -1,4 +1,4 @@
-from ...contract import AccountSignIn, ApiField, GuideStep, Names, SectionKind, SectionType, SignInKind
+from ...contract import AccountSignIn, ApiField, GuideStep, ListOrder, Names, SectionKind, SectionType, SignInKind
 from .feed_section_type import YtdlpFeedSectionType
 from .other_sites import OtherSites
 
@@ -16,6 +16,8 @@ class SoundCloud(OtherSites):
     icon = "fab:soundcloud"
     audio_only = True
     creators = True
+    # Its albums and playlists keep an order of their own, the first first.
+    list_order = ListOrder.OLDEST_FIRST
     # Its apps share short links, which redirect to its pages.
     share_hosts = ("on.soundcloud.com",)
     # Its accounts, albums, playlists and tracks are found by name. Each search asks SoundCloud four times, or runs

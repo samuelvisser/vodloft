@@ -77,7 +77,7 @@ from backend.types.episode_types import PENDING_EPISODE_PUBLISH_STATUSES, Episod
 from backend.types.media_types import MediaType
 from backend.types.collection_types import EpisodeIdentifier
 from backend.utils.helpers import generate_uuid
-from sources import MAIN_TAG, Chapter, Feature, ItemRef, SeasonRef, Source, VideoDetails, get_source, site_for
+from sources import MAIN_TAG, Chapter, Feature, ItemRef, ListOrder, SeasonRef, Source, VideoDetails, get_source, site_for
 from .episodes.events import queue_episode_status_events
 from .episodes.identifier import next_identifier
 from .general import datetime_to_string
@@ -332,6 +332,15 @@ def _new_episode(
     return episode
 
 
+def _in_adding_order(collection: Collection, new: list[VideoDetails], now: datetime) -> list[VideoDetails]:
+    """The new videos in the order the collection adds and numbers them. A collection made from one list follows the
+    list's order, as an album numbers its tracks, the other way around where its Site lists newest first; any other
+    collection, and one on a Site that lists in no order it can trust, goes by date."""
+    if not numbered_in_list_order(collection):
+        return sorted(new, key=lambda details: _order_key(details, now))
+    return new[::-1] if collection_site(collection).list_order is ListOrder.NEWEST_FIRST else new
+
+
 def add_listed_episodes(
     s: Session, *, collection_id: int, found: list[VideoDetails], sources: Mapping[str, str] | None = None,
 ) -> int:
@@ -358,8 +367,7 @@ def add_listed_episodes(
 
     known = set(s.scalars(select(Episode.video_slug).where(Episode.collection_id == collection.id, Episode.video_slug.in_(listed))))
     new = [details for slug, details in listed.items() if slug not in known]
-    # A collection made from one list numbers its videos in the list's order, as an album numbers its tracks.
-    ordered = new if numbered_in_list_order(collection) else sorted(new, key=lambda details: _order_key(details, now))
+    ordered = _in_adding_order(collection, new, now)
 
     placer = _Placer(s, collection, now)
     split = splits_chapters(collection)
