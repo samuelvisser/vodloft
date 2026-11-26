@@ -15,3 +15,5 @@ class Nebula(OtherSites):
         "sign-in Nebula gives, not your password.",
         EMAIL_FIELDS,
     )
+    # Nebula's public API finds its channels and videos by name, without signing in.
+    searchable = True

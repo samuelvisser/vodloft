@@ -58,30 +58,34 @@ def album_kinds(kinds: Iterable[ListKind]) -> set[str]:
                                            kind.names.plural.lower()} & _ALBUM_NAMES}
 
 
-def default_new_link_seasons(kinds: Iterable[ListKind]) -> dict[str, str]:
-    """What a collection does with each kind of new list until the user chooses: add it as a season, except that on a
-    Site where some kinds best describe albums (``album_kinds``), such as SoundCloud, the others, its playlists, are
-    left off."""
+def default_new_link_seasons(kinds: Iterable[ListKind], *, albums_only: bool = False) -> dict[str, str]:
+    """What a collection does with each kind of new list until the user chooses: add it as a season. A collection of
+    an artist's albums (``albums_only``) on a Site where some kinds best describe albums (``album_kinds``), such as
+    SoundCloud, adds those and leaves the others, its playlists, off."""
     kinds = list(kinds)
-    albums = album_kinds(kinds)
+    albums = album_kinds(kinds) if albums_only else set()
     return {
         kind.key: (NewLinkSeasonAction.IGNORE if albums and kind.key not in albums else NewLinkSeasonAction.ADD).value
         for kind in kinds
     }
 
 
-def new_link_seasons_settings(kinds: Iterable[ListKind], stored: Mapping[str, str] | None) -> list[NewListSetting]:
+def new_link_seasons_settings(
+    kinds: Iterable[ListKind], stored: Mapping[str, str] | None, *, albums_only: bool = False,
+) -> list[NewListSetting]:
     """A collection's setting for each kind of its Site's lists: the one stored, or the kind's default."""
     kinds = list(kinds)
-    defaults = default_new_link_seasons(kinds)
+    defaults = default_new_link_seasons(kinds, albums_only=albums_only)
     return [NewListSetting(kind, (stored or {}).get(kind.key) or defaults[kind.key]) for kind in kinds]
 
 
-def checked_new_link_seasons(kinds: Iterable[ListKind], wanted: Mapping[str, str]) -> dict[str, str]:
+def checked_new_link_seasons(
+    kinds: Iterable[ListKind], wanted: Mapping[str, str], *, albums_only: bool = False,
+) -> dict[str, str]:
     """Every kind's setting for a collection, ``wanted`` over the defaults. Refuses a kind its Site doesn't have."""
     kinds = list(kinds)
     unknown = sorted(set(wanted) - {kind.key for kind in kinds})
     if unknown:
         raise ServiceError(f"This collection's site has no lists of the kind {unknown[0]}", field="new_lists")
-    settings = default_new_link_seasons(kinds)
+    settings = default_new_link_seasons(kinds, albums_only=albums_only)
     return {key: NewLinkSeasonAction(wanted.get(key, action)).value for key, action in settings.items()}

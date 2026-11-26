@@ -28,9 +28,11 @@ type Props = {
   onChange: (value: CollectionFormValue) => void
   /** The creator the collection belongs to, whose name is its author, and what its Site calls a creator, such as host. */
   creator?: { slug: string, title: string, word: string } | null
+  /** Why the name was refused, shown under it. */
+  nameError?: string | null
 }
 
-export default function CollectionForm({ value, onChange, creator }: Props) {
+export default function CollectionForm({ value, onChange, creator, nameError }: Props) {
 
   return (
     <>
@@ -43,7 +45,10 @@ export default function CollectionForm({ value, onChange, creator }: Props) {
           placeholder="The Ben Shapiro Show"
           value={value.name}
           onChange={(e) => onChange({ ...value, name: e.target.value })}
+          aria-invalid={nameError ? true : undefined}
+          aria-describedby={nameError ? 'collection-name-error' : undefined}
         />
+        {nameError && <div id="collection-name-error" className="error" role="alert">{nameError}</div>}
       </div>
 
       <div className="form-row">

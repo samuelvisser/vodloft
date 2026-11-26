@@ -108,26 +108,34 @@ Renaming a season or giving it another number doesn't rename files you already d
 
 ### Playlists and albums as seasons
 
-A collection of a whole YouTube channel, or of an artist on Bandcamp or SoundCloud, can make the channel's playlists, or the artist's albums, seasons of their own. A new channel collection starts with every playlist a season of its own, each one whole (a video in several playlists is in each), and with the videos of other channels in them included. Turn on **Playlists as seasons** in the Seasons window (in a Music collection, the Albums window has **The artist's albums**), and choose:
+The top of the Seasons window, **What's in the collection**, lists everything that brings videos to a collection, each with one choice: **A season of its own**, **Part of the collection**, or **Off**. A playlist or album that is a season of its own gets a season named after it. One that is part of the collection adds its videos to the collection without a season of its own: they go where the channel's own videos go, such as one season or a season per year. One that is off leaves its videos out.
 
-- **Which playlists**: every playlist, also the ones to come, or only those you switch on in the list. **Look for new playlists** asks the site for the list again. A playlist you switch on is **A season of its own**, or **Contents only**: its videos are then in the collection, but in its other seasons, such as Videos or a season per year, instead of a season named after the playlist. **Bulk edit** above the list lets you pick several playlists and switch them on or off, or make them seasons or contents only, in one go; the changes are saved with the rest of the window.
-- **When the channel adds a playlist**: ask you, make it a season right away, or always skip it. A site that knows more than one kind of list has a setting for each: on SoundCloud, one for new albums and one for new playlists. A Music collection on such a site starts with only the albums, and skips new playlists until you choose otherwise.
-- **How playlist content fits in the collection** (in the site's own word, such as album), for videos of other channels in these playlists: **Only include media already in the collection**, **Include media that is not in the collection**, in their playlist's season (the default for a channel), or **Include only what the playlists contain** (see [Collections of only playlists](#collections-of-only-playlists)).
+A collection of a whole YouTube channel, or of an artist on Bandcamp or SoundCloud, has two boxes there:
+
+- **From the channel** (**From the artist**): the parts of the channel page, such as Videos, Shorts and Livestreams on YouTube. See [Feeds and the channel's own season](#feeds-and-the-channels-own-season).
+- **Playlists and links** (in the site's own words, such as **Albums, playlists and links**): the creator's playlists, grouped by kind where the site knows more than one, such as albums and playlists on SoundCloud, and **Your links**, links you add yourself from any site VODLoft can read. **Look for new playlists** asks the site for the list again. The switch in its header turns the whole box off when you don't want playlists at all: the collection then holds only what is on the channel page.
+
+A header with more than one item has an **All** choice that sets every item under it at once. The arrow beside a box folds it shut to one line that counts its choices; the playlists box starts folded while it is switched off. A new channel collection starts with every playlist a season of its own, each one whole (a video in several playlists is in each), and with the videos of other channels in them included.
+
+Under **For these lists**:
+
+- **When the channel adds a playlist**: make it a season of its own right away (the default), make it part of the collection, ask you, or always skip it. A site that knows more than one kind of list has a setting for each: on SoundCloud, one for new albums and one for new playlists. A Music collection on such a site starts with only the albums, and skips new playlists until you choose otherwise.
+- **Videos of other channels in these playlists and links**: **Include them**, in the season their playlist goes to (the default for a channel), or **Leave them out**, so a playlist only brings the videos the channel has itself.
 
 Each playlist season is named after its playlist, and its videos keep the order of the playlist, as do their episode numbers. An album's tracks keep the album's track order. Playlist seasons go in the order of their first video, so with a season per year a 2025 playlist comes after the 2025 season. An artist's albums come after Singles, in the order the artist lists them; you can still reorder them, and **Automatic order** brings back the artist's order. A video that is in more than one playlist goes to the season that comes first, unless the collection is set to put it in each (see [A video in several seasons](#a-video-in-several-seasons)). Files you already downloaded keep their numbers.
 
-**Playlists** (**Albums**) chooses how the playlist seasons are laid out: **A season per playlist**, or **Together in seasons by year**. By year, the playlists still decide which videos are in the collection, but every video goes to the season of the year it came out, as do the videos in no playlist. Inside a year, videos go by date. When you save, VODLoft shows the **Move** dialog for the videos you already downloaded, so they move along, files and all. Output templates still get the playlist a video came from as `section_title`, so files can be named by playlist inside a year folder.
+To have every video in the season of the year it came out, while the playlists still decide which videos are in, make the playlists **Part of the collection** and choose **A season per year** under **What is part of the collection goes in**. Output templates still get the playlist a video came from as `section_title`, so files can be named by playlist inside a year folder.
 
 #### A video in several seasons
 
-In the Seasons window, **When an episode belongs in several seasons** (in a Music collection, **When a track belongs on several albums**) decides what happens with a video that more than one of the collection's playlist seasons have, such as a track that is on an album and on a "Best of":
+In the Seasons window, **When an episode belongs in several seasons** (in a Music collection, **When a track belongs on several albums**) decides what happens with a video that more than one of the collection's playlist seasons have, such as a track that is on an album and on a "Best of". It is only shown while some playlists are seasons of their own, since otherwise every video has one season:
 
 - **Only in the first season** (**Only on the first album**): it is one episode, in the season that comes first in the order shown in the window. This is where a Podcast or Series starts.
 - **In each season** (**On each album**): it is an episode in each of those seasons, with its own number and its own files, so every season is whole. Each one downloads on its own, so a track on two albums is two files, each tagged with its own album and track number. This is where a Music collection starts.
 
-Two playlists that share one season still give a video one episode there, and with **Together in seasons by year** a video has one upload year, so it is in one season. When a playlist no longer has a video, only its episode in that season leaves. Switching back to **Only in the first season** removes the extra episodes: ones without downloads go at once, and downloaded ones stay, marked **Removed**, until you answer on Home whether to keep them.
+Two playlists that share one season still give a video one episode there. When a playlist no longer has a video, only its episode in that season leaves. Switching back to **Only in the first season** removes the extra episodes: ones without downloads go at once, and downloaded ones stay, marked **Removed**, until you answer on Home whether to keep them.
 
-Several playlists can share one season, such as a "Part 1" and a "Part 2" of the same series. In the Seasons window, pick the other season under **Together with** on a playlist's season. The season keeps its name and holds the videos of its first playlist first, then those of the next, numbered in that order. **Own season** gives a playlist a season of its own again. Either way, downloaded videos move with their files.
+Several playlists can share one season, such as a "Part 1" and a "Part 2" of the same series, and a part of the channel that is a season of its own, such as Shorts, can share one with a playlist too. In the list of seasons, pick **Together with** another season on a season's menu. The season keeps its name and holds the videos of its first playlist first, then those of the next, numbered in that order. **A season of its own again** gives a playlist or part of the channel a season of its own again. Either way, downloaded videos move with their files.
 
 When a playlist season is turned off, its downloaded videos move to the season a new video would go to, and their files are renamed and moved with them. A video that was only in the collection because that playlist had it leaves the collection, and **its downloaded files are deleted**. The same happens when you switch back to leaving out other channels' videos. The Seasons window tells you before you save how many videos leave and how many of them have files.
 
@@ -141,9 +149,9 @@ An episode can appear in VODLoft before final downloadable media exists. You may
 
 ### Collections of only playlists
 
-A collection set to **Include only what the playlists contain** holds nothing but its playlist seasons. There is no Videos season, and videos of the channel that are in none of its playlists are left out. Choosing this for an existing collection removes the videos no playlist has; the Seasons window tells you how many, and how many of them have files, before you save.
+A collection with every part of the channel switched **Off** holds nothing but what its playlists and links have. Videos of the channel that are in none of them are left out. Switching the last part off removes the videos no playlist has; the Seasons window tells you how many, and how many of them have files, before you save. A playlist or link that is part of the collection, rather than a season of its own, puts its videos in one season of the rest, or a season per year.
 
-Such a collection doesn't need a link of its own. You can add links to it yourself in the Seasons window: a playlist, a channel or a single video, from any site yt-dlp supports, so one collection can hold playlists from YouTube and Vimeo side by side. Each link becomes a season. **Remove** takes a link you added out again, together with the videos only it had. When the collection does have a channel link, set or change it on its **Edit** page, its playlists are offered as before, and VODLoft keeps looking for new ones.
+A collection of only playlists doesn't need a link of its own. You can add links in the Seasons window of any collection with playlists: a playlist, a channel or a single video, from any site yt-dlp supports, so one collection can hold playlists from YouTube and Vimeo side by side. Each link becomes a season of its own, or part of the collection, as you choose. **Remove** takes a link you added out again, together with the videos only it had. When the collection does have a channel link, set or change it on its **Edit** page, its playlists are offered as before, and VODLoft keeps looking for new ones.
 
 ## Sync now and sync history
 
@@ -241,20 +249,16 @@ On a site where VODLoft knows no creators, such as NPO Start, every collection i
 
 ### Feeds and the channel's own season
 
-In the Seasons window of a channel collection (the Albums window for music), **Feeds** lists the parts of the channel the collection takes its videos from, such as Videos, Shorts and Live on YouTube. Switch a feed off to leave its videos out. The channel is listed again when you save: its videos that no feed or playlist of the collection still has leave the collection, downloaded ones with their files. Saving tells you how many leave first.
+In the Seasons window of a channel collection (the Albums window for music), **From the channel** lists the parts of the channel the collection takes its videos from, such as Videos, Shorts and Livestreams on YouTube. Each is **Part of the collection**, **A season of its own**, such as a Shorts season, or **Off**, which leaves its videos out. When a part is off, the channel is listed again when you save: its videos that no part or playlist of the collection still has leave the collection, downloaded ones with their files. Saving tells you how many leave first. Switching every part off makes a [collection of only playlists](#collections-of-only-playlists).
 
-**How VODLoft groups the videos**, under **Seasons**, chooses where the channel's own videos go. Without playlists as seasons:
+A video in a part of the channel that is a season of its own goes to that season. When it is also in a playlist that is a season of its own, the playlist's season wins, unless the collection puts a video in each of its seasons (see [A video in several seasons](#a-video-in-several-seasons)).
 
-- **One season**, called **Channel**: every video of the feeds is in it.
+**What is part of the collection goes in**, under **Seasons**, chooses where the videos that are part of the collection go:
+
+- **One season**: called **Channel** while it holds everything from the channel, and **Videos** when it holds only what has no season of its own. On sites with sound only, such as SoundCloud and Bandcamp, it is called **Singles**.
 - **A season per year**: every video goes to the season of the year it came out.
 
-With playlists as seasons:
-
-- **Everything in one season**, as **Channel** (the default): every video of the feeds is in it, also the ones in a playlist that is a season, so they are in two seasons. The collection's page opens on this season.
-- **What is in no playlist in one season**, as **Videos**: a video that is in a playlist season is only there. On sites with sound only, such as SoundCloud and Bandcamp, this is the default, and the season is called **Singles**.
-- **What is in no playlist in a season per year**: a video that is in a playlist season is only there; the others go to the season of their year.
-
-With the playlists laid out **Together in seasons by year**, every video goes to the season of its year, so this setting is not shown.
+With one season and some playlists that are a season of their own, **Channel also holds the videos that have a season of their own** (the default on YouTube) keeps every video of the channel in it too, so a video in a playlist season is in two seasons. The collection's page opens on this season. Switch it off to have it hold only the rest, as **Videos**.
 
 ### Adding a collection to a creator
 

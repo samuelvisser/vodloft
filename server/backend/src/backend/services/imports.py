@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session
 
 from backend.services.site_settings import download_profile_defaults, local_media_profile_defaults
 from backend.services.sites import CollectionAlreadyAddedError, collection_site, site_record
+from backend.services.seasons import collection_indexed
 
 import importer.pinchflat  # noqa: F401  (registers the importer)
 import importer.wireloft  # noqa: F401  (registers the importer)
@@ -427,14 +428,20 @@ def _library_collections(session: Session) -> dict[str, Collection]:
 
 
 def _matching_profile(session: Session, plan: ProfilePlan) -> CollectionLocalMediaProfile | None:
-    """A VODLoft profile that names files the same way, to use instead of a copy."""
+    """A VODLoft profile that names files the same way and keeps them the same way, such as in the same audio
+    format, to use instead of a copy."""
     if plan.output_template is None:
         return None
-    return session.scalar(select(CollectionLocalMediaProfile).where(
+    wanted = {name: value for name, value in _profile_wanted(plan).items() if value is not None}
+    candidates = session.scalars(select(CollectionLocalMediaProfile).where(
         CollectionLocalMediaProfile.type == plan.settings.get("type", "collection"),
         CollectionLocalMediaProfile.output_template == plan.output_template,
         CollectionLocalMediaProfile.preferred_format == plan.settings.get("preferred_format"),
-    ).limit(1))
+    ).order_by(CollectionLocalMediaProfile.id))
+    return next((
+        profile for profile in candidates
+        if all(values.get(name, value) == value for values in (_profile_values(profile),) for name, value in wanted.items())
+    ), None)
 
 
 def _published(value: str | None) -> datetime | None:
@@ -1213,7 +1220,7 @@ def _add_link_seasons(session: Session, collection: Collection, plan: Collection
     if added:
         collection.keep_a_default_link()
         if collection.link_seasons == LinkSeasons.OFF.value:
-            collection.link_seasons = LinkSeasons.SELECTED.value
+            collection.link_seasons = LinkSeasons.ON.value
             if collection.loose_videos == LooseVideos.BY_YEAR.value:
                 collection.loose_videos = LooseVideos.ONE_SEASON.value
         # The other program kept every video of these links, also another channel's.
@@ -2039,18 +2046,6 @@ def enable_run_download_profiles(session: Session, run: ImportRun) -> int:
     return enabled
 
 
-def _indexed(session: Session, collection_id: int) -> bool:
-    """Whether the Collection's first index finished, so its step only waits for its files to be adopted."""
-    from task_manager.scheduler.db import TaskOperation
-    from task_manager.scheduler.types import OperationStatus
-
-    return session.scalar(select(TaskOperation.id).where(
-        TaskOperation.kind == "collection.index", TaskOperation.resource_type == "collection",
-        TaskOperation.resource_id == collection_id,
-        TaskOperation.status.in_((OperationStatus.SUCCEEDED.value, OperationStatus.PARTIAL.value)),
-    ).limit(1)) is not None
-
-
 @dataclass(frozen=True)
 class DownloadProfilesView:
     total: int
@@ -2093,7 +2088,7 @@ def run_view(session: Session, run: ImportRun) -> RunView:
             collection_slug=collection.slug if collection else None,
             collection_title=collection.title if collection else None,
             status=step.status,
-            indexed=step.status != STEP_WAITING or _indexed(session, step.collection_id),
+            indexed=step.status != STEP_WAITING or collection_indexed(session, step.collection_id),
             files=sum(1 for file in step.files if file.get("kind") == "file"),
             counts=result.get("counts", {}),
             problems=result.get("problems", []),

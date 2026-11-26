@@ -75,36 +75,36 @@ function seasonsRows(view: CollectionSeasonsRead, causes: MoveCause[]): CauseRow
     const words = dialogWords(wordsOf(view.words), view)
     const lists = namesOf(view, view.looseSeason)
     const regs = registries(lists, words, view)
-    const only = view.outsideVideos === 'only'
     const text = (value: MoveCause['before']) => Array.isArray(value) ? value.join(', ') : value ?? ''
     const feeds = (value: MoveCause['before']) => {
         const on = view.feeds.filter((feed) => value === null || (Array.isArray(value) && value.includes(feed.ref)))
         return on.length ? names(on.map((feed) => capitalized(feed.names.plural))) : 'None'
     }
-    const list = (value: MoveCause['before']) => value === 'off'
-        ? 'Off' : only ? 'On' : regs.placement.getLabelLoose(text(value))
+    const list = (value: MoveCause['before']) => regs.role.getLabelLoose(value === 'contents' ? 'part' : text(value))
     const settings: Record<string, {setting: string, value: (value: MoveCause['before']) => string}> = {
         link_seasons: {
-            setting: view.siteOrder ? capitalized(lists.plural) : `${capitalized(lists.plural)} as ${words.season.plural}`,
-            value: (value) => value === 'off' ? 'Off' : regs.mode.getLabelLoose(text(value)),
+            setting: `${capitalized(view.sectionListNames.plural)} and links`,
+            value: (value) => value === 'off' ? 'Off' : 'On',
         },
         outside_videos: {
-            setting: `How ${lists.singular} content fits in the collection`,
-            value: (value) => regs.outside.getLabelLoose(text(value)),
+            setting: `${capitalized(words.videos)} of other ${words.creators}`,
+            value: (value) => value === 'only' ? `Only what the ${lists.plural} have` : regs.guests.getLabelLoose(text(value)),
         },
-        list_layout: {setting: `Where the ${lists.plural} go`, value: (value) => regs.layout.getLabelLoose(text(value))},
         loose_videos: {
-            setting: `How VODLoft groups the ${words.videos}`,
-            value: (value) => view.madeFromList ? regs.listSeasons.getLabelLoose(text(value))
-                : view.linkSeasons !== 'off' ? regs.channelWithLists.getLabelLoose(text(value))
-                    // With no lists as seasons, the one season holds the whole channel.
-                    : regs.channel.getLabelLoose(value === 'one_season' ? 'everything' : text(value)),
+            setting: 'What is part of the collection goes in',
+            value: (value) => regs.grouping.getLabelLoose(text(value)),
         },
         repeat_videos: {
             setting: `When ${words.episode.a} belongs ${words.inSeason} several ${words.season.plural}`,
             value: (value) => regs.repeat.getLabelLoose(text(value)),
         },
         feeds: {setting: 'Feeds', value: feeds},
+        feed_seasons: {
+            setting: `Feeds with ${words.season.a} of their own`,
+            value: (value) => Array.isArray(value) && value.length
+                ? names(view.feeds.filter((feed) => value.includes(feed.ref)).map((feed) => capitalized(feed.names.plural)))
+                : 'None',
+        },
     }
     return causes.flatMap((cause) => {
         const known = cause.setting === 'list'

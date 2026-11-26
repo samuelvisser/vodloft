@@ -71,6 +71,9 @@ from backend.types.collection_types import EpisodeIdentifier
 from backend.security.access import Access, Area, Level
 from backend.security.deps import may_delete_files, requires, signed_in
 from backend.db.core import run_write_transaction
+from backend.db.models import Collection
+from backend.services.collections import downloaded_files_of, remove_downloaded_files
+from sqlalchemy import select
 
 router = APIRouter(prefix="/collections", tags=["Collections"])
 
@@ -398,17 +401,33 @@ def collection_update(collection_slug: str, body: CollectionAPIUpdate):
 
 
 @router.delete("/{collection_slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=CollectionAPIRead)
-def collection_delete(collection_slug: str):
+def collection_delete(
+    collection_slug: str,
+    delete_files: bool = Query(False, alias="deleteFiles", description="Also delete the collection's downloaded files"),
+    access: Access = signed_in(),
+):
     """
     Delete a show from the system.
 
-    Permanently removes the specified show and its associated data.
-    Returns the deleted show's information for confirmation.
+    Permanently removes the specified show and its associated data, and with ``deleteFiles`` its downloaded files
+    too. Returns the deleted show's information for confirmation.
     """
+    files: list[tuple[str, tuple[str, ...]]] = []
+    if delete_files:
+        if not access.delete_files:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You may not delete downloaded files from disk.")
+        with db_session() as s:
+            collection = s.scalar(select(Collection).where(Collection.slug == collection_slug))
+            if collection is not None:
+                files = downloaded_files_of(s, collection)
+
     def work(s):
         return delete_collection(s, collection_slug)
 
-    return run_write_transaction(work)
+    deleted = run_write_transaction(work)
+    # The files go once VODLoft has forgotten them, so nothing it still knows points at a missing file.
+    remove_downloaded_files(files)
+    return deleted
 
 
 def _collection_found(work):

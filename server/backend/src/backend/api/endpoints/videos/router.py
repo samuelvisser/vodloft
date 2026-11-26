@@ -4,7 +4,7 @@ from backend.api.models.media_download import MediaDownloadAPICreate
 from backend.api.models.operations import MediaDownloadOperationAccepted
 from backend.api.models.video import VideoAPICreate, VideoAPIRead
 from backend.app import db_session
-from backend.services.thumbnails import take_first_frames
+from backend.services.thumbnails import keep_own_pictures
 from backend.services.videos import apply_video_details, index_video
 from task_manager.scheduler.types import OperationSource
 from task_manager.tasks.media_download_operations import (
@@ -41,7 +41,7 @@ def video_create(body: VideoAPICreate, access: Access = signed_in()):
     access.check_link(source, body.url)
     details = fetch_video_details(source, body.url)
     video_id = run_write_transaction(lambda s: index_video(s, source.id, details)[0].id)
-    take_first_frames([video_id])
+    keep_own_pictures([video_id])
     with db_session() as s:
         return VideoAPIRead.model_validate(get_video_record(s, video_id))
 
@@ -60,7 +60,7 @@ def video_refresh(video_id: int):
         source_key, url = video.source_key, video.sharing_url
     details = fetch_video_details(video_source(source_key), url)
     run_write_transaction(lambda s: apply_video_details(get_video_record(s, video_id), details))
-    take_first_frames([video_id])
+    keep_own_pictures([video_id])
     with db_session() as s:
         return VideoAPIRead.model_validate(get_video_record(s, video_id))
 

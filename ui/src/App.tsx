@@ -24,7 +24,7 @@ export default function App() {
   const navigate = useNavigate()
 
   // main.tsx asked who is signed in before rendering; ask again only if that failed.
-  const [authState, setAuthState] = useState<'checking' | 'ok' | 'no'>(getAccess() ? 'ok' : accessChecked() ? 'no' : 'checking')
+  const [authState, setAuthState] = useState<'checking' | 'ok' | 'no' | 'unreachable'>(getAccess() ? 'ok' : accessChecked() ? 'no' : 'checking')
   const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus | null>(null)
   const [onboardingError, setOnboardingError] = useState<string | null>(null)
 
@@ -36,11 +36,22 @@ export default function App() {
         if (!canceled) setAuthState(access ? 'ok' : 'no')
       })
       .catch(() => {
-        if (!canceled) setAuthState('no')
+        // The server did not answer, such as while it starts: that says nothing about signing in.
+        if (!canceled) setAuthState('unreachable')
       })
     return () => {
       canceled = true
     }
+  }, [authState])
+
+  // Keep asking while the server can't be reached. Once it answers, load the page again, so everything the page
+  // loads before it renders, such as the public config, comes from the server too.
+  useEffect(() => {
+    if (authState !== 'unreachable') return
+    const timer = window.setInterval(() => {
+      loadAccess().then(() => window.location.reload(), () => undefined)
+    }, 3000)
+    return () => window.clearInterval(timer)
   }, [authState])
 
   const loadOnboardingStatus = useCallback(async () => {
@@ -74,6 +85,19 @@ export default function App() {
     return <LoginPage />
   }
 
+  if (authState === 'unreachable') {
+    return (
+      <div className="onboarding-bootstrap">
+        <div>
+          <p role="alert">VODLoft's server can't be reached right now. This page opens by itself once it answers again.</p>
+          <button className="btn btn-primary" type="button" onClick={() => window.location.reload()}>
+            Try again
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   if (mustChangePassword) {
     return <ForcedPasswordChangePage />
   }
@@ -100,7 +124,7 @@ export default function App() {
           setOnboardingStatus((current) => current ? { ...current, completed: true } : current)
           navigate(path ?? '/', { replace: true })
           toast.success(
-            'VODLoft is setup. Look around a little and explore your very own media manager. Enjoy!',
+            'VODLoft is set up. Look around a little and explore your very own media manager. Enjoy!',
             { duration: 8000 },
           )
         }}

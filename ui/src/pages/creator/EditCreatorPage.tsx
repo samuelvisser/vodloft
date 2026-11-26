@@ -106,7 +106,7 @@ export default function EditCreatorPage() {
                 {label: `${capitalized(creator.creatorNames.singular)} ${creator.title}`, to: `/creator/${creator.slug}`},
             ]}/>
             <PageHeader
-                title="Edit creator" titleId="edit-creator-title"
+                title={`Edit ${creator.creatorNames.singular}`} titleId="edit-creator-title"
                 subtitle={<p className="view-description"><Link className="quiet-link" to={`/creator/${creator.slug}`}>{creator.title}</Link> · {creatorKindText(creator)}</p>}
             />
             <form className="form" onSubmit={onSubmit} noValidate>
@@ -167,7 +167,7 @@ export default function EditCreatorPage() {
                     </button>
                     <button type="button" className="btn" onClick={() => navigate(`/creator/${creator.slug}`)}>Cancel</button>
                     <button type="submit" className="btn btn-primary" disabled={isSubmitting || !isDirty}>
-                        {isSubmitting ? 'Saving…' : 'Save'}
+                        {isSubmitting ? 'Saving…' : 'Save changes'}
                     </button>
                 </div>
             </form>

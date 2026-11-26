@@ -23,7 +23,7 @@ from backend.api.models.collection import CollectionAPIRead
 from backend.api.endpoints.collections.as_view.service import get_collection_views_list
 from backend.api.endpoints.episodes.service import episode_view_columns
 from backend.api.endpoints.movies.service import add_movies
-from backend.db.models import Creator, CreatorAccount, Collection, Episode
+from backend.db.models import Creator, CreatorAccount, CreatorTier, Collection, Episode
 from backend.services import creators
 from backend.services.errors import ServiceError
 from progress_plan import PlanSnapshot, PlanTracker, StageSpec
@@ -276,6 +276,7 @@ def creator_episodes(s: Session, slug: str, *, cursor: str | None, limit: int) -
         select(*episode_view_columns(), Collection.slug.label("collection_slug"), Collection.title.label("collection_title"),
                Collection.ytdlp_options.label("collection_ytdlp_options"))
         .join(Collection, Episode.collection_id == Collection.id)
+        .outerjoin(CreatorTier, CreatorTier.id == Episode.creator_tier_id)
         .where(Collection.creator_id == creator_id)
         .order_by(Episode.published_date.desc().nulls_last(), Episode.id.desc())
     )

@@ -346,7 +346,7 @@ export default function StreamProfileAdvisory({
         const partial = coverage.profiles.length > 0
         return (
             <AdvisoryCard
-                title={partial ? 'Download profile coverage is incomplete' : 'No matching download profile is setup'}
+                title={partial ? 'Download profile coverage is incomplete' : 'No matching download profile is set up'}
                 helpSummary="Why a share needs downloads"
                 help={(
                     <>
@@ -481,7 +481,7 @@ export default function StreamProfileAdvisory({
             <AdvisoryCard
                 title={hasPartialCoverage
                     ? 'Download profile coverage is incomplete'
-                    : 'No matching download profile is setup'}
+                    : 'No matching download profile is set up'}
                 helpSummary="What counts as matching download coverage"
                 help={(
                     <>
@@ -502,7 +502,7 @@ export default function StreamProfileAdvisory({
                 <p>
                     {hasPartialCoverage
                         ? `${noStreaming}, but the existing Download Profiles do not fully cover this Stream Profile.`
-                        : `${noStreaming} and no enabled Download Profile matches the media coverage this Stream Profile is setup to include.`}
+                        : `${noStreaming} and no enabled Download Profile matches the media coverage this Stream Profile is set up to include.`}
                 </p>
                 {streamsLiveEpisodes ? (
                     <p>

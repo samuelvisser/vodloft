@@ -16,7 +16,7 @@ def _save(session, **settings):
     session.rollback()
     body = CollectionSeasonsAPIUpdate(**{
         "seasons": [{"id": x.id, "name": x.name} for x in view.seasons], "custom_season_order": False,
-        "link_seasons": view.link_seasons, "loose_videos": view.loose_videos, "list_layout": view.list_layout,
+        "link_seasons": view.link_seasons, "loose_videos": view.loose_videos,
         "outside_videos": view.outside_videos,
         "playlists": [{"id": p.id, "enabled": p.enabled, "as_season": p.as_season, "season_id": p.season_id} for p in view.playlists],
         **settings,

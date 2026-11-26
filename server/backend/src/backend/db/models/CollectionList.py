@@ -31,6 +31,9 @@ class CollectionList(Base):
     site_key: Mapped[Optional[str]] = mapped_column(ForeignKey("sites.key"), comment="The Site the list is on")
     url: Mapped[str]
     title: Mapped[str]
+    type_key: Mapped[Optional[str]] = mapped_column(
+        comment="The key of the list's type on its Site, such as album or playlist, once VODLoft listed it",
+    )
     image_path: Mapped[Optional[str]]
     item_count: Mapped[Optional[int]]
     site_position: Mapped[int] = mapped_column(default=0, server_default="0", comment="Where the Site lists it, newest first")

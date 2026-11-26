@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import select
 
 from test_link_seasons import (  # noqa: F401
-    CreatorSource, _collection, _index, _list, _seasons, session, source,
+    CreatorSource, _collection, _index, _list, _seasons, links_source, session, source,
 )
 from test_ytdlp_collections import _video
 
@@ -112,17 +112,23 @@ def test_a_downloaded_extra_leaves_with_its_files_when_the_user_made_it_one_and_
         assert held_back(extra)
 
 
-def test_lists_by_year_give_a_video_one_episode(source, session):
-    from backend.db.models import Collection
+def test_lists_part_of_the_collection_by_year_give_a_video_one_episode(links_source, session):
+    from backend.db.models import Collection, CollectionList
 
+    source = links_source
     _albums(source)
+    source.outside = {video.slug: video for video in source.videos}
     collection = _collection(session, music=True)
     collection = session.get(Collection, collection.id)
-    collection.list_layout = "by_year"
+    # A collection of nothing but its lists, which are part of it, with what is part of it in a season per year.
+    collection.outside_videos = "only"
+    collection.loose_videos = "by_year"
+    collection.new_lists = {"list": "contents"}
     session.commit()
 
     _index(session, collection, source)
 
+    assert not any(link.as_season for link in session.scalars(select(CollectionList)))
     assert len(_episodes(session, "b")) == 1
 
 
@@ -170,7 +176,7 @@ def test_the_seasons_dialog_sets_it_in_the_collections_words(source, session):
 
     body = {
         "seasons": [{"id": season["id"], "name": season["name"]} for season in view["seasons"]],
-        "customSeasonOrder": False, "linkSeasons": "all", "repeatVideos": "one_season",
+        "customSeasonOrder": False, "linkSeasons": "on", "repeatVideos": "one_season",
     }
     saved = client.put(f"/api/collections/{collection.slug}/season-settings", json=body)
     assert saved.status_code == 200, saved.text

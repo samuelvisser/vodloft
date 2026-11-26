@@ -158,7 +158,8 @@ def test_other_sites_are_prefixed_and_unknown_pages_are_best_effort(lookups):
     source = YtDlpSource()
 
     vimeo = source.resolve("https://vimeo.com/1")
-    assert (vimeo.slug, vimeo.site) == ("vimeo-1", "vimeo.com")
+    # A link is on its Site, named as the Site's contract names it.
+    assert (vimeo.slug, vimeo.site) == ("vimeo-1", "Vimeo")
     assert source.video_details("https://vimeo.com/1").published_at == datetime(1970, 1, 1, tzinfo=timezone.utc)
     generic = source.resolve("https://example.com/clip.mp4")
     assert (generic.slug, generic.site) == ("generic-clip", GENERIC_SITE)
@@ -746,3 +747,14 @@ def test_ytdlp_writes_the_info_file_when_asked(fake_ytdlp, tmp_path):
     assert result.info_json == str(keep / "media.info.json")
     assert (keep / "media.info.json").read_text() == '{"id": "x", "title": "Video"}'
     assert download_ytdlp("https://x/video", str(tmp_path / "off.mp4"), command=fake_ytdlp).info_json is None
+
+
+def test_a_link_that_is_no_page_of_its_site_is_not_looked_up(lookups):
+    answers, asked = lookups
+    # yt-dlp's generic extractor would follow it to YouTube's recommended videos.
+    answers["https://www.youtube.com/watch?v="] = {"_type": "playlist", "id": "recommended", "extractor_key": "YoutubeTab"}
+    source = YtDlpSource()
+
+    assert source.resolve("https://www.youtube.com/watch?v=") is None
+    assert source.resolve("https://youtu.be/") is None
+    assert not asked

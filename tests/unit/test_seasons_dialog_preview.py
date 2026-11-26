@@ -18,7 +18,7 @@ def _body(session, change):
     session.rollback()
     data = dict(
         seasons=[{"id": x.id, "name": x.name} for x in view.seasons], custom_season_order=view.custom_season_order,
-        link_seasons=view.link_seasons, loose_videos=view.loose_videos, list_layout=view.list_layout,
+        link_seasons=view.link_seasons, loose_videos=view.loose_videos,
         repeat_videos=view.repeat_videos, outside_videos=view.outside_videos,
         playlists=[
             {"id": p.id, "enabled": p.enabled, "season_id": p.season_id, "as_season": p.as_season} for p in view.playlists
@@ -81,9 +81,14 @@ def _season_id(view, name):
 CHANNEL_CHANGES = {
     "one season for videos in no list": lambda v, d: d.update(loose_videos="one_season"),
     "a season per year for videos in no list": lambda v, d: d.update(loose_videos="by_year"),
-    "lists laid out by year": lambda v, d: d.update(list_layout="by_year"),
-    "a list switched off": lambda v, d: (d.update(link_seasons="selected"), _set_playlist(d, v, "One", enabled=False)),
+    "the lists contents only and the rest by year": lambda v, d: (
+        _set_playlist(d, v, "One", as_season=False), _set_playlist(d, v, "Two", as_season=False),
+        d.update(loose_videos="by_year")),
+    "a list switched off": lambda v, d: (d.update(link_seasons="on"), _set_playlist(d, v, "One", enabled=False)),
     "lists off": lambda v, d: d.update(link_seasons="off"),
+    "every list contents only": lambda v, d: (
+        _set_playlist(d, v, "One", as_season=False), _set_playlist(d, v, "Two", as_season=False)),
+    "a feed a season of its own": lambda v, d: d.update(feed_seasons={"videos": None}),
     "lists off and one season": lambda v, d: d.update(link_seasons="off", loose_videos="one_season"),
     "a list joins another's season": lambda v, d: _set_playlist(d, v, "Two", season_id=_playlist(v, "One").season_id),
     "a list no season of its own": lambda v, d: _set_playlist(d, v, "One", as_season=False),
@@ -106,7 +111,7 @@ def test_a_channel_collection(source, session, change, files, loose, monkeypatch
     ]
     source.lists = [_list("PLone", "One"), _list("PLtwo", "Two")]
     source.items = {"PLone": ("a", "c", "f"), "PLtwo": ("c", "d")}
-    collection = _collection(session, mode="selected", loose=loose)
+    collection = _collection(session, mode="on", loose=loose)
     _index(session, collection, source)
     if files:
         _give_files(session, "a", "b", "c", "e")
@@ -122,7 +127,7 @@ def test_a_video_back_in_one_season_only(source, session, files, monkeypatch):
     source.videos = [_video("a", 2023), _video("c", 2024), _video("d", 2024, 6)]
     source.lists = [_list("PLone", "One"), _list("PLtwo", "Two")]
     source.items = {"PLone": ("a", "c"), "PLtwo": ("c", "d")}
-    collection = _collection(session, mode="selected")
+    collection = _collection(session, mode="on")
     _index(session, collection, source)
     body = _body(session, lambda v, d: d.update(repeat_videos="each_season"))
     run_write_transaction(lambda s: service.update_seasons(s, "creator", body))
@@ -155,10 +160,12 @@ def test_a_collection_of_one_playlist(source, session, to, files, monkeypatch):
 
 LINKS_CHANGES = {
     "holds only what its lists have": lambda v, d: d.update(outside_videos="only"),
+    "holds only what its lists have, by year": lambda v, d: (
+        d.update(outside_videos="only", loose_videos="by_year"), _set_playlist(d, v, "One", as_season=False)),
     "adds the videos of its lists": lambda v, d: d.update(outside_videos="add"),
     "a link the user added removed": lambda v, d: d.update(outside_videos="only", removed_links=[_playlist(v, "Mine").id]),
     "a list switched off": lambda v, d: (
-        d.update(outside_videos="only", link_seasons="selected"), _set_playlist(d, v, "One", enabled=False),
+        d.update(outside_videos="only", link_seasons="on"), _set_playlist(d, v, "One", enabled=False),
     ),
 }
 
@@ -174,7 +181,7 @@ def test_a_collection_with_links_the_user_adds(links_source, session, change, fi
     source.lists = [_list("PLone", "One")]
     source.items = {"PLone": ("a",), "PLmine": ("b", "x")}
     source.outside = {"a": _video("a", 2024), "b": _video("b", 2025), "x": _video("x", 2023)}
-    collection = _collection(session, mode="all")
+    collection = _collection(session, mode="on")
     _index(session, collection, source)
     if change in ("a link the user added removed", "a list switched off"):
         mine = AddedLink("PLmine", "https://seasons.example/playlist?list=PLmine", "Mine", None, "seasons")

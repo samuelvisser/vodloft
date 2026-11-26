@@ -1,8 +1,9 @@
-"""Thumbnails VODLoft makes itself, for videos that have no picture of their own.
+"""Thumbnails VODLoft keeps itself: for videos that have no picture of their own, and for videos on a Site whose
+links to pictures stop working.
 
-A video's Source takes a frame from the start of the video. VODLoft keeps it as
-a JPEG in the thumbnail folder and stores ``thumbnails/<name>.jpg`` as the
-video's picture, which the browser loads from the ``/assets`` route.
+A video's Source takes a frame from the start of the video, or copies its picture. VODLoft keeps it as a JPEG in the
+thumbnail folder and stores ``thumbnails/<name>.jpg`` as the video's picture, which the browser loads from the
+``/assets`` route.
 """
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.core import get_session, run_write_transaction
 from backend.db.models import MediaItemBase
+from backend.services.media_access import media_locked
 from config import get_settings
 from config.network import is_no_internet_error
 from sources import get_source
@@ -57,20 +59,20 @@ def newest_media_item_id(s: Session) -> int:
     return s.scalar(select(func.max(MediaItemBase.id))) or 0
 
 
-def take_first_frames(item_ids: Sequence[int], *, checking: Callable[[int, int], None] | None = None) -> int:
-    """Give the episodes and videos among ``item_ids`` whose picture is missing a frame of the video.
+def keep_own_pictures(item_ids: Sequence[int], *, checking: Callable[[int, int], None] | None = None) -> int:
+    """Give the episodes and videos among ``item_ids`` a picture of VODLoft's own: a frame of the video where its
+    picture is missing, or a copy of a picture whose link stops working.
 
-    Their Source decides whether a picture is missing and takes the frame. No
-    transaction stays open while it does, and a few items are looked at at once.
-    ``checking`` is told how many items were checked so far, and of how many, as
-    each one is done. Returns how many thumbnails were made.
+    Their Source decides which picture it makes, if any. A locked video gets no frame, since VODLoft can't download it.
+    No transaction stays open while it does, and a few items are looked at at once. ``checking`` is told how many items
+    were checked so far, and of how many, as each one is done. Returns how many thumbnails were made.
     """
     if not item_ids:
         return 0
     s = get_session()
     try:
         items = [
-            (item.id, item.uuid, item.source_key, item.sharing_url, item.thumbnail_landscape_path)
+            (item.id, item.uuid, item.source_key, item.sharing_url, item.thumbnail_landscape_path, media_locked(item))
             for item in s.scalars(select(MediaItemBase).where(MediaItemBase.id.in_(item_ids)).order_by(MediaItemBase.id))
             if getattr(item, "sharing_url", None) and not is_own_thumbnail(getattr(item, "thumbnail_landscape_path", None))
             and not item.removed_from_source
@@ -81,8 +83,8 @@ def take_first_frames(item_ids: Sequence[int], *, checking: Callable[[int, int],
     made = checked = 0
     with ThreadPoolExecutor(max_workers=_CONCURRENT_CHECKS, thread_name_prefix="first-frame", **keep_call_options()) as pool:
         frames = {
-            pool.submit(get_source(source_key).first_frame, url, picture): (item_id, uuid, url)
-            for item_id, uuid, source_key, url, picture in items
+            pool.submit(get_source(source_key).own_picture, url, picture, locked=locked): (item_id, uuid, url)
+            for item_id, uuid, source_key, url, picture, locked in items
         }
         try:
             for done in as_completed(frames):

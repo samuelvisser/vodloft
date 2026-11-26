@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import List, Optional, TYPE_CHECKING
 
-from sqlalchemy import String, and_, false, func
+from sqlalchemy import ForeignKey, String, and_, false, func
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -10,6 +10,7 @@ from backend.db.datetime_types import UTCDateTime, utc_datetime
 from backend.types.media_types import MediaType
 
 if TYPE_CHECKING:
+    from backend.db.models.CreatorTier import CreatorTier
     from backend.db.models.media_download import MediaDownloadBase
 
 
@@ -38,6 +39,11 @@ class MediaItemBase(Base):
     access: Mapped[Optional[str]] = mapped_column(
         String(40), comment="Key of the Source's Access the media needs, such as NPO Plus or a channel membership",
     )
+    creator_tier_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("creator_tiers.id", ondelete="SET NULL"), index=True,
+        comment="The creator's tier the media needs, when ``access`` is a tier creators on the Site set up themselves",
+    )
+    creator_tier: Mapped[Optional["CreatorTier"]] = relationship(lazy="selectin")
     access_refused_at: Mapped[Optional[datetime]] = mapped_column(
         UTCDateTime(), comment="When the Source last refused to give VODLoft the media for lack of its access",
     )

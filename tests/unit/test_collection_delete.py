@@ -139,3 +139,32 @@ def test_deleting_a_collection_whose_episodes_are_loaded(session) -> None:
     session.commit()
 
     assert set(_counts(session).values()) == {0}
+
+
+def test_a_deleted_collection_can_take_its_downloaded_files_with_it(session, tmp_path, monkeypatch) -> None:
+    from backend.services import download_relocation
+    from backend.services.collections import downloaded_files_of, remove_downloaded_files
+
+    collection = _collection_with_episodes(session, "show", 2)
+    folder = tmp_path / "show"
+    folder.mkdir()
+    assert downloaded_files_of(session, collection) == [
+        ("/downloads/show/0.mp4", ("/downloads/show/0.jpg",)), ("/downloads/show/1.mp4", ("/downloads/show/1.jpg",)),
+    ]
+    # Their own files, in a folder of their own under the download folder.
+    files = []
+    for index in range(2):
+        media, thumbnail = folder / f"{index}.mp4", folder / f"{index}.jpg"
+        media.write_bytes(b"media")
+        thumbnail.write_bytes(b"jpg")
+        files.append((str(media), (str(thumbnail),)))
+    other = tmp_path / "other.mp4"
+    other.write_bytes(b"someone else's")
+    emptied = []
+    monkeypatch.setattr(download_relocation, "remove_folders_left_empty", lambda folders, keep=(): emptied.extend(folders))
+
+    remove_downloaded_files(files)
+
+    assert not any(folder.iterdir())
+    assert other.exists()
+    assert emptied == [folder]

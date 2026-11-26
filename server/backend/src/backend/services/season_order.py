@@ -72,12 +72,17 @@ def _dated_order(s: Session, collection: Collection) -> list[Season]:
         if link.season_id is not None:
             album_places[link.season_id] = min(link.site_position, album_places.get(link.season_id, link.site_position))
 
+    # A feed's own season, such as Shorts, comes first with the channel's other videos.
+    feeds = {season_id for season_id in (collection.feed_seasons or {}).values() if season_id is not None}
+
     def key(season: Season):
         if season.season_type == SeasonType.EXTRA.value:
             return (2, 0, 0, _LAST, season.index)
         if season.loose:
             # The videos in no playlist come first, as a channel's Videos do.
             return (-1, 0, 0, _LAST, season.index)
+        if season.id in feeds and season.id not in playlist_starts:
+            return (-1, 1, 0, _LAST, season.index)
         if season.id in album_places:
             return (1, album_places[season.id], 0, _LAST, season.index)
         year = season_year(season)
@@ -124,7 +129,8 @@ def arrange_seasons(s: Session, collection: Collection) -> None:
         made = s.info.pop(_MADE_SEASONS, set()) & {season.id for season in seasons if season_year(season) is not None}
         ordered = sorted(seasons, key=lambda season: season.index)
         _close_up(s, collection, _slot_in(ordered, made, _dated_order(s, collection)) if made else ordered)
-    elif any(playlist.season_id is not None for playlist in collection.lists) or any(season.loose for season in seasons):
+    elif (any(playlist.season_id is not None for playlist in collection.lists) or any(season.loose for season in seasons)
+          or any(season_id is not None for season_id in (collection.feed_seasons or {}).values())):
         renumber_seasons(s, collection, _dated_order(s, collection))
     else:
         _set_indices(s, sorted(seasons, key=lambda season: season.season_number))
