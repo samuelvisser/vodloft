@@ -1,6 +1,7 @@
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {ReactNode} from 'react'
 import {faIcon} from '../../icons/faIcon'
+import Notice from './Notice'
 import './DrmProtected.css'
 
 type Lockable = {
@@ -43,12 +44,8 @@ export function AccessNotice({item, action}: {item: Lockable, action?: ReactNode
         ? ` VODLoft checks again on ${checkDate(item.accessCheckAt)} in case it opens up for everyone.`
         : ''
     return (
-        <div className="drm-notice access-notice" role="status">
-            <div className="access-notice-message">
-                <FontAwesomeIcon icon={faIcon('fass', 'lock')} aria-hidden="true"/>
-                <span>{item.accessDescription ?? 'Only members or subscribers can watch this.'} VODLoft cannot download it.{check}</span>
-            </div>
-            {action && <div className="access-notice-action">{action}</div>}
-        </div>
+        <Notice icon={faIcon('fass', 'lock')} action={action} className="access-notice">
+            {item.accessDescription ?? 'Only members or subscribers can watch this.'} VODLoft cannot download it.{check}
+        </Notice>
     )
 }
