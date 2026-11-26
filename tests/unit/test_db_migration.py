@@ -33,7 +33,8 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "a79d0f6c0f17"
+HEAD_REVISION = "3106a907fdd4"
+EACH_SOURCE_ITS_OWN_CHOICE_REVISION = "a79d0f6c0f17"
 
 
 @pytest.fixture
@@ -1868,3 +1869,61 @@ def test_each_list_has_its_own_choice_and_lists_laid_out_by_year_are_part_of_the
     assert json.loads(stored_causes) == [
         {"origin": "seasons", "setting": "loose_videos", "before": "one_season", "after": "by_year"},
     ]
+
+
+def _own_integer_id_tables() -> list:
+    from backend.db.core import Base, load_database_models
+
+    load_database_models()
+    return [
+        table for table in Base.metadata.sorted_tables
+        if [column.name for column in table.primary_key.columns] == ["id"]
+        and table.c.id.type.python_type is int and not table.c.id.foreign_keys
+    ]
+
+
+def test_every_table_with_its_own_integer_id_never_reuses_an_id(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import upgrade_database
+
+    tables = _own_integer_id_tables()
+    assert tables
+    upgrade_database()
+
+    with engine.connect() as connection:
+        created = dict(connection.exec_driver_sql("SELECT name, sql FROM sqlite_master WHERE type = 'table'").all())
+    for table in tables:
+        assert table.dialect_options["sqlite"]["autoincrement"], table.name
+        assert "PRIMARY KEY AUTOINCREMENT" in created[table.name], table.name
+
+
+def test_existing_tables_keep_their_rows_and_never_give_a_deleted_id_again(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, EACH_SOURCE_ITS_OWN_CHOICE_REVISION)
+    with engine.begin() as connection:
+        for user_id in (1, 2, 3):
+            connection.execute(
+                text("INSERT INTO users (id, username, password_hash, stream_token) VALUES (:id, :name, 'x', :name)"),
+                {"id": user_id, "name": f"user-{user_id}"},
+            )
+        connection.execute(text("DELETE FROM users WHERE id = 3"))
+        indexes_before = connection.exec_driver_sql(
+            "SELECT name, sql FROM sqlite_master WHERE type = 'index' ORDER BY name"
+        ).all()
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.begin() as connection:
+        assert connection.execute(text("SELECT id FROM users ORDER BY id")).scalars().all() == [1, 2]
+        connection.execute(text("INSERT INTO users (username, password_hash, stream_token) VALUES ('user-4', 'x', 'user-4')"))
+        connection.execute(text("DELETE FROM users WHERE username = 'user-4'"))
+        connection.execute(text("INSERT INTO users (username, password_hash, stream_token) VALUES ('user-5', 'x', 'user-5')"))
+        # The upgrade counts on from the highest id still there; from then on a deleted id never comes back.
+        assert connection.execute(text("SELECT id FROM users WHERE username = 'user-5'")).scalar_one() == 4
+        assert connection.exec_driver_sql(
+            "SELECT name, sql FROM sqlite_master WHERE type = 'index' ORDER BY name"
+        ).all() == indexes_before
+        assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []

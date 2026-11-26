@@ -66,7 +66,7 @@ def test_a_link_already_looked_up_previews_from_that_lookup(monkeypatch):
 
     monkeypatch.setattr(module.requests, "get", lambda *a, **k: pytest.fail("no request expected"))
     source = _ytdlp()
-    source._cache["https://vimeo.com/1"] = (module.time.monotonic(), {
+    source._infos.get("https://vimeo.com/1", lambda: {
         "id": "1", "title": "Cached", "uploader": "Someone", "extractor_key": "Vimeo", "thumbnail": "https://x/t.jpg",
     })
     preview = source.preview("https://vimeo.com/1")
