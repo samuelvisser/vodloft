@@ -306,6 +306,9 @@ class SeasonsReviewAPIRead(ResponseBase):
     deleted_seasons: list[str] = Field(default_factory=list)
     moves: Optional[MovePreviewAPIRead] = None
     """What moves where, and the numbering after it, as the Move dialog says it."""
+    already_waiting: ReviewVideosAPIRead = Field(default_factory=ReviewVideosAPIRead)
+    """The downloads among those that move that already waited to move before the dialog's changes, such as after a
+    creator moved a video to another list."""
     leaving: ReviewVideosAPIRead = Field(default_factory=ReviewVideosAPIRead)
     """The videos that leave the collection."""
     extra: ReviewVideosAPIRead = Field(default_factory=ReviewVideosAPIRead)

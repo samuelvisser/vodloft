@@ -207,6 +207,8 @@ export const SeasonsReviewReadSchema = z.object({
     deletedSeasons: z.array(z.string()).default([]),
     /** What moves where, and the numbering after it, as the Move dialog says it. */
     moves: MovePreviewSchema.nullable().default(null),
+    /** The downloads among those that move that already waited to move before the changes. */
+    alreadyWaiting: ReviewVideosSchema.default({count: 0, examples: []}),
     leaving: ReviewVideosSchema.default({count: 0, examples: []}),
     /** Episodes that go while their video stays in another season. */
     extra: ReviewVideosSchema.default({count: 0, examples: []}),

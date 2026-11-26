@@ -72,7 +72,29 @@ def test_the_review_shows_what_the_change_moves_and_saves_nothing(source, sessio
     assert [(part.to_season, part.count, part.files_moved) for part in review.moves.parts] == [("Collection", 2, 2)]
     assert (review.new_seasons, review.deleted_seasons) == (["Collection"], ["2024", "2025"])
     assert (review.leaving.count, review.deleted_files.count) == (0, 0)
+    # The change moves them: none waited before.
+    assert review.already_waiting.count == 0
     assert [(name, slugs) for name, _, slugs in _seasons(session)] == [("2024", ["a"]), ("2025", ["b"])]
+
+
+def test_the_review_says_which_downloads_already_waited_to_move(source, session):
+    """Downloads that waited to move before the dialog opened move along with a save, and the review says so."""
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Collection
+
+    _waiting(source, session)
+
+    def one_season(s):
+        s.query(Collection).one().loose_videos = "one_season"
+
+    # Changed outside the dialog, so its downloads wait to move.
+    run_write_transaction(one_season)
+    session.expire_all()
+
+    review = _review(session)
+    assert review.causes == []
+    assert [(part.count, part.files_moved) for part in review.moves.parts] == [(2, 2)]
+    assert (review.already_waiting.count, len(review.already_waiting.examples)) == (2, 2)
 
 
 def test_saving_moves_the_downloads_the_review_showed(source, session, monkeypatch):

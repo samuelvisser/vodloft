@@ -87,6 +87,15 @@ export default function SeasonsReview({view, review, failed, changes, words, lis
             value={review.newSeasons.length}
         />
     )
+    const alreadyWaiting = review.alreadyWaiting.count > 0 && (
+        <Step
+            icon={faIcon('fass', 'clock')} headline="Already waiting to move"
+            detail="Of the downloads that move, these already waited to move before your changes, such as after a creator moved them to another list. They move along when you save."
+            value={review.alreadyWaiting.count}
+        >
+            <TitleList titles={review.alreadyWaiting.examples} total={review.alreadyWaiting.count}/>
+        </Step>
+    )
     const others = (
         <>
             {review.joining > 0 && (
@@ -151,7 +160,7 @@ export default function SeasonsReview({view, review, failed, changes, words, lis
             </p>
             <FoldSteps.Provider value={folded}>
                 {moves && moving ? (
-                    <CollectionMoves preview={moves} renumber={renumber} onRenumber={onRenumber} reason={false} leading={newSeasons} trailing={others}/>
+                    <CollectionMoves preview={moves} renumber={renumber} onRenumber={onRenumber} reason={false} leading={<>{newSeasons}{alreadyWaiting}</>} trailing={others}/>
                 ) : (
                     <ul className="change-identification-steps">{newSeasons}{others}</ul>
                 )}

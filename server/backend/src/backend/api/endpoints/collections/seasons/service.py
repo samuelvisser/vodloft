@@ -560,6 +560,8 @@ class _Copy:
     """The episodes with files before, by id, with their seasons."""
     was_waiting: set[int]
     """The lists that waited to be listed for a season of their own already."""
+    moves_waiting: set[int]
+    """The downloaded episodes that already waited to move before the dialog's changes."""
 
 
 def _plan_copy(s: Session, collection: Collection, body: CollectionSeasonsAPIUpdate, listed: Listed) -> _Copy:
@@ -573,6 +575,7 @@ def _plan_copy(s: Session, collection: Collection, body: CollectionSeasonsAPIUpd
     was_seasons = {season.id: season.name for season in state.seasons.values()}
     downloaded = {episode.id: episode.season_id for episode in state.episodes.values() if episode.has_files}
     was_waiting = {playlist.id for playlist in active_lists(state) if playlist.season_id not in state.seasons}
+    moves_waiting = {episode.id for episode in moved(state) if episode.has_files}
     for playlist in state.lists:
         if playlist.id in listed.lists:
             playlist.items = listed.lists[playlist.id]
@@ -593,7 +596,7 @@ def _plan_copy(s: Session, collection: Collection, body: CollectionSeasonsAPIUpd
     waiting = {episode.id for episode in moved(state)}
     if waiting:
         place(state, with_files=waiting, drop=False)
-    return _Copy(state, was_settings, was_seasons, downloaded, was_waiting)
+    return _Copy(state, was_settings, was_seasons, downloaded, was_waiting, moves_waiting)
 
 
 def _add_drafts(
@@ -678,6 +681,8 @@ def review_seasons(
     gone = sorted(episode_id for episode_id, episode in state.gone.items() if episode.video_slug not in staying)
     extra = sorted(episode_id for episode_id, episode in state.gone.items() if episode.video_slug in staying)
     deleted = [episode_id for episode_id in sorted(state.gone) if episode_id in copy.downloaded]
+    # Downloads that already waited to move, such as after a creator moved a video to another list, move along.
+    already = sorted(copy.moves_waiting & {episode_id for group in done.groups for episode_id in group.episode_ids})
     if adds_outside_videos(state.collection):
         known = {episode.video_slug for episode in [*state.episodes.values(), *state.gone.values()]}
         joining = len({slug for playlist in lists_in(state.collection) for slug in playlist.items} - known)
@@ -692,6 +697,7 @@ def review_seasons(
         ],
         deleted_seasons=[name for season_id, name in copy.was_seasons.items() if season_id not in state.seasons],
         moves=replace(moves, causes=[]),
+        already_waiting=ReviewVideosAPIRead(count=len(already), examples=_titles(s, already)),
         leaving=ReviewVideosAPIRead(count=len(gone), examples=_titles(s, gone)),
         extra=ReviewVideosAPIRead(count=len(extra), examples=_titles(s, extra)),
         deleted_files=ReviewFilesAPIRead(count=len(deleted), examples=_titles(s, deleted), profiles=_profiles(s, deleted)),
