@@ -432,6 +432,27 @@ def _locked(info: dict, error: str) -> dict | None:
     return {**info, "availability": _AVAILABILITY_BY_ACCESS[key]}
 
 
+def _entries(listing: dict) -> list[dict]:
+    """The entries of yt-dlp's flat listing. Some extractors, such as Patreon's, list each video by its link alone;
+    such an entry gets the id the video's own extractor takes from that link, so it has the slug a lookup gives it."""
+    entries = []
+    for entry in listing.get("entries") or []:
+        if not isinstance(entry, dict):
+            continue
+        entry_url = entry.get("url") or entry.get("webpage_url")
+        if not entry.get("id") and entry.get("ie_key") and entry_url:
+            from yt_dlp.extractor import get_info_extractor
+
+            try:
+                video_id = get_info_extractor(str(entry["ie_key"])).get_temp_id(entry_url)
+            except (AttributeError, KeyError):
+                video_id = None
+            if video_id:
+                entry = {**entry, "id": video_id}
+        entries.append(entry)
+    return entries
+
+
 def _listed_open(entry: dict) -> bool:
     """Whether a listing says anyone may watch the video.
 
@@ -718,7 +739,7 @@ class YtDlpSource(Source):
             if listing.get("_type") != "playlist" and listing.get("id"):
                 slug = video_slug(listing)
                 return (ItemRef(slug, listing.get("webpage_url") or url),)
-            for entry in listing.get("entries") or []:
+            for entry in _entries(listing):
                 if isinstance(entry, dict) and entry.get("id"):
                     # A video a playlist lists twice keeps its first place.
                     slug = video_slug(entry)
@@ -998,7 +1019,7 @@ class YtDlpSource(Source):
                     raise
                 logger.info("Not listing %s: %s", listing_url, exc)
                 continue
-            for entry in listing.get("entries") or []:
+            for entry in _entries(listing):
                 if not isinstance(entry, dict) or not entry.get("id") or entry.get("title") in _UNAVAILABLE_TITLES:
                     continue
                 if (entry.get("url") or entry.get("webpage_url")) and video_slug(entry) not in known:
@@ -1065,7 +1086,7 @@ class YtDlpSource(Source):
         )
         return [
             self._video(entry, entry.get("url") or entry.get("webpage_url"))
-            for entry in listing.get("entries") or []
+            for entry in _entries(listing)
             if isinstance(entry, dict) and entry.get("id") and (entry.get("url") or entry.get("webpage_url"))
             and entry.get("title") not in _UNAVAILABLE_TITLES
         ]
@@ -1086,7 +1107,7 @@ class YtDlpSource(Source):
                     raise
                 logger.info("Not checking %s: %s", listing_url, exc)
                 continue
-            for entry in listing.get("entries") or []:
+            for entry in _entries(listing):
                 entry_url = isinstance(entry, dict) and (entry.get("url") or entry.get("webpage_url"))
                 if entry_url and entry.get("id") and entry.get("title") not in _UNAVAILABLE_TITLES:
                     items.setdefault(video_slug(entry), ItemRef(video_slug(entry), entry_url))
@@ -1246,7 +1267,7 @@ class YtDlpSource(Source):
             except runner.YtDlpError as exc:
                 logger.info("Not refreshing from %s: %s", listing_url, exc)
                 continue
-            for entry in listing.get("entries") or []:
+            for entry in _entries(listing):
                 if not isinstance(entry, dict) or not entry.get("id") or not entry.get("title"):
                     continue
                 slug = video_slug(entry)

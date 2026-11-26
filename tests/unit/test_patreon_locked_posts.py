@@ -13,13 +13,16 @@ NO_ACCESS = "You do not have access to this post"
 NO_MEDIA = "No supported media found in this post"
 
 
+IDS = {"open": "125257910", "paid": "121848656", "text": "116397886"}
+
+
 def _post_url(post_id: str) -> str:
-    return f"https://www.patreon.com/posts/{post_id}"
+    return f"https://www.patreon.com/Creator/posts/early-access-{IDS[post_id]}"
 
 
 def _post(post_id: str, **fields) -> dict:
     return {
-        "id": post_id, "extractor_key": "Patreon", "title": f"Post {post_id}", "webpage_url": _post_url(post_id),
+        "id": IDS[post_id], "extractor_key": "Patreon", "title": f"Post {post_id}", "webpage_url": _post_url(post_id),
         "upload_date": "20261120", **fields,
     }
 
@@ -32,12 +35,13 @@ def patreon(monkeypatch):
     def run_json(*args, **_kwargs):
         url = args[-1]
         if url == CAMPAIGN:
+            # Patreon's listing gives each post by its link alone, without its id or title.
             return {"_type": "playlist", "id": "1", "entries": [
-                {"_type": "url", "id": post_id, "url": _post_url(post_id), "ie_key": "Patreon"} for post_id in refused
+                {"_type": "url", "url": _post_url(post_id), "ie_key": "Patreon"} for post_id in refused
             ]}
-        post_id = url.rsplit("/", 1)[-1]
+        post_id = next(name for name, number in IDS.items() if url.endswith(number))
         if refused[post_id] and "--ignore-no-formats-error" not in args:
-            raise runner.YtDlpError(f"[patreon] {post_id}: {refused[post_id]}")
+            raise runner.YtDlpError(f"[patreon] {IDS[post_id]}: {refused[post_id]}")
         return _post(post_id, formats=[] if refused[post_id] else [{"url": "https://cdn.example/v.mp4"}])
 
     def run_json_lines(*args, **_kwargs):
@@ -57,11 +61,17 @@ def patreon(monkeypatch):
 
 
 def test_a_post_for_patrons_only_is_listed_locked_and_a_text_post_is_left_out(patreon):
-    found = {video.title: video for video in YtDlpSource().list_episodes(CAMPAIGN, known=frozenset())}
+    found = {video.slug: video for video in YtDlpSource().list_episodes(CAMPAIGN, known=frozenset())}
 
-    assert set(found) == {"Post open", "Post paid"}
-    assert found["Post open"].access is None
-    assert found["Post paid"].access == sites.MEMBERS_KEY
+    assert set(found) == {"patreon-125257910", "patreon-121848656"}
+    assert found["patreon-125257910"].access is None
+    assert (found["patreon-121848656"].title, found["patreon-121848656"].access) == ("Post paid", sites.MEMBERS_KEY)
+
+
+def test_a_known_post_is_not_looked_up_again(patreon):
+    known = frozenset({"patreon-125257910", "patreon-121848656"})
+
+    assert list(YtDlpSource().list_episodes(CAMPAIGN, known=known)) == []
 
 
 def test_a_post_for_patrons_only_is_looked_up_locked_on_its_own(patreon):
