@@ -911,7 +911,8 @@ class CreatorTier:
 
     site_id: str
     """The Site's own id of the tier, which stays when the creator renames it or changes its amount."""
-    name: str
+    name: str | None
+    """What the creator calls the tier; None when they gave it no name."""
     amount: str | None
     """What the tier costs, as people write it, such as "$5"."""
     rank: int | None
@@ -929,6 +930,9 @@ class CreatorTierAccess:
     """What the Site calls a tier, with ``{name}`` and ``{amount}`` where the tier's go."""
     description: str
     """Who can watch what needs a tier, with ``{name}`` and ``{amount}``."""
+    unnamed_label: str
+    """What the Site calls a tier its creator gave no name, with ``{amount}``."""
+    unnamed_description: str
     unknown_label: str
     """What VODLoft calls a tier it knows nothing of yet but its id."""
     unknown_description: str
@@ -943,8 +947,13 @@ class CreatorTierAccess:
 
     def access(self, tier: CreatorTier | None) -> Access:
         """The access to a tier, or to a tier VODLoft knows nothing of yet."""
-        if tier is None:
+        if tier is None or (not tier.name and not tier.amount):
             return Access(self.key, self.unknown_label, self.unknown_description)
+        if not tier.name:
+            return Access(
+                self.key, self.unnamed_label.format(amount=tier.amount), self.unnamed_description.format(amount=tier.amount),
+                tier=tier.rank,
+            )
         amount = tier.amount or ""
         return Access(
             self.key, self.label.format(name=tier.name, amount=amount).strip(),

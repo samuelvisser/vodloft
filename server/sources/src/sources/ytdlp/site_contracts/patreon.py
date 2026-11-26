@@ -25,5 +25,6 @@ class Patreon(OtherSites):
     # Each creator sets up tiers of their own.
     creator_tiers = CreatorTierAccess(
         "tier", "{name}", "Only patrons on the creator's “{name}” tier ({amount}) or higher can watch this.",
+        "Patrons from {amount}", "Only the creator's patrons who pledge {amount} or more can watch this.",
         "Paid tier", "Only the creator's patrons on one of their paid tiers can watch this.",
     )
