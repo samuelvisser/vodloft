@@ -331,9 +331,8 @@ def update_seasons(
     before = {episode.id: episode.season_id for episode in state.episodes.values() if episode.has_files}
     planned = plan_seasons_dialog(state, body)
     # The user saw and agreed to what moves, so the downloads that belong in another season now move along.
-    waiting = {episode.id for episode in moved(state)}
-    if waiting:
-        place(state, with_files=waiting, drop=False)
+    # Downloads whose files keep their paths move along too, as the next look at the collection would move them.
+    place(state, with_files={episode.id for episode in moved(state)}, drop=False)
     done = moves_made(s, state, before, list_labels(state))
     apply_state(s, state)
     s.flush()
@@ -593,9 +592,8 @@ def _plan_copy(s: Session, collection: Collection, body: CollectionSeasonsAPIUpd
             state.remove_episode(episode)
     if gone:
         arrange(state)
-    waiting = {episode.id for episode in moved(state)}
-    if waiting:
-        place(state, with_files=waiting, drop=False)
+    # Downloads whose files keep their paths move along too, as the next look at the collection would move them.
+    place(state, with_files={episode.id for episode in moved(state)}, drop=False)
     return _Copy(state, was_settings, was_seasons, downloaded, was_waiting, moves_waiting)
 
 

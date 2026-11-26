@@ -23,8 +23,10 @@ export const MovedPartSchema = z.object({
     toSeason: z.string(),
     /** The titles of the videos, newest first, up to a few dozen. */
     examples: z.array(z.string()),
-    /** Downloads whose files move along into their new season. */
+    /** Downloaded files that get another path in their new season. */
     filesMoved: z.number().default(0),
+    /** Those files, with the path each has now and gets, newest first; no new path when only moving it tells. */
+    files: z.array(z.object({title: z.string(), fromPath: z.string(), toPath: z.string().nullable().default(null)})).default([]),
 })
 export type MovedPart = z.infer<typeof MovedPartSchema>
 

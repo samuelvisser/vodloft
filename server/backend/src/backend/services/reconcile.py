@@ -24,6 +24,7 @@ from backend.services.link_seasons import (
     belonging, holder_titles, moved, moved_episodes, place, seasons_plan,
 )
 from backend.services.collection_health import note_collection_health
+from backend.services.file_moves import FileMove, FileMoves
 from backend.services.season_state import SeasonsState, apply_state, load_state
 from backend.services.move_causes import clear_move_causes, move_causes
 from backend.services.season_order import match_downloaded
@@ -75,7 +76,7 @@ class _Group:
     label: str
     to_season: str
     episode_ids: list[int]
-    files_moved: int
+    files: list[FileMove]
 
 
 @dataclass
@@ -120,8 +121,8 @@ def moves_made(
 ) -> MovesMade:
     """What planning moved: the episodes of ``before`` that are in another season now, grouped by their new season
     and the list that holds them (``labels``, by video slug). Downloaded ones take their new season's number, as their
-    files move into its folder. Downloads whose file names don't depend on their season stay where they are: they are
-    in no group, but among ``renamed``, so their metadata is written again. Changes the copy, saves nothing."""
+    files move into its folder. A download whose files keep their paths in the new season, as its Local Media Profiles
+    render them, stays where it is: it is in no group, but among ``renamed``, so its metadata is written again. Changes the copy, saves nothing."""
     names = collection_words(state.record).episode
     done = MovesMade()
     moved_ids = [
@@ -140,15 +141,21 @@ def moves_made(
         match_downloaded(state, downloaded)
         done.renamed = sorted(downloaded)
     grouped: dict[tuple[str, str | None], list[int]] = {}
+    files = FileMoves(state, s)
+    moving: dict[int, list[FileMove]] = {}
     for episode_id in moved_ids:
-        if episode_id in downloaded and not state.episodes[episode_id].files_in_season:
-            # Its files stay where they are: only its metadata is written again.
-            continue
-        season = state.seasons[state.episodes[episode_id].season_id]
+        episode = state.episodes[episode_id]
+        season = state.seasons[episode.season_id]
+        if episode_id in downloaded:
+            moving[episode_id] = files.moving(episode, season, episode.episode_identifier)
+            if not moving[episode_id]:
+                # Its files keep their paths in the new season: only its metadata is written again.
+                continue
         grouped.setdefault((season.name, labels.get(state.episodes[episode_id].source_slug)), []).append(episode_id)
     for (season, label), episode_ids in grouped.items():
         done.groups.append(_Group(
-            names, label or names.plural, season, episode_ids, len(downloaded.intersection(episode_ids)),
+            names, label or names.plural, season, episode_ids,
+            [move for episode_id in episode_ids for move in moving.get(episode_id, [])],
         ))
     return done
 
@@ -165,7 +172,20 @@ class MovedPart:
     examples: list[str]
     """The titles of the videos, newest first, up to a few dozen."""
     files_moved: int = 0
-    """Downloads whose files move along into their new season."""
+    """Downloaded files that get another path in their new season."""
+    files: list[MovedFile] = field(default_factory=list)
+    """Those files, with the path each has now and gets, newest first, up to a few hundred."""
+
+
+@dataclass(frozen=True)
+class MovedFile:
+    """A downloaded file that gets another path."""
+
+    title: str
+    """The episode's title."""
+    from_path: str
+    to_path: str | None
+    """None when only moving it tells, such as with a custom index."""
 
 
 @dataclass(frozen=True)
@@ -223,6 +243,18 @@ def preview_reconcile(s: Session, scope: ReconcileScope) -> MovePreview:
     return move_preview(s, collection, state, _plan(s, state, scope))
 
 
+# Files the dialog shows of each group that moves.
+_FILES = 500
+
+
+def _files(moves: list[FileMove], titles: Mapping[int, tuple[str, datetime | None]]) -> list[MovedFile]:
+    earliest = datetime.min.replace(tzinfo=timezone.utc)
+    newest = sorted(moves, key=lambda move: titles.get(move.episode_id, ("", None))[1] or earliest, reverse=True)
+    return [
+        MovedFile(titles.get(move.episode_id, ("", None))[0], move.from_path, move.to_path) for move in newest[:_FILES]
+    ]
+
+
 def move_preview(s: Session, collection: Collection, state: SeasonsState, done: MovesMade) -> MovePreview:
     """What ``done`` moved in the planner's copy of the collection, and the numbering after it, as the Move dialog
     shows it. Numbers the copy, saves nothing."""
@@ -237,7 +269,7 @@ def move_preview(s: Session, collection: Collection, state: SeasonsState, done: 
         MovedPart(
             label=group.label, names=group.names, count=len(group.episode_ids), to_season=group.to_season,
             examples=_newest_first([titles[episode_id] for episode_id in group.episode_ids if episode_id in titles]),
-            files_moved=group.files_moved,
+            files_moved=len(group.files), files=_files(group.files, titles),
         )
         for group in done.groups
     ]

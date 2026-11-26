@@ -15,6 +15,15 @@ from backend.types.collection_types import EpisodeIdentifier
 from backend.types.move_cause_types import MoveCauseOrigin, MoveCauseValue
 
 
+class MovedFileAPIRead(ResponseBase):
+    """A downloaded file that gets another path."""
+
+    title: str
+    from_path: str
+    to_path: Optional[str] = None
+    """None when only moving it tells, such as with a custom index."""
+
+
 class MovedPartAPIRead(ResponseBase):
     """The videos of one list that move to another season of their collection."""
 
@@ -26,7 +35,9 @@ class MovedPartAPIRead(ResponseBase):
     examples: list[str]
     """The titles of the videos, newest first, up to a few dozen."""
     files_moved: int = 0
-    """Downloads whose files move along into their new season."""
+    """Downloaded files that get another path in their new season."""
+    files: list[MovedFileAPIRead] = Field(default_factory=list)
+    """Those files, with the path each has now and gets, newest first, up to a few hundred."""
 
 
 class MoveCauseAPIRead(ResponseBase):

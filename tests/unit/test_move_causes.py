@@ -70,6 +70,10 @@ def test_the_review_shows_what_the_change_moves_and_saves_nothing(source, sessio
     assert review.busy is None
     assert [(c.setting, c.before, c.after) for c in review.causes] == [("loose_videos", "by_year", "one_season")]
     assert [(part.to_season, part.count, part.files_moved) for part in review.moves.parts] == [("Collection", 2, 2)]
+    # Each file with the path it has now and the one its Local Media Profile gives it in the new season.
+    assert sorted((f.from_path, f.to_path.split("/")[-2:]) for f in review.moves.parts[0].files) == [
+        ("/downloads/a.mp4", ["Collection", "Video a.mp4"]), ("/downloads/b.mp4", ["Collection", "Video b.mp4"]),
+    ]
     assert (review.new_seasons, review.deleted_seasons) == (["Collection"], ["2024", "2025"])
     assert (review.leaving.count, review.deleted_files.count) == (0, 0)
     # The change moves them: none waited before.

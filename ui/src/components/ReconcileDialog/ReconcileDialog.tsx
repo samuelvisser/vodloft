@@ -6,6 +6,7 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import toast from '../../lib/toast'
 
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
+import PathChangeList from '../common/PathChangeList'
 import MoveCauses from './MoveCauses'
 import '../ChangeIdentificationDialog/ChangeIdentificationDialog.css'
 import {faIcon} from '../../icons/faIcon'
@@ -191,7 +192,16 @@ function PartStep({part, season}: {part: MovedPart, season: string}) {
             detail={`${label}${files}`.trim() || undefined}
             value={part.count}
         >
-            {part.examples.length > 0 && <TitleList titles={part.examples} total={part.count}/>}
+            {part.files.length > 0 ? (
+                <PathChangeList
+                    changes={part.files.map((file, index) => ({
+                        key: index, from: file.fromPath, to: file.toPath,
+                        toNote: file.toPath === null ? 'Worked out when the move runs' : undefined,
+                        header: <b>{file.title}</b>,
+                    }))}
+                    fromLabel="Now" toLabel="After" endless
+                />
+            ) : part.examples.length > 0 && <TitleList titles={part.examples} total={part.count}/>}
         </Step>
     )
 }

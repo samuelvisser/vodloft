@@ -13,9 +13,7 @@ from typing import Iterable
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.db.models import (
-    Collection, CollectionList, CollectionListItem, Episode, LocalMediaProfileBase, MediaDownloadBase, Season,
-)
+from backend.db.models import Collection, CollectionList, CollectionListItem, Episode, MediaDownloadBase, Season
 
 # The collection's settings the planner reads, which the Seasons dialog changes in the copy before planning.
 SETTINGS = (
@@ -77,9 +75,6 @@ class EpisodeDraft:
     index: int
     removed_from_source: bool
     has_files: bool
-    files_in_season: bool = False
-    """Whether its files' names depend on its season, by the templates of the Local Media Profiles that have them: such
-    as a template with a season folder. Files that don't stay where they are when the episode changes season."""
     went_live_date: datetime | None = None
     scheduled_date: datetime | None = None
     created_at: datetime | None = None
@@ -169,26 +164,16 @@ class SeasonsState:
             )
             for playlist in record.lists
         ]
-        with_files: set[int] = set()
-        in_season: set[int] = set()
-        follows: dict[str, bool] = {}
-        for episode_id, template in s.execute(
-            select(MediaDownloadBase.media_item_id, LocalMediaProfileBase.output_template)
-            .join(Episode, Episode.id == MediaDownloadBase.media_item_id)
-            .outerjoin(LocalMediaProfileBase, LocalMediaProfileBase.id == MediaDownloadBase.local_media_profile_id)
+        with_files = set(s.scalars(
+            select(MediaDownloadBase.media_item_id).join(Episode, Episode.id == MediaDownloadBase.media_item_id)
             .where(Episode.collection_id == record.id)
-        ):
-            with_files.add(episode_id)
-            if template not in follows:
-                follows[template] = names_follow_season(template, record.episode_identifier)
-            if follows[template]:
-                in_season.add(episode_id)
+        ))
         self.episodes: dict[int, EpisodeDraft] = {
             row.id: EpisodeDraft(
                 id=row.id, slug=row.slug, source_slug=row.source_slug, part_of=row.part_of, season_id=row.season_id,
                 from_link_season=row.from_link_season, episode_identifier=row.episode_identifier,
                 published_date=row.published_date, index=row.index, removed_from_source=row.removed_from_source,
-                has_files=row.id in with_files, files_in_season=row.id in in_season, went_live_date=row.went_live_date, scheduled_date=row.scheduled_date,
+                has_files=row.id in with_files, went_live_date=row.went_live_date, scheduled_date=row.scheduled_date,
                 created_at=row.created_at, source_number=row.source_number,
             )
             for row in s.execute(
@@ -239,15 +224,23 @@ class SeasonsState:
     def season(self, season_id: int | None) -> SeasonDraft | None:
         return self.seasons.get(season_id) if season_id is not None else None
 
-    def make_season(self, *, slug: str, name: str, number: int, origin: str, season_type: str) -> SeasonDraft:
+    def season_draft(
+        self, *, slug: str, name: str, number: int, origin: str, season_type: str, id: int = 0,
+    ) -> SeasonDraft:
+        """A new season as it would be made now, apart from the copy, such as to name a file in it."""
         taken = {season.slug for season in self.seasons.values()}
         unique, suffix = slug, 2
         while unique in taken:
             unique, suffix = f"{slug}-{suffix}", suffix + 1
-        season = SeasonDraft(
-            id=self.new_id(), collection_id=self.record.id, slug=unique, name=name, season_number=number,
+        return SeasonDraft(
+            id=id, collection_id=self.record.id, slug=unique, name=name, season_number=number,
             index=max((x.index for x in self.seasons.values()), default=0) + 1, season_type=season_type, origin=origin,
             loose=False, created_at=self.now,
+        )
+
+    def make_season(self, *, slug: str, name: str, number: int, origin: str, season_type: str) -> SeasonDraft:
+        season = self.season_draft(
+            slug=slug, name=name, number=number, origin=origin, season_type=season_type, id=self.new_id(),
         )
         self.seasons[season.id] = season
         self.made.add(season.id)
@@ -483,34 +476,3 @@ def _placement_slug(s: Session, collection: Collection, season: Season, source_s
 __all__ = [
     "CollectionDraft", "EpisodeDraft", "Leaving", "ListDraft", "SeasonDraft", "SeasonsState", "apply_state", "load_state",
 ]
-
-
-# What a file's name can take from its episode's season: the season itself, a Music collection's album and track, and
-# the episode's number, which a seasonal numbering takes from the season.
-_SEASON_FIELDS = frozenset({
-    "season", "season_name", "season_index", "season_type", "season_number", "album_slug", "album_number", "album",
-    "track_number", "track_number_padded",
-})
-_NUMBER_FIELDS = frozenset({
-    "episode_identifier", "episode_type", "episode_extra_type", "episode_number", "episode_sub_number", "episode_label",
-})
-
-
-def names_follow_season(output_template: str | None, episode_identifier: str) -> bool:
-    """Whether a Local Media Profile's file names change when an episode changes season: its template names the season,
-    or the episode's number while the collection numbers its episodes by season. A template with custom indexes may
-    count by season, so it does too; so does a file with no profile to tell."""
-    from backend.types.collection_types import EpisodeIdentifier
-    from backend.utils.output_template import output_template_custom_index_keys, output_template_fields
-
-    if not output_template:
-        return True
-    try:
-        fields = output_template_fields(output_template)
-        if output_template_custom_index_keys(output_template):
-            return True
-    except Exception:
-        return True
-    return bool(fields & _SEASON_FIELDS) or (
-        episode_identifier == EpisodeIdentifier.SEASONAL.value and bool(fields & _NUMBER_FIELDS)
-    )

@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Collection, CollectionList, CollectionListItem, Episode
 from backend.services.season_order import arrange, link_first_videos, season_year
+from backend.services.file_moves import FileMoves, number_in
 from backend.services.season_state import (
     EpisodeDraft, Leaving, ListDraft, SeasonDraft, SeasonsState, apply_state, load_state,
 )
@@ -540,16 +541,19 @@ class SeasonFinder:
         self._one_list = list_in_one_season(collection)
         self._feeds = feed_seasons(collection)
 
-    def create(self, *, slug: str, name: str, number: int, origin: SeasonOrigin) -> SeasonDraft:
+    def _season_args(self, *, slug: str, name: str, number: int, origin: SeasonOrigin) -> dict:
         collection = self._collection
         if collection.custom_season_order:
             # The user's order stays: a new season goes last.
             number = max((x.season_number for x in collection.seasons if x.season_type == SeasonType.NORMAL.value), default=0) + 1
         season_type = season_type_from_name(name)
-        season = self._state.make_season(
+        return dict(
             slug=slug, name=name, number=0 if season_type is SeasonType.EXTRA else number, origin=origin.value,
             season_type=season_type.value,
         )
+
+    def create(self, *, slug: str, name: str, number: int, origin: SeasonOrigin) -> SeasonDraft:
+        season = self._state.make_season(**self._season_args(slug=slug, name=name, number=number, origin=origin))
         self._by_slug[season.slug] = season
         if season_year(season) is not None:
             self._by_year[season_year(season)] = season
@@ -566,6 +570,28 @@ class SeasonFinder:
             default=0,
         ) + 1
 
+    def planned(self, episode: EpisodeDraft, belonging: Belonging) -> SeasonDraft:
+        """The season ``_season_for`` puts the episode in, without making it: one that is not there yet comes as it
+        would be made, apart from the planner's copy."""
+        collection = self._collection
+        if belonging.link is not None:
+            season, new = self._state.season(belonging.link.season_id), lambda: self._list_new(belonging.link)
+        elif belonging.feed is not None:
+            season, new = self._state.season(feed_season_ids(collection).get(belonging.feed)), lambda: self._feed_new(belonging.feed)
+        elif belonging.loose and self._from_list:
+            season, new = _found_list_season(collection), self._list_own_new
+        elif belonging.loose:
+            season, new = next((season for season in collection.seasons if season.loose), None), self._loose_new
+        else:
+            year = (episode.published_date or self._now).year
+            season, new = self._by_year.get(year), lambda: self._year_new(year)
+            season = season if season is not None and season.id in self._state.seasons else None
+        if season is not None:
+            return season
+        draft = self._state.season_draft(**self._season_args(**new()))
+        draft.loose = belonging.loose and not self._from_list
+        return draft
+
     def loose_season(self) -> SeasonDraft:
         """The one season of the videos in none of the playlists that are seasons, named as their Site calls it, such
         as Videos, or Singles for an artist. A collection made from one list has no playlists: its one season is the
@@ -574,18 +600,24 @@ class SeasonFinder:
             return self.list_own_season()
         season = next((season for season in self._collection.seasons if season.loose), None)
         if season is None:
-            name = loose_season_name(self._collection)
-            season = self.create(slug=name.lower(), name=name, number=self._named_number(), origin=SeasonOrigin.VODLOFT)
+            season = self.create(**self._loose_new())
             season.loose = True
         return season
+
+    def _loose_new(self) -> dict:
+        name = loose_season_name(self._collection)
+        return dict(slug=name.lower(), name=name, number=self._named_number(), origin=SeasonOrigin.VODLOFT)
 
     def list_own_season(self) -> SeasonDraft:
         """The one season of a collection made from one list, named after it, as the collection is."""
         season = _found_list_season(self._collection)
         if season is None:
-            title = self._collection.title
-            season = self.create(slug=slugify(title) or "1", name=title, number=1, origin=SeasonOrigin.LIST)
+            season = self.create(**self._list_own_new())
         return season
+
+    def _list_own_new(self) -> dict:
+        title = self._collection.title
+        return dict(slug=slugify(title) or "1", name=title, number=1, origin=SeasonOrigin.LIST)
 
     def home_season(self, published_at: datetime | None, tag: str | None = None) -> SeasonDraft:
         """Where a new video in no playlist goes: the season of its feed, by its episode ``tag``, when that feed is a
@@ -603,19 +635,24 @@ class SeasonFinder:
         year = (published_at or self._now).year
         season = self._by_year.get(year)
         if season is None or season.id not in self._state.seasons:
-            season = self.create(slug=str(year), name=str(year), number=year, origin=SeasonOrigin.VODLOFT)
+            season = self.create(**self._year_new(year))
         return season
+
+    @staticmethod
+    def _year_new(year: int) -> dict:
+        return dict(slug=str(year), name=str(year), number=year, origin=SeasonOrigin.VODLOFT)
 
     def list_season(self, playlist: ListDraft) -> SeasonDraft:
         """A playlist's season, made when the playlist gets its first video."""
         season = self._state.season(playlist.season_id)
         if season is None:
-            number = self._named_number()
-            season = self.create(
-                slug=slugify(playlist.title) or str(number), name=playlist.title, number=number, origin=SeasonOrigin.LIST,
-            )
+            season = self.create(**self._list_new(playlist))
             playlist.season_id = season.id
         return season
+
+    def _list_new(self, playlist: ListDraft) -> dict:
+        number = self._named_number()
+        return dict(slug=slugify(playlist.title) or str(number), name=playlist.title, number=number, origin=SeasonOrigin.LIST)
 
     def feed_season(self, ref: str) -> SeasonDraft:
         """A feed's own season, named after the feed, such as Shorts, made when the feed gets its first video there. It
@@ -623,11 +660,14 @@ class SeasonFinder:
         collection = self._collection
         season = self._state.season(feed_season_ids(collection).get(ref))
         if season is None:
-            type_ = next(type_ for type_ in collection_site(collection).types_of(SectionKind.FEED) if type_.feed_ref == ref)
-            number = self._named_number()
-            season = self.create(slug=slugify(type_.title) or str(number), name=type_.title, number=number, origin=SeasonOrigin.VODLOFT)
+            season = self.create(**self._feed_new(ref))
             collection.feed_seasons = {**(collection.feed_seasons or {}), ref: season.id}
         return season
+
+    def _feed_new(self, ref: str) -> dict:
+        type_ = next(type_ for type_ in collection_site(self._collection).types_of(SectionKind.FEED) if type_.feed_ref == ref)
+        number = self._named_number()
+        return dict(slug=slugify(type_.title) or str(number), name=type_.title, number=number, origin=SeasonOrigin.VODLOFT)
 
     def own_season(self, name: str) -> SeasonDraft:
         """A season of its own, such as for a video split by chapter."""
@@ -863,6 +903,15 @@ def season_is_year(season) -> bool:
     return season is not None and season_year(season) is not None
 
 
+def _files_move(
+    state: SeasonsState, finder: SeasonFinder, files: FileMoves, episode: EpisodeDraft, belonging: Belonging,
+) -> bool:
+    """Whether moving the downloaded episode where it belongs moves its files: one of them gets another path there, also
+    in a season that is not made yet."""
+    season = finder.planned(episode, belonging)
+    return bool(files.moving(episode, season, number_in(state, episode.episode_identifier, season)))
+
+
 def _season_for(finder: SeasonFinder, episode: EpisodeDraft, belonging: Belonging) -> SeasonDraft:
     if belonging.link is not None:
         return finder.list_season(belonging.link)
@@ -887,11 +936,11 @@ def place(
         _drop_outside(state, by_user=by_user, extras=places.extras)
     if not places.anything:
         return 0
-    # Files whose names don't depend on the season stay where they are, so their episodes move like any other.
     kept = set() if with_files is True else {
-        episode.id for episode in state.episodes.values() if episode.has_files and episode.files_in_season
+        episode.id for episode in state.episodes.values() if episode.has_files
     } - (with_files or set())
     finder = SeasonFinder(state)
+    files = FileMoves(state) if kept else None
     moved = 0
     emptied: set[int] = set()
     for episode in state.in_index_order():
@@ -903,10 +952,11 @@ def place(
         ):
             # A playlist that is a season lists it again, so it is back at its Site.
             episode.removed_from_source = False
-        if episode.id in kept:
-            continue
         belonging = places.belonging(episode)
         if belonging is None:
+            continue
+        if episode.id in kept and _files_move(state, finder, files, episode, belonging):
+            # Its files would move, which waits for the user.
             continue
         season = _season_for(finder, episode, belonging)
         if season.id != episode.season_id:
@@ -928,16 +978,14 @@ def place_in_link_seasons(
 
     ``s`` is a write transaction's session."""
     state = load_state(s, collection, now)
-    staying = {
-        episode.id: episode.season_id for episode in state.episodes.values()
-        if episode.has_files and not episode.files_in_season
-    }
+    staying = {episode.id: episode.season_id for episode in state.episodes.values() if episode.has_files}
     moved = place(state, with_files=with_files, by_user=by_user, drop=drop, left=left)
     apply_state(s, state)
     _note_health(s, collection)
     s.flush()
     if with_files is not True:
-        # Downloads that changed season while their files stay where they are: their metadata names the season.
+        # Downloads that changed season while their files keep their paths: their metadata names the season. Their
+        # files are renamed too, should a path have changed after all.
         changed = [
             episode_id for episode_id, season_id in staying.items()
             if episode_id in state.episodes and state.episodes[episode_id].season_id != season_id
@@ -1196,15 +1244,17 @@ def belongs_elsewhere(s: Session, episode: Episode) -> Belonging | None:
 
 def moved(state: SeasonsState) -> list[EpisodeDraft]:
     """The collection's videos that its playlists put in another season than the one they are in: downloaded ones,
-    which wait for the user to move them, since moving renames their files. Downloads whose file names don't depend on
-    the season never wait: their episodes move like any other, and their files stay."""
+    which wait for the user to move them, since moving renames their files. A download whose files keep their paths
+    in the new season never waits: its episode moves like any other, and its files stay."""
     places = _Places(state)
     if not places.anything:
         return []
+    finder = SeasonFinder(state)
+    files = FileMoves(state)
     return [
         episode for episode in sorted(state.episodes.values(), key=lambda episode: episode.id)
-        if (not episode.has_files or episode.files_in_season)
-        and episode.season_id in places.movable and places.belonging(episode) is not None
+        if episode.season_id in places.movable and (belonging := places.belonging(episode)) is not None
+        and (not episode.has_files or _files_move(state, finder, files, episode, belonging))
     ]
 
 
