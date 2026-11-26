@@ -27,10 +27,12 @@ function cloneIndexingValues(values: IndexingValueEntry[] | undefined): Indexing
 
 /** Opens the editor for a collection profile's own Indexing values. By default it is the small Edit button of the
  * template reference's Indexing tab. */
-export default function IndexingValuesEditorButton({form, className = 'template-reference__button', label = 'Edit'}: {
+export default function IndexingValuesEditorButton({form, className = 'template-reference__button', label = 'Edit', addKey}: {
     form: UseFormReturn<any>
     className?: string
     label?: string
+    /** A key to start a new Indexing value with, such as one the template uses that is not defined yet. */
+    addKey?: string
 }) {
     const [open, setOpen] = useState(false)
     const titleId = `indexing-values-title-${useId()}`
@@ -48,10 +50,11 @@ export default function IndexingValuesEditorButton({form, className = 'template-
     })
     const {errors, isDirty} = useFormState({control: editorForm.control})
     const openEditor = () => {
+        const current = cloneIndexingValues(form.getValues('indexingValues') as IndexingValueEntry[] | undefined)
         editorForm.reset({
-            indexingValues: cloneIndexingValues(
-                form.getValues('indexingValues') as IndexingValueEntry[] | undefined,
-            ),
+            indexingValues: addKey && !current.some(({key}) => key === addKey)
+                ? [...current, {key: addKey, name: '', keepNumbers: false}]
+                : current,
         })
         setOpen(true)
     }

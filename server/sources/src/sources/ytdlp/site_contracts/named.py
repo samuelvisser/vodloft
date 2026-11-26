@@ -28,24 +28,11 @@ class Facebook(OtherSites):
     icon = "fab:facebook"
 
 
-class Patreon(OtherSites):
-    key, name = "patreon", "Patreon"
-    initials = "PA"
-    domains = ("patreon.com",)
-    icon = "fab:patreon"
-
-
 class Reddit(OtherSites):
     key, name = "reddit", "Reddit"
     initials = "RD"
     domains = ("reddit.com", "redd.it")
     icon = "fab:reddit"
-
-
-class Rumble(OtherSites):
-    key, name = "rumble", "Rumble"
-    initials = "RU"
-    domains = ("rumble.com",)
 
 
 class Vimeo(OtherSites):
@@ -56,4 +43,4 @@ class Vimeo(OtherSites):
     pitch = "Channels, showcases and videos"
 
 
-NAMED = (BBC, Bilibili, BitChute, Facebook, Patreon, Reddit, Rumble, Vimeo)
+NAMED = (BBC, Bilibili, BitChute, Facebook, Reddit, Vimeo)
