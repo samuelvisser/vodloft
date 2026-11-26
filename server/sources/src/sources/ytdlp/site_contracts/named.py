@@ -1,5 +1,6 @@
-"""Sites whose own contract only names them the way most people know them."""
-from .other_sites import OtherSites
+"""Sites whose own contract only names them the way most people know them, and what they call a locked video."""
+from ...contract import Access
+from .other_sites import MEMBERS_KEY, OtherSites
 
 
 class BBC(OtherSites):
@@ -33,6 +34,7 @@ class Patreon(OtherSites):
     initials = "PA"
     domains = ("patreon.com",)
     icon = "fab:patreon"
+    accesses = (Access(MEMBERS_KEY, "Patrons only", "Only the creator's patrons can watch this."),)
 
 
 class Reddit(OtherSites):
