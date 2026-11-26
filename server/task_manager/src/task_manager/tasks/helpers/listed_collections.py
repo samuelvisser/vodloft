@@ -67,7 +67,7 @@ from backend.services.season_order import arrange_seasons
 from backend.services.source_options import ytdlp_call_options
 from backend.services.sites import collection_site
 from backend.services.link_seasons import (
-    SeasonFinder, SeasonNumbers, holds_only_link_seasons, list_lists, lists_own_link, made_from_list, own_feeds, section_list_names, place_in_link_seasons, link_seasons_on,
+    SeasonFinder, SeasonNumbers, holds_only_link_seasons, list_lists, lists_own_link, numbered_in_list_order, own_feeds, section_list_names, place_in_link_seasons, link_seasons_on,
     save_lists,
 )
 from backend.services.metadata_refresh import new_item_metadata_is_final
@@ -359,7 +359,7 @@ def add_listed_episodes(
     known = set(s.scalars(select(Episode.video_slug).where(Episode.collection_id == collection.id, Episode.video_slug.in_(listed))))
     new = [details for slug, details in listed.items() if slug not in known]
     # A collection made from one list numbers its videos in the list's order, as an album numbers its tracks.
-    ordered = new if made_from_list(collection) else sorted(new, key=lambda details: _order_key(details, now))
+    ordered = new if numbered_in_list_order(collection) else sorted(new, key=lambda details: _order_key(details, now))
 
     placer = _Placer(s, collection, now)
     split = splits_chapters(collection)

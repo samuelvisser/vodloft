@@ -9,6 +9,8 @@ from sources import ytdlp_runner as runner
 from sources.ytdlp import YtDlpSource
 from sources.ytdlp.site_implementations.patreon import PatreonImplementation
 
+from test_quick_check import session  # noqa: F401
+
 CAMPAIGN = "https://www.patreon.com/creator"
 NO_ACCESS = "You do not have access to this post"
 NO_MEDIA = "No supported media found in this post"
@@ -134,3 +136,30 @@ def test_every_post_is_kept_when_patreon_does_not_tell_their_kinds(patreon, monk
     monkeypatch.setattr(PatreonImplementation, "_post_kinds", staticmethod(refuse))
     found = {video.slug for video in YtDlpSource().list_episodes(CAMPAIGN, known=frozenset())}
     assert found == {"patreon-125257910", "patreon-121848656", "patreon-116397886"}
+
+
+def test_a_patreon_collection_numbers_its_posts_by_date(session):
+    # Patreon lists a creator's posts newest first, so the order they come in is no order of the creator's own.
+    from datetime import datetime, timezone
+
+    from backend.db.models import Collection, Episode
+    from sources import VideoDetails
+    from task_manager.tasks.helpers.listed_collections import add_listed_episodes
+
+    collection = Collection(
+        uuid="uuid-patreon", slug="david-wood", source_key="ytdlp", title="David Wood", kind="list",
+        sharing_url=CAMPAIGN, membership_level="FREE", type="series", episode_identifier="numbered",
+        author_name="A", author_slug="a",
+    )
+    session.add(collection)
+    session.commit()
+    newest_first = [
+        VideoDetails(slug=f"patreon-{day}", url=_post_url(name), title=name, published_at=datetime(2024, 1, day, tzinfo=timezone.utc))
+        for name, day in (("open", 3), ("paid", 2), ("text", 1))
+    ]
+
+    add_listed_episodes(session, collection_id=collection.id, found=newest_first)
+    session.commit()
+
+    episodes = session.query(Episode).filter(Episode.collection_id == collection.id).order_by(Episode.index)
+    assert [episode.title for episode in episodes] == ["text", "paid", "open"]

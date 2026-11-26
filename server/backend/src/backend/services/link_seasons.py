@@ -107,6 +107,12 @@ def made_from_list(collection: Collection) -> bool:
     return collection.kind == CollectionKind.LIST.value and collection.sharing_url is not None and not holds_only_link_seasons(collection)
 
 
+def numbered_in_list_order(collection: Collection) -> bool:
+    """Whether the collection numbers and shows its videos in the order they were added, which is its list's order:
+    a collection made from one list on a Site whose lists keep an order of their own."""
+    return made_from_list(collection) and collection_site(collection).lists_in_order
+
+
 def list_in_one_season(collection: Collection) -> bool:
     """Whether the collection made from one list has the list as its one season, rather than a season per year."""
     return made_from_list(collection) and collection.loose_videos == LooseVideos.ONE_SEASON.value

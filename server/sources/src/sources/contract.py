@@ -1168,6 +1168,10 @@ class Site:
     link_seasons: bool = False
     """A collection made from a creator's channel can make the channel's lists, such as its playlists, its seasons:
     link seasons, through its Source's ``is_creator_page``, ``season_lists`` and ``list_items``."""
+    lists_in_order: bool = True
+    """A collection made from one of the Site's lists numbers and shows its videos in the list's order, as a playlist
+    or an album sets it. A Site whose contract says False lists newest first, like a feed, such as Patreon's posts:
+    VODLoft numbers and shows them by date instead."""
     whole_lists: bool = True
     """A new channel collection puts a video in every list season that has it, so each list is whole. A Site whose
     contract says False puts a video in the first of them only, unless the collection's type says otherwise."""

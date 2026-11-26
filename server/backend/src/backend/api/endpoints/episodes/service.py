@@ -4,7 +4,7 @@ from typing import Optional, Sequence
 
 from sqlalchemy.orm import Session
 from backend.services.custom_indexes import request_collection_custom_index_reconciliation
-from backend.services.link_seasons import made_from_list
+from backend.services.link_seasons import numbered_in_list_order
 from backend.services.metadata_refresh import refreshes_metadata
 from sqlalchemy import and_, case, func, or_, select
 
@@ -124,7 +124,7 @@ def _in_list_order(s: Session, collection_slug: str) -> bool:
     """Whether the collection lists its episodes in the order they were added rather than by date: a collection made
     from one list, whose episodes are added in the list's order."""
     collection = s.scalar(select(Collection).where(Collection.slug == collection_slug))
-    return collection is not None and made_from_list(collection)
+    return collection is not None and numbered_in_list_order(collection)
 
 
 def _episode_view_stmt(
