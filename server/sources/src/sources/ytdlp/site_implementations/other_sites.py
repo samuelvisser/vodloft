@@ -67,6 +67,11 @@ class OtherSitesImplementation:
         when it lists one already."""
         return url
 
+    def media_entries(self, listing: dict, entries: list[dict]) -> list[dict]:
+        """The entries of yt-dlp's flat listing that are media VODLoft keeps. yt-dlp's lookup of an entry tells that on
+        most Sites; a Site whose locked posts it can't look into, such as Patreon's, says it here."""
+        return entries
+
     def served_picture(self, url: str | None) -> str | None:
         """The picture yt-dlp gives a video, or None when the Site is known not to serve it, so that VODLoft shows its
         own picture instead of an empty one."""
