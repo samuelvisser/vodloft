@@ -886,6 +886,50 @@ class Access:
     """What the Site calls it, such as NPO Plus, as the badge on a locked item shows it."""
     description: str
     """One sentence on who can watch what needs it, such as "Only NPO Plus subscribers can watch this"."""
+    tier: int | None = None
+    """Where the access stands among the Site's paid tiers, such as a membership level or a pledge in cents: a tier
+    gives everything a lower one gives. None for an access that is no tier, such as a channel membership."""
+
+    def gives(self, needed: Access) -> bool:
+        """Whether having this access lets one watch what needs ``needed``: it is that access, or a tier at least as
+        high."""
+        return self.key == needed.key or (self.tier is not None and needed.tier is not None and self.tier >= needed.tier)
+
+
+def cheapest(accesses: Iterable[Access | None]) -> Access | None:
+    """The lowest tier among accesses that each unlock the same thing, which is all one needs of them; an access that
+    is no tier, if there is no tier among them."""
+    found = [access for access in accesses if access is not None]
+    tiers = [access for access in found if access.tier is not None]
+    return min(tiers, key=lambda access: access.tier) if tiers else next(iter(found), None)
+
+
+PLEDGE_PREFIX = "pledge-"
+_CURRENCY_SIGNS = {"usd": "$", "eur": "€", "gbp": "£", "cad": "CA$", "aud": "A$", "nzd": "NZ$"}
+
+
+def pledge_key(cents: int, currency: str) -> str:
+    """The key of the access to what supporters who pledge at least ``cents`` in ``currency`` can watch."""
+    return f"{PLEDGE_PREFIX}{cents}-{currency.lower()}"
+
+
+def pledge_cents(key: str | None) -> int | None:
+    """The cents a ``pledge_key`` names, the pledge's tier; None for any other key."""
+    cents = key.removeprefix(PLEDGE_PREFIX).partition("-")[0] if key and key.startswith(PLEDGE_PREFIX) else ""
+    return int(cents) if cents.isdigit() else None
+
+
+def pledge_amount(key: str | None) -> str | None:
+    """The amount a ``pledge_key`` names, as people write it, such as "$5" or "€2.50"; None for any other key."""
+    if not key or not key.startswith(PLEDGE_PREFIX):
+        return None
+    cents, _, currency = key.removeprefix(PLEDGE_PREFIX).partition("-")
+    if not cents.isdigit() or not currency:
+        return None
+    whole, part = divmod(int(cents), 100)
+    number = f"{whole}" if part == 0 else f"{whole}.{part:02d}"
+    sign = _CURRENCY_SIGNS.get(currency)
+    return f"{sign}{number}" if sign else f"{number} {currency.upper()}"
 
 
 @dataclass(frozen=True)
@@ -1145,6 +1189,10 @@ class Site:
     accesses: tuple[Access, ...] = ()
     """What the Site only gives some of its videos with, such as NPO Plus or a channel membership,
     by the keys its Sources tell."""
+    pledge_access: Access | None = None
+    """What the Site calls the access to what only supporters who pledge some amount can watch, such as Patreon's
+    "Patrons from $5", with ``{amount}`` where the amount goes. Its key is unused: each amount has its own
+    ``pledge_key``."""
     creators: bool = False
     """The Site has creators VODLoft can add, through a Source with ``Feature.CREATORS``."""
     audio_only: bool = False
@@ -1181,6 +1229,9 @@ class Site:
     link_seasons: bool = False
     """A collection made from a creator's channel can make the channel's lists, such as its playlists, its seasons:
     link seasons, through its Source's ``is_creator_page``, ``season_lists`` and ``list_items``."""
+    pictures_expire: bool = False
+    """The Site's links to its videos' pictures stop working after a while, such as Patreon's signed ones, so VODLoft
+    keeps a copy of each picture itself."""
     list_order: ListOrder = ListOrder.NONE
     """In what order the Site lists what a collection made from one of its lists holds, such as a playlist, an album
     or, on a Site without creators, any link. A collection made from one list numbers and shows its videos in that
@@ -1295,8 +1346,14 @@ class Site:
         return found
 
     def access(self, key: str | None) -> Access | None:
-        """One of ``accesses`` by its key."""
-        return next((access for access in self.accesses if access.key == key), None)
+        """One of ``accesses`` by its key, or the ``pledge_access`` of the amount a ``pledge_key`` names."""
+        found = next((access for access in self.accesses if access.key == key), None)
+        if found is None and self.pledge_access is not None and (amount := pledge_amount(key)) is not None:
+            found = Access(
+                key, self.pledge_access.label.format(amount=amount), self.pledge_access.description.format(amount=amount),
+                tier=pledge_cents(key),
+            )
+        return found
 
     @property
     def streams(self) -> bool:
@@ -1420,10 +1477,11 @@ class Source(ABC):
         """A title and image for a link, faster than ``resolve``, or None when this Source has no faster way."""
         return None
 
-    def first_frame(self, url: str, image_url: str | None) -> bytes | None:
-        """A JPEG from the start of a video whose own picture, ``image_url``, is missing.
+    def own_picture(self, url: str, image_url: str | None, *, locked: bool = False) -> bytes | None:
+        """A JPEG VODLoft keeps as the video's picture: a copy of its picture, ``image_url``, on a Site whose pictures
+        expire, or a frame from the start of a video whose picture is missing, which a ``locked`` video has none of.
 
-        None when the picture is there, or when this Source cannot take a frame.
+        None when the video's own picture will do, or when this Source can make neither.
         """
         return None
 

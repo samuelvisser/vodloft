@@ -28,8 +28,10 @@ class FramingSource(ListedSource):
         super().__init__()
         self.asked: list[tuple[str, str | None]] = []
 
-    def first_frame(self, url, image_url):
+    def own_picture(self, url, image_url, *, locked=False):
         self.asked.append((url, image_url))
+        if locked:
+            return None
         return b"jpeg" if image_url is None or "placeholder" in image_url else None
 
 
@@ -108,12 +110,12 @@ def test_the_ytdlp_source_takes_no_frame_when_the_still_is_there(monkeypatch):
 
     monkeypatch.setattr(thumbnails, "still_missing", lambda url: False)
     monkeypatch.setattr(thumbnails, "first_frame", lambda url: pytest.fail("no frame should be taken"))
-    assert YtDlpSource().first_frame("https://www.youtube.com/watch?v=dQw4w9WgXcQ", "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg") is None
+    assert YtDlpSource().own_picture("https://www.youtube.com/watch?v=dQw4w9WgXcQ", "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg") is None
 
 
 def test_new_episodes_without_a_picture_get_their_first_frame(framing, session, thumbnail_root):  # noqa: F811
     from backend.db.models import Episode
-    from backend.services.thumbnails import newest_media_item_id, take_first_frames
+    from backend.services.thumbnails import newest_media_item_id, keep_own_pictures
     from task_manager.tasks.helpers.listed_collections import index_listed_collection
 
     collection = _collection(session, source_key="listed")
@@ -126,7 +128,7 @@ def test_new_episodes_without_a_picture_get_their_first_frame(framing, session, 
 
     ids = [episode.id for episode in session.query(Episode).filter(Episode.id > newest)]
     checks: list[tuple[int, int]] = []
-    assert take_first_frames(ids, checking=lambda checked, total: checks.append((checked, total))) == 1
+    assert keep_own_pictures(ids, checking=lambda checked, total: checks.append((checked, total))) == 1
     # It says how far the check is before each episode.
     assert checks == [(0, 2), (1, 2)]
 
@@ -137,7 +139,7 @@ def test_new_episodes_without_a_picture_get_their_first_frame(framing, session, 
 
     # A frame VODLoft made is not looked at again.
     framing.asked.clear()
-    assert take_first_frames(ids) == 0
+    assert keep_own_pictures(ids) == 0
     assert [url for url, _ in framing.asked] == ["https://www.youtube.com/watch?v=b"]
 
 
@@ -194,3 +196,22 @@ def test_a_frame_vodloft_made_is_the_thumbnail_a_download_takes(thumbnail_root):
     # A frame that is gone is no thumbnail.
     gone = SimpleNamespace(**{**made.__dict__, "thumbnail_landscape_path": "thumbnails/gone.jpg", "background_image_path": None})
     assert select_thumbnail(gone) is None
+
+
+def test_a_locked_video_gets_no_frame(monkeypatch):
+    from sources.ytdlp import YtDlpSource
+
+    monkeypatch.setattr(thumbnails, "first_frame", lambda url: pytest.fail("a locked video can't be downloaded"))
+    assert YtDlpSource().own_picture("https://www.youtube.com/watch?v=dQw4w9WgXcQ", None, locked=True) is None
+
+
+def test_a_picture_whose_link_expires_is_kept(monkeypatch):
+    # Patreon signs the links to its pictures, so VODLoft keeps a copy, also of a locked post's picture.
+    from sources.ytdlp import YtDlpSource
+
+    monkeypatch.setattr(thumbnails, "as_jpeg", lambda url: b"kept:" + url.encode())
+    picture = "https://c10.patreonusercontent.com/4/patreon-media/p/post/1/a.png?token-hash=x"
+    assert YtDlpSource().own_picture("https://www.patreon.com/posts/a-1", picture, locked=True) == b"kept:" + picture.encode()
+    # Other sites' pictures stay where they are.
+    monkeypatch.setattr(thumbnails, "still_missing", lambda url: False)
+    assert YtDlpSource().own_picture("https://www.youtube.com/watch?v=dQw4w9WgXcQ", "https://i.ytimg.com/vi/x/hq.jpg") is None

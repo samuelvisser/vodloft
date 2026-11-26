@@ -67,10 +67,17 @@ class OtherSitesImplementation:
         when it lists one already."""
         return url
 
-    def media_entries(self, listing: dict, entries: list[dict]) -> list[dict]:
-        """The entries of yt-dlp's flat listing that are media VODLoft keeps. yt-dlp's lookup of an entry tells that on
-        most Sites; a Site whose locked posts it can't look into, such as Patreon's, says it here."""
-        return entries
+    def listing(self, url: str, limit: int | None = None) -> dict | None:
+        """A page's videos, as yt-dlp's flat listing of it gives them, for a page the implementation lists itself
+        because yt-dlp can't, or can only slowly, such as Patreon's; None for yt-dlp to list it. ``limit`` is how many
+        videos are wanted, the first first, and 0 for the page alone. An entry may be complete, such as a video the
+        Site locks, with what a lookup would give: its ``_access`` and ``_access_refused``; it is then not looked up."""
+        return None
+
+    def refused_access(self, info: dict, key: str) -> str:
+        """The access a video needs that yt-dlp could not get for lack of ``key``, where the Site tells it more
+        exactly, such as the least pledge that unlocks a Patreon post."""
+        return key
 
     def served_picture(self, url: str | None) -> str | None:
         """The picture yt-dlp gives a video, or None when the Site is known not to serve it, so that VODLoft shows its

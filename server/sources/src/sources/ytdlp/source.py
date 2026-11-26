@@ -414,8 +414,9 @@ def _chapters(info: dict) -> tuple[Chapter, ...] | None:
 
 def _access(info: dict) -> str | None:
     """yt-dlp marks a video only the channel's members can watch as ``subscriber_only``, and one only
-    the site's paying subscribers can watch as ``premium_only``."""
-    return _ACCESS_BY_AVAILABILITY.get(info.get("availability"))
+    the site's paying subscribers can watch as ``premium_only``. A Site that tells more exactly what unlocks a video
+    gives its ``_access``."""
+    return info.get("_access") or _ACCESS_BY_AVAILABILITY.get(info.get("availability"))
 
 
 def _refused_access(error: str) -> str | None:
@@ -429,13 +430,17 @@ def _locked(info: dict, error: str) -> dict | None:
     have, such as a Patreon post for patrons only: kept as locked until VODLoft can download it."""
     if (key := _refused_access(error)) is None:
         return None
-    return {**info, "availability": _AVAILABILITY_BY_ACCESS[key], "_access_refused": True}
+    url = str(info.get("webpage_url") or info.get("original_url") or "")
+    site = sites.site_for(url) if "://" in url else None
+    if site is not None and (implementation := IMPLEMENTATIONS.get(site.key)) is not None:
+        # The Site may tell more exactly what unlocks it.
+        key = implementation(site, lambda link: {}).refused_access(info, key)
+    return {**info, "availability": _AVAILABILITY_BY_ACCESS[sites.MEMBERS_KEY], "_access": key, "_access_refused": True}
 
 
-def _entries(listing: dict, implementation: OtherSitesImplementation) -> list[dict]:
-    """The entries of yt-dlp's flat listing that the Site's implementation takes for media. Some extractors, such as
-    Patreon's, list each video by its link alone; such an entry gets the id the video's own extractor takes from that
-    link, so it has the slug a lookup gives it."""
+def _entries(listing: dict) -> list[dict]:
+    """The entries of a flat listing. Some extractors list each video by its link alone; such an entry gets the id the
+    video's own extractor takes from that link, so it has the slug a lookup gives it."""
     entries = []
     for entry in listing.get("entries") or []:
         if not isinstance(entry, dict):
@@ -451,7 +456,7 @@ def _entries(listing: dict, implementation: OtherSitesImplementation) -> list[di
             if video_id:
                 entry = {**entry, "id": video_id}
         entries.append(entry)
-    return implementation.media_entries(listing, entries)
+    return entries
 
 
 def _listed_open(entry: dict) -> bool:
@@ -532,7 +537,9 @@ class YtDlpSource(Source):
         if ours is None:
             return running.result()
         try:
-            info = _lookup("--no-playlist", "--flat-playlist", "--playlist-items", "1", url)
+            info = self._implementation(url).listing(url, 0) if "://" in url else None
+            if info is None:
+                info = _lookup("--no-playlist", "--flat-playlist", "--playlist-items", "1", url)
         except BaseException as exc:
             with self._cache_lock:
                 del self._running[key]
@@ -695,6 +702,14 @@ class YtDlpSource(Source):
         site = sites.site_for(url) if "://" in url else sites.site_of("youtube")
         return IMPLEMENTATIONS.get(site.key, OtherSitesImplementation)(site, self._info)
 
+    def _flat(self, url: str, *options: str, limit: int | None = None) -> dict:
+        """The page's flat listing: the one its Site's implementation makes itself, else yt-dlp's. ``limit`` is how
+        many of its videos are wanted, the first first."""
+        if (listing := self._implementation(url).listing(url, limit)) is not None:
+            return listing
+        items = ("--playlist-items", f"1:{limit}") if limit else ()
+        return runner.run_json("--flat-playlist", *options, *items, url, cookies=sites.cookies_for(url))
+
     def creator_of(self, url: str) -> str | None:
         """A channel's tab is the channel; an album belongs to its artist, and a playlist to the channel that made
         it."""
@@ -736,11 +751,11 @@ class YtDlpSource(Source):
         items: dict[str, ItemRef] = {}
         implementation = self._implementation(url)
         for listing_url in implementation.listing_urls(url) if implementation.is_creator_page(url) else [url]:
-            listing = runner.run_json("--flat-playlist", listing_url, cookies=sites.cookies_for(listing_url))
+            listing = self._flat(listing_url)
             if listing.get("_type") != "playlist" and listing.get("id"):
                 slug = video_slug(listing)
                 return (ItemRef(slug, listing.get("webpage_url") or url),)
-            for entry in _entries(listing, implementation):
+            for entry in _entries(listing):
                 if isinstance(entry, dict) and entry.get("id"):
                     # A video a playlist lists twice keeps its first place.
                     slug = video_slug(entry)
@@ -753,8 +768,10 @@ class YtDlpSource(Source):
             raise runner.YtDlpError("This link is a playlist or channel, not a single video")
         return self._video(info, url)
 
-    def first_frame(self, url: str, image_url: str | None) -> bytes | None:
-        if not thumbnails.still_missing(image_url):
+    def own_picture(self, url: str, image_url: str | None, *, locked: bool = False) -> bytes | None:
+        if image_url and sites.site_for(url).pictures_expire:
+            return thumbnails.as_jpeg(image_url)
+        if locked or not thumbnails.still_missing(image_url):
             return None
         return thumbnails.first_frame(url)
 
@@ -987,13 +1004,18 @@ class YtDlpSource(Source):
 
     def _from_entries(self, entries: list[dict]) -> Iterator[VideoDetails]:
         """Listed videos, looked up a batch at a time with one yt-dlp run each, in the listing's order. A video the
-        batch could not look up, such as an upcoming one or one with DRM, is looked up on its own as before."""
+        batch could not look up, such as an upcoming one or one with DRM, is looked up on its own as before. A video the
+        listing says the Site locks is taken as listed."""
         for start in range(0, len(entries), _LOOKUP_BATCH):
             batch = [entry for entry in entries[start:start + _LOOKUP_BATCH] if entry.get("url") or entry.get("webpage_url")]
             urls = [entry.get("url") or entry.get("webpage_url") for entry in batch]
-            found = self._batch_lookup(urls) if len(urls) > 1 else {}
+            wanted = [entry_url for entry, entry_url in zip(batch, urls) if not entry.get("_access_refused")]
+            found = self._batch_lookup(wanted) if len(wanted) > 1 else {}
             for entry, entry_url in zip(batch, urls):
-                if (info := found.get(entry_url)) is not None:
+                if entry.get("_access_refused"):
+                    # The Site's listing says all a lookup would of a video it locks.
+                    yield self._video(entry, entry_url)
+                elif (info := found.get(entry_url)) is not None:
                     yield self._video(info, entry_url)
                 elif details := self._from_entry(entry):
                     yield details
@@ -1013,16 +1035,13 @@ class YtDlpSource(Source):
             return entries
         for index, listing_url in enumerate(implementation.listing_urls(url, feeds)):
             try:
-                listing = runner.run_json(
-                    "--flat-playlist", "--extractor-args", "youtubetab:approximate_date", listing_url,
-                    cookies=sites.cookies_for(listing_url),
-                )
+                listing = self._flat(listing_url, "--extractor-args", "youtubetab:approximate_date")
             except runner.YtDlpError as exc:
                 if index == 0:
                     raise
                 logger.info("Not listing %s: %s", listing_url, exc)
                 continue
-            for entry in _entries(listing, implementation):
+            for entry in _entries(listing):
                 if not isinstance(entry, dict) or not entry.get("id") or entry.get("title") in _UNAVAILABLE_TITLES:
                     continue
                 if (entry.get("url") or entry.get("webpage_url")) and video_slug(entry) not in known:
@@ -1083,13 +1102,10 @@ class YtDlpSource(Source):
                     return youtube_rss.latest_videos(**_feed(ref))
             except (youtube_rss.FeedError, runner.YtDlpError) as exc:
                 logger.info("Reading the newest videos of %s with yt-dlp, because its RSS feed could not be read: %s", url, exc)
-        listing = runner.run_json(
-            "--flat-playlist", "--playlist-items", f"1:{_LATEST_COUNT}", self._implementation(url).listing_urls(url)[0],
-            cookies=sites.cookies_for(url),
-        )
+        listing = self._flat(self._implementation(url).listing_urls(url)[0], limit=_LATEST_COUNT)
         return [
             self._video(entry, entry.get("url") or entry.get("webpage_url"))
-            for entry in _entries(listing, self._implementation(url))
+            for entry in _entries(listing)
             if isinstance(entry, dict) and entry.get("id") and (entry.get("url") or entry.get("webpage_url"))
             and entry.get("title") not in _UNAVAILABLE_TITLES
         ]
@@ -1102,15 +1118,13 @@ class YtDlpSource(Source):
         items: dict[str, ItemRef] = {}
         for index, listing_url in enumerate(implementation.listing_urls(url, feeds)):
             try:
-                listing = runner.run_json(
-                    "--flat-playlist", "--playlist-items", f"1:{_LATEST_COUNT}", listing_url, cookies=sites.cookies_for(listing_url),
-                )
+                listing = self._flat(listing_url, limit=_LATEST_COUNT)
             except runner.YtDlpError as exc:
                 if index == 0:
                     raise
                 logger.info("Not checking %s: %s", listing_url, exc)
                 continue
-            for entry in _entries(listing, implementation):
+            for entry in _entries(listing):
                 entry_url = isinstance(entry, dict) and (entry.get("url") or entry.get("webpage_url"))
                 if entry_url and entry.get("id") and entry.get("title") not in _UNAVAILABLE_TITLES:
                     items.setdefault(video_slug(entry), ItemRef(video_slug(entry), entry_url))
@@ -1266,11 +1280,11 @@ class YtDlpSource(Source):
         listed_open: set[str] = set()
         for listing_url in self._implementation(url).listing_urls(url):
             try:
-                listing = runner.run_json("--flat-playlist", listing_url, cookies=sites.cookies_for(listing_url))
+                listing = self._flat(listing_url)
             except runner.YtDlpError as exc:
                 logger.info("Not refreshing from %s: %s", listing_url, exc)
                 continue
-            for entry in _entries(listing, self._implementation(url)):
+            for entry in _entries(listing):
                 if not isinstance(entry, dict) or not entry.get("id") or not entry.get("title"):
                     continue
                 slug = video_slug(entry)
