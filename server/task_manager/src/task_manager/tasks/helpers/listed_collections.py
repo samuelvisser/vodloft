@@ -251,10 +251,10 @@ class _Placer(SeasonFinder):
         super().__init__(s, collection, now)
         self.identifiers = set(s.scalars(select(Episode.episode_identifier).where(Episode.collection_id == collection.id)))
 
-    def season(self, ref: SeasonRef | None, published_at: datetime | None) -> Season:
-        """The Source's own season, or the season of the upload year."""
+    def season(self, ref: SeasonRef | None, published_at: datetime | None, tag: str | None = None) -> Season:
+        """The Source's own season, or where a new video of the feed with episode ``tag`` goes (``home_season``)."""
         if ref is None:
-            return self.home_season(published_at)
+            return self.home_season(published_at, tag)
         season = self._by_slug.get(ref.slug)
         if season is not None and season.season_number != ref.number:
             # A season picked when the collection was added, before VODLoft knew its number.
@@ -373,7 +373,9 @@ def add_listed_episodes(
                 for offset, (number, chapter) in enumerate(enumerate(chapters, start=1))
             ]
         else:
-            season = placer.season(details.season, details.published_at)
+            # A video of a list, rather than of the channel's feeds, is placed in its list's season afterwards.
+            own = details.slug not in (sources or {})
+            season = placer.season(details.season, details.published_at, details.tag if own else None)
             episodes = [_new_episode(
                 s, collection, season, next_index, placer.identifier(season, details), details,
                 source_key=(sources or {}).get(details.slug),

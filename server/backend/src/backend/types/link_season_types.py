@@ -2,26 +2,27 @@ from enum import StrEnum
 
 from sources import ChannelSeason
 
-__all__ = ["ChannelSeason", "CollectionKind", "LinkSeasons", "ListLayout", "ListStatus", "LooseVideos", "NewLinkSeasonAction", "OutsideVideos", "RepeatVideos"]
+__all__ = ["ChannelSeason", "CollectionKind", "LinkSeasons", "ListStatus", "LooseVideos", "NewLinkSeasonAction", "OutsideVideos", "RepeatVideos"]
 
 
 class LinkSeasons(StrEnum):
-    """Whether a channel collection turns the channel's playlists into seasons."""
+    """Whether a collection takes lists: its channel's playlists and the links the user adds. Each list then says
+    what it is: off, a season of its own, or part of the collection (``CollectionList.enabled`` and ``as_season``),
+    and ``NewLinkSeasonAction`` says what happens with new ones."""
 
     OFF = "off"
-    ALL = "all"
-    """Every playlist is a season, also the ones the channel adds later."""
-    SELECTED = "selected"
-    """Only the playlists the user keeps on; ``NewLinkSeasonAction`` says what happens with new ones."""
+    ON = "on"
 
 
 class NewLinkSeasonAction(StrEnum):
-    """What happens with a playlist the channel adds later, when only selected playlists are seasons."""
+    """What happens with a playlist the channel adds later."""
 
     ASK = "ask"
     """Send a message, and show the playlist in the collection's Seasons dialog to turn on."""
     ADD = "add"
     """Make it a season."""
+    CONTENTS = "contents"
+    """Include its videos, without a season of its own: contents only."""
     IGNORE = "ignore"
     """Leave it off."""
 
@@ -44,16 +45,6 @@ class OutsideVideos(StrEnum):
     """Hold nothing but the videos of the link seasons that are on: the link seasons say what the collection holds.
     Its own link, which it may go without, only offers its playlists; a video leaves, files and all, once no link
     season that is on lists it."""
-
-
-class ListLayout(StrEnum):
-    """How a collection whose lists are seasons lays them out."""
-
-    SEASON_EACH = "season_each"
-    """Each list is a season, or shares one with the lists the user put together with it."""
-    BY_YEAR = "by_year"
-    """The lists still decide which videos are in, but the seasons are years, by each video's date. Videos in no
-    list join the same year seasons."""
 
 
 class LooseVideos(StrEnum):

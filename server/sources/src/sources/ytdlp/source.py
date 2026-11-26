@@ -438,8 +438,13 @@ _SIGN_IN_ERRORS = (
     "join this channel", "registered users", "private video", "age-restricted",
 )
 # What yt-dlp says about a video that only the channel's members can watch.
-_MEMBERS_ERRORS = ("join this channel", "members-only", "members only", "available to this channel's members")
+# Patreon's posts for patrons only are the creator's members' too.
+_MEMBERS_ERRORS = (
+    "join this channel", "members-only", "members only", "available to this channel's members",
+    "you do not have access to this post",
+)
 _ACCESS_BY_AVAILABILITY = {"subscriber_only": sites.MEMBERS_KEY, "premium_only": sites.PREMIUM_KEY}
+_AVAILABILITY_BY_ACCESS = {key: availability for availability, key in _ACCESS_BY_AVAILABILITY.items()}
 _OPEN_AVAILABILITIES = frozenset({"public", "unlisted"})
 
 
@@ -459,6 +464,42 @@ def _access(info: dict) -> str | None:
     """yt-dlp marks a video only the channel's members can watch as ``subscriber_only``, and one only
     the site's paying subscribers can watch as ``premium_only``."""
     return _ACCESS_BY_AVAILABILITY.get(info.get("availability"))
+
+
+def _refused_access(error: str) -> str | None:
+    """The access yt-dlp says a video needs, from the error it gave for the video."""
+    text = error.lower()
+    return sites.MEMBERS_KEY if any(sign in text for sign in _MEMBERS_ERRORS) else None
+
+
+def _locked(info: dict, error: str) -> dict | None:
+    """The info of a video yt-dlp described but gave no formats of because it needs an access the cookies don't
+    have, such as a Patreon post for patrons only: kept as locked until VODLoft can download it."""
+    if (key := _refused_access(error)) is None:
+        return None
+    return {**info, "availability": _AVAILABILITY_BY_ACCESS[key]}
+
+
+def _entries(listing: dict, implementation: OtherSitesImplementation) -> list[dict]:
+    """The entries of yt-dlp's flat listing that the Site's implementation takes for media. Some extractors, such as
+    Patreon's, list each video by its link alone; such an entry gets the id the video's own extractor takes from that
+    link, so it has the slug a lookup gives it."""
+    entries = []
+    for entry in listing.get("entries") or []:
+        if not isinstance(entry, dict):
+            continue
+        entry_url = entry.get("url") or entry.get("webpage_url")
+        if not entry.get("id") and entry.get("ie_key") and entry_url:
+            from yt_dlp.extractor import get_info_extractor
+
+            try:
+                video_id = get_info_extractor(str(entry["ie_key"])).get_temp_id(entry_url)
+            except (AttributeError, KeyError):
+                video_id = None
+            if video_id:
+                entry = {**entry, "id": video_id}
+        entries.append(entry)
+    return implementation.media_entries(listing, entries)
 
 
 def _listed_open(entry: dict) -> bool:
@@ -728,7 +769,7 @@ class YtDlpSource(Source):
             if listing.get("_type") != "playlist" and listing.get("id"):
                 slug = video_slug(listing)
                 return (ItemRef(slug, listing.get("webpage_url") or url),)
-            for entry in listing.get("entries") or []:
+            for entry in _entries(listing, implementation):
                 if isinstance(entry, dict) and entry.get("id"):
                     # A video a playlist lists twice keeps its first place.
                     slug = video_slug(entry)
@@ -771,19 +812,20 @@ class YtDlpSource(Source):
 
     def _video(self, info: dict, url: str) -> VideoDetails:
         duration = info.get("duration")
+        implementation = self._implementation(info.get("webpage_url") or url)
         return VideoDetails(
             slug=video_slug(info),
             url=info.get("webpage_url") or url,
             title=info.get("title") or url,
             description=info.get("description"),
             duration=float(duration) if isinstance(duration, (int, float)) else None,
-            image_url=_thumbnail(info),
+            image_url=implementation.served_picture(_thumbnail(info)),
             author_name=info.get("uploader") or info.get("channel"),
             author_url=info.get("uploader_url") or info.get("channel_url"),
             published_at=_published_at(info),
             drm_protected=_drm_protected(info),
             access=_access(info),
-            tag=self._implementation(info.get("webpage_url") or url).episode_tag(info, url),
+            tag=implementation.episode_tag(info, url),
             publish_status=_publish_status(info),
             scheduled_at=_scheduled_at(info),
             chapters=_chapters(info),
@@ -896,8 +938,8 @@ class YtDlpSource(Source):
     def _pending_info(url: str) -> dict:
         """The video info. An upcoming video has no formats yet, which yt-dlp calls an error
         unless told not to. A video that failed is looked up that way once more, unless it is
-        clearly gone or needs signing in, and only an upcoming one is taken from that lookup:
-        for any other video a missing format is still an error."""
+        clearly gone or needs signing in, and only an upcoming one, or one locked for its members, is taken from that
+        lookup: for any other video a missing format is still an error."""
         try:
             return _lookup("--no-playlist", url)
         except runner.YtDlpError as exc:
@@ -913,9 +955,11 @@ class YtDlpSource(Source):
             raise error from None
         finally:
             pacing.pause(_LISTING_PAUSE_SECONDS, "lookup_spacing")
-        if info.get("live_status") != "is_upcoming":
-            raise error
-        return info
+        if info.get("live_status") == "is_upcoming":
+            return info
+        if (locked := _locked(info, str(error))) is not None:
+            return locked
+        raise error
 
     def check_pending(self, items: Sequence[ItemRef]) -> ItemRefresh:
         """Each item looked up with yt-dlp, which works for every site. A lookup that fails is
@@ -941,7 +985,8 @@ class YtDlpSource(Source):
     def _batch_lookup(urls: list[str]) -> dict[str, dict]:
         """The info of each of the links that one yt-dlp run could look up, by link. What it couldn't is looked up
         again in one run that also takes videos without playable formats, of which only those protected by DRM
-        (marked as ``_lookup`` marks them) and upcoming ones count, as a lookup on its own would take them."""
+        (marked as ``_lookup`` marks them), upcoming ones and ones locked for members count, as a lookup on its own
+        would take them."""
         cookies = sites.cookies_for(urls[0])
         timeout = runner.LOOKUP_TIMEOUT_SECONDS + 15 * len(urls)
 
@@ -964,6 +1009,8 @@ class YtDlpSource(Source):
                     found[url] = {**info, "_has_drm": True}
                 elif info.get("live_status") == "is_upcoming":
                     found[url] = info
+                elif (locked := _locked(info, errors.get(str(info.get("id")), ""))) is not None:
+                    found[url] = locked
         return found
 
     def _from_entries(self, entries: list[dict]) -> Iterator[VideoDetails]:
@@ -1003,7 +1050,7 @@ class YtDlpSource(Source):
                     raise
                 logger.info("Not listing %s: %s", listing_url, exc)
                 continue
-            for entry in listing.get("entries") or []:
+            for entry in _entries(listing, implementation):
                 if not isinstance(entry, dict) or not entry.get("id") or entry.get("title") in _UNAVAILABLE_TITLES:
                     continue
                 if (entry.get("url") or entry.get("webpage_url")) and video_slug(entry) not in known:
@@ -1070,7 +1117,7 @@ class YtDlpSource(Source):
         )
         return [
             self._video(entry, entry.get("url") or entry.get("webpage_url"))
-            for entry in listing.get("entries") or []
+            for entry in _entries(listing, self._implementation(url))
             if isinstance(entry, dict) and entry.get("id") and (entry.get("url") or entry.get("webpage_url"))
             and entry.get("title") not in _UNAVAILABLE_TITLES
         ]
@@ -1091,7 +1138,7 @@ class YtDlpSource(Source):
                     raise
                 logger.info("Not checking %s: %s", listing_url, exc)
                 continue
-            for entry in listing.get("entries") or []:
+            for entry in _entries(listing, implementation):
                 entry_url = isinstance(entry, dict) and (entry.get("url") or entry.get("webpage_url"))
                 if entry_url and entry.get("id") and entry.get("title") not in _UNAVAILABLE_TITLES:
                     items.setdefault(video_slug(entry), ItemRef(video_slug(entry), entry_url))
@@ -1251,7 +1298,7 @@ class YtDlpSource(Source):
             except runner.YtDlpError as exc:
                 logger.info("Not refreshing from %s: %s", listing_url, exc)
                 continue
-            for entry in listing.get("entries") or []:
+            for entry in _entries(listing, self._implementation(url)):
                 if not isinstance(entry, dict) or not entry.get("id") or not entry.get("title"):
                     continue
                 slug = video_slug(entry)
@@ -1411,8 +1458,7 @@ class YtDlpSource(Source):
         return any(sign in text for sign in _SIGN_IN_ERRORS)
 
     def refused_access(self, error: str) -> str | None:
-        text = error.lower()
-        return sites.MEMBERS_KEY if any(sign in text for sign in _MEMBERS_ERRORS) else None
+        return _refused_access(error)
 
     def program_status(self) -> ProgramStatus:
         last_update_at, last_update_error = runner.last_update()
