@@ -15,7 +15,7 @@ import {createSelectRegistry, type SelectRegistry} from '../../utils/selectRegis
 import SimpleSelect from '../common/SimpleSelect'
 import NewListSettings from '../common/NewListSettings'
 import {capitalized} from '../../types/creator'
-import ActionMenu, {type ActionMenuItem} from '../ActionMenu/ActionMenu'
+import ChoiceBar from '../common/ChoiceBar'
 import {useDismissOnEscape} from '../Modal/useDismissOnEscape'
 import SegmentedOptions from '../SegmentedOptions/SegmentedOptions'
 import {
@@ -30,6 +30,11 @@ import SeasonsReview from './SeasonsReview'
 import type {CauseRow} from '../ReconcileDialog/MoveCauses'
 import {collectionWords, CollectionWords, wordsOf} from '../../lib/collectionWords'
 import {nameInText} from '../../lib/nameInText'
+import type {Names} from '../../types/schemas/source'
+
+/** A badge of a season: what it is made of, such as what is part of the collection, a kind of list or a feed. */
+type BadgeTone = 'collection' | 'list' | 'feed'
+type Badge = {key: string, label: string, tone: BadgeTone}
 
 type Props = {
     open: boolean
@@ -89,6 +94,8 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     const dragFrom = useRef<number | null>(null)
     const narrow = useNarrow()
     // On a phone, the settings for the lists and for the seasons fold to one summary row each.
+    // The seasons opened to rename them or change what they are made of; all start closed.
+    const [openSeasons, setOpenSeasons] = useState<ReadonlySet<number>>(new Set())
     const [openSettings, setOpenSettings] = useState<{lists: boolean, seasons: boolean}>({lists: false, seasons: false})
     // The settings as the review shows them; while there are none, the dialog is at its first step.
     const [reviewing, setReviewing] = useState<CollectionSeasonsFormOut | null>(null)
@@ -194,6 +201,17 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     const holdsWholeChannel = channelSeasonOffered && !byYear && (looseVideos === 'everything' || !anyListSeason)
     const looseSeason = view ? view.channelSeasonNames[holdsWholeChannel ? 'everything' : 'one_season'] : undefined
     const names = useMemo(() => view ? namesOf(view, looseSeason!) : undefined, [view, looseSeason])
+    // The channel season is named after what it holds, such as Channel or Videos: what changes that renames it, unless
+    // the user gave it a name of their own.
+    const looseNamed = useRef(looseSeason)
+    useEffect(() => {
+        const was = looseNamed.current
+        looseNamed.current = looseSeason
+        if (!view || !looseSeason || !was || was === looseSeason) return
+        const named = form.getValues('seasons') ?? []
+        const at = named.findIndex((x) => view.seasons.find((y) => y.id === x.id)?.loose)
+        if (at >= 0 && named[at].name.trim() === was) setValue(`seasons.${at}.name`, looseSeason, {shouldDirty: true})
+    }, [looseSeason, view]) // eslint-disable-line react-hooks/exhaustive-deps
     const words = dialogWords(collectionWordsGiven ?? (view ? wordsOf(view.words) : collectionWords(null)), view)
     const {season} = words
     const regs = useMemo(() => view && names ? registries(names, words, view) : null, [view, names, words])
@@ -447,38 +465,32 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         }
         setValue('feedSeasons', next, {shouldDirty: true})
     }
-    /** The choice of what one source is: a row of choices, or one dropdown on a phone. */
-    const roleControl = (key: string, title: string, value: SourceRole, onRole: (role: SourceRole) => void, allowed: SourceRole[]) => narrow && regs ? (
-        <span className="seasons-dialog-role-select">
-            <SimpleSelect
-                inputId={`seasons-role-${key}`} aria-label={`What ${title} is`} registry={regs.role} sections={[allowed]}
-                value={value} onChange={(chosen) => onRole(chosen as SourceRole)}
-            />
-        </span>
-    ) : (
-        <SegmentedOptions
-            name={`seasons-role-${key}`} className="seasons-dialog-role" ariaLabel={`What ${title} is`}
-            value={value} options={allowed.map((role) => ({value: role, label: regs?.role.getLabel(role) ?? role}))}
-            onChange={(chosen) => onRole(chosen as SourceRole)}
-        />
+    /** The choices of what a source is, in a word each, with what each means in full. */
+    const roleOptions = (allowed: SourceRole[]) => allowed.map((role) => ({
+        value: role, label: role === 'season' ? 'Own' : role === 'part' ? 'Part' : 'Off', title: regs?.role.getLabel(role) ?? role,
+    }))
+    /** The choice of what one source is, all in view beside its name. */
+    const roleControl = (title: string, value: SourceRole, onRole: (role: SourceRole) => void, allowed: SourceRole[]) => (
+        <ChoiceBar ariaLabel={`What ${title} is`} value={value} options={roleOptions(allowed)} onChange={onRole}/>
     )
-    /** The choice that sets every source of a group at once, which shows a choice only while they all have it. */
-    const allOptions = (seasonsToo: boolean) => (['season', 'part', 'off'] as const)
-        .filter((role) => seasonsToo || role !== 'season')
-        .map((role) => ({value: role, label: role === 'season' ? `Own ${season.singular}` : role === 'part' ? 'Part' : 'Off'}))
-    const same = (roles: SourceRole[]) => roles.length && roles.every((role) => role === roles[0]) ? roles[0] : null
 
+    /** What kind of list a list is, for its season's badge: a link the user gave, or the type of list it is at its Site. */
+    const listKind = (playlist: CollectionListRead | undefined): Names => !view ? {singular: '', plural: '', a: ''}
+        : playlist?.addedByUser ? view.linkNames
+            : view.listTypes.find((type) => type.key === playlist?.typeKey)?.names ?? view.listTypes[0]?.names ?? view.sectionListNames
     // The seasons that sources are in, which other sources can join: lists, and the feeds that are a season.
-    type Source = {key: string, title: string, home: boolean, own: () => void}
+    type Source = {key: string, title: string, home: boolean, own: () => void, kind: Names, tone: BadgeTone}
     const sourcesIn = (seasonId: number): Source[] => [
         ...channelFeeds.filter((feed) => roleOfFeed(feed.ref) === 'season' && feedSeasons[feed.ref] === seasonId).map((feed) => ({
             key: `feed-${feed.ref}`, title: capitalized(feed.names.plural), home: feed.seasonId === seasonId,
             own: () => setValue('feedSeasons', {...feedSeasons, [feed.ref]: null}, {shouldDirty: true}),
+            kind: feed.names, tone: 'feed' as const,
         })),
         ...playlistChoices.filter((choice) => roleOfList(choice) === 'season' && choice.seasonId === seasonId).map((choice) => ({
             key: `list-${choice.id}`, title: playlistsById.get(choice.id)?.title ?? '', home: playlistsById.get(choice.id)?.seasonId === seasonId,
             // A list that leaves a season it shared gets a season of its own when you save.
             own: () => setValue('playlists', playlistChoices.map((x) => x.id === choice.id ? {...x, seasonId: null} : x), {shouldDirty: true}),
+            kind: listKind(playlistsById.get(choice.id)), tone: 'list' as const,
         })),
     ]
     const sourceSeasonIds = [...new Set([
@@ -519,6 +531,39 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         const name = seasonName(seasonId)
         return name === title ? null : `In ${name}`
     }
+
+    /** The kinds of source a season holds, each once: what is part of the collection, and the kinds of list and feed
+     * it is made of, such as Playlist, or Playlists for more than one. */
+    const badgesOf = (id: number): Badge[] => {
+        const x = seasonsById.get(id)
+        if (!view || !x || x.seasonType === 'extra') return []
+        const collection: Badge = {key: 'collection', label: capitalized(view.collectionNames.singular), tone: 'collection'}
+        const kinds = (sources: {kind: Names, tone: BadgeTone}[]): Badge[] => {
+            const tally = new Map<string, {kind: Names, tone: BadgeTone, count: number}>()
+            for (const source of sources) {
+                const at = tally.get(source.kind.plural) ?? {kind: source.kind, tone: source.tone, count: 0}
+                tally.set(source.kind.plural, {...at, count: at.count + 1})
+            }
+            return [...tally.values()].map(({kind, tone, count}) => ({
+                key: kind.plural, label: capitalized(count > 1 ? kind.plural : kind.singular), tone,
+            }))
+        }
+        if (x.loose) return [collection]
+        if (x.year !== null) {
+            // A year holds what is part of the collection from that year: its own videos, and those of the lists that
+            // are part of it.
+            const parts = listsOn ? playlistChoices.filter((choice) => roleOfList(choice) === 'part') : []
+            const own = view.kind !== 'channel' || channelFeeds.some((feed) => roleOfFeed(feed.ref) === 'part')
+            return [...(own ? [collection] : []), ...kinds(parts.map((choice) => ({kind: listKind(playlistsById.get(choice.id)), tone: 'list' as const})))]
+        }
+        return kinds(sourcesIn(id))
+    }
+
+    const toggleSeason = (id: number) => setOpenSeasons((current) => {
+        const next = new Set(current)
+        if (!next.delete(id)) next.add(id)
+        return next
+    })
 
     let shown = 0
     const toggleSeasonRemoved = (id: number) => setValue(
@@ -561,8 +606,11 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
             <span className="seasons-dialog-grip" aria-hidden="true"><FontAwesomeIcon icon={faIcon('fass', 'grip-vertical')}/></span>
             <span className="seasons-dialog-number" aria-hidden="true">{x.seasonType === 'extra' ? '0' : x.seasonNumber}</span>
             <span className="seasons-dialog-season-copy">
-                <input className="input" value={x.name} readOnly aria-label={`Name of the new ${words.season.singular} ${x.name}`}/>
-                <span>New when you save · {counted(x.episodeCount, words.video, words.videos)}</span>
+                <b>{x.name}</b>
+                <span className="seasons-dialog-season-about">
+                    <span className="seasons-dialog-badge">New</span>
+                    <span>{counted(x.episodeCount, words.video, words.videos)} when you save</span>
+                </span>
             </span>
         </li>
     )
@@ -607,37 +655,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         const choice = playlistChoices.find((x) => x.id === playlist.id)
         return choice ? [{choice, playlist}] : []
     })
-    // What the channel season is called while it holds everything, as it would be named now.
-    const looseId = view?.seasons.find((x) => x.loose)?.id
-    const holdsName = looseVideos === 'everything' && looseId !== undefined ? seasonName(looseId) : view?.channelSeasonNames.everything ?? ''
     const feedsAsSeasons = !!view && view.listsPlaylists
-
-    /** On a phone, a season's actions in one menu: rename, move, give a list that joined it its own season again,
-     * join another season, and delete. */
-    const seasonMenu = (id: number, index: number, up: number, down: number, deleted: boolean, removable: boolean): ActionMenuItem[] => {
-        const sources = sourcesIn(id)
-        const home = sources.find((source) => source.home) ?? sources[0]
-        // Only a season of lists or feeds can join another, as on a wider screen.
-        const join = sourceSeasonIds.includes(id) && sources.length > 0
-            ? joinRegistry(id).options.filter((option) => option.value !== 'own') : []
-        return [
-            {label: 'Rename', icon: faIcon('fass', 'pen'), onSelect: () => document.getElementById(`seasons-name-${id}`)?.focus()},
-            {label: 'Move up', icon: faIcon('fass', 'arrow-up'), disabled: up < 0, onSelect: () => moveSeason(index, up)},
-            {label: 'Move down', icon: faIcon('fass', 'arrow-down'), disabled: down < 0, onSelect: () => moveSeason(index, down)},
-            ...(sources.length > 1 ? sources.filter((source) => source !== home).map((source, at) => ({
-                label: `Give ${source.title} ${season.a} of its own again`, icon: faIcon('fass', 'object-ungroup'),
-                onSelect: source.own, separatorBefore: at === 0,
-            })) : []),
-            ...join.map((option, at) => ({
-                label: option.label, icon: faIcon('fass', 'object-group'), onSelect: () => joinSeason(id, Number(option.value)),
-                separatorBefore: at === 0,
-            })),
-            ...(removable ? [{
-                label: deleted ? 'Keep' : 'Delete', icon: faIcon('fass', deleted ? 'rotate-left' : 'trash'),
-                tone: deleted ? 'default' as const : 'danger' as const, onSelect: () => toggleSeasonRemoved(id), separatorBefore: true,
-            }] : []),
-        ]
-    }
 
     /** On a phone, a group of settings folds to one row that says what they are set to. */
     const settingsFold = (key: 'lists' | 'seasons', title: string, summary: string[], body: ReactNode) => !narrow ? body : (
@@ -714,7 +732,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                 )}
             </span>
             {row.actions}
-            {roleControl(row.key, row.title, row.role, row.onRole, row.seasonsToo === false ? ['part', 'off'] : ['season', 'part', 'off'])}
+            {roleControl(row.title, row.role, row.onRole, row.seasonsToo === false ? ['part', 'off'] : ['season', 'part', 'off'])}
         </li>
     )
     const listRow = ({choice, playlist}: {choice: {id: number, enabled: boolean, asSeason?: boolean, seasonId: number | null}, playlist: CollectionListRead},
@@ -749,15 +767,20 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         .filter(([, count]) => count > 0)
         .map(([role, count]) => `${count} ${role === 'season' ? (count === 1 ? `${season.singular} of its own` : `${season.plural} of their own`) : role === 'part' ? 'part of the collection' : 'off'}`)
         .join(' · ')
-    /** The choice for every source in a group, shown above them once there is more than one. */
-    const allOf = (label: string, roles: SourceRole[], onRole: (role: SourceRole) => void, seasonsToo = true) => roles.length > 1 && (
-        <span className="seasons-dialog-all">
-            <span>{label}</span>
-            <SegmentedOptions
-                name={`seasons-all-${label}`} className="seasons-dialog-role" ariaLabel={label}
-                value={same(roles)} options={allOptions(seasonsToo)} onChange={(value) => onRole(value as SourceRole)}
-            />
-        </span>
+    /** The head of a group of sources, which reads apart from them: with more than one, its choices set them all. */
+    const totals = (title: string, all: string, roles: SourceRole[], onRole: (role: SourceRole) => void, seasonsToo = true) => (
+        <div className="seasons-dialog-totals">
+            <span className="seasons-dialog-totals-copy">
+                <b>{roles.length > 1 ? all : title}</b>
+                {roles.length > 1 && <span>Tap one to set them all</span>}
+            </span>
+            {roles.length > 1 && (
+                <ChoiceBar
+                    tiles ariaLabel={`Set ${all.toLowerCase()}`} options={roleOptions(seasonsToo ? ['season', 'part', 'off'] : ['part', 'off'])}
+                    onChange={onRole}
+                />
+            )}
+        </div>
     )
 
     return (
@@ -815,9 +838,10 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                             </div>
                                                             {foldButton('feeds', `the parts of the ${words.channel}`)}
                                                         </div>
-                                                        {!shut.feeds && allOf('All', channelFeeds.map((feed) => roleOfFeed(feed.ref)),
-                                                            (role) => setFeedRoles(new Set(channelFeeds.map((feed) => feed.ref)), role), feedsAsSeasons)}
                                                     </div>
+                                                    {!shut.feeds && totals(`Parts of the ${words.channel}`, `All parts of the ${words.channel}`,
+                                                        channelFeeds.map((feed) => roleOfFeed(feed.ref)),
+                                                        (role) => setFeedRoles(new Set(channelFeeds.map((feed) => feed.ref)), role), feedsAsSeasons)}
                                                     {!shut.feeds && <ul className="seasons-dialog-sources">
                                                         {channelFeeds.map((feed) => sourceRow({
                                                             key: `feed-${feed.ref}`, title: capitalized(feed.names.plural), role: roleOfFeed(feed.ref),
@@ -898,20 +922,14 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                             )}
                                                             {kindGroups.map((group) => (
                                                                 <Fragment key={group.key}>
-                                                                    <div className="seasons-dialog-kind">
-                                                                        <span>{group.title}</span>
-                                                                        {allOf(`All ${group.title.toLowerCase()}`, group.rows.map((row) => setRoleOfList(row.choice)),
-                                                                            (role) => setListRoles(new Set(group.rows.map((row) => row.choice.id)), role))}
-                                                                    </div>
+                                                                    {totals(group.title, `All ${group.title.toLowerCase()}`, group.rows.map((row) => setRoleOfList(row.choice)),
+                                                                        (role) => setListRoles(new Set(group.rows.map((row) => row.choice.id)), role))}
                                                                     <ul className="seasons-dialog-sources">{group.rows.map((row) => listRow(row))}</ul>
                                                                 </Fragment>
                                                             ))}
 
-                                                            <div className="seasons-dialog-kind">
-                                                                <span>Your links</span>
-                                                                {allOf('All links', userLinks.filter((row) => !removedLinks.includes(row.playlist.id)).map((row) => setRoleOfList(row.choice)),
-                                                                    (role) => setListRoles(new Set(userLinks.map((row) => row.choice.id)), role))}
-                                                            </div>
+                                                            {totals('Your links', 'All your links', userLinks.filter((row) => !removedLinks.includes(row.playlist.id)).map((row) => setRoleOfList(row.choice)),
+                                                                (role) => setListRoles(new Set(userLinks.map((row) => row.choice.id)), role))}
                                                             <ul className="seasons-dialog-sources">
                                                                 {userLinks.map((row) => {
                                                                     const link = row.playlist
@@ -961,7 +979,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                                             Remove
                                                                         </button>
                                                                         {/* A link you add is in the collection: off would be the same as not adding it. */}
-                                                                        {roleControl(`new-${link.url}`, link.title, link.asSeason === false ? 'part' : 'season', (role) => setValue(
+                                                                        {roleControl(link.title, link.asSeason === false ? 'part' : 'season', (role) => setValue(
                                                                             'addedLinks', newLinks.map((x) => x.url === link.url ? {...x, asSeason: role === 'season'} : x), {shouldDirty: true},
                                                                         ), ['season', 'part'])}
                                                                     </li>
@@ -1047,7 +1065,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                         </div>
                                         {(showRest || showAlsoHolds || showRepeat) && settingsFold('seasons', `${season.Singular} settings`, [
                                             showRest ? regs.rest.getLabel(byYear ? 'by_year' : 'one_season') : '',
-                                            showAlsoHolds && looseVideos === 'everything' ? `${holdsName} holds everything` : '',
+                                            showAlsoHolds && looseVideos === 'everything' ? `${view.channelSeasonNames.everything} holds everything` : '',
                                             showRepeat ? regs.repeat.getLabel(repeatVideos) : '',
                                         ], (
                                             <div className="seasons-dialog-season-settings">
@@ -1072,7 +1090,8 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                     onChange={(event) => setValue('looseVideos', event.target.checked ? 'everything' : 'one_season', {shouldDirty: true})}
                                                 />
                                                 <span>
-                                                    {holdsName} also holds the {words.videos} that have {season.a} of their own
+                                                    {/* Named the same whichever way it is set: ticked, the season is called Channel. */}
+                                                    {view.channelSeasonNames.everything} also holds the {words.videos} that have {season.a} of their own
                                                 </span>
                                             </label>
                                         )}
@@ -1136,6 +1155,21 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                 const counts = season?.episodeCount ?? 0
                                                 const number = next ? (next.seasonType === 'extra' ? '0' : next.seasonNumber)
                                                     : extra ? '0' : customOrder ? shown : season?.seasonNumber
+                                                // A season with a name the user has to fix stays open.
+                                                const opened = openSeasons.has(field.id) || !!errors.seasons?.[index]?.name
+                                                const nameNow = form.getValues(`seasons.${index}.name`) || season?.name || words.season.singular
+                                                const about = (
+                                                    <span className="seasons-dialog-season-about">
+                                                        {badgesOf(field.id).map((badge) => (
+                                                            <span key={badge.key} className={`seasons-dialog-kind-badge is-${badge.tone}`}>{badge.label}</span>
+                                                        ))}
+                                                        <span>
+                                                            {deleted ? `Deleted, and made again${next && next.name !== season?.name ? ` as ${next.name}` : ''} by your settings when you save · ` : null}
+                                                            {counted(counts, words.video, words.videos)}
+                                                            {next && next.episodeCount !== counts ? `, ${counted(next.episodeCount, words.video, words.videos)} when you save` : null}
+                                                        </span>
+                                                    </span>
+                                                )
                                                 return (
                                                     <Fragment key={field.key}>
                                                     {(added.get(field.id) ?? []).map(addedRow)}
@@ -1165,52 +1199,62 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                             <FontAwesomeIcon icon={faIcon('fass', 'grip-vertical')}/>
                                                         </span>
                                                         <span className="seasons-dialog-number" aria-hidden="true">{number}</span>
-                                                        <span className="seasons-dialog-season-copy">
-                                                            <input
-                                                                id={`seasons-name-${field.id}`}
-                                                                className="input" aria-label={`Name of ${words.season.singular} ${index + 1}`}
-                                                                aria-invalid={!!errors.seasons?.[index]?.name}
-                                                                {...register(`seasons.${index}.name`)}
-                                                            />
-                                                            <span>
-                                                                {deleted ? `Deleted, and made again${next && next.name !== season?.name ? ` as ${next.name}` : ''} by your settings when you save · ` : null}
-                                                                {counted(counts, words.video, words.videos)}
-                                                                {next && next.episodeCount !== counts ? `, ${counted(next.episodeCount, words.video, words.videos)} when you save` : null}
-                                                                {season?.loose ? (holdsWholeChannel ? ` · Everything from the ${words.channel}` : ' · The rest of the collection') : null}
+                                                        {opened ? (
+                                                            <span className="seasons-dialog-season-copy">
+                                                                <span className="seasons-dialog-season-name">
+                                                                    <input
+                                                                        id={`seasons-name-${field.id}`}
+                                                                        className="input" aria-label={`Name of ${words.season.singular} ${index + 1}`}
+                                                                        aria-invalid={!!errors.seasons?.[index]?.name}
+                                                                        {...register(`seasons.${index}.name`)}
+                                                                    />
+                                                                    <button
+                                                                        type="button" className="seasons-dialog-fold" aria-expanded="true"
+                                                                        aria-label={`Close ${nameNow}`} title="Close" onClick={() => toggleSeason(field.id)}
+                                                                    >
+                                                                        <FontAwesomeIcon icon={faIcon('fass', 'chevron-up')} aria-hidden="true"/>
+                                                                    </button>
+                                                                </span>
+                                                                {about}
+                                                                {season && sourceSeasonIds.includes(season.id) && (
+                                                                    <SeasonSources
+                                                                        season={field.id} words={words} sources={sourcesIn(field.id)}
+                                                                        joinRegistry={joinRegistry(field.id)}
+                                                                        onJoin={(to) => joinSeason(field.id, to)} joinsName={joinsName(field.id)}
+                                                                    />
+                                                                )}
+                                                                {season?.removable && (
+                                                                    <button
+                                                                        type="button" className={`btn btn-small seasons-dialog-delete${deleted ? '' : ' is-danger'}`}
+                                                                        onClick={() => toggleSeasonRemoved(field.id)}
+                                                                    >
+                                                                        <FontAwesomeIcon icon={faIcon('fass', deleted ? 'rotate-left' : 'trash')} aria-hidden="true"/>
+                                                                        {deleted ? `Keep this ${words.season.singular}` : `Delete ${words.season.singular}`}
+                                                                    </button>
+                                                                )}
+                                                                {errors.seasons?.[index]?.name && <span className="error" role="alert">{errors.seasons[index]?.name?.message}</span>}
                                                             </span>
-                                                            {season && sourceSeasonIds.includes(season.id) && (
-                                                                <SeasonSources
-                                                                    season={field.id} words={words} sources={sourcesIn(field.id)}
-                                                                    joinRegistry={joinRegistry(field.id)}
-                                                                    onJoin={(to) => joinSeason(field.id, to)} joinsName={joinsName(field.id)}
-                                                                    compact={narrow}
-                                                                />
-                                                            )}
-                                                            {errors.seasons?.[index]?.name && <span className="error" role="alert">{errors.seasons[index]?.name?.message}</span>}
-                                                        </span>
-                                                        {narrow ? (
-                                                            <ActionMenu
-                                                                label={`More for ${form.getValues(`seasons.${index}.name`) || words.season.singular}`}
-                                                                triggerIcon={faIcon('fass', 'ellipsis')} className="seasons-dialog-season-menu"
-                                                                items={seasonMenu(field.id, index, up, down, deleted, !!season?.removable)}
-                                                            />
                                                         ) : (
-                                                        <span className="seasons-dialog-arrows">
-                                                            {season?.removable && (
-                                                                <button
-                                                                    type="button" aria-label={`${deleted ? 'Keep' : 'Delete'} ${form.getValues(`seasons.${index}.name`) || words.season.singular}`}
-                                                                    title={deleted ? 'Keep' : 'Delete'} onClick={() => toggleSeasonRemoved(field.id)}
-                                                                >
-                                                                    <FontAwesomeIcon icon={faIcon('fass', deleted ? 'rotate-left' : 'trash')}/>
+                                                            <button
+                                                                type="button" className="seasons-dialog-season-head" aria-expanded="false"
+                                                                onClick={() => toggleSeason(field.id)}
+                                                            >
+                                                                <span className="seasons-dialog-season-copy">
+                                                                    <b>{nameNow}</b>
+                                                                    {about}
+                                                                </span>
+                                                                <FontAwesomeIcon icon={faIcon('fass', 'chevron-down')} aria-hidden="true"/>
+                                                            </button>
+                                                        )}
+                                                        {!narrow && (
+                                                            <span className="seasons-dialog-arrows">
+                                                                <button type="button" aria-label={`Move ${words.season.singular} ${index + 1} up`} disabled={up < 0} onClick={() => moveSeason(index, up)}>
+                                                                    <FontAwesomeIcon icon={faIcon('fass', 'arrow-up')}/>
                                                                 </button>
-                                                            )}
-                                                            <button type="button" aria-label={`Move ${words.season.singular} ${index + 1} up`} disabled={up < 0} onClick={() => moveSeason(index, up)}>
-                                                                <FontAwesomeIcon icon={faIcon('fass', 'chevron-up')}/>
-                                                            </button>
-                                                            <button type="button" aria-label={`Move ${words.season.singular} ${index + 1} down`} disabled={down < 0} onClick={() => moveSeason(index, down)}>
-                                                                <FontAwesomeIcon icon={faIcon('fass', 'chevron-down')}/>
-                                                            </button>
-                                                        </span>
+                                                                <button type="button" aria-label={`Move ${words.season.singular} ${index + 1} down`} disabled={down < 0} onClick={() => moveSeason(index, down)}>
+                                                                    <FontAwesomeIcon icon={faIcon('fass', 'arrow-down')}/>
+                                                                </button>
+                                                            </span>
                                                         )}
                                                     </li>
                                                     </Fragment>
@@ -1222,8 +1266,11 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                     <span className="seasons-dialog-grip" aria-hidden="true"><FontAwesomeIcon icon={faIcon('fass', 'grip-vertical')}/></span>
                                                     <span className="seasons-dialog-number" aria-hidden="true"/>
                                                     <span className="seasons-dialog-season-copy">
-                                                        <input className="input" value={list.title} readOnly aria-label={`Name of the new ${words.season.singular} ${list.title}`}/>
-                                                        <span>New when you save · Not indexed yet: VODLoft lists its {words.videos} after saving</span>
+                                                        <b>{list.title}</b>
+                                                        <span className="seasons-dialog-season-about">
+                                                            <span className="seasons-dialog-badge">New</span>
+                                                            <span>Not indexed yet: VODLoft lists its {words.videos} after saving</span>
+                                                        </span>
                                                     </span>
                                                 </li>
                                             ))}
@@ -1289,16 +1336,15 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
 }
 
 
-/** The sources of one season in the Seasons dialog: the lists and feeds it holds, and putting it together with another. */
-function SeasonSources({season, words, sources, joinRegistry, onJoin, joinsName, compact = false}: {
+/** What one open season of the Seasons dialog is made of: its lists and feeds, each but its own able to have a season
+ * of its own again, and putting it together with another season. */
+function SeasonSources({season, words, sources, joinRegistry, onJoin, joinsName}: {
     season: number
     words: Words
     sources: {key: string, title: string, home: boolean, own: () => void}[]
     joinRegistry: SelectRegistry
     onJoin: (to: number) => void
     joinsName: string
-    /** On a phone, the season's menu offers giving a list its own season again and joining another. */
-    compact?: boolean
 }) {
     if (sources.length === 0) {
         return <span className="seasons-dialog-joins">What is in it moves to {joinsName} when you save.</span>
@@ -1306,31 +1352,30 @@ function SeasonSources({season, words, sources, joinRegistry, onJoin, joinsName,
     // The source whose season it is stays; the ones that joined it can have one of their own again.
     const home = sources.find((source) => source.home) ?? sources[0]
     return (
-        <span className="seasons-dialog-season-lists">
-            {sources.length > 1 && (
-                <span className="seasons-dialog-list-names">
-                    {sources.filter((source) => source !== home).map((source) => (
-                        <span key={source.key} className="seasons-dialog-list-name">
-                            <span>Joined: <b>{source.title}</b></span>
-                            {!compact && (
-                                <button type="button" className="btn btn-small" onClick={source.own}
-                                        aria-label={`Give ${source.title} ${words.season.a} of its own again`}>
-                                    {capitalized(words.season.a)} of its own again
-                                </button>
-                            )}
-                        </span>
-                    ))}
-                </span>
-            )}
-            {!compact && joinRegistry.options.length > 1 && (
-                <span className="seasons-dialog-join">
-                    <SimpleSelect
-                        inputId={`seasons-join-${season}`} aria-label={`Put ${sources.map((source) => source.title).join(' and ')} together with another ${words.season.singular}`}
-                        registry={joinRegistry} value="own"
-                        onChange={(value) => { if (value && value !== 'own') onJoin(Number(value)) }}
-                    />
-                </span>
-            )}
+        <span className="seasons-dialog-made-of">
+            <span className="seasons-dialog-made-of-title">Made of</span>
+            <span className="seasons-dialog-made-of-list">
+                {sources.map((source) => (
+                    <span key={source.key} className="seasons-dialog-source-chip">
+                        {source.title}
+                        {sources.length > 1 && source !== home && (
+                            <button type="button" onClick={source.own} title={`${capitalized(words.season.a)} of its own again`}
+                                    aria-label={`Give ${source.title} ${words.season.a} of its own again`}>
+                                <FontAwesomeIcon icon={faIcon('fass', 'xmark')} aria-hidden="true"/>
+                            </button>
+                        )}
+                    </span>
+                ))}
+                {joinRegistry.options.length > 1 && (
+                    <span className="seasons-dialog-join">
+                        <SimpleSelect
+                            inputId={`seasons-join-${season}`} aria-label={`Put ${sources.map((source) => source.title).join(' and ')} together with another ${words.season.singular}`}
+                            registry={joinRegistry} value="own"
+                            onChange={(value) => { if (value && value !== 'own') onJoin(Number(value)) }}
+                        />
+                    </span>
+                )}
+            </span>
         </span>
     )
 }

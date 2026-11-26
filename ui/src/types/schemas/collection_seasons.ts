@@ -122,6 +122,10 @@ export const CollectionSeasonsReadSchema = z.object({
      * collection's own seasons, which a YouTube channel collection also calls playlists. A collection without a link
      * of its own calls them links: the ones the user gave it. */
     creatorListNames: NamesSchema,
+    /** What VODLoft calls a collection, for the badge of a season that holds what is part of the collection. */
+    collectionNames: NamesSchema,
+    /** What VODLoft calls the links the user gives a collection, for the badge of a season they are in. */
+    linkNames: NamesSchema,
     /** The season of the videos in none of the lists, such as Videos, Singles or Tracks. */
     looseSeason: z.string(),
     /** What the collection's Site calls the creator behind it, such as artist in a Music collection. */

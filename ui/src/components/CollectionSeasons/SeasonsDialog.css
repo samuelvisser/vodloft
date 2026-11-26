@@ -397,3 +397,109 @@
 .seasons-dialog.is-sheet .seasons-dialog-content { flex: 1 1 auto; padding-right: 0; }
 .seasons-dialog.is-sheet .modal-actions { padding-bottom: max(14px, env(safe-area-inset-bottom)); }
 .seasons-dialog.is-sheet .modal-actions .btn { flex: 1 1 auto; }
+
+/* The head of a group of sources reads apart from its rows: a band with what it is, and tiles that set them all. */
+.seasons-dialog-totals {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .5rem .875rem;
+    border-top: 1px solid rgba(100, 116, 139, 0.24);
+    border-bottom: 1px solid rgba(100, 116, 139, 0.24);
+    background: rgba(148, 163, 184, 0.14);
+}
+.seasons-dialog-totals-copy { display: grid; gap: 1px; min-width: 0; }
+.seasons-dialog-totals-copy b { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.seasons-dialog-totals-copy span { font-size: .75rem; color: var(--muted); }
+.seasons-dialog-totals + .seasons-dialog-sources > .seasons-dialog-source:first-child { border-top: 0; }
+@media (max-width: 560px) {
+    .seasons-dialog-totals { padding-left: .75rem; padding-right: .75rem; }
+}
+/* A source's choice sits beside its name, on the same line, also on a phone. */
+.seasons-dialog-source { flex-wrap: nowrap; }
+.seasons-dialog-source .seasons-dialog-link-copy { flex: 1 1 auto; }
+.seasons-dialog-source-actions { flex-wrap: wrap; justify-content: flex-end; }
+
+/* A season folds shut to its name and what it is made of, and opens to rename it and change that. */
+.seasons-dialog-season { align-items: flex-start; }
+.seasons-dialog-season > .seasons-dialog-grip,
+.seasons-dialog-season > .seasons-dialog-number { align-self: flex-start; line-height: 2.25rem; }
+.seasons-dialog-season > .seasons-dialog-arrows { align-self: flex-start; margin-top: .3rem; }
+.seasons-dialog-season-head {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .25rem .25rem;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.seasons-dialog-season-head:hover { background: rgba(59, 130, 246, 0.06); }
+.seasons-dialog-season-head > svg { flex: none; opacity: .6; }
+.seasons-dialog-season-head .seasons-dialog-season-copy b { overflow-wrap: anywhere; }
+.seasons-dialog-season-name { display: flex; align-items: center; gap: .25rem; }
+.seasons-dialog-season-name .input { flex: 1 1 auto; }
+.seasons-dialog-season-copy > .seasons-dialog-season-about { opacity: 1; }
+.seasons-dialog-season-about {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .25rem .35rem;
+    font-size: .8125rem;
+}
+.seasons-dialog-season-about > span:last-child { opacity: .75; }
+.seasons-dialog-season-about .seasons-dialog-badge { margin-right: 0; }
+.seasons-dialog-kind-badge {
+    display: inline-block;
+    padding: 0 .45rem;
+    border: 1px solid;
+    border-radius: 999px;
+    font-size: .6875rem;
+    font-weight: 600;
+    line-height: 1.1rem;
+}
+.seasons-dialog-kind-badge.is-collection { border-color: rgba(16, 185, 129, 0.5); background: rgba(16, 185, 129, 0.12); color: #059669; }
+.seasons-dialog-kind-badge.is-list { border-color: rgba(59, 130, 246, 0.5); background: rgba(59, 130, 246, 0.12); color: #2563eb; }
+.seasons-dialog-kind-badge.is-feed { border-color: rgba(139, 92, 246, 0.5); background: rgba(139, 92, 246, 0.12); color: #7c3aed; }
+@media (prefers-color-scheme: dark) {
+    .seasons-dialog-kind-badge.is-collection { color: #6ee7b7; }
+    .seasons-dialog-kind-badge.is-list { color: #93c5fd; }
+    .seasons-dialog-kind-badge.is-feed { color: #c4b5fd; }
+}
+.seasons-dialog-made-of { display: grid; gap: .3rem; margin-top: .35rem; }
+.seasons-dialog-made-of-title { font-size: .75rem; font-weight: 600; opacity: .8; }
+.seasons-dialog-made-of-list { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
+.seasons-dialog-source-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    padding: 0 .65rem;
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    border-radius: 999px;
+    font-size: .8125rem;
+}
+.seasons-dialog-source-chip:has(button) { padding-right: 0; }
+.seasons-dialog-source-chip button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: inherit;
+    opacity: .7;
+    cursor: pointer;
+}
+.seasons-dialog-source-chip button:hover { opacity: 1; background: rgba(239, 68, 68, 0.1); }
+.seasons-dialog-made-of-list .seasons-dialog-join { min-width: 12rem; flex: 0 1 16rem; }
+.seasons-dialog-delete { justify-self: start; align-self: flex-start; margin-top: .4rem; }
+.seasons-dialog-delete.is-danger { color: #dc2626; }

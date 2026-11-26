@@ -41,7 +41,7 @@ from config.network import is_no_internet_error
 from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import EpisodeIdentifier
 from backend.types.season_types import SeasonType
-from backend.types.resource_names import OWN_LINK_NAMES
+from backend.types.resource_names import OWN_LINK_NAMES, RESOURCE_NAMES
 from backend.types.link_season_types import (
     CollectionKind, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos, RepeatVideos,
 )
@@ -118,6 +118,8 @@ class _View:
     channel_season_names: dict[str, str]
     channel_season_offered: bool
     channel_names: Names
+    collection_names: Names
+    link_names: Names
 
     def __getattr__(self, name):
         return getattr(self.collection, name)
@@ -239,6 +241,7 @@ def _view(state: SeasonsState) -> CollectionSeasonsAPIRead:
         channel_season_names=_channel_season_names(collection),
         channel_season_offered=channel_season_offered(collection),
         channel_names=collection_site(collection).channel_collection_names,
+        collection_names=RESOURCE_NAMES["collection"], link_names=OWN_LINK_NAMES,
     ))
 
 

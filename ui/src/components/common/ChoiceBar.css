@@ -1,0 +1,59 @@
+/* A row of a few short choices, as tall as a dropdown, each as wide as the others. */
+.choice-bar {
+    --choice-width: 3.25rem;
+    display: inline-grid;
+    grid-template-columns: repeat(var(--choice-count), minmax(var(--choice-width), 1fr));
+    flex: none;
+    min-height: 38px;
+    box-sizing: border-box;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--bg);
+}
+.choice-bar-option {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 .5rem;
+    font-size: .8125rem;
+    font-weight: 500;
+    color: var(--text);
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+}
+.choice-bar:not(.is-tiles) .choice-bar-option + .choice-bar-option { border-left: 1px solid rgba(148, 163, 184, 0.4); }
+.choice-bar-option input {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    opacity: 0;
+    cursor: inherit;
+}
+.choice-bar-option:hover { background: rgba(59, 130, 246, 0.1); }
+.choice-bar-option.is-chosen { background: #2563eb; color: #fff; font-weight: 600; }
+.choice-bar-option:has(input:focus-visible) { outline: 2px solid #60a5fa; outline-offset: -2px; }
+.choice-bar-option:has(input:disabled) { opacity: .5; cursor: not-allowed; }
+
+/* Tiles set many rows at once: they stand apart and none is chosen. */
+.choice-bar.is-tiles {
+    gap: .25rem;
+    border: 0;
+    border-radius: 0;
+    overflow: visible;
+    background: transparent;
+}
+.choice-bar.is-tiles .choice-bar-option {
+    min-height: 34px;
+    border: 1px dashed rgba(148, 163, 184, 0.7);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg) 60%, transparent);
+    font: inherit;
+    font-size: .8125rem;
+    font-weight: 600;
+}
+.choice-bar.is-tiles .choice-bar-option:hover { border-style: solid; border-color: #60a5fa; }
+.choice-bar.is-tiles .choice-bar-option:focus-visible { outline: 2px solid #60a5fa; outline-offset: 1px; }
+.choice-bar.is-tiles .choice-bar-option:disabled { opacity: .5; cursor: not-allowed; }
