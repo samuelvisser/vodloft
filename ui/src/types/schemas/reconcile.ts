@@ -45,6 +45,8 @@ export const MovePreviewSchema = z.object({
     profiles: z.array(z.object({name: z.string(), filesRenamed: z.number(), metadataRewritten: z.number()})),
     /** Files moved, so its files are renamed and their metadata rewritten also when it keeps its numbers. */
     filesFollow: z.boolean(),
+    /** What the move waits for, such as the listing a saved change started; what moves shows once it is done. */
+    busy: z.string().nullable().default(null),
 })
 export type MovePreview = z.infer<typeof MovePreviewSchema>
 

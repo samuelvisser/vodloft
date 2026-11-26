@@ -62,6 +62,8 @@ class MovePreviewAPIRead(ResponseBase):
     """What numbering again does to each Local Media Profile's files; the metadata is rewritten either way."""
     files_follow: bool
     """Files moved, so its files are renamed and their metadata rewritten also when it keeps its numbers."""
+    busy: Optional[str] = None
+    """What the move waits for, such as the listing a saved change started; what moves shows once it is done."""
 
 
 class ReconcileAPIIn(RequestBase):

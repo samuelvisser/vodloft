@@ -43,7 +43,11 @@ export default function ReconcileDialog({open, path, what, onDismiss, onDone}: P
         enabled: open,
         gcTime: 0,
         queryFn: ({signal}) => previewReconcile(path, signal),
+        // While VODLoft works on the collection, such as listing it again after a saved change, the preview waits.
+        refetchInterval: (query) => query.state.data?.busy ? 2000 : false,
     })
+    const ready = preview && !preview.busy
+    const nothing = ready && preview.parts.length === 0
 
     const confirm = async () => {
         setError(null)
@@ -70,7 +74,7 @@ export default function ReconcileDialog({open, path, what, onDismiss, onDone}: P
             onDismiss={onDismiss}
             icon={faIcon('fass', 'arrow-right-arrow-left')}
             className="change-identification-dialog move-sections-dialog"
-            confirmButton={{label: 'Move', onClick: confirm, className: 'btn btn-primary', disabled: !preview}}
+            confirmButton={{label: 'Move', onClick: confirm, className: 'btn btn-primary', disabled: !ready || nothing}}
         >
             <p className="help">
                 What is downloaded waits where it is until you move it: moving renames its files into their new place, or
@@ -88,7 +92,14 @@ export default function ReconcileDialog({open, path, what, onDismiss, onDone}: P
                         ? previewError.message : 'VODLoft could not look up what the move does.'}
                 </p>
             )}
-            {preview && <CollectionMoves preview={preview} renumber={renumber} onRenumber={setRenumber}/>}
+            {preview?.busy && (
+                <p className="change-identification-loading" role="status">
+                    <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/>
+                    {preview.busy}
+                </p>
+            )}
+            {nothing && <p role="status">Everything is where it belongs now: there is nothing to move.</p>}
+            {ready && !nothing && <CollectionMoves preview={preview} renumber={renumber} onRenumber={setRenumber}/>}
             {error && <p className="error" role="alert">{error}</p>}
         </ConfirmDialog>
     )

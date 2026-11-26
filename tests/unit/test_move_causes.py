@@ -99,3 +99,32 @@ def test_a_change_that_moves_nothing_downloaded_is_not_kept(source, session):
     _save(session, loose_videos="one_season")
 
     assert _causes(session) == []
+
+
+def test_the_move_dialog_waits_while_vodloft_lists_the_collection_again(source, session, monkeypatch):
+    from backend.db.core import get_session
+    from backend.db.models import Collection
+    from backend.services import reconcile
+    from backend.services.episode_identification import CollectionWork
+
+    _waiting(source, session)
+    _save(session, loose_videos="one_season")
+
+    def preview():
+        reading = get_session()
+        try:
+            return reconcile.preview_reconcile(
+                reading, reconcile.ReconcileScope.of_collection(reading.query(Collection).one()),
+            )
+        finally:
+            reading.close()
+
+    # Saving started a listing of the collection, which may change what moves: the dialog waits for it.
+    monkeypatch.setattr(reconcile, "collection_work", lambda s, c: CollectionWork(c.title, downloads=False))
+    waiting = preview()
+    assert waiting.busy is not None and "still working on" in waiting.busy
+    assert waiting.parts == []
+
+    monkeypatch.setattr(reconcile, "collection_work", lambda s, c: None)
+    ready = preview()
+    assert ready.busy is None and [part.count for part in ready.parts] == [2]

@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Collection, Episode, EpisodeMediaDownload
 from backend.services.episode_identification import (
-    IdentificationChange, ProfileFilesChange, collection_busy, profile_file_changes, queue_renumber, renumber_changes,
+    IdentificationChange, ProfileFilesChange, collection_busy, collection_work, profile_file_changes, queue_renumber, renumber_changes,
     renumbers,
 )
 from backend.services.errors import ServiceError
@@ -163,6 +163,9 @@ class MovePreview:
     """What numbering again does to each Local Media Profile's files; the metadata is rewritten either way."""
     files_follow: bool
     """Files moved, so its files are renamed and their metadata rewritten also when it keeps its numbers."""
+    busy: str | None = None
+    """What the move waits for, such as the listing a saved change started: what moves shows once it is done, as
+    it may change what moves. Nothing else is planned meanwhile."""
 
 
 def _newest_first(episodes: list[tuple[str, datetime | None]]) -> list[str]:
@@ -172,9 +175,26 @@ def _newest_first(episodes: list[tuple[str, datetime | None]]) -> list[str]:
 
 def preview_reconcile(s: Session, scope: ReconcileScope) -> MovePreview:
     """What the Move action does, as it plans the moves and the numbering after them on the planner's copy of the
-    collection: nothing is saved. Reading only."""
+    collection: nothing is saved. While VODLoft works on the collection, such as listing it again after a saved change,
+    the preview says what it waits for instead. With nothing to move, it has no parts. Reading only."""
     collection = scope.collection
+    identification = EpisodeIdentifier(collection.episode_identifier)
+    offered = identification is not EpisodeIdentifier.DATE_BASED
+
+    def nothing(busy: str | None = None) -> MovePreview:
+        return MovePreview(
+            slug=collection.slug, title=collection.title, type=collection.type, episode_identifier=identification,
+            parts=[], causes=move_causes(collection), seasons_plan=seasons_plan(collection), renumber_offered=False,
+            changes=[], profiles=[], files_follow=False, busy=busy,
+        )
+
+    work = collection_work(s, collection)
+    if work is not None:
+        return nothing(work.waiting())
     state = load_state(s, collection)
+    if not _waiting(state, scope):
+        # Such as when listing the collection again after a change put everything where it belongs.
+        return nothing()
     done = _plan(s, state, scope)
     titles = {
         episode_id: (title, published) for episode_id, title, published in s.execute(
@@ -189,8 +209,6 @@ def preview_reconcile(s: Session, scope: ReconcileScope) -> MovePreview:
         )
         for group in done.groups
     ]
-    identification = EpisodeIdentifier(collection.episode_identifier)
-    offered = identification is not EpisodeIdentifier.DATE_BASED
     changes, changed_ids = renumber_changes(s, state) if offered else ([], set())
     follow = bool(done.renamed)
     return MovePreview(

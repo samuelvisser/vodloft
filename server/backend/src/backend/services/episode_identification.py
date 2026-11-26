@@ -290,9 +290,40 @@ def _busy(s: Session, collection: Collection) -> str | None:
     return collection_busy(s, collection, "changing how its episodes are numbered")
 
 
-def collection_busy(s: Session, collection: Collection, doing: str) -> str | None:
-    """Why ``doing`` something that numbers the collection's episodes again can't start now: its episodes are
-    downloading, or VODLoft is working on its episodes or files. None when it can."""
+@dataclass(frozen=True)
+class CollectionWork:
+    """Work on a collection that numbering its episodes again has to wait for."""
+
+    title: str
+    downloads: bool
+    """Its episodes are downloading or waiting to download, rather than VODLoft working on its episodes or files,
+    such as listing it again after a change."""
+
+    def refusal(self, doing: str) -> str:
+        """Why ``doing`` it can't start now."""
+        if self.downloads:
+            return (
+                f"Episodes of {name_in_text(self.title)} are downloading or waiting to download. "
+                f"Let them finish, or cancel them, before {doing}."
+            )
+        return f"VODLoft is still working on {name_in_text(self.title)}. Try again once that is done."
+
+    def waiting(self) -> str:
+        """What a preview that waits for the work says while it waits."""
+        if self.downloads:
+            return (
+                f"Episodes of {name_in_text(self.title)} are downloading or waiting to download. The changes "
+                "show here once they are done, or once you cancel them."
+            )
+        return (
+            f"VODLoft is still working on {name_in_text(self.title)}, such as listing it again after your change. "
+            "The changes show here once that is done."
+        )
+
+
+def collection_work(s: Session, collection: Collection) -> CollectionWork | None:
+    """The work on the collection that numbering its episodes again waits for: its episodes are downloading, or
+    VODLoft is working on its episodes or files. None when there is none."""
     downloads = s.scalar(
         select(TaskOperation.id).where(
             TaskOperation.kind == "media.download",
@@ -304,10 +335,7 @@ def collection_busy(s: Session, collection: Collection, doing: str) -> str | Non
         ).limit(1)
     )
     if downloads is not None:
-        return (
-            f"Episodes of {name_in_text(collection.title)} are downloading or waiting to download. "
-            f"Let them finish, or cancel them, before {doing}."
-        )
+        return CollectionWork(collection.title, downloads=True)
     work = s.scalar(
         select(TaskOperation.kind).where(
             TaskOperation.resource_type == "collection",
@@ -316,9 +344,14 @@ def collection_busy(s: Session, collection: Collection, doing: str) -> str | Non
             TaskOperation.status.in_(_ACTIVE),
         ).limit(1)
     )
-    if work is not None:
-        return f"VODLoft is still working on {name_in_text(collection.title)}. Try again once that is done."
-    return None
+    return CollectionWork(collection.title, downloads=False) if work is not None else None
+
+
+def collection_busy(s: Session, collection: Collection, doing: str) -> str | None:
+    """Why ``doing`` something that numbers the collection's episodes again can't start now (``collection_work``).
+    None when it can."""
+    work = collection_work(s, collection)
+    return work.refusal(doing) if work is not None else None
 
 
 def _metadata_rewrites(s: Session, collection: Collection, profile: CollectionLocalMediaProfile) -> int:
