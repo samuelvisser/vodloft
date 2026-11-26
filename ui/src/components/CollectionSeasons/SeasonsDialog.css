@@ -18,6 +18,7 @@
 .seasons-dialog-content {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
+    align-content: start;
     gap: 18px;
     min-height: 0;
     margin-top: 8px;
@@ -87,9 +88,17 @@
     font-weight: 600;
 }
 
-.seasons-dialog-season { display: flex; align-items: center; gap: .6rem; padding: .5rem .5rem .5rem .75rem; cursor: grab; }
+.seasons-dialog-season { display: flex; align-items: center; gap: .6rem; padding: .5rem .5rem .5rem .75rem; }
 .seasons-dialog-season.is-dragging { background: rgba(59, 130, 246, 0.1); }
-.seasons-dialog-grip { opacity: .6; }
+/* The handle a season is dragged by, also with a finger: it gets the touches instead of the page scrolling. */
+.seasons-dialog-grip {
+    opacity: .6;
+    cursor: grab;
+    touch-action: none;
+    padding: .5rem .35rem;
+    margin: -.5rem -.35rem;
+}
+.seasons-dialog-season.is-dragging .seasons-dialog-grip { cursor: grabbing; opacity: 1; }
 .seasons-dialog-number {
     flex: 0 0 auto;
     min-width: 1.75rem;
@@ -110,7 +119,6 @@
 
 @media (max-width: 560px) {
     .seasons-dialog-switch-row { flex-direction: column; }
-    .seasons-dialog-grip { display: none; }
 }
 
 .seasons-dialog-links li.seasons-dialog-added { display: flex; align-items: center; gap: .6rem; }
@@ -296,3 +304,96 @@
 @media (max-width: 560px) {
     .seasons-dialog-source, .seasons-dialog-box-head, .seasons-dialog-kind { padding-left: .75rem; padding-right: .75rem; }
 }
+
+.seasons-dialog-badge.is-changed { background: rgba(249, 115, 22, 0.16); color: #c2410c; }
+
+/* The two steps: the settings, then the review of what saving does. */
+.seasons-dialog-header { display: flex; flex-direction: column; align-items: flex-start; gap: .5rem; }
+.seasons-dialog-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: .4rem 1rem; font-size: .8125rem; color: var(--muted); }
+.seasons-dialog-steps li { display: flex; align-items: center; gap: .4rem; }
+.seasons-dialog-steps li > span {
+    display: inline-grid;
+    place-items: center;
+    width: 1.375rem;
+    height: 1.375rem;
+    border-radius: 999px;
+    border: 1px solid rgba(100, 116, 139, 0.4);
+    font-size: .75rem;
+    font-weight: 600;
+}
+.seasons-dialog-steps li.is-current { color: inherit; font-weight: 600; }
+.seasons-dialog-steps li.is-current > span { background: #2563eb; border-color: #2563eb; color: #fff; }
+.seasons-dialog-steps li.is-done > span { background: rgba(34, 197, 94, 0.16); border-color: transparent; color: #15803d; }
+.seasons-dialog .modal-actions .seasons-dialog-back { margin-right: auto; }
+
+/* The review: what changed as a row of pills, then one card per thing saving does, as the Move dialog shows them. */
+.seasons-review { display: grid; gap: 12px; align-content: start; }
+.seasons-review .change-identification-steps { margin: 0; }
+.seasons-review-changes h3 { margin: 0 0 .5rem; font-size: .875rem; }
+.seasons-review-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.seasons-review-chip {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border: 1px solid rgba(100, 116, 139, 0.35);
+    border-radius: 14px;
+    font-size: .8125rem;
+    max-width: 100%;
+}
+.seasons-review-chip svg { opacity: .7; font-size: .75rem; }
+.seasons-review-back {
+    border: 0;
+    padding: 0;
+    background: none;
+    color: var(--link, #2563eb);
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+}
+.seasons-review-busy { display: grid; gap: 10px; }
+.seasons-review-nothing { display: flex; gap: 10px; align-items: flex-start; margin: 0; }
+.seasons-review-nothing svg { color: #16a34a; margin-top: 3px; }
+.seasons-review-nothing > span { display: grid; gap: 2px; }
+
+/* On a phone the choice of what a source is is one dropdown, on its own line under the name. */
+.seasons-dialog-role-select { flex: 1 1 100%; min-width: 0; }
+
+/* On a phone, settings fold to one row that says what they are set to. */
+.seasons-dialog-settings-fold { border-top: 1px solid rgba(100, 116, 139, 0.24); }
+.seasons-dialog-section > .seasons-dialog-settings-fold { border: 1px solid rgba(100, 116, 139, 0.24); border-radius: 12px; }
+.seasons-dialog-settings-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    width: 100%;
+    padding: .75rem .875rem;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.seasons-dialog-settings-summary > span { display: grid; gap: 2px; min-width: 0; }
+.seasons-dialog-settings-fold .seasons-dialog-box-settings { border-top: 0; padding-top: 0; }
+.seasons-dialog-settings-fold .seasons-dialog-season-settings { padding: 0 .875rem .75rem; }
+.seasons-dialog-season-settings { display: grid; gap: 12px; }
+.seasons-dialog-season-menu { flex: none; }
+
+/* On a phone the dialog is a sheet over the whole screen, its buttons pinned at the bottom. */
+.modal.seasons-dialog.is-sheet {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    margin: 0;
+}
+.modal-overlay:has(> .seasons-dialog.is-sheet) { padding: 0; align-items: stretch; }
+.seasons-dialog.is-sheet > form { flex: 1 1 auto; }
+.seasons-dialog.is-sheet .seasons-dialog-content { flex: 1 1 auto; padding-right: 0; }
+.seasons-dialog.is-sheet .modal-actions { padding-bottom: max(14px, env(safe-area-inset-bottom)); }
+.seasons-dialog.is-sheet .modal-actions .btn { flex: 1 1 auto; }

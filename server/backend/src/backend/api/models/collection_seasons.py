@@ -9,7 +9,9 @@ from pydantic import AliasChoices, AliasPath, Field
 
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.api.models.collection_contract import CollectionWordsAPIRead
+from backend.api.models.reconcile import MoveCauseAPIRead, MovePreviewAPIRead
 from backend.api.models.source import ListKindAPIRead, NamesAPIRead, SectionTypeAPIRead
+from backend.services.list_previews import ListingState
 from backend.types.link_season_types import (
     CollectionKind, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos, RepeatVideos,
 )
@@ -64,6 +66,9 @@ class CollectionListAPIRead(ResponseBase):
     is_default: bool = False
     """For a collection without a link of its own: its default link, such as the one its picture comes from. Such a
     collection always has one."""
+    listed: bool = False
+    """VODLoft knows what the list holds, as it listed it before; the dialog lists one that is switched on otherwise,
+    so its review can say what saving moves."""
 
 
 class CollectionFeedAPIRead(ResponseBase):
@@ -188,6 +193,19 @@ class CollectionListChangeAPIIn(RequestBase):
     link that stays is the default."""
 
 
+TOKEN_PATTERN = r"^[A-Za-z0-9-]+$"
+"""The open Seasons dialog's token, such as a UUID."""
+
+
+class AddedLinkAPIIn(RequestBase):
+    """A link the user adds in the Seasons dialog, as the dialog looked it up."""
+
+    url: str = Field(min_length=1, max_length=2000, pattern=r"^https?://")
+    title: str = Field(default="", max_length=1000)
+    as_season: bool = True
+    """A season of its own; otherwise its videos are part of the collection."""
+
+
 class CollectionSeasonsAPIUpdate(RequestBase):
     """The seasons in the order the user wants them, with their names, and how the playlists are seasons."""
 
@@ -211,12 +229,15 @@ class CollectionSeasonsAPIUpdate(RequestBase):
     playlists: list[CollectionListChangeAPIIn] = Field(default_factory=list, max_length=5000)
     removed_links: list[int] = Field(default_factory=list, max_length=5000)
     """Links the user added that they remove again, by id."""
-    added_links: list[Annotated[str, Field(min_length=1, max_length=2000, pattern=r"^https?://")]] = Field(
-        default_factory=list, max_length=200,
-    )
+    added_links: list[AddedLinkAPIIn] = Field(default_factory=list, max_length=200)
     """Links the user adds, saved with the rest."""
     removed_seasons: list[int] = Field(default_factory=list, max_length=2000)
     """Seasons the user removes, by id. Their videos go where the settings put them, which can be a season like it."""
+    listing_token: Optional[str] = Field(default=None, max_length=64, pattern=TOKEN_PATTERN)
+    """The open dialog's token: what it listed (``SeasonsListingsAPIIn``) is what the review plans with and what
+    saving takes along."""
+    renumber: bool = True
+    """Saving: whether the collection numbers its episodes again after the downloads moved."""
 
 
 class CollectionListAddAPIIn(RequestBase):
@@ -231,3 +252,62 @@ class AddedLinkAPIRead(ResponseBase):
     url: str
     title: str
     image_url: Optional[str] = None
+
+
+class SeasonsListingsAPIIn(RequestBase):
+    """The lists the open Seasons dialog wants listed for its review: lists of the collection VODLoft has not listed,
+    by id, and links the user adds. One it listed or is listing already is not listed again."""
+
+    token: str = Field(min_length=8, max_length=64, pattern=TOKEN_PATTERN)
+    list_ids: list[int] = Field(default_factory=list, max_length=5000)
+    links: list[Annotated[str, Field(min_length=1, max_length=2000, pattern=r"^https?://")]] = Field(
+        default_factory=list, max_length=200,
+    )
+
+
+class SeasonsListingAPIRead(ResponseBase):
+    list_id: Optional[int] = None
+    link: Optional[str] = None
+    """For a link the user adds: the link as the user gave it."""
+    state: ListingState
+    count: int = 0
+    """How many videos it lists, once listed."""
+
+
+class SeasonsListingsAPIRead(ResponseBase):
+    listings: list[SeasonsListingAPIRead]
+
+
+class ReviewVideosAPIRead(ResponseBase):
+    count: int = 0
+    examples: list[str] = Field(default_factory=list)
+    """Their titles, newest first, up to a few dozen."""
+
+
+class ReviewFilesAPIRead(ReviewVideosAPIRead):
+    profiles: list[str] = Field(default_factory=list)
+    """The Local Media Profiles their files are in."""
+
+
+class SeasonsReviewAPIRead(ResponseBase):
+    """What saving the Seasons dialog does, for its review: nothing is saved until the user agrees to it."""
+
+    busy: Optional[str] = None
+    """What the review waits for, such as a list VODLoft is still listing; the rest is empty meanwhile."""
+    seasons: list[CollectionSeasonAPIRead] = Field(default_factory=list)
+    waiting: list[WaitingSeasonAPIRead] = Field(default_factory=list)
+    causes: list[MoveCauseAPIRead] = Field(default_factory=list)
+    """The settings saving changes that decide where videos go, each as it was and as it becomes."""
+    new_seasons: list[str] = Field(default_factory=list)
+    deleted_seasons: list[str] = Field(default_factory=list)
+    moves: Optional[MovePreviewAPIRead] = None
+    """What moves where, and the numbering after it, as the Move dialog says it."""
+    leaving: ReviewVideosAPIRead = Field(default_factory=ReviewVideosAPIRead)
+    """The videos that leave the collection."""
+    extra: ReviewVideosAPIRead = Field(default_factory=ReviewVideosAPIRead)
+    """The episodes that go while their video stays in another season, such as when a list stops being a season of
+    its own in a collection that holds every video in one season too."""
+    deleted_files: ReviewFilesAPIRead = Field(default_factory=ReviewFilesAPIRead)
+    """The downloaded files of the episodes that go, which are deleted."""
+    joining: int = 0
+    """New videos that join the collection from its lists, which its Download Profiles then download as they say."""

@@ -89,6 +89,20 @@ def note_move_causes(collection: Collection, origin: MoveCauseOrigin, before: Se
         collection.move_causes = stored
 
 
+def changed_settings(collection, origin: MoveCauseOrigin, before: Settings) -> list[MoveCause]:
+    """What the origin's settings of ``collection`` changed from ``before``, such as the planner's copy of it after
+    planning a change that is not saved yet."""
+    changes: list[MoveCause] = []
+    for (setting, subject_id), (now, title) in settings_of(collection, origin).items():
+        was = before.get((setting, subject_id))
+        if was is None:
+            # Something new, such as a link the user adds, is shown by what it brings rather than as a change.
+            continue
+        if was[0] != now:
+            changes.append(MoveCause(origin, setting, was[0], now, subject_id, title))
+    return changes
+
+
 def clear_move_causes(collection: Collection) -> bool:
     """Forget the changes once no download waits for the Move action. Returns whether there were any."""
     if not collection.move_causes:
@@ -97,4 +111,4 @@ def clear_move_causes(collection: Collection) -> bool:
     return True
 
 
-__all__ = ["READERS", "Settings", "clear_move_causes", "move_causes", "note_move_causes", "settings_of"]
+__all__ = ["READERS", "Settings", "changed_settings", "clear_move_causes", "move_causes", "note_move_causes", "settings_of"]

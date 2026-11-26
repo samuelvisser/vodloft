@@ -1,6 +1,7 @@
 import {z} from 'zod'
 import {NamesSchema, SectionTypeSchema} from './source'
 import {CollectionWordsSchema} from './collection_contract'
+import {MoveCauseSchema, MovePreviewSchema} from './reconcile'
 
 export const NewLinkSeasonValues = ['ask', 'add', 'contents', 'ignore'] as const
 export type NewLinkSeason = typeof NewLinkSeasonValues[number]
@@ -64,6 +65,8 @@ export const CollectionListReadSchema = z.object({
     /** For a collection without a link of its own: its default link, such as the one its picture comes from. Such a
      * collection always has one: its first link, until the user picks another. */
     isDefault: z.boolean().default(false),
+    /** VODLoft knows what the list holds. The dialog lists one you switch on otherwise, so its review is exact. */
+    listed: z.boolean().default(false),
 })
 export type CollectionListRead = z.infer<typeof CollectionListReadSchema>
 
@@ -158,8 +161,10 @@ export const CollectionSeasonsFormSchema = z.object({
     })).default([]),
     /** Links you added that go when you save. */
     removedLinks: z.array(z.number()).default([]),
-    /** Links you add, which are saved, and listed, when you save. */
-    addedLinks: z.array(z.object({url: z.string(), title: z.string(), imageUrl: z.string().nullable()})).default([]),
+    /** Links you add, which are saved, and listed, when you save: each a season of its own, or part of the collection. */
+    addedLinks: z.array(z.object({
+        url: z.string(), title: z.string(), imageUrl: z.string().nullable(), asSeason: z.boolean().default(true),
+    })).default([]),
     /** Seasons that are deleted when you save. */
     removedSeasons: z.array(z.number()).default([]),
 })
@@ -171,6 +176,41 @@ export const LinkSeasonAddFormSchema = z.object({
 /** A link you add, as VODLoft found it; nothing is saved until the Seasons dialog is. */
 export const AddedLinkReadSchema = z.object({url: z.string(), title: z.string(), imageUrl: z.string().nullable()})
 export type AddedLinkRead = z.infer<typeof AddedLinkReadSchema>
+/** How far the dialog's listing of a list is, which it starts as soon as you switch the list on or add a link, so its
+ * review can say exactly what saving moves. */
+export const SeasonsListingsReadSchema = z.object({
+    listings: z.array(z.object({
+        listId: z.number().nullable().default(null),
+        /** For a link you add: the link as you gave it. */
+        link: z.string().nullable().default(null),
+        state: z.enum(['listing', 'listed', 'failed']),
+        count: z.number().default(0),
+    })),
+})
+export type SeasonsListingsRead = z.infer<typeof SeasonsListingsReadSchema>
+
+const ReviewVideosSchema = z.object({count: z.number().default(0), examples: z.array(z.string()).default([])})
+
+/** What saving the Seasons dialog does, for its review: nothing is saved until you agree to it. */
+export const SeasonsReviewReadSchema = z.object({
+    /** What the review waits for, such as a list VODLoft is still listing. */
+    busy: z.string().nullable().default(null),
+    seasons: z.array(CollectionSeasonReadSchema).default([]),
+    waiting: z.array(z.object({listId: z.number(), title: z.string()})).default([]),
+    /** The settings saving changes that decide where videos go, each as it was and as it becomes. */
+    causes: z.array(MoveCauseSchema).default([]),
+    newSeasons: z.array(z.string()).default([]),
+    deletedSeasons: z.array(z.string()).default([]),
+    /** What moves where, and the numbering after it, as the Move dialog says it. */
+    moves: MovePreviewSchema.nullable().default(null),
+    leaving: ReviewVideosSchema.default({count: 0, examples: []}),
+    /** Episodes that go while their video stays in another season. */
+    extra: ReviewVideosSchema.default({count: 0, examples: []}),
+    deletedFiles: ReviewVideosSchema.extend({profiles: z.array(z.string()).default([])}).default({count: 0, examples: [], profiles: []}),
+    /** New videos that join from the collection's lists, which its Download Profiles then download. */
+    joining: z.number().default(0),
+})
+export type SeasonsReviewRead = z.infer<typeof SeasonsReviewReadSchema>
 export type LinkSeasonAddFormIn = z.input<typeof LinkSeasonAddFormSchema>
 export type LinkSeasonAddFormOut = z.output<typeof LinkSeasonAddFormSchema>
 export type CollectionSeasonsFormIn = z.input<typeof CollectionSeasonsFormSchema>

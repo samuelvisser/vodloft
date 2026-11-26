@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react'
+import {type ReactNode, useEffect, useState} from 'react'
 import {useQuery, useQueryClient} from '@tanstack/react-query'
 import Switch from 'react-switch'
 import {Link} from 'react-router-dom'
@@ -105,8 +105,13 @@ export default function ReconcileDialog({open, path, what, onDismiss, onDone}: P
     )
 }
 
-/** What the Move action does to the collection, with its switch to number its episodes again. */
-function CollectionMoves({preview, renumber, onRenumber}: {preview: MovePreview, renumber: boolean, onRenumber: (again: boolean) => void}) {
+/** What the Move action does to the collection, with its switch to number its episodes again. A dialog that moves
+ * episodes as part of a change of its own, such as the Seasons dialog, says why they move itself (``reason`` off) and
+ * adds what else its change does as steps of its own, before and after these. */
+export function CollectionMoves({preview, renumber, onRenumber, reason = true, leading, trailing}: {
+    preview: MovePreview, renumber: boolean, onRenumber: (again: boolean) => void, reason?: boolean
+    leading?: ReactNode, trailing?: ReactNode
+}) {
     const {episode, season} = collectionWords(preview.type)
     const renumbered = renumber ? preview.changes : []
     // Kept numbers rename and rewrite nothing, unless files moved, which go where the collection keeps them.
@@ -115,7 +120,7 @@ function CollectionMoves({preview, renumber, onRenumber}: {preview: MovePreview,
     const metadata = touched ? preview.profiles.reduce((sum, profile) => sum + profile.metadataRewritten, 0) : 0
     return (
         <section className="move-sections-collection" aria-label={preview.title}>
-            {preview.causes.length > 0 ? <MoveCauses collectionSlug={preview.slug} causes={preview.causes}/> : (
+            {!reason ? null : preview.causes.length > 0 ? <MoveCauses collectionSlug={preview.slug} causes={preview.causes}/> : (
                 // Downloads can wait without a recorded change, such as after an older VODLoft placed them differently.
                 <p className="help move-reason">
                     <b>Why they move:</b> {preview.seasonsPlan}{' '}
@@ -125,6 +130,7 @@ function CollectionMoves({preview, renumber, onRenumber}: {preview: MovePreview,
                 </p>
             )}
             <ul className="change-identification-steps">
+                {leading}
                 {preview.parts.map((part, index) => <PartStep key={index} part={part} season={season.singular}/>)}
                 {renumbered.length > 0 && (
                     <Step icon={faIcon('fass', 'list-ol')} headline={`${episode.Plural} get a new number`} detail={null} value={renumbered.length}>
@@ -147,6 +153,7 @@ function CollectionMoves({preview, renumber, onRenumber}: {preview: MovePreview,
                         value={metadata}
                     />
                 )}
+                {trailing}
             </ul>
             {preview.renumberOffered && (
                 <label className="change-identification-order">

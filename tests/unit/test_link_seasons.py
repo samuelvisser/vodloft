@@ -245,8 +245,7 @@ def test_moving_a_video_after_the_seasons_were_put_in_another_order_skips_number
     from backend.db.core import run_write_transaction
     from backend.db.models import Collection, Episode
     from backend.services.link_seasons import moved_episodes
-    from backend.services.reconcile import ReconcileScope, reconcile
-
+    
     source.videos = [_video("a", 2023), _video("b", 2023, 6), _video("c", 2024), _video("d", 2024, 6)]
     source.lists = [_list("PLone", "One"), _list("PLtwo", "Two")]
     source.items = {"PLone": ("a", "c"), "PLtwo": ("c", "d")}
@@ -265,13 +264,10 @@ def test_moving_a_video_after_the_seasons_were_put_in_another_order_skips_number
     )
     run_write_transaction(lambda s: update_seasons(s, "creator", body))
     session.expire_all()
-    # The downloaded episode of the season that was first keeps its number from before.
+    # The downloaded episode of the season that was first keeps its number from before, until the collection numbers
+    # its episodes again after the save; the downloaded one in both lists moved along, as the review said.
     assert session.scalar(select(Episode.episode_identifier).where(Episode.source_slug == "b")).startswith("ep.S01E")
-    assert [e.source_slug for e in moved_episodes(session, session.get(Collection, collection.id))] == ["c"]
-    session.rollback()
-
-    run_write_transaction(lambda w: reconcile(w, ReconcileScope.of_collection(w.get(Collection, collection.id)), renumber={}))
-
+    assert moved_episodes(session, session.get(Collection, collection.id)) == []
     assert _seasons(session) == [("Two", 1, ["c", "d"]), ("One", 2, ["a"]), ("Videos", 3, ["b"])]
     identifiers = session.scalars(select(Episode.episode_identifier)).all()
     assert len(identifiers) == len(set(identifiers))
@@ -718,8 +714,7 @@ def test_the_downloaded_videos_of_a_playlist_turned_off_move_where_new_videos_wo
     from backend.db.core import run_write_transaction
     from backend.db.models import Episode, CollectionList, Season
 
-    moved = []
-    monkeypatch.setattr(service, "queue_season_folder_moves", lambda s, collection, ids: moved.append(ids))
+    moved = _files_follow(monkeypatch, service)
     source.videos = [_video("a", 2024), _video("b", 2025)]
     source.lists = [_list("PLone", "One")]
     source.items = {"PLone": ("a",)}
@@ -737,8 +732,7 @@ def test_the_downloaded_videos_of_a_playlist_turned_off_move_where_new_videos_wo
     session.rollback()
     run_write_transaction(lambda s: update_seasons_call(service, s, body))
 
-    episode_a = session.scalar(select(Episode).where(Episode.source_slug == "a"))
-    assert moved == [[episode_a.id]]
+    assert moved == [True]
     assert _seasons(session) == [("2024", 1, ["a"]), ("2025", 2, ["b"])]
     assert session.scalar(select(Episode.episode_identifier).where(Episode.source_slug == "a")).startswith("ep.S01E")
 
@@ -749,7 +743,7 @@ def test_a_season_of_a_list_left_over_while_link_seasons_were_off_empties_when_s
     from backend.db.core import run_write_transaction
     from backend.db.models import Collection, CollectionList, Season
 
-    monkeypatch.setattr(service, "queue_season_folder_moves", lambda s, collection, ids: None)
+    _files_follow(monkeypatch, service)
     source.videos = [_video("a", 2024), _video("b", 2025)]
     source.lists = [_list("PLone", "One")]
     source.items = {"PLone": ("a",)}
@@ -798,13 +792,9 @@ def test_downloaded_videos_of_year_seasons_wait_for_the_move_after_a_save_puts_t
     session.rollback()
     run_write_transaction(lambda s: update_seasons_call(service, s, body))
 
-    # The video without files moved at once; the downloaded one waits for the Move dialog the save opens.
-    assert _seasons(session) == [("Videos", 1, ["b"]), ("2024", 2, ["a"])]
-    assert [episode.source_slug for episode in moved_episodes(session, session.get(Collection, collection.id))] == ["a"]
-    session.rollback()
-    run_write_transaction(lambda w: reconcile(w, ReconcileScope.of_collection(w.get(Collection, collection.id)), renumber={}))
-    session.expire_all()
+    # The downloaded one moves along with the one without files, as the review the user agreed to said.
     assert _seasons(session) == [("Videos", 1, ["a", "b"])]
+    assert moved_episodes(session, session.get(Collection, collection.id)) == []
 
 
 def test_the_channel_season_takes_its_new_name_when_it_holds_the_whole_channel(source, session, monkeypatch):
@@ -853,8 +843,7 @@ def test_a_removed_season_per_year_comes_back_when_the_settings_put_its_videos_t
     from backend.api.endpoints.collections.seasons import service
     from backend.db.models import Season
 
-    moved = []
-    monkeypatch.setattr(service, "queue_season_folder_moves", lambda s, collection, ids: moved.append(ids))
+    moved = _files_follow(monkeypatch, service)
     source.videos = [_video("a", 2024), _video("b", 2025)]
     source.lists = []
     source.items = {}
@@ -878,7 +867,7 @@ def test_a_removed_season_of_a_list_or_a_leftover_season_goes_to_the_seasons_the
     from backend.api.endpoints.collections.seasons import service
     from backend.db.models import Episode, Season
 
-    monkeypatch.setattr(service, "queue_season_folder_moves", lambda s, collection, ids: None)
+    _files_follow(monkeypatch, service)
     source.videos = [_video("a", 2024), _video("b", 2025)]
     source.lists = [_list("PLone", "One")]
     source.items = {"PLone": ("a",)}
@@ -919,6 +908,14 @@ def test_a_season_the_site_has_itself_is_not_removable(source, session):
     assert {x.name: x.removable for x in view.seasons} == {"Collection": True, "Season 1": False}
     with pytest.raises(ServiceError):
         _remove(session, service, "Season 1", loose_videos="one_season")
+
+
+def _files_follow(monkeypatch, service):
+    """What saving queues to move downloaded files: the task that numbers the collection's episodes again, or keeps
+    their numbers, and gives every file its new name and folder. Each entry says whether it numbers them again."""
+    queued = []
+    monkeypatch.setattr(service, "queue_renumber", lambda s, collection, renumber: queued.append(renumber))
+    return queued
 
 
 def update_seasons_call(service, s, body):
@@ -1404,8 +1401,7 @@ def test_the_downloaded_videos_of_a_list_that_joins_another_season_move_with_the
     from backend.api.endpoints.collections.seasons import service
     from backend.db.models import Episode
 
-    moved = []
-    monkeypatch.setattr(service, "queue_season_folder_moves", lambda s, collection, ids: moved.append(ids))
+    moved = _files_follow(monkeypatch, service)
     source.videos = [_video("a", 2023), _video("c", 2024)]
     source.lists = [_list("PLtwo", "Part 2"), _list("PLone", "Part 1")]
     source.items = {"PLone": ("a",), "PLtwo": ("c",)}
@@ -1415,7 +1411,7 @@ def test_the_downloaded_videos_of_a_list_that_joins_another_season_move_with_the
 
     _put_together(session, {"PLtwo": _season_of(session, "PLone")})
 
-    assert moved == [[session.scalar(select(Episode.id).where(Episode.source_slug == "c"))]]
+    assert moved == [True]
     assert _seasons(session) == [("Part 1", 1, ["a", "c"])]
 
 
@@ -1447,10 +1443,10 @@ def test_lists_included_as_contents_with_the_rest_by_year_still_decide_what_is_i
 
     _update(session, playlists=_every_list(session, as_season=False), loose_videos="by_year")
 
-    # The playlist's videos and the others share the year seasons; the other creator's video stays out. The
-    # downloaded one stays where it is until it is moved, as with any season change.
-    assert _seasons(session) == [("Videos", 1, ["d"]), ("2023", 2, ["a"]), ("2024", 3, ["b", "c"])]
-    assert [episode.source_slug for episode in moved_episodes(session, collection)] == ["d"]
+    # The playlist's videos and the others share the year seasons, the downloaded one too; the other creator's
+    # video stays out.
+    assert _seasons(session) == [("2023", 1, ["a"]), ("2024", 2, ["b", "c"]), ("2025", 3, ["d"])]
+    assert moved_episodes(session, collection) == []
 
     _update(session, playlists=_every_list(session, as_season=True), loose_videos="one_season")
     assert _seasons(session) == [("Videos", 1, ["c", "d"]), ("The Tour", 2, ["a", "b"])]

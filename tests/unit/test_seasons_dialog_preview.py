@@ -61,7 +61,7 @@ def _preview_matches_saving(session, source, collection, change, monkeypatch, *,
     from task_manager.tasks.helpers.listed_collections import index_listed_collection
     from task_manager.tasks.workers.remove_left_episodes.service import run_remove_left_episodes
 
-    monkeypatch.setattr(service, "queue_season_folder_moves", lambda s, c, ids: None)
+    monkeypatch.setattr(service, "queue_renumber", lambda s, c, renumber: None)
     before = _seasons(session)
     body = _body(session, change)
     preview = _preview(service, body)
@@ -240,3 +240,107 @@ def test_a_list_switched_on_whose_videos_are_not_listed_yet_shows_the_season_it_
     preview = _preview(service, body)
     assert [x.title for x in preview.waiting] == ["The Tour"]
     assert "The Tour" not in [x.name for x in preview.seasons]
+
+
+def _never_listed(session, ref):
+    """The list as one the collection has but VODLoft never listed: switched off, and nothing known of what it holds."""
+    from sqlalchemy import delete
+    from backend.db.models import CollectionList, CollectionListItem
+
+    playlist = session.scalar(select(CollectionList).where(CollectionList.ref == ref))
+    session.execute(delete(CollectionListItem).where(CollectionListItem.list_id == playlist.id))
+    playlist.enabled = False
+    session.commit()
+    return playlist.id
+
+
+def test_the_review_of_a_list_switched_on_plans_with_what_the_dialog_listed_and_saving_takes_it_along(
+    source, session, monkeypatch,
+):
+    from backend.api.endpoints.collections.seasons import service
+    from backend.db.core import get_session, run_write_transaction
+    from backend.db.models import CollectionListItem
+
+    renumbered = []
+    monkeypatch.setattr(service, "queue_renumber", lambda s, c, renumber: renumbered.append(renumber))
+    monkeypatch.setattr(service, "reindex_collection", lambda s, c, by_user: None)
+    source.videos = [_video("a", 2023), _video("b", 2024)]
+    source.lists = [_list("PLone", "One"), _list("PLtwo", "Two")]
+    source.items = {"PLone": ("a",), "PLtwo": ("b",)}
+    collection = _collection(session)
+    _index(session, collection, source)
+    two = _never_listed(session, "PLtwo")
+    _index(session, collection, source)
+    _give_files(session, "b")
+    assert _seasons(session) == [("Videos", 1, ["b"]), ("One", 2, ["a"])]
+    assert not next(p for p in service.seasons_view(session, "creator").playlists if p.id == two).listed
+    session.rollback()
+
+    body = _body(session, lambda v, d: _set_playlist(d, v, "Two", enabled=True))
+    listed = service.Listed(lists={two: ("b",)})
+    reading = get_session()
+    try:
+        # Without the listing, VODLoft can't tell what the list moves; with it, the review says.
+        assert service.review_seasons(reading, "creator", body).moves.parts == []
+        review = service.review_seasons(reading, "creator", body, listed)
+    finally:
+        reading.close()
+    assert [(part.to_season, part.count, part.files_moved) for part in review.moves.parts] == [("Two", 1, 1)]
+    assert "Two" in review.new_seasons and review.deleted_seasons == ["Videos"]
+    assert _seasons(session) == [("Videos", 1, ["b"]), ("One", 2, ["a"])]
+
+    run_write_transaction(lambda s: service.update_seasons(s, "creator", body, (), listed))
+
+    assert [(name, slugs) for name, _, slugs in _seasons(session)] == [("One", ["a"]), ("Two", ["b"])]
+    assert session.scalars(select(CollectionListItem.source_slug).where(CollectionListItem.list_id == two)).all() == ["b"]
+    assert renumbered == [True]
+
+
+def test_a_link_the_user_adds_can_be_part_of_the_collection(links_source, session, monkeypatch):
+    from backend.api.endpoints.collections.seasons import service
+    from backend.api.endpoints.collections.seasons.service import AddedLink
+    from backend.db.models import CollectionList
+
+    monkeypatch.setattr(service, "reindex_collection", lambda s, c, by_user: None)
+    collection = _collection(session)
+    _index(session, collection, links_source)
+    mine = AddedLink("PLmine", "https://seasons.example/playlist?list=PLmine", "Mine", None, "seasons", as_season=False)
+
+    _update(session, added=[mine], outside_videos="add")
+
+    assert session.scalar(select(CollectionList.as_season).where(CollectionList.ref == "PLmine")) is False
+
+
+def test_the_dialog_lists_each_list_once_and_keeps_what_it_listed_until_it_closes(monkeypatch):
+    import threading
+    from backend.services import list_previews
+    from backend.services.list_previews import ListingState, ListToList, forget_listings, listings, start_listings
+
+    asked = []
+    release = threading.Event()
+
+    def listing(wanted):
+        asked.append(wanted.url)
+        release.wait(5)
+        return ("a", "b")
+
+    monkeypatch.setattr(list_previews, "_list", listing)
+    one = ListToList("seasons", "https://seasons.example/playlist?list=PLone", list_id=1)
+    start_listings("creator", "token-one", [one])
+    # Asked again while it runs, such as by the review: it is not listed again.
+    start_listings("creator", "token-one", [one])
+    assert [listing.state for listing in listings("creator", "token-one")] == [ListingState.LISTING]
+
+    release.set()
+    while listings("creator", "token-one")[0].state is ListingState.LISTING:
+        threading.Event().wait(0.01)
+    start_listings("creator", "token-one", [one])
+    assert [(item.list_id, item.state, item.slugs) for item in listings("creator", "token-one")] == [
+        (1, ListingState.LISTED, ("a", "b")),
+    ]
+    assert asked == [one.url]
+    # Another dialog has listings of its own.
+    assert listings("creator", "token-two") == []
+
+    forget_listings("creator", "token-one")
+    assert listings("creator", "token-one") == []

@@ -17,7 +17,7 @@ import {dialogWords, namesOf, readSeasons, registries} from '../CollectionSeason
 type OriginProps = {collectionSlug: string, causes: MoveCause[]}
 
 /** One change: what the setting is, and its value before and now. */
-type CauseRow = {key: string, setting: string, before: string, after: string}
+export type CauseRow = {key: string, setting: string, before: string, after: string}
 
 const ORIGINS: Record<MoveCauseOrigin, ComponentType<OriginProps>> = {
     seasons: SeasonsCauses,
@@ -71,7 +71,8 @@ function SeasonsCauses({collectionSlug, causes}: OriginProps) {
     )
 }
 
-function seasonsRows(view: CollectionSeasonsRead, causes: MoveCause[]): CauseRow[] {
+/** Each change in the words of the Seasons dialog: the setting, and its value before and after. */
+export function seasonsRows(view: CollectionSeasonsRead, causes: MoveCause[]): CauseRow[] {
     const words = dialogWords(wordsOf(view.words), view)
     const lists = namesOf(view, view.looseSeason)
     const regs = registries(lists, words, view)

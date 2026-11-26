@@ -92,7 +92,7 @@ def test_a_video_of_a_feed_that_is_also_in_a_list_goes_to_the_list_unless_the_co
     assert dict(_filled(session)) == {"Videos": ["a"], "Best Shorts": ["s1"], "Shorts": ["s1", "s2"]}
 
 
-def test_a_downloaded_video_waits_to_move_to_its_feeds_season(feeds_source, session):
+def test_a_downloaded_video_moves_to_its_feeds_season_with_the_save(feeds_source, session):
     from backend.services.link_seasons import moved_episodes
 
     source = feeds_source
@@ -101,9 +101,10 @@ def test_a_downloaded_video_waits_to_move_to_its_feeds_season(feeds_source, sess
     _index(session, collection, source)
     _give_files(session, "s1")
 
+    # The Seasons dialog's review showed the move, so saving moves it, files and all.
     _update(session, feed_seasons={"shorts": None})
-    assert dict(_filled(session)) == {"Collection": ["a", "s1"], "Shorts": ["s2"]}
-    assert [episode.source_slug for episode in moved_episodes(session, collection)] == ["s1"]
+    assert dict(_filled(session)) == {"Collection": ["a"], "Shorts": ["s1", "s2"]}
+    assert moved_episodes(session, collection) == []
 
 
 def test_only_a_feed_the_collection_takes_can_be_a_season(feeds_source, session):

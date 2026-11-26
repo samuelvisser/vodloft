@@ -3,31 +3,35 @@ from __future__ import annotations
 
 from backend.utils.helpers import name_in_text
 from collections import Counter
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from backend.api.models.collection_seasons import (
-    CollectionSeasonsAPIRead, CollectionSeasonsAPIUpdate, MovedEpisodesAPIRead, SeasonsPreviewAPIRead, WaitingSeasonAPIRead,
+    CollectionSeasonsAPIRead, CollectionSeasonsAPIUpdate, MovedEpisodesAPIRead, ReviewFilesAPIRead, ReviewVideosAPIRead,
+    SeasonsListingsAPIIn, SeasonsPreviewAPIRead, SeasonsReviewAPIRead, WaitingSeasonAPIRead,
 )
-from backend.db.models import Collection, CollectionList, Episode
+from backend.db.models import Collection, CollectionList, CollectionListItem, Episode, LocalMediaProfileBase, MediaDownloadBase
 from backend.services.collections import reindex_collection
 from backend.services.errors import ServiceError
 from backend.services.new_lists import checked_new_link_seasons
 from backend.services.collection_health import note_collection_health
+from backend.services.episode_identification import collection_work, queue_renumber
+from backend.services.list_previews import Listing, ListingState, ListToList
+from backend.services.reconcile import list_labels, move_preview, moves_made
 from backend.services.link_seasons import (
-    collection_list_kinds, collection_new_lists, feed_season_ids, held_back, leaving, moved, place,
+    adds_outside_videos, collection_list_kinds, collection_new_lists, feed_season_ids, held_back, leaving, lists_in, moved,
+    place,
     LinkListing, holds_only_link_seasons, is_in, section_list_names,
     channel_season_offered, lists_playlists, loose_season_name, made_from_list, offers_link_seasons, outside_only_in, save_lists,
     active_lists, let_go_of_seasons, moved_episodes, rehome_removed, season_removable, seasons_with_parts,
 )
 from backend.services.season_state import CollectionDraft, EpisodeDraft, ListDraft, SeasonsState, apply_state, load_state
 from backend.services.sites import collection_creator_names, collection_site, preferred_sources, site_record
-from backend.services.season_moves import queue_season_folder_moves
-from backend.services.move_causes import note_move_causes, settings_of
+from backend.services.move_causes import changed_settings, note_move_causes, settings_of
 from backend.types.move_cause_types import MoveCauseOrigin
 from backend.services.season_order import (
     arrange, link_first_videos, lists_by_season, match_downloaded, renumber_seasons, season_year,
@@ -35,6 +39,7 @@ from backend.services.season_order import (
 from backend.services.source_requests import asking_source
 from config.network import is_no_internet_error
 from backend.types.collection_contracts import collection_contract
+from backend.types.collection_types import EpisodeIdentifier
 from backend.types.season_types import SeasonType
 from backend.types.resource_names import OWN_LINK_NAMES
 from backend.types.link_season_types import (
@@ -76,6 +81,10 @@ class _Playlist:
     first_video_at: object
     leaving_count: int
     leaving_with_files: int
+
+    @property
+    def listed(self) -> bool:
+        return bool(self.playlist.items)
 
     def __getattr__(self, name):
         return getattr(self.playlist, name)
@@ -270,41 +279,88 @@ class _Planned:
     was_only: bool
 
 
+@dataclass(frozen=True)
+class Listed:
+    """What the open dialog listed for its review (``list_previews``), which its save takes along: the videos of the
+    collection's lists by id, and of the links the user adds by the link as they gave it."""
+
+    lists: Mapping[int, tuple[str, ...]] = field(default_factory=dict)
+    links: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    running: tuple[Listing, ...] = ()
+    """The listings still running."""
+
+    @classmethod
+    def of(cls, found: Sequence[Listing]) -> "Listed":
+        done = [listing for listing in found if listing.state is ListingState.LISTED]
+        return cls(
+            lists={listing.list_id: listing.slugs for listing in done if listing.list_id is not None},
+            links={listing.link: listing.slugs for listing in done if listing.link is not None},
+            running=tuple(listing for listing in found if listing.state is ListingState.LISTING),
+        )
+
+
 def update_seasons(
     s: Session, collection_slug: str, body: CollectionSeasonsAPIUpdate, added: Sequence[AddedLink] = (),
+    listed: Listed = Listed(),
 ) -> CollectionSeasonsAPIRead:
-    """Rename and order the collection's seasons, and set which feeds of its channel it takes and how the channel's
-    playlists are seasons, as ``plan_seasons_dialog`` plans it. ``added`` are the links the user adds, looked up
-    before the transaction (see ``look_up_added_link``).
+    """Save the Seasons dialog as its review showed it (``review_seasons``): rename and order the collection's seasons,
+    set which feeds of its channel it takes and how its lists are seasons, as ``plan_seasons_dialog`` plans it, and
+    move the downloads that then belong in another season, which numbers its episodes again unless ``body`` says not
+    to. ``added`` are the links the user adds, looked up before the transaction (see ``look_up_added_link``), and
+    ``listed`` what the dialog listed for its review.
 
     ``s`` is a write transaction's session."""
     collection = _collection(s, collection_slug)
     # As the settings are before saving, for what the Move dialog shows changed.
     was_settings = settings_of(collection, MoveCauseOrigin.SEASONS)
-    if added and body.link_seasons == LinkSeasons.OFF:
-        raise ServiceError(
-            f"Switch the {section_list_names(collection).plural} and links on to add links", field="link_seasons",
-        )
+    _check_added(collection, body, bool(added))
     _check_seasons(collection, body)
-    for link in added:
-        _add_link(s, collection, link)
-    if added:
-        s.flush()
+    links = [(link, _add_link(s, collection, link)) for link in added]
+    s.flush()
+    for playlist in collection.lists:
+        if playlist.id in listed.lists:
+            _store_items(s, playlist, listed.lists[playlist.id])
+    for link, playlist in links:
+        if playlist is not None and link.items:
+            _store_items(s, playlist, link.items)
+    s.flush()
     state = load_state(s, collection)
+    before = {episode.id: episode.season_id for episode in state.episodes.values() if episode.has_files}
     planned = plan_seasons_dialog(state, body)
+    # The user saw and agreed to what moves, so the downloads that belong in another season now move along.
+    waiting = {episode.id for episode in moved(state)}
+    if waiting:
+        place(state, with_files=waiting, drop=False)
+    done = moves_made(s, state, before, list_labels(state))
     apply_state(s, state)
-    if planned.moving:
-        queue_season_folder_moves(s, collection, sorted(planned.moving))
+    s.flush()
+    again = EpisodeIdentifier(collection.episode_identifier) is not EpisodeIdentifier.DATE_BASED and body.renumber
+    if done.renamed:
+        # Numbers the episodes again, unless the user said not to, then moves each downloaded file to its season's
+        # folder and its name.
+        queue_renumber(s, collection, renumber=again)
     # A link the user added lists its videos, which then get its season.
     if (planned.relisting or bool(added)) and body.link_seasons != LinkSeasons.OFF:
         reindex_collection(s, collection, by_user=True)
     s.flush()
     note_collection_health(s, collection)
-    # Downloads the new settings put in another season wait for the Move action, which shows what changed.
-    note_move_causes(collection, MoveCauseOrigin.SEASONS, was_settings, waiting=bool(moved(state)))
+    note_move_causes(collection, MoveCauseOrigin.SEASONS, was_settings, waiting=bool(moved_episodes(s, collection)))
     s.flush()
     s.refresh(collection)
     return seasons_view(s, collection_slug)
+
+
+def _check_added(collection: Collection, body: CollectionSeasonsAPIUpdate, adds: bool) -> None:
+    if adds and body.link_seasons == LinkSeasons.OFF:
+        raise ServiceError(
+            f"Switch the {section_list_names(collection).plural} and links on to add links", field="link_seasons",
+        )
+
+
+def _store_items(s: Session, playlist: CollectionList, slugs: tuple[str, ...]) -> None:
+    """What the dialog listed of the list, as listing the collection stores it."""
+    s.execute(delete(CollectionListItem).where(CollectionListItem.list_id == playlist.id))
+    s.add_all(CollectionListItem(list_id=playlist.id, source_slug=slug, position=position) for position, slug in enumerate(slugs))
 
 
 def _check_seasons(collection: Collection, body: CollectionSeasonsAPIUpdate) -> None:
@@ -489,16 +545,35 @@ def plan_seasons_dialog(state: SeasonsState, body: CollectionSeasonsAPIUpdate) -
     return _Planned(moving=moving, relisting=relist and body.link_seasons != LinkSeasons.OFF, was_only=was_only)
 
 
-def preview_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIUpdate) -> SeasonsPreviewAPIRead:
-    """The seasons saving the dialog with ``body`` would leave, as the planner plans the save on its copy of the
-    collection: nothing is saved. What the save sets going happens after it, and the preview shows it done too:
-    downloaded videos that leave are removed with their files by a task, a collection that now holds only what its
-    lists have loses the videos in none of them once its lists are listed again, and downloaded videos that belong
-    in another season are moved by the Move dialog the save opens.
+@dataclass
+class _Copy:
+    """The planner's copy of the collection after planning the dialog's settings and what saving sets going."""
 
-    Reading only."""
-    collection = _collection(s, collection_slug)
+    state: SeasonsState
+    was_settings: dict
+    was_seasons: dict[int, str]
+    """The collection's seasons before, by id, with their names."""
+    downloaded: dict[int, int]
+    """The episodes with files before, by id, with their seasons."""
+    was_waiting: set[int]
+    """The lists that waited to be listed for a season of their own already."""
+
+
+def _plan_copy(s: Session, collection: Collection, body: CollectionSeasonsAPIUpdate, listed: Listed) -> _Copy:
+    """Plan saving the dialog with ``body`` on the planner's copy of the collection, with what the dialog listed, and
+    then what the save sets going: downloaded videos that leave are removed with their files by a task, a collection
+    that now holds only what its lists have loses the videos in none of them once its lists are listed again, and the
+    downloaded videos that belong in another season move. Saves nothing."""
+    _check_added(collection, body, bool(body.added_links))
+    was_settings = settings_of(collection, MoveCauseOrigin.SEASONS)
     state = load_state(s, collection)
+    was_seasons = {season.id: season.name for season in state.seasons.values()}
+    downloaded = {episode.id: episode.season_id for episode in state.episodes.values() if episode.has_files}
+    was_waiting = {playlist.id for playlist in active_lists(state) if playlist.season_id not in state.seasons}
+    for playlist in state.lists:
+        if playlist.id in listed.lists:
+            playlist.items = listed.lists[playlist.id]
+    _add_drafts(s, collection, state, body, listed)
     planned = plan_seasons_dialog(state, body)
     gone = [
         episode for episode in leaving(state)
@@ -515,11 +590,150 @@ def preview_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPI
     waiting = {episode.id for episode in moved(state)}
     if waiting:
         place(state, with_files=waiting, drop=False)
+    return _Copy(state, was_settings, was_seasons, downloaded, was_waiting)
+
+
+def _add_drafts(
+    s: Session, collection: Collection, state: SeasonsState, body: CollectionSeasonsAPIUpdate, listed: Listed,
+) -> None:
+    """The links the user adds, as lists of the copy, with what the dialog listed of them."""
+    position = max((known.site_position for known in collection.lists), default=-1) + 1
+    for link in body.added_links:
+        if any(known.url == link.url for known in collection.lists):
+            continue
+        source_key = link_to_add(s, collection.slug, link.url).source_key
+        title = link.title or link.url
+        # Never saved: the save adds the link as it looked it up.
+        record = CollectionList(
+            ref=link.url, url=link.url, title=title, source_key=source_key, added_by_user=True, enabled=True,
+            status=ListStatus.KNOWN.value, as_season=link.as_season, is_default=False, site_position=position,
+        )
+        state.lists.append(ListDraft(
+            record=record, id=state.new_id(), title=title, enabled=True, status=ListStatus.KNOWN.value,
+            as_season=link.as_season, is_default=False, added_by_user=True, site_position=position, season_id=None,
+            items=listed.links.get(link.url, ()),
+        ))
+        position += 1
+
+
+def _waiting_seasons(state: SeasonsState) -> list[WaitingSeasonAPIRead]:
     # A list that is a season of its own but has none yet waits for VODLoft to list its videos.
-    return SeasonsPreviewAPIRead(seasons=_seasons(state), waiting=[
+    return [
         WaitingSeasonAPIRead(list_id=playlist.id, title=playlist.title)
         for playlist in active_lists(state) if playlist.season_id not in state.seasons
-    ])
+    ]
+
+
+def preview_seasons(
+    s: Session, collection_slug: str, body: CollectionSeasonsAPIUpdate, listed: Listed = Listed(),
+) -> SeasonsPreviewAPIRead:
+    """The seasons saving the dialog with ``body`` would leave, as the planner plans the save on its copy of the
+    collection (``_plan_copy``): nothing is saved.
+
+    Reading only."""
+    state = _plan_copy(s, _collection(s, collection_slug), body, listed).state
+    return SeasonsPreviewAPIRead(seasons=_seasons(state), waiting=_waiting_seasons(state))
+
+
+# Videos the review names of each kind.
+_EXAMPLES = 50
+
+
+def review_seasons(
+    s: Session, collection_slug: str, body: CollectionSeasonsAPIUpdate, listed: Listed = Listed(),
+) -> SeasonsReviewAPIRead:
+    """What saving the dialog with ``body`` does, for its review: the settings it changes, the seasons it makes and
+    removes, the downloads it moves and the numbering after that, the videos that leave and the files deleted with
+    them, and how many new videos join. Nothing is saved. While VODLoft works on the collection, or still lists a list
+    the user switched on or a link they add, the review says what it waits for instead; downloads it does not wait
+    for, as the new videos queue behind them.
+
+    Reading only."""
+    collection = _collection(s, collection_slug)
+    work = collection_work(s, collection)
+    if work is not None and not work.downloads:
+        return SeasonsReviewAPIRead(busy=work.waiting())
+    on = {change.id for change in body.playlists if change.enabled}
+    titles = {playlist.id: playlist.title for playlist in collection.lists}
+    asked = {link.url: link.title or link.url for link in body.added_links}
+    still = [
+        titles[listing.list_id] if listing.list_id is not None else asked[listing.link] for listing in listed.running
+        if (listing.list_id in on and listing.list_id in titles) or listing.link in asked
+    ]
+    if still:
+        return SeasonsReviewAPIRead(busy=(
+            f"Listing the videos of {Names.joined([Names(name_in_text(title), name_in_text(title)) for title in still]).plural}, "
+            "to show exactly what saving changes."
+        ))
+    copy = _plan_copy(s, collection, body, listed)
+    state = copy.state
+    done = moves_made(s, state, copy.downloaded, list_labels(state))
+    moves = move_preview(s, collection, state, done)
+    # An episode that goes while its video stays in another season, such as a list's copy of a video the collection
+    # has elsewhere, is no video leaving the collection.
+    staying = {episode.video_slug for episode in state.episodes.values()}
+    gone = sorted(episode_id for episode_id, episode in state.gone.items() if episode.video_slug not in staying)
+    extra = sorted(episode_id for episode_id, episode in state.gone.items() if episode.video_slug in staying)
+    deleted = [episode_id for episode_id in sorted(state.gone) if episode_id in copy.downloaded]
+    if adds_outside_videos(state.collection):
+        known = {episode.video_slug for episode in [*state.episodes.values(), *state.gone.values()]}
+        joining = len({slug for playlist in lists_in(state.collection) for slug in playlist.items} - known)
+    else:
+        joining = 0
+    return SeasonsReviewAPIRead(
+        seasons=_seasons(state), waiting=_waiting_seasons(state),
+        causes=changed_settings(state.collection, MoveCauseOrigin.SEASONS, copy.was_settings),
+        new_seasons=[
+            *(season.name for season in state.ordered_seasons() if season.id < 0),
+            *(waiting.title for waiting in _waiting_seasons(state) if waiting.list_id not in copy.was_waiting),
+        ],
+        deleted_seasons=[name for season_id, name in copy.was_seasons.items() if season_id not in state.seasons],
+        moves=replace(moves, causes=[]),
+        leaving=ReviewVideosAPIRead(count=len(gone), examples=_titles(s, gone)),
+        extra=ReviewVideosAPIRead(count=len(extra), examples=_titles(s, extra)),
+        deleted_files=ReviewFilesAPIRead(count=len(deleted), examples=_titles(s, deleted), profiles=_profiles(s, deleted)),
+        joining=joining,
+    )
+
+
+def _titles(s: Session, episode_ids: list[int]) -> list[str]:
+    """The episodes' titles, newest first, up to a few dozen."""
+    if not episode_ids:
+        return []
+    return list(s.scalars(
+        select(Episode.title).where(Episode.id.in_(episode_ids))
+        .order_by(Episode.published_date.desc().nulls_last(), Episode.id.desc()).limit(_EXAMPLES)
+    ))
+
+
+def _profiles(s: Session, episode_ids: list[int]) -> list[str]:
+    """The Local Media Profiles that have files of these episodes, by name."""
+    if not episode_ids:
+        return []
+    return list(s.scalars(
+        select(LocalMediaProfileBase.name).distinct()
+        .join(MediaDownloadBase, MediaDownloadBase.local_media_profile_id == LocalMediaProfileBase.id)
+        .where(MediaDownloadBase.media_item_id.in_(episode_ids)).order_by(LocalMediaProfileBase.name)
+    ))
+
+
+def lists_to_list(s: Session, collection_slug: str, body: SeasonsListingsAPIIn) -> list[ListToList]:
+    """The lists the dialog asks to have listed for its review, with what listing each needs. Reading only."""
+    collection = _collection(s, collection_slug)
+    lists = {playlist.id: playlist for playlist in collection.lists}
+    unknown = [list_id for list_id in body.list_ids if list_id not in lists]
+    if unknown:
+        raise ServiceError(
+            f"{name_in_text(collection.title)} has no {section_list_names(collection).singular} {unknown[0]}", field="playlists",
+        )
+    options = tuple(collection.ytdlp_option_texts)
+    wanted = [
+        ListToList(lists[list_id].source_key, lists[list_id].url, options, list_id=list_id) for list_id in body.list_ids
+    ]
+    for link in body.links:
+        lookup = link_to_add(s, collection_slug, link)
+        wanted.append(ListToList(lookup.source_key, lookup.url, tuple(lookup.ytdlp_options), link=link))
+    return wanted
 
 
 def _regroup_feeds(collection: CollectionDraft, playlists: dict[int, ListDraft], wanted: dict[str, int | None]) -> set[int]:
@@ -627,6 +841,10 @@ class AddedLink:
     title: str
     image_url: str | None
     source_key: str
+    as_season: bool = True
+    """A season of its own; otherwise its videos are part of the collection."""
+    items: tuple[str, ...] = ()
+    """Its videos, as the dialog listed them for its review."""
 
 
 def link_to_add(s: Session, collection_slug: str, url: str) -> _AddLookup:
@@ -680,22 +898,25 @@ def check_added_link(s: Session, collection_slug: str, link: AddedLink) -> Added
     return link
 
 
-def _add_link(s: Session, collection: Collection, link: AddedLink) -> None:
-    """Make a link the user added one of the collection's link seasons. A link it has already stays as it is."""
+def _add_link(s: Session, collection: Collection, link: AddedLink) -> CollectionList | None:
+    """Make a link the user added one of the collection's link seasons, or part of the collection. A link it has
+    already stays as it is: returns None then."""
     if _known_link(collection, link) is not None:
-        return
+        return None
     site = get_source(link.source_key).site_for(link.url)
-    collection.lists.append(CollectionList(
+    playlist = CollectionList(
         ref=link.ref, url=link.url, title=link.title, image_path=link.image_url, added_by_user=True, enabled=True,
-        status=ListStatus.KNOWN.value, source_key=link.source_key,
+        status=ListStatus.KNOWN.value, source_key=link.source_key, as_season=link.as_season,
         site_key=site_record(s, site).key if site is not None else None,
         site_position=max((known.site_position for known in collection.lists), default=-1) + 1,
-    ))
+    )
+    collection.lists.append(playlist)
     collection.keep_a_default_link()
+    return playlist
 
 
 __all__ = [
     "moved_view",
-    "AddedLink", "CollectionNotFoundError", "link_to_add", "look_up_added_link", "look_up_links", "links_lookup",
+    "AddedLink", "CollectionNotFoundError", "Listed", "lists_to_list", "preview_seasons", "review_seasons", "link_to_add", "look_up_added_link", "look_up_links", "links_lookup",
     "check_added_link", "save_listed_links", "seasons_view", "update_seasons",
 ]
