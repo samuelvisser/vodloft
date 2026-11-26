@@ -7,14 +7,24 @@ for a few weeks, and checks right away when the user asks or when the Source's s
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import and_, false, not_, or_
+from sources import (
+    Access,
+    UnknownSourceError,
+    all_sources,
+    get_source,
+    site_for,
+    site_of,
+)
+from sqlalchemy import and_, false, not_, or_, select
+from sqlalchemy.orm import object_session
 
-from backend.db.models import Episode, Video
+from backend.db.core import get_session
+from backend.db.models import CreatorTier, Episode, Video
 from backend.db.models.media_item import MediaItemBase
+from backend.services.creator_tiers import site_tier, tier_row
 from backend.services.sites import collection_site, episode_site_key, video_site
-from sources import Access, UnknownSourceError, all_sources, get_source, site_for, site_of
 
 CHECK_GAPS = (
     timedelta(days=1), timedelta(days=2), timedelta(days=4),
@@ -23,12 +33,25 @@ CHECK_GAPS = (
 """The time before each check of refused media: after 1, 3 and 7 days, then weekly up to five weeks."""
 
 
-def site_access(source_key: str, site_key: str | None, key: str | None) -> Access | None:
+def site_access(source_key: str, site_key: str | None, key: str | None, tier: SiteTier | None = None) -> Access | None:
     """What the media's Site calls the access it needs: as the Site itself says, else as the media's
-    Source names it on that Site, such as a membership yt-dlp tells on a Site made for another Source."""
+    Source names it on that Site, such as a membership yt-dlp tells on a Site made for another Source.
+
+    On a Site whose creators set up tiers of their own, ``tier`` is the kept tier the media needs, as the Site names it. A Source's key of a
+    tier, such as one for a link VODLoft has not stored, names the tier VODLoft keeps by the Site's id of it.
+    """
     if key is None or site_key is None:
         return None
-    found = site_of(site_key).access(key)
+    site = site_of(site_key)
+    if site.creator_tiers is not None:
+        if key == site.creator_tiers.key:
+            return site.creator_tiers.access(tier)
+        if (site_tier_id := site.creator_tiers.tier_id(key)) is not None:
+            with get_session() as s:
+                return site.creator_tiers.access(site_tier(s.scalar(select(CreatorTier).where(
+                    CreatorTier.site_key == site.key, CreatorTier.site_tier_id == site_tier_id,
+                ))))
+    found = site.access(key)
     if found is None:
         try:
             own = get_source(source_key).site_of(site_key)
@@ -54,7 +77,25 @@ def media_site_key(media: MediaItemBase) -> str | None:
 
 def media_access(media: MediaItemBase) -> Access | None:
     """What the media's Site calls the access the media needs."""
-    return site_access(media.source_key, media_site_key(media), media.access)
+    return site_access(media.source_key, media_site_key(media), media.access, site_tier(media.creator_tier))
+
+
+def set_access(media: MediaItemBase, key: str | None) -> None:
+    """Store the access a Source says the media needs. A tier its creator set up is stored as the Site's access to a
+    creator's tier, with the tier VODLoft keeps for it, so that the media stays with the tier whatever the creator
+    later calls it or asks for it."""
+    # An episode that is not in its collection yet is on no Site VODLoft can tell.
+    placed = not isinstance(media, Episode) or media.collection is not None
+    site_key = media_site_key(media) if key is not None and placed else None
+    tiers = site_of(site_key).creator_tiers if site_key is not None else None
+    site_tier_id = tiers.tier_id(key) if tiers is not None else None
+    if tiers is None or site_tier_id is None:
+        media.access = key
+        media.creator_tier = None
+        return
+    media.access = tiers.key
+    s = object_session(media) or (object_session(media.collection) if isinstance(media, Episode) else None)
+    media.creator_tier = tier_row(s, site_key, site_tier_id) if s is not None else None
 
 
 class AccessLocks:
@@ -125,20 +166,22 @@ def without_access_clause(item=MediaItemBase):
 
 def lock_refused(media: MediaItemBase, access: str, *, now: datetime | None = None) -> None:
     """The Source refused the media for lack of the access: lock it and plan the first check."""
-    now = now or datetime.now(timezone.utc)
-    media.access = access
+    now = now or datetime.now(UTC)
+    set_access(media, access)
     media.access_refused_at = now
-    if media.access_check_at is None and media.access_checks < len(CHECK_GAPS):
-        media.access_check_at = now + CHECK_GAPS[media.access_checks]
+    # Media that is not stored yet has no count of checks until it is.
+    checks = media.access_checks or 0
+    if media.access_check_at is None and checks < len(CHECK_GAPS):
+        media.access_check_at = now + CHECK_GAPS[checks]
 
 
 def record_check(media: MediaItemBase, access: str | None, *, now: datetime | None = None) -> None:
     """Store what a check found: the access the media needs now, or None when anyone may download it."""
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     if access is None:
         unlock(media)
         return
-    media.access = access
+    set_access(media, access)
     if media.access_refused_at is None:
         # Nothing was refused since the check was asked for, so a download tries again.
         media.access_check_at = None
@@ -147,16 +190,20 @@ def record_check(media: MediaItemBase, access: str | None, *, now: datetime | No
     media.access_check_at = now + CHECK_GAPS[media.access_checks] if media.access_checks < len(CHECK_GAPS) else None
 
 
-def apply_source_access(media: MediaItemBase, access: str | None) -> None:
-    """Store the access a fresh lookup of the media says it needs. Media anyone may download is unlocked."""
+def apply_source_access(media: MediaItemBase, access: str | None, *, refused: bool = False) -> None:
+    """Store the access a fresh lookup of the media says it needs. Media anyone may download is unlocked, and media
+    the Source ``refused`` for lack of the access is locked."""
     if access is None:
         unlock(media)
+    elif refused and media.access_refused_at is None:
+        lock_refused(media, access)
     else:
-        media.access = access
+        set_access(media, access)
 
 
 def unlock(media: MediaItemBase) -> None:
     media.access = None
+    media.creator_tier = None
     media.access_refused_at = None
     media.access_check_at = None
     media.access_checks = 0

@@ -2,15 +2,19 @@ import {useMemo} from 'react'
 import {customIndexAdvisoryRequest, customIndexReferences, type IndexDefinition} from '../../lib/customIndexAdvisory'
 import {useCustomIndexAdvisory} from '../../lib/useCustomIndexAdvisory'
 import ReadOnlyOutputTemplateCode from './ReadOnlyOutputTemplateCode'
+import IndexingValuesEditorButton from './IndexingValuesEditorButton'
+import type {UseFormReturn} from 'react-hook-form'
 import './CustomIndexAdvisories.css'
 
 type Props = {
     template: string
     indexingValues: IndexDefinition[]
     onApply: (template: string) => void
+    /** The profile's form, whose Indexing values a missing one is added to. */
+    form: UseFormReturn<any>
 }
 
-export default function CustomIndexAdvisories({template, indexingValues, onApply}: Props) {
+export default function CustomIndexAdvisories({template, indexingValues, onApply, form}: Props) {
     const references = useMemo(() => customIndexReferences(template), [template])
     const request = customIndexAdvisoryRequest(template, indexingValues)
     const {advisories, unavailable} = useCustomIndexAdvisory(request)
@@ -27,6 +31,12 @@ export default function CustomIndexAdvisories({template, indexingValues, onApply
                         It will render as empty. Add it in Indexing Values, or remove its reference.
                         This warning does not prevent saving.
                     </p>
+                    <IndexingValuesEditorButton
+                        form={form}
+                        addKey={key}
+                        className="btn btn-secondary template-warning-action"
+                        label="Add Indexing value"
+                    />
                 </div>
             ))}
             {advisories.map(({key, kind, suggestion}) => (

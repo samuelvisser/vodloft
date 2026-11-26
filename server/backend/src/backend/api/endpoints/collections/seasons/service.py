@@ -18,8 +18,8 @@ from backend.services.collections import reindex_collection
 from backend.services.errors import ServiceError
 from backend.services.new_lists import checked_new_link_seasons
 from backend.services.link_seasons import (
-    collection_list_kinds, collection_new_lists,
-    LinkListing, channel_feeds, holds_only_link_seasons, is_in, leaving_outside, section_list_names,
+    collection_list_kinds, collection_new_lists, feed_season_ids,
+    LinkListing, holds_only_link_seasons, is_in, leaving_outside, section_list_names,
     channel_season_offered, lists_playlists, loose_season_name, made_from_list, offers_link_seasons, outside_only_in, place_in_link_seasons, save_lists,
     active_lists, let_go_of_seasons, moved_episodes, rehome_removed, season_removable, seasons_with_parts,
 )
@@ -36,7 +36,7 @@ from backend.types.collection_contracts import collection_contract
 from backend.types.season_types import SeasonType
 from backend.types.resource_names import OWN_LINK_NAMES
 from backend.types.link_season_types import (
-    CollectionKind, ListLayout, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos, RepeatVideos,
+    CollectionKind, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos, RepeatVideos,
 )
 from backend.services.source_options import ytdlp_call_options
 from sources import Feature, Names, SectionKind, get_source, sources_for
@@ -122,6 +122,8 @@ def moved_view(s: Session, collection_slug: str) -> MovedEpisodesAPIRead:
 class _Feed:
     type: object
     on: bool
+    as_season: bool
+    season_id: int | None
 
     @property
     def ref(self) -> str:
@@ -133,11 +135,25 @@ class _Feed:
 
 
 def _feeds(collection: Collection) -> list[_Feed]:
-    """The feeds of the collection's channel, and whether it takes each."""
+    """The feeds of the collection's channel, whether it takes each, and whether each is a season of its own. A
+    collection that holds only what its lists have takes none of them."""
+    only = holds_only_link_seasons(collection)
+    seasons = feed_season_ids(collection)
     return [
-        _Feed(type_, collection.feeds is None or type_.feed_ref in collection.feeds)
-        for type_ in channel_feeds(collection)
+        _Feed(
+            type_, not only and (collection.feeds is None or type_.feed_ref in collection.feeds),
+            type_.feed_ref in (collection.feed_seasons or {}), seasons.get(type_.feed_ref),
+        )
+        for type_ in _channel_feeds(collection)
     ]
+
+
+def _channel_feeds(collection: Collection):
+    """The feeds of a channel collection's channel, also while it holds only what its lists have, when it takes
+    none of them."""
+    if collection.kind != CollectionKind.CHANNEL.value or collection.sharing_url is None:
+        return []
+    return list(collection_site(collection).types_of(SectionKind.FEED))
 
 
 def _channel_season_names(collection: Collection) -> dict[str, str]:
@@ -156,6 +172,10 @@ def seasons_view(s: Session, collection_slug: str) -> CollectionSeasonsAPIRead:
         select(Episode.season_id, func.count()).where(Episode.collection_id == collection.id).group_by(Episode.season_id)
     ).all())
     by_season = {season_id: [link.title for link in links] for season_id, links in lists_by_season(s, collection).items()}
+    # A feed's own season holds the feed, such as Shorts, before the lists put together with it.
+    for feed in _feeds(collection):
+        if feed.season_id is not None and feed.on and feed.as_season:
+            by_season[feed.season_id] = [feed.type.title, *by_season.get(feed.season_id, [])]
     firsts = link_first_videos(s, collection)
     never = datetime.max.replace(tzinfo=timezone.utc)
     contract = collection_contract(collection.type)
@@ -260,10 +280,9 @@ def update_seasons(
     if sorted(change.id for change in body.seasons) != sorted(seasons):
         season = collection_contract(collection.type).words.season
         raise ServiceError(f"The {season.plural} must name each {season.singular} of the collection exactly once", field="seasons")
-    if added and body.outside_videos != OutsideVideos.ONLY:
+    if added and body.link_seasons == LinkSeasons.OFF:
         raise ServiceError(
-            f"Only a collection that holds only what its {section_list_names(collection).plural} have can take links you add",
-            field="outside_videos",
+            f"Switch the {section_list_names(collection).plural} and links on to add links", field="link_seasons",
         )
     for link in added:
         _add_link(s, collection, link)
@@ -288,28 +307,20 @@ def update_seasons(
             f"A collection that holds only what its {lists.plural} have needs its {lists.plural} as "
             f"{collection_contract(collection.type).words.season.plural}", field="link_seasons",
         )
-    if only and (body.lists_as_seasons is False or any(not change.as_season for change in body.playlists)):
-        raise ServiceError(
-            f"A collection that holds only what its {lists.plural} have has no other "
-            f"{collection_contract(collection.type).words.season.plural} to add a {lists.singular}'s contents to",
-            field="playlists",
-        )
     if only and not get_source(collection.source_key).has(Feature.LINK_COLLECTIONS):
         raise ServiceError(f"This collection can't hold only what its {lists.plural} have", field="outside_videos")
     if not only and collection.sharing_url is None:
         raise ServiceError(
             f"This collection has no link of its own, so it can only hold what its {lists.plural} have", field="outside_videos",
         )
-    if not only and any(link.added_by_user and link.id not in body.removed_links for link in playlists.values()):
-        raise ServiceError(
-            f"Remove the links you added first: only a collection that holds what its {lists.plural} have can keep them",
-            field="outside_videos",
-        )
     feed_refs = [feed.ref for feed in _feeds(collection)]
     if body.feeds is not None and not set(body.feeds) <= set(feed_refs):
         raise ServiceError(f"{name_in_text(collection.title)} has no feed {sorted(set(body.feeds) - set(feed_refs))[0]}", field="feeds")
-    feeds = None if body.feeds is None or set(body.feeds) == set(feed_refs) else [ref for ref in feed_refs if ref in body.feeds]
-    if feeds == [] and (body.outside_videos != OutsideVideos.ADD or body.link_seasons == LinkSeasons.OFF):
+    # A collection that holds only what its lists have takes none of its channel's feeds.
+    feeds = [] if only and feed_refs else (
+        None if body.feeds is None or set(body.feeds) == set(feed_refs) else [ref for ref in feed_refs if ref in body.feeds]
+    )
+    if feeds == [] and not only and (body.outside_videos != OutsideVideos.ADD or body.link_seasons == LinkSeasons.OFF):
         raise ServiceError(
             f"A collection without feeds holds only what its {lists.plural} have: add their other videos too",
             field="feeds",
@@ -321,13 +332,29 @@ def update_seasons(
             f"{collection_contract(collection.type).words.season.plural}",
             field="link_seasons",
         )
-    shared_seasons = {playlist.season_id for playlist in playlists.values() if playlist.season_id is not None}
+    # A list or feed can join a season another list or feed has.
+    feed_seasons = feed_season_ids(collection)
+    shared_seasons = {playlist.season_id for playlist in playlists.values() if playlist.season_id is not None} | set(feed_seasons.values())
     stray = next((change for change in body.playlists if change.season_id is not None and change.season_id not in shared_seasons), None)
     if stray is not None:
         raise ServiceError(
             f"{playlists[stray.id].title} can only join {collection_contract(collection.type).words.season.a} "
-            "that holds one of the collection's lists", field="playlists",
+            "that holds one of the collection's lists or feeds", field="playlists",
         )
+    wanted_feeds = dict(body.feed_seasons) if body.feed_seasons is not None else None
+    if wanted_feeds is not None:
+        taken = set(feed_refs if feeds is None else feeds)
+        unknown_feed = sorted(set(wanted_feeds) - set(feed_refs))
+        if unknown_feed:
+            raise ServiceError(f"{name_in_text(collection.title)} has no feed {unknown_feed[0]}", field="feeds")
+        # A feed the collection does not take is no season.
+        wanted_feeds = {ref: target for ref, target in wanted_feeds.items() if ref in taken}
+        stray_feed = next((ref for ref, target in wanted_feeds.items() if target is not None and target not in shared_seasons), None)
+        if stray_feed is not None:
+            raise ServiceError(
+                f"A feed can only join {collection_contract(collection.type).words.season.a} that holds one of the "
+                "collection's lists or feeds", field="feeds",
+            )
     defaults = [change for change in body.playlists if change.is_default]
     if defaults and collection.sharing_url is not None:
         raise ServiceError(
@@ -350,7 +377,7 @@ def update_seasons(
         seasons[change.id].name = change.name.strip()
     # Every season a list has, also one of a list that is not a season now, such as one the old creators left while
     # the collection's playlists were off: a season that no list holds after saving empties.
-    was_seasons = {link.season_id for link in playlists.values() if link.season_id is not None}
+    was_seasons = {link.season_id for link in playlists.values() if link.season_id is not None} | set(feed_seasons.values())
     was_only = holds_only_link_seasons(collection)
     was_named = loose_season_name(collection)
     relist = (
@@ -367,8 +394,6 @@ def update_seasons(
     for link_id in body.removed_links:
         s.delete(playlists.pop(link_id))
     collection.link_seasons = body.link_seasons
-    if body.lists_as_seasons is not None:
-        collection.lists_as_seasons = body.lists_as_seasons
     collection.outside_videos = body.outside_videos
     collection.feeds = feeds
     current = {setting.key: setting.action for setting in collection_new_lists(collection)}
@@ -377,20 +402,12 @@ def update_seasons(
         albums_only=collection_contract(collection.type).album_lists,
     )
     collection.loose_videos = body.loose_videos
-    # Only a collection of nothing but its lists lays them out by year; one with videos of its own includes them as
-    # contents only instead.
-    collection.list_layout = body.list_layout if only else ListLayout.SEASON_EACH.value
     if body.repeat_videos is not None:
         # An episode of a video in each season it belongs in, made or let go of below.
         collection.repeat_videos = RepeatVideos(body.repeat_videos).value
-    # The channel season takes the name its new settings give it, such as Channel once it holds everything, unless
-    # the user named it themselves.
-    named = loose_season_name(collection)
-    if named != was_named:
-        for season in collection.seasons:
-            if season.loose and season.name == was_named:
-                season.name = named
     regrouped = _regroup(playlists, seasons, body)
+    if wanted_feeds is not None:
+        regrouped |= _regroup_feeds(collection, playlists, wanted_feeds)
     for change in body.playlists:
         if change.id not in playlists:
             continue
@@ -399,11 +416,13 @@ def update_seasons(
         playlists[change.id].status = ListStatus.KNOWN.value
         playlists[change.id].as_season = change.as_season
         playlists[change.id].is_default = change.is_default
-    if collection.link_seasons == LinkSeasons.ALL.value:
-        # Every list is in, each a season of its own or contents only, as the collection says.
-        for playlist in playlists.values():
-            if not playlist.added_by_user:
-                playlist.as_season = collection.lists_as_seasons
+    # The channel season takes the name its new settings, and those of its lists, give it, such as Channel once it holds everything, unless
+    # the user named it themselves.
+    named = loose_season_name(collection)
+    if named != was_named:
+        for season in collection.seasons:
+            if season.loose and season.name == was_named:
+                season.name = named
     # Choosing another default, or removing it, leaves one default: the first link that stays, if the user chose none.
     collection.keep_a_default_link(playlists.values())
     removed_slugs = let_go_of_seasons(collection, removed) if removed else {}
@@ -420,7 +439,7 @@ def update_seasons(
         arrange_seasons(s, collection)
     # The downloaded videos of a playlist that stopped being a season go where they would go if they were new, files
     # and all; the ones that leave the collection are removed with their files.
-    lost = (was_seasons - {link.season_id for link in active_lists(s, collection)}) | regrouped | removed
+    lost = (was_seasons - {link.season_id for link in active_lists(s, collection)} - set(feed_season_ids(collection).values())) | regrouped | removed
     leaving = {episode.id for episode in leaving_outside(s, collection)}
     # A collection that now holds only what its playlists have keeps no season of videos in none of them, so its
     # downloaded videos there move to their playlist's season too.
@@ -482,6 +501,30 @@ def preview_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPI
     view = seasons_view(s, collection_slug)
     s.rollback()
     return SeasonsPreviewAPIRead(seasons=view.seasons)
+
+
+def _regroup_feeds(collection: Collection, playlists: dict[int, CollectionList], wanted: dict[str, int | None]) -> set[int]:
+    """Make the feeds in ``wanted`` the collection's feeds that are a season of their own, each in the season the user
+    chose: another list's or feed's, or one of its own, which a feed that shared its season gets when its videos are
+    next placed. Returns the seasons that a feed left or joined, whose videos move."""
+    was = feed_season_ids(collection)
+    holders: dict[int, int] = {}
+    for season_id in [*(playlist.season_id for playlist in playlists.values()), *was.values()]:
+        if season_id is not None:
+            holders[season_id] = holders.get(season_id, 0) + 1
+    left: set[int] = {season_id for ref, season_id in was.items() if ref not in wanted}
+    chosen: dict[str, int | None] = {}
+    for ref, target in wanted.items():
+        current = was.get(ref)
+        if target is None:
+            # It keeps a season it has alone, and gets one of its own when it shared one.
+            chosen[ref] = current if current is not None and holders.get(current, 0) <= 1 else None
+        else:
+            chosen[ref] = target
+        if chosen[ref] != current:
+            left |= {season_id for season_id in (current, chosen[ref]) if season_id is not None}
+    collection.feed_seasons = chosen
+    return left
 
 
 def _regroup(playlists: dict[int, CollectionList], seasons: dict[int, Season], body: CollectionSeasonsAPIUpdate) -> set[int]:

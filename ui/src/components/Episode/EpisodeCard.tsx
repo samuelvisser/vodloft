@@ -119,13 +119,6 @@ type Props = {
 
 /** The episode thumbnail card used on a show's episode list. */
 export default function EpisodeCard({ep, collectionSlug, downloads, moved = false, collectionTitle, seasonName, words, unplayableAllowed = false}: Props) {
-    const initials = ep.title
-        .split(' ')
-        .map((w) => w[0])
-        .join('')
-        .slice(0, 3)
-        .toUpperCase()
-
     // Episode thumbnails are landscape by default; if missing/empty, use a placeholder with the episode index.
     const landscapePath = (ep.thumbnailLandscapePath && ep.thumbnailLandscapePath.trim() !== '') ? ep.thumbnailLandscapePath : undefined
     const imageUrl = landscapePath ? toImageUrl(landscapePath) : `https://placehold.co/640x360/png?text=${encodeURIComponent(words.episode.Singular)}+%23${ep.index}`
@@ -178,12 +171,6 @@ export default function EpisodeCard({ep, collectionSlug, downloads, moved = fals
                         <span style={LIVE_BADGE_DOT_STYLE} aria-hidden/>
                         Live
                     </span>
-                )}
-                {/* Show initials only if we are using the placeholder (i.e., no real thumbnail) */}
-                {!landscapePath && (
-                    <span className="cover-text" aria-hidden>
-            {initials}
-          </span>
                 )}
                 {(ep.duration > 0 || isUpcoming) && (
                     <span className="thumb-corner"><DurationPill seconds={ep.duration} upcoming={isUpcoming}/></span>

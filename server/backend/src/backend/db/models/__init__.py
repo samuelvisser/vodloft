@@ -13,6 +13,7 @@ from .Season import Season
 from .Settings import Settings
 from .HealthDismissal import HealthDismissal
 from .Site import Site
+from .CreatorTier import CreatorTier
 from .QuickDownloadHistory import QuickDownloadHistory
 from .user import User, UserAccess, UserSourceAccess
 from .Collection import Collection

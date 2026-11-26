@@ -12,7 +12,7 @@ from backend.services.check_frequency import full_scan_done, full_scan_due
 from backend.db.core import run_write_transaction
 from backend.db.models import Episode, Collection
 from backend.services.collection_assets import update_collection_artwork_metadata
-from backend.services.thumbnails import newest_media_item_id, take_first_frames
+from backend.services.thumbnails import newest_media_item_id, keep_own_pictures
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.collection_types import EpisodeIdentifier
@@ -269,7 +269,7 @@ def finish_index(*, collection_id: int, found: int, newest: int, progress=None) 
 
     added = run_write_transaction(work)
     if added:
-        take_first_frames(added, checking=_thumbnail_progress(progress))
+        keep_own_pictures(added, checking=_thumbnail_progress(progress))
 
 
 def _thumbnail_progress(progress):

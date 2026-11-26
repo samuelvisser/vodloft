@@ -180,6 +180,19 @@ SECTION_KIND_NAMES = {
 """VODLoft's own word for each kind of section, for a kind a Site names no section type for."""
 
 
+class ListOrder(StrEnum):
+    """In what order the Site lists what a collection made from one of its links holds."""
+
+    NEWEST_FIRST = "newest_first"
+    """Newest first, like a feed, such as a creator's posts on Patreon: VODLoft adds them the other way around, so
+    they are numbered oldest first without looking at their dates."""
+    OLDEST_FIRST = "oldest_first"
+    """In an order of the list's own, the first first, as a playlist, an album or a series sets it: VODLoft numbers
+    them in that order."""
+    NONE = "none"
+    """In no order VODLoft can trust: VODLoft numbers them by date."""
+
+
 class SectionRole(StrEnum):
     """What a section holds, which only steers the defaults when a creator is added."""
 
@@ -701,6 +714,10 @@ class VideoDetails:
     access: str | None = None
     """The key of the ``Access`` the Source only gives the video with, such as NPO Plus or a
     channel membership. VODLoft indexes it, and downloads it only while it has that access."""
+    access_refused: bool = False
+    """The Source asked for the video with everything VODLoft has, such as its cookies, and was refused for lack of
+    ``access``. VODLoft locks the video right away, as it does when a download is refused, instead of only learning
+    it from a download."""
     season: SeasonRef | None = None
     """The collection season a listed episode belongs to, for a Source with real seasons.
     Without one, VODLoft puts the episode in a season per upload year."""
@@ -869,6 +886,70 @@ class Access:
     """What the Site calls it, such as NPO Plus, as the badge on a locked item shows it."""
     description: str
     """One sentence on who can watch what needs it, such as "Only NPO Plus subscribers can watch this"."""
+    tier: int | None = None
+    """Where the access stands among the Site's paid tiers, such as a membership level, or a creator's tier by its price
+    in cents: a tier gives everything a lower one gives. None for an access that is no tier, such as a channel
+    membership."""
+
+    def gives(self, needed: Access) -> bool:
+        """Whether having this access lets one watch what needs ``needed``: it is that access, or a tier at least as
+        high."""
+        return self.key == needed.key or (self.tier is not None and needed.tier is not None and self.tier >= needed.tier)
+
+
+def cheapest(accesses: Iterable[Access | None]) -> Access | None:
+    """The lowest tier among accesses that each unlock the same thing, which is all one needs of them; an access that
+    is no tier, if there is no tier among them."""
+    found = [access for access in accesses if access is not None]
+    tiers = [access for access in found if access.tier is not None]
+    return min(tiers, key=lambda access: access.tier) if tiers else next(iter(found), None)
+
+
+@dataclass(frozen=True)
+class CreatorTier:
+    """A paid tier a creator set up on a Site whose creators make their own tiers, such as a Patreon tier."""
+
+    site_id: str
+    """The Site's own id of the tier, which stays when the creator renames it or changes its amount."""
+    name: str
+    amount: str | None
+    """What the tier costs, as people write it, such as "$5"."""
+    rank: int | None
+    """Where the tier stands among the creator's tiers, such as its price in cents: a tier gives what a lower one gives."""
+
+
+@dataclass(frozen=True)
+class CreatorTierAccess:
+    """What a Site calls the access to a tier its creators set up themselves, such as a Patreon tier. The Source
+    tells such an access by ``key_of`` the tier's id on the Site; VODLoft stores the access by ``key``, and the tier
+    beside it."""
+
+    key: str
+    label: str
+    """What the Site calls a tier, with ``{name}`` and ``{amount}`` where the tier's go."""
+    description: str
+    """Who can watch what needs a tier, with ``{name}`` and ``{amount}``."""
+    unknown_label: str
+    """What VODLoft calls a tier it knows nothing of yet but its id."""
+    unknown_description: str
+
+    def key_of(self, site_tier_id: str) -> str:
+        return f"{self.key}:{site_tier_id}"
+
+    def tier_id(self, key: str | None) -> str | None:
+        """The id on the Site of the tier a key from ``key_of`` names; None for any other key."""
+        prefix = f"{self.key}:"
+        return key[len(prefix):] or None if key and key.startswith(prefix) else None
+
+    def access(self, tier: CreatorTier | None) -> Access:
+        """The access to a tier, or to a tier VODLoft knows nothing of yet."""
+        if tier is None:
+            return Access(self.key, self.unknown_label, self.unknown_description)
+        amount = tier.amount or ""
+        return Access(
+            self.key, self.label.format(name=tier.name, amount=amount).strip(),
+            self.description.format(name=tier.name, amount=amount).replace(" ()", ""), tier=tier.rank,
+        )
 
 
 @dataclass(frozen=True)
@@ -1128,6 +1209,9 @@ class Site:
     accesses: tuple[Access, ...] = ()
     """What the Site only gives some of its videos with, such as NPO Plus or a channel membership,
     by the keys its Sources tell."""
+    creator_tiers: CreatorTierAccess | None = None
+    """The Site's creators set up paid tiers of their own, such as Patreon's, and what the Site calls them. The tiers
+    themselves are each creator's, so VODLoft learns them from the Source and keeps them."""
     creators: bool = False
     """The Site has creators VODLoft can add, through a Source with ``Feature.CREATORS``."""
     audio_only: bool = False
@@ -1164,9 +1248,13 @@ class Site:
     link_seasons: bool = False
     """A collection made from a creator's channel can make the channel's lists, such as its playlists, its seasons:
     link seasons, through its Source's ``is_creator_page``, ``season_lists`` and ``list_items``."""
-    every_list_a_season: bool = True
-    """A new channel collection makes every one of the channel's lists a season, as a channel shows all its lists.
-    A Site whose contract says False makes only the lists the user picks seasons."""
+    pictures_expire: bool = False
+    """The Site's links to its videos' pictures stop working after a while, such as Patreon's signed ones, so VODLoft
+    keeps a copy of each picture itself."""
+    list_order: ListOrder = ListOrder.NONE
+    """In what order the Site lists what a collection made from one of its lists holds, such as a playlist, an album
+    or, on a Site without creators, any link. A collection made from one list numbers and shows its videos in that
+    order; on a Site whose contract tells no order, by date."""
     whole_lists: bool = True
     """A new channel collection puts a video in every list season that has it, so each list is whole. A Site whose
     contract says False puts a video in the first of them only, unless the collection's type says otherwise."""
@@ -1277,7 +1365,7 @@ class Site:
         return found
 
     def access(self, key: str | None) -> Access | None:
-        """One of ``accesses`` by its key."""
+        """One of ``accesses`` by its key. A creator's tier is named by the backend, which keeps the tiers."""
         return next((access for access in self.accesses if access.key == key), None)
 
     @property
@@ -1402,10 +1490,16 @@ class Source(ABC):
         """A title and image for a link, faster than ``resolve``, or None when this Source has no faster way."""
         return None
 
-    def first_frame(self, url: str, image_url: str | None) -> bytes | None:
-        """A JPEG from the start of a video whose own picture, ``image_url``, is missing.
+    def creator_tiers(self, url: str) -> tuple[CreatorTier, ...]:
+        """The paid tiers of the creator a link is of, on a Site with ``creator_tiers``, such as a Patreon creator's
+        page or one of their posts. Empty when the Site has no such tiers or the Source cannot tell them."""
+        return ()
 
-        None when the picture is there, or when this Source cannot take a frame.
+    def own_picture(self, url: str, image_url: str | None, *, locked: bool = False) -> bytes | None:
+        """A JPEG VODLoft keeps as the video's picture: a copy of its picture, ``image_url``, on a Site whose pictures
+        expire, or a frame from the start of a video whose picture is missing, which a ``locked`` video has none of.
+
+        None when the video's own picture will do, or when this Source can make neither.
         """
         return None
 

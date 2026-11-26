@@ -16,7 +16,7 @@ from sqlalchemy import select
 
 from backend.db.core import get_session
 from backend.db.models import Episode, Video
-from backend.services.thumbnails import take_first_frames
+from backend.services.thumbnails import keep_own_pictures
 
 
 revision = "4e8a2c7f1d95"
@@ -37,7 +37,7 @@ def _item_ids() -> list[int]:
 
 
 def _take(item_ids: list[int]) -> None:
-    take_first_frames(item_ids)
+    keep_own_pictures(item_ids)
 
 
 async def migrate(context) -> None:

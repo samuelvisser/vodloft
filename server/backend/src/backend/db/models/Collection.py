@@ -13,7 +13,7 @@ from backend.db.mixins.CreatedByMixin import CreatedByMixin
 from backend.types.collection_types import EpisodeOrder
 from backend.types.collection_health_types import HealthIssueKind
 from backend.types.collection_contracts import collection_contract
-from backend.types.link_season_types import CollectionKind, ListLayout, LooseVideos, LinkSeasons, OutsideVideos
+from backend.types.link_season_types import CollectionKind, LooseVideos, LinkSeasons, OutsideVideos
 
 if TYPE_CHECKING:
     from backend.db.models.media_item import Episode
@@ -69,21 +69,11 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     )
     link_seasons: Mapped[str] = mapped_column(
         default=LinkSeasons.OFF.value, server_default=LinkSeasons.OFF.value,
-        comment="Whether the channel's playlists are seasons: off, all or selected",
+        comment="Whether the collection takes lists, its channel's playlists and links the user adds: off or on",
     )
     new_lists: Mapped[dict[str, str]] = mapped_column(
         JSON, default=dict, server_default="{}",
-        comment="What happens with a list the channel adds, by the kind of list, when only selected lists are seasons: "
-                "ask, add or ignore",
-    )
-    lists_as_seasons: Mapped[bool] = mapped_column(
-        default=True, server_default=true(),
-        comment="While every list is in (link_seasons all): whether each list is a season of its own, or only adds its "
-                "videos to the channel's own seasons, as a feed does",
-    )
-    list_layout: Mapped[str] = mapped_column(
-        default=ListLayout.SEASON_EACH.value, server_default=ListLayout.SEASON_EACH.value,
-        comment="How the lists that are seasons are laid out: season_each, or by_year in a season per upload year",
+        comment="What happens with a list the channel adds, by the kind of list: ask, add, contents or ignore",
     )
     loose_videos: Mapped[str] = mapped_column(
         default=LooseVideos.ONE_SEASON.value, server_default=LooseVideos.ONE_SEASON.value,
@@ -109,6 +99,11 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
             "For a channel collection, the refs of the channel's feeds it lists, such as only a YouTube channel's "
             "Videos; null lists every feed"
         ),
+    )
+    feed_seasons: Mapped[dict[str, Optional[int]]] = mapped_column(
+        JSON, default=dict, server_default="{}",
+        comment="The feeds of the channel that are a season of their own, by ref, with their season's id once it has "
+                "one, which lists or other feeds may share",
     )
     custom_season_order: Mapped[bool] = mapped_column(
         default=False, server_default="0",

@@ -2,7 +2,7 @@
 from dataclasses import replace
 
 import pytest
-from sources import SiteSetting, site_for
+from sources import ListOrder, SiteSetting, site_for
 from sources.ytdlp.site_contracts import CONTRACTS, OtherSites
 from sources.ytdlp.sites import site_of
 
@@ -11,14 +11,14 @@ def _without_identity(site):
     return replace(site, key="", name="", initials="", domains=(), accesses=())
 
 
-def test_a_contract_that_only_names_its_locked_content_takes_everything_else_from_other_sites():
+def test_a_contract_that_only_names_its_locked_content_and_its_order_takes_everything_else_from_other_sites():
     floatplane = site_of("floatplane", "floatplane.com")
 
     assert floatplane.name == "Floatplane"
     assert floatplane.access("members").description == "Only subscribers of the creator can watch this."
     # The general name of what Floatplane names no differently.
     assert floatplane.access("premium").label == "Premium only"
-    assert _without_identity(floatplane) == _without_identity(site_of("arte", "arte.tv"))
+    assert _without_identity(replace(floatplane, list_order=ListOrder.NONE)) == _without_identity(site_of("arte", "arte.tv"))
 
 
 def test_a_site_without_a_contract_is_named_after_its_domain():

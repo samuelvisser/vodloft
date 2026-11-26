@@ -30,11 +30,14 @@ type Props = {
     /** Comes first in the dialog and chooses what to edit, such as a collection picker. The fields show below it
      * once it has chosen. */
     picker?: ReactNode
+    /** Fields to start with as new rows, such as ones an output template uses that do not exist yet. */
+    addFields?: readonly string[]
     invalidateQueryKeys?: QueryKey[]
     onDismiss: () => void
 }
 
 const NO_METADATA: Record<string, string> = {}
+const NO_FIELDS: readonly string[] = []
 
 type PendingRemoval = {
     fieldId: string
@@ -58,6 +61,7 @@ export default function CustomMetadataEditor({
     metadata = NO_METADATA,
     endpoint,
     picker,
+    addFields = NO_FIELDS,
     invalidateQueryKeys = [],
     onDismiss,
 }: Props) {
@@ -79,11 +83,14 @@ export default function CustomMetadataEditor({
             .sort((left, right) => left.localeCompare(right))
     ), [metadata, sharedFields])
     const persistedFields = useMemo(() => new Set(metadataFields), [metadataFields])
+    const startFields = useMemo(() => [
+        ...metadataFields, ...addFields.filter((field) => !persistedFields.has(field)),
+    ], [addFields, metadataFields, persistedFields])
 
     const form = useForm<CustomMetadataFormValues>({
         resolver: zodResolver(CustomMetadataFormSchema),
         defaultValues: {
-            entries: customMetadataToEntries(metadata, metadataFields),
+            entries: customMetadataToEntries(metadata, startFields),
         },
         mode: 'onBlur',
         shouldFocusError: true,
@@ -109,9 +116,9 @@ export default function CustomMetadataEditor({
         }
         if (!open || (!justOpened && isDirty)) return
         form.reset({
-            entries: customMetadataToEntries(metadata, metadataFields),
+            entries: customMetadataToEntries(metadata, startFields),
         })
-    }, [endpoint, form, isDirty, metadata, metadataFields, open])
+    }, [endpoint, form, isDirty, metadata, open, startFields])
 
     const submit = buildServerAwareSubmit<CustomMetadataFormValues>(
         form,

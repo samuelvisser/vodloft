@@ -15,7 +15,7 @@ from urllib.parse import urljoin
 
 from progress_plan import PlanTracker, StageSpec
 
-from ...contract import MAIN_TAG, CollectionDetails, CreatorDetails, DeviceCode, SearchResults, SectionRef, SectionRole, SignInRejected, Site, link_host
+from ...contract import MAIN_TAG, CollectionDetails, CreatorDetails, CreatorTier, DeviceCode, SearchResults, SectionRef, SectionRole, SignInRejected, Site, link_host
 from ...site_accounts import SignedIn
 import requests
 
@@ -65,6 +65,27 @@ class OtherSitesImplementation:
     def collection_link(self, url: str) -> str:
         """The page a collection of the link lists, such as a channel's videos for its front page; the link itself
         when it lists one already."""
+        return url
+
+    def listing(self, url: str, limit: int | None = None) -> dict | None:
+        """A page's videos, as yt-dlp's flat listing of it gives them, for a page the implementation lists itself
+        because yt-dlp can't, or can only slowly, such as Patreon's; None for yt-dlp to list it. ``limit`` is how many
+        videos are wanted, the first first, and 0 for the page alone. An entry may be complete, such as a video the
+        Site locks, with what a lookup would give: its ``_access`` and ``_access_refused``; it is then not looked up."""
+        return None
+
+    def refused_access(self, info: dict, key: str) -> str:
+        """The access a video needs that yt-dlp could not get for lack of ``key``, where the Site tells it more
+        exactly, such as the cheapest of the creator's tiers that unlocks a Patreon post."""
+        return key
+
+    def creator_tiers(self, url: str) -> tuple[CreatorTier, ...]:
+        """The paid tiers of the creator a link is of, on a Site whose creators set up tiers of their own."""
+        return ()
+
+    def served_picture(self, url: str | None) -> str | None:
+        """The picture yt-dlp gives a video, or None when the Site is known not to serve it, so that VODLoft shows its
+        own picture instead of an empty one."""
         return url
 
     def episode_tag(self, info: dict, url: str) -> str:

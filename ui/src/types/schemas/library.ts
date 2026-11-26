@@ -10,10 +10,15 @@ export const LibraryCountsSchema = z.object({
 
 export type LibraryCounts = z.infer<typeof LibraryCountsSchema>
 
-/** How the signed-in user lists the Library; ``saved`` is false without user accounts, when the browser keeps it. */
+/**
+ * How the signed-in user lists Collections in the Library and on creator pages; ``saved`` is false without user
+ * accounts, when the browser keeps it.
+ */
 export const LibraryPreferencesSchema = z.object({
     collectionSort: z.enum(LibraryCollectionSortReg.values),
     collectionSortReversed: z.boolean(),
+    creatorCollectionSort: z.enum(LibraryCollectionSortReg.values),
+    creatorCollectionSortReversed: z.boolean(),
     saved: z.boolean(),
 })
 

@@ -36,6 +36,7 @@ from backend.api.models.media_download import (
 )
 from backend.db.model_mapping import update_database_fields
 from backend.db.models import (
+    CreatorTier,
     Episode,
     LocalMediaProfileBase,
     MediaDownloadBase,
@@ -194,6 +195,7 @@ def _load_media_items_for_view(
                     Episode.access_check_at,
                     raiseload=True,
                 ),
+                _with_creator_tier(Episode),
                 joinedload(Episode.collection).load_only(
                     Collection.id,
                     Collection.slug,
@@ -224,6 +226,7 @@ def _load_media_items_for_view(
                     Movie.access_check_at,
                     raiseload=True,
                 ),
+                _with_creator_tier(Movie),
                 raiseload("*"),
             )
         )
@@ -248,6 +251,7 @@ def _load_media_items_for_view(
                     MovieExtra.access_check_at,
                     raiseload=True,
                 ),
+                _with_creator_tier(MovieExtra),
                 joinedload(MovieExtra.movie).load_only(
                     Movie.id,
                     Movie.slug,
@@ -282,12 +286,20 @@ def _load_media_items_for_view(
                     Video.access_check_at,
                     raiseload=True,
                 ),
+                _with_creator_tier(Video),
                 raiseload("*"),
             )
         )
         media_by_id.update((video.id, video) for video in videos)
 
     return media_by_id
+
+
+def _with_creator_tier(model):
+    """Loads the creator's tier media needs, which names its access."""
+    return joinedload(model.creator_tier).load_only(
+        CreatorTier.site_tier_id, CreatorTier.name, CreatorTier.amount, CreatorTier.rank, raiseload=True,
+    )
 
 
 def _media_download_view_statement(

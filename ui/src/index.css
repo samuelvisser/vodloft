@@ -399,11 +399,6 @@ a.episode-card { display: block; min-width: 0; color: inherit; text-decoration: 
   background-position: center;
 }
 
-.cover-text {
-  font-weight: 700;
-  opacity: 0.8;
-}
-
 .badge {
   position: absolute;
   right: 8px;
