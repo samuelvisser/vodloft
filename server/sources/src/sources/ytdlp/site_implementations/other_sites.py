@@ -67,6 +67,11 @@ class OtherSitesImplementation:
         when it lists one already."""
         return url
 
+    def served_picture(self, url: str | None) -> str | None:
+        """The picture yt-dlp gives a video, or None when the Site is known not to serve it, so that VODLoft shows its
+        own picture instead of an empty one."""
+        return url
+
     def episode_tag(self, info: dict, url: str) -> str:
         """Which of the Site's episode tags yt-dlp's full lookup of a video gives it."""
         return MAIN_TAG

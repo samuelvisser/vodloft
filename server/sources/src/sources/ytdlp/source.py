@@ -782,19 +782,20 @@ class YtDlpSource(Source):
 
     def _video(self, info: dict, url: str) -> VideoDetails:
         duration = info.get("duration")
+        implementation = self._implementation(info.get("webpage_url") or url)
         return VideoDetails(
             slug=video_slug(info),
             url=info.get("webpage_url") or url,
             title=info.get("title") or url,
             description=info.get("description"),
             duration=float(duration) if isinstance(duration, (int, float)) else None,
-            image_url=_thumbnail(info),
+            image_url=implementation.served_picture(_thumbnail(info)),
             author_name=info.get("uploader") or info.get("channel"),
             author_url=info.get("uploader_url") or info.get("channel_url"),
             published_at=_published_at(info),
             drm_protected=_drm_protected(info),
             access=_access(info),
-            tag=self._implementation(info.get("webpage_url") or url).episode_tag(info, url),
+            tag=implementation.episode_tag(info, url),
             publish_status=_publish_status(info),
             scheduled_at=_scheduled_at(info),
             chapters=_chapters(info),

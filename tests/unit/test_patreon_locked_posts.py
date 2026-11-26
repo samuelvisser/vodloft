@@ -85,3 +85,22 @@ def test_a_post_for_patrons_only_is_looked_up_locked_on_its_own(patreon):
 def test_patreon_calls_its_locked_posts_patrons_only():
     access = sites.site_for(CAMPAIGN).access(sites.MEMBERS_KEY)
     assert access.label == "Patrons only"
+
+
+def test_a_picture_patreon_does_not_serve_is_left_out(monkeypatch):
+    # Patreon gives embedded videos and links a picture on its media-u address, which answers with an error page.
+    pictures = {
+        "open": "https://www.patreon.com/media-u/v3/33031817",
+        "paid": "https://c10.patreonusercontent.com/4/patreon-media/p/post/121848656/abc/eyJ3IjoxMDgwfQ%3D%3D/1.jpg",
+    }
+
+    def run_json(*args, **_kwargs):
+        post_id = next(name for name, number in IDS.items() if args[-1].endswith(number))
+        return _post(post_id, thumbnail=pictures[post_id], formats=[{"url": "https://cdn.example/v.mp4"}])
+
+    monkeypatch.setattr(runner, "run_json", run_json)
+    monkeypatch.setattr("sources.ytdlp.source._LISTING_PAUSE_SECONDS", 0)
+    source = YtDlpSource()
+
+    assert source.video_details(_post_url("open")).image_url is None
+    assert source.video_details(_post_url("paid")).image_url == pictures["paid"]
