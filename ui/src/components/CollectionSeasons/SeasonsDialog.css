@@ -287,8 +287,12 @@
 .seasons-dialog-fold:hover { opacity: 1; }
 .seasons-dialog-box-body[inert] { opacity: .5; }
 /* On a phone a choice wraps its words rather than running out of the box. */
+/* Each choice keeps its words on one line while there is room, and wraps them only when the box is too narrow. */
+.segmented-options.seasons-dialog-role { max-width: 100%; flex-wrap: nowrap; }
+.segmented-options.seasons-dialog-role .segmented-option { flex: 1 1 auto; min-width: 0; }
+.segmented-options.seasons-dialog-role .segmented-label { white-space: normal; }
+.seasons-dialog-all { flex-wrap: nowrap; max-width: 100%; }
+.seasons-dialog-all > span:first-child { flex: none; }
 @media (max-width: 560px) {
-    .segmented-options.seasons-dialog-role { max-width: 100%; flex-wrap: nowrap; }
-    .segmented-options.seasons-dialog-role .segmented-label { white-space: normal; }
     .seasons-dialog-source, .seasons-dialog-box-head, .seasons-dialog-kind { padding-left: .75rem; padding-right: .75rem; }
 }
