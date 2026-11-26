@@ -76,7 +76,7 @@ class LockableResponse(ResponseBase):
     def _access(self) -> Optional[Access]:
         tier = SiteTier(
             self.creator_tier_site_id, self.creator_tier_name, self.creator_tier_amount, self.creator_tier_rank,
-        ) if self.creator_tier_site_id is not None and self.creator_tier_name else None
+        ) if self.creator_tier_site_id is not None else None
         return site_access(self.source_key, self.site_key, self.access, tier)
     access_refused_at: Optional[datetime] = None
     access_check_at: Optional[datetime] = None

@@ -43,7 +43,7 @@ def _post(name: str, *, kind: str = "video_embed", viewable: bool = False, rules
 TIERS = [
     {"type": "reward", "id": "-1", "attributes": {"amount_cents": 0, "description": "Everyone"}},
     {"type": "reward", "id": "free", "attributes": {"title": "Free", "amount_cents": 0, "currency": "USD"}},
-    {"type": "reward", "id": "bronze", "attributes": {"title": "Bronze", "amount_cents": 100, "currency": "USD"}},
+    {"type": "reward", "id": "bronze", "attributes": {"title": None, "amount_cents": 100, "currency": "USD"}},
     {"type": "reward", "id": "silver", "attributes": {"title": "Silver", "amount_cents": 300, "currency": "USD"}},
     {"type": "reward", "id": "fiver", "attributes": {"title": "Fiver", "amount_cents": 500, "currency": "USD"}},
     {"type": "reward", "id": "gold", "attributes": {"title": "Gold", "amount_cents": 1000, "currency": "USD"}},
@@ -178,7 +178,7 @@ def test_the_tiers_of_a_creator_are_their_paid_ones(patreon):
     tiers = YtDlpSource().creator_tiers(CAMPAIGN)
 
     assert tiers == (
-        CreatorTier("bronze", "Bronze", "$1", 100), CreatorTier("silver", "Silver", "$3", 300),
+        CreatorTier("bronze", None, "$1", 100), CreatorTier("silver", "Silver", "$3", 300),
         CreatorTier("fiver", "Fiver", "$5", 500), CreatorTier("gold", "Gold", "$10", 1000),
     )
     # A post or a playlist is of the same creator.
@@ -195,6 +195,10 @@ def test_patreon_names_a_tier_as_its_creator_does():
     fiver = tiers.access(CreatorTier("fiver", "Fiver", "$5", 500))
     assert (fiver.key, fiver.label, fiver.tier) == ("tier", "Fiver", 500)
     assert fiver.description == "Only patrons on the creator's “Fiver” tier ($5) or higher can watch this."
+    # A tier its creator gave no name is named by its amount.
+    unnamed = tiers.access(CreatorTier("five", None, "$5", 500))
+    assert (unnamed.label, unnamed.tier) == ("Patrons from $5", 500)
+    assert unnamed.description == "Only the creator's patrons who pledge $5 or more can watch this."
     assert tiers.access(None).label == "Paid tier"
     assert sites.site_for("https://www.youtube.com/watch?v=a").creator_tiers is None
 

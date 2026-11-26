@@ -146,7 +146,7 @@ def _amount(cents: int, currency: str | None) -> str:
 def creator_tier(tier: dict) -> CreatorTier:
     attributes = tier.get("attributes") or {}
     return CreatorTier(
-        site_id=str(tier["id"]), name=str(attributes.get("title") or "").strip() or _amount(_cents(tier), attributes.get("currency")),
+        site_id=str(tier["id"]), name=str(attributes.get("title") or "").strip() or None,
         amount=_amount(_cents(tier), attributes.get("currency")), rank=_cents(tier),
     )
 
