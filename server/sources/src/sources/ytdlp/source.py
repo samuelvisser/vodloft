@@ -429,7 +429,7 @@ def _locked(info: dict, error: str) -> dict | None:
     have, such as a Patreon post for patrons only: kept as locked until VODLoft can download it."""
     if (key := _refused_access(error)) is None:
         return None
-    return {**info, "availability": _AVAILABILITY_BY_ACCESS[key]}
+    return {**info, "availability": _AVAILABILITY_BY_ACCESS[key], "_access_refused": True}
 
 
 def _entries(listing: dict, implementation: OtherSitesImplementation) -> list[dict]:
@@ -796,6 +796,7 @@ class YtDlpSource(Source):
             published_at=_published_at(info),
             drm_protected=_drm_protected(info),
             access=_access(info),
+            access_refused=bool(info.get("_access_refused")),
             tag=implementation.episode_tag(info, url),
             publish_status=_publish_status(info),
             scheduled_at=_scheduled_at(info),

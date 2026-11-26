@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Video
+from backend.services.media_access import lock_refused
 from backend.services.sites import episode_site
 from backend.services.thumbnails import is_own_thumbnail
 from backend.services.upgrade_check import check_refreshed_changes_now
@@ -47,6 +48,10 @@ def apply_refreshed_details(item: Episode | Video, details: VideoDetails, *, now
         if value is not None and getattr(item, name) != value:
             setattr(item, name, value)
             changed = True
+    if details.access_refused and details.access is not None and item.access_refused_at is None:
+        # The Source refused it for lack of the access, as a download would be.
+        lock_refused(item, details.access, now=item.metadata_refreshed_at)
+        changed = True
     return changed
 
 

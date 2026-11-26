@@ -291,7 +291,7 @@ def _new_episode(
     # A collection of links from several Sites follows each video's own Site, as does a video of a list on another Site.
     own_site = holds_only_link_seasons(collection) or source_key != collection.source_key
     site = site_for(details.url, source_key) if own_site else collection_site(collection)
-    return Episode(
+    episode = Episode(
         uuid=generate_uuid(),
         type=MediaType.EPISODE.value,
         source_key=source_key,
@@ -326,6 +326,10 @@ def _new_episode(
         part_start=None if chapter is None else chapter.start,
         part_end=None if chapter is None else chapter.end,
     )
+    if details.access_refused and details.access is not None:
+        # The Source already refused it for lack of the access, as a download would be.
+        lock_refused(episode, details.access)
+    return episode
 
 
 def add_listed_episodes(

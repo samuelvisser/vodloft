@@ -128,8 +128,10 @@ def lock_refused(media: MediaItemBase, access: str, *, now: datetime | None = No
     now = now or datetime.now(timezone.utc)
     media.access = access
     media.access_refused_at = now
-    if media.access_check_at is None and media.access_checks < len(CHECK_GAPS):
-        media.access_check_at = now + CHECK_GAPS[media.access_checks]
+    # Media that is not stored yet has no count of checks until it is.
+    checks = media.access_checks or 0
+    if media.access_check_at is None and checks < len(CHECK_GAPS):
+        media.access_check_at = now + CHECK_GAPS[checks]
 
 
 def record_check(media: MediaItemBase, access: str | None, *, now: datetime | None = None) -> None:
@@ -147,10 +149,13 @@ def record_check(media: MediaItemBase, access: str | None, *, now: datetime | No
     media.access_check_at = now + CHECK_GAPS[media.access_checks] if media.access_checks < len(CHECK_GAPS) else None
 
 
-def apply_source_access(media: MediaItemBase, access: str | None) -> None:
-    """Store the access a fresh lookup of the media says it needs. Media anyone may download is unlocked."""
+def apply_source_access(media: MediaItemBase, access: str | None, *, refused: bool = False) -> None:
+    """Store the access a fresh lookup of the media says it needs. Media anyone may download is unlocked, and media
+    the Source ``refused`` for lack of the access is locked."""
     if access is None:
         unlock(media)
+    elif refused and media.access_refused_at is None:
+        lock_refused(media, access)
     else:
         media.access = access
 

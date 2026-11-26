@@ -701,6 +701,10 @@ class VideoDetails:
     access: str | None = None
     """The key of the ``Access`` the Source only gives the video with, such as NPO Plus or a
     channel membership. VODLoft indexes it, and downloads it only while it has that access."""
+    access_refused: bool = False
+    """The Source asked for the video with everything VODLoft has, such as its cookies, and was refused for lack of
+    ``access``. VODLoft locks the video right away, as it does when a download is refused, instead of only learning
+    it from a download."""
     season: SeasonRef | None = None
     """The collection season a listed episode belongs to, for a Source with real seasons.
     Without one, VODLoft puts the episode in a season per upload year."""
