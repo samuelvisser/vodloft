@@ -65,7 +65,7 @@ _ACTIVE = (OperationStatus.QUEUED.value, OperationStatus.RUNNING.value, Operatio
 _BUSY_KINDS = (
     "collection.index", "collection.sync", "collection.rename_files", "collection.rewrite_metadata",
     "collection.change_identification", "collection.renumber", "collection.download_all", "collection.redownload_episodes",
-    "collection.delete_downloads",
+    "collection.delete_downloads", "collection.remove_left_episodes",
 )
 _PHYSICAL = (
     MediaDownloadArtifactStatus.AVAILABLE.value,

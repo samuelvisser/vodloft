@@ -657,6 +657,16 @@ def test_videos_of_other_creators_in_a_playlist_join_the_collection_when_it_adds
     assert _seasons(session) == [("Collabs", 1, ["a"])]
 
 
+def _removing(session) -> list[int]:
+    """The collections whose episodes that left with their files wait to be let go, as an action of the collection."""
+    from task_manager.scheduler.db import TaskOperation
+
+    session.expire_all()
+    return list(session.scalars(
+        select(TaskOperation.resource_id).where(TaskOperation.kind == "collection.remove_left_episodes")
+    ))
+
+
 def test_a_video_from_outside_with_files_leaves_with_its_files(source, session, monkeypatch):
     from backend.api.endpoints.collections.seasons.service import seasons_view, update_seasons
     from backend.api.models.collection_seasons import CollectionSeasonsAPIUpdate
@@ -698,7 +708,7 @@ def test_a_video_from_outside_with_files_leaves_with_its_files(source, session, 
     )
     session.rollback()
     run_write_transaction(lambda s: update_seasons(s, "creator", body))
-    assert queued == [{"def_key": "remove_left_episodes", "resource_type": "collection", "resource_id": collection.id}]
+    assert _removing(session) == [collection.id]
 
     assert worker.run_remove_left_episodes(session, collection_id=collection.id) == 1
     assert deleted == ["/downloads/guest.mp4"]
@@ -997,7 +1007,7 @@ def test_a_downloaded_video_the_creator_takes_out_of_a_playlist_stays_until_the_
     assert sorted(session.scalars(select(Episode.source_slug)).all()) == ["a", "guest"]
     guest = session.scalar(select(Episode).where(Episode.source_slug == "guest"))
     assert guest.removed_from_source
-    assert queued == []
+    assert queued == [] and _removing(session) == []
     (question,) = get_keep_questions(session)
     assert (question.episode_title, question.left_link) == ("Video guest", "Collabs")
     assert worker.run_remove_left_episodes(session, collection_id=collection.id) == 0
@@ -1006,7 +1016,7 @@ def test_a_downloaded_video_the_creator_takes_out_of_a_playlist_stays_until_the_
 
     # Don't keep lets it go, files and all.
     run_write_transaction(lambda s: answer_keep_question(s, [guest.id], keep=False))
-    assert queued == [{"def_key": "remove_left_episodes", "resource_type": "collection", "resource_id": collection.id}]
+    assert _removing(session) == [collection.id]
     assert worker.run_remove_left_episodes(session, collection_id=collection.id) == 1
     assert deleted == ["/downloads/guest.mp4"]
     session.expire_all()
@@ -1141,7 +1151,7 @@ def test_switching_to_only_the_playlists_removes_the_videos_none_of_them_has(lin
     assert sorted(session.scalars(select(Episode.source_slug)).all()) == ["a", "b"]
     b = session.scalar(select(Episode).where(Episode.source_slug == "b"))
     assert not b.removed_from_source and b.downloads[0].removal_answered_at is not None
-    assert [kwargs["def_key"] for kwargs in queued] == ["remove_left_episodes"]
+    assert _removing(session) == [collection.id]
     assert _seasons(session)[-1] == ("Best Of", 2, ["a"])
 
 

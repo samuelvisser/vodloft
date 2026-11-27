@@ -23,6 +23,7 @@ from backend.services.file_moves import files_stamp
 from backend.services.new_lists import checked_new_link_seasons
 from backend.services.collection_health import note_collection_health
 from backend.services.episode_identification import collection_work, queue_renumber
+from backend.services.removed_downloads import remove_left_episodes
 from backend.services.replaced_work import REPLACED_KINDS, ReplacedWork, replaced_operations
 from backend.services.list_previews import Listing, ListingState, ListToList
 from backend.services.reconcile import MovesMade, list_labels, move_preview, moves_made
@@ -486,6 +487,9 @@ def _after_saving(
     elif replaced.relist is not None:
         # The save stopped listing the collection again: it lists it again under the new settings.
         reindex_collection(s, collection, by_user=replaced.relist)
+    if replaced.remove_left:
+        # The save stopped letting go of episodes that left: it lets go of those that still leave.
+        remove_left_episodes(s, collection.id)
     s.flush()
     note_collection_health(s, collection)
     note_move_causes(collection, MoveCauseOrigin.SEASONS, was_settings, waiting=bool(moved_episodes(s, collection)))

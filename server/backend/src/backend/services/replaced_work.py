@@ -2,7 +2,8 @@
 
 Saving the Seasons dialog, or the same settings in the Library's bulk edit, plans everything the new settings need from
 the collection as it is. Work VODLoft still does for an earlier change does not have to finish first: numbering the
-episodes again with renaming their files and writing their metadata, and listing the collection again. Saving stops
+episodes again with renaming their files and writing their metadata, letting go of the episodes that left with their
+files, and listing the collection again. Saving stops
 that work and starts what is still needed of it again under the new settings, together with what the new settings
 need themselves. The review of the change says which work it replaces, rather than waiting for it.
 
@@ -26,8 +27,9 @@ from task_manager.scheduler.operation_control import cancel_operation
 from task_manager.scheduler.types import OperationStatus, TaskStatus
 
 RENUMBER = "collection.renumber"
+REMOVING = "collection.remove_left_episodes"
 LISTING = ("collection.sync", "collection.index")
-REPLACED_KINDS = (RENUMBER, *LISTING)
+REPLACED_KINDS = (RENUMBER, REMOVING, *LISTING)
 """The kinds of work on a collection saving its seasons replaces."""
 
 _ACTIVE = (OperationStatus.QUEUED.value, OperationStatus.RUNNING.value, OperationStatus.WAITING.value)
@@ -44,6 +46,8 @@ class ReplacedWork:
     their metadata. None when there was none."""
     relist: bool | None = None
     """Listing the collection again was stopped: whether the user's change asked for it. None when there was none."""
+    remove_left: bool = False
+    """Letting go of the episodes that left with their files was stopped."""
 
 
 def replaced_operations(s: Session, collection_id: int) -> list[str]:
@@ -59,8 +63,9 @@ def replaced_operations(s: Session, collection_id: int) -> list[str]:
 
 
 def stop_replaced_work(collection_slug: str) -> ReplacedWork:
-    """Stop the work on the collection that saving its seasons replaces, and wait until numbering again stopped:
-    renaming files undoes itself when it stops halfway, and writing metadata stops between two files. Listing the
+    """Stop the work on the collection that saving its seasons replaces, and wait until numbering again and letting
+    episodes go stopped: renaming files undoes itself when it stops halfway, writing metadata stops between two files,
+    and letting episodes go between two episodes. Listing the
     collection again stops before it saves anything. Returns what the work was still going to do. Raises a
     ``ServiceError`` when numbering again does not stop in time.
 
@@ -86,13 +91,15 @@ def stop_replaced_work(collection_slug: str) -> ReplacedWork:
         except ValueError:
             pass  # It finished meanwhile.
     # Listing the collection again changes nothing until it saves what it found, and it stops before that; numbering
-    # again works on the files the save plans to move, so the save waits until it stopped.
-    _wait_until_stopped([operation_id for operation_id, kind, _kwargs in work if kind == RENUMBER], title)
+    # again works on the files the save plans to move, and letting episodes go deletes files of episodes the save may
+    # keep after all, so the save waits until they stopped.
+    _wait_until_stopped([operation_id for operation_id, kind, _kwargs in work if kind in (RENUMBER, REMOVING)], title)
     renumbers = [kwargs for _id, kind, kwargs in work if kind == RENUMBER]
     listings = [kwargs for _id, kind, kwargs in work if kind in LISTING]
     return ReplacedWork(
         renumber=any(kwargs.get("renumber", True) for kwargs in renumbers) if renumbers else None,
         relist=any(kwargs.get("by_user", False) for kwargs in listings) if listings else None,
+        remove_left=any(kind == REMOVING for _id, kind, _kwargs in work),
     )
 
 

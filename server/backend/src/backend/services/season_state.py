@@ -393,10 +393,9 @@ def _apply_episodes(s: Session, state: SeasonsState, real: dict[int, int], was: 
     from sqlalchemy import inspect
 
     from backend.services.link_seasons import held_back
-    from backend.services.removed_downloads import delete_episode
+    from backend.services.removed_downloads import delete_episode, remove_left_episodes
     from backend.utils.helpers import generate_uuid
     from task_manager.events.transactional import queue_event
-    from task_manager.scheduler.transactional import queue_task_after_commit
 
     record = state.record
     changed = [
@@ -463,7 +462,7 @@ def _apply_episodes(s: Session, state: SeasonsState, real: dict[int, int], was: 
                 download.removal_answered_at = download.removal_answered_at or now
         removing = removing or not held_back(row)
     if removing:
-        queue_task_after_commit(s, def_key="remove_left_episodes", resource_type="collection", resource_id=record.id)
+        remove_left_episodes(s, record.id)
     s.flush()
 
 

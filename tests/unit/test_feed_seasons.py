@@ -291,6 +291,7 @@ def test_saving_stops_numbering_again_for_an_earlier_change_and_starts_it_again(
     from backend.db.core import run_write_transaction
     from backend.db.models import Collection
     from backend.services.episode_identification import queue_renumber
+    from backend.services.removed_downloads import remove_left_episodes
     from backend.services.replaced_work import ReplacedWork, stop_replaced_work
     from task_manager.scheduler.db import TaskOperation
 
@@ -300,6 +301,8 @@ def test_saving_stops_numbering_again_for_an_earlier_change_and_starts_it_again(
     _index(session, collection, source)
     monkeypatch.setattr(service, "reindex_collection", lambda s, c, by_user: None)
     earlier = run_write_transaction(lambda s: queue_renumber(s, s.get(Collection, collection.id), renumber=False).id)
+    run_write_transaction(lambda s: remove_left_episodes(s, collection.id))
+    removing = session.scalar(select(TaskOperation.id).where(TaskOperation.kind == "collection.remove_left_episodes"))
 
     # The review does not wait for it, and says saving replaces it.
     view = seasons_view(session, "creator")
@@ -311,20 +314,26 @@ def test_saving_stops_numbering_again_for_an_earlier_change_and_starts_it_again(
     )
     review = review_seasons(session, "creator", body)
     session.rollback()
-    assert review.busy is None and review.replaces == [earlier]
+    assert review.busy is None and review.replaces == [earlier, removing]
 
     # Saving stops it first, and starts what it was still going to do again, the way it was.
     replaced = stop_replaced_work("creator")
-    assert replaced == ReplacedWork(renumber=False)
+    assert replaced == ReplacedWork(renumber=False, remove_left=True)
     session.expire_all()
     assert session.get(TaskOperation, earlier).status == "CANCELED"
+    assert session.get(TaskOperation, removing).status == "CANCELED"
     run_write_transaction(lambda s: service.update_seasons(s, "creator", body, replaced=replaced))
     session.expire_all()
     again = session.scalars(select(TaskOperation).where(
         TaskOperation.kind == "collection.renumber", TaskOperation.status == "QUEUED",
     )).all()
     assert len(again) == 1 and again[0].id != earlier and again[0].context["renumber"] is False
+    # Letting go of what left starts again too, and looks up what still leaves when it runs.
+    (removing_again,) = session.scalars(select(TaskOperation.id).where(
+        TaskOperation.kind == "collection.remove_left_episodes", TaskOperation.status == "QUEUED",
+    )).all()
+    assert removing_again != removing
     # A later save replaces the one this save started, in turn.
-    assert stop_replaced_work("creator") == ReplacedWork(renumber=False)
+    assert stop_replaced_work("creator") == ReplacedWork(renumber=False, remove_left=True)
     session.expire_all()
     assert session.get(TaskOperation, again[0].id).status == "CANCELED"

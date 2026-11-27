@@ -16,6 +16,7 @@ _DELETE_DOWNLOADS_TASK_KEY = "delete_collection_downloads_worker"
 _SCAN_EXISTING_FILES_TASK_KEY = "scan_existing_files"
 _REWRITE_METADATA_TASK_KEY = "rewrite_collection_profile_metadata"
 _CHANGE_IDENTIFICATION_TASK_KEY = "change_collection_identification"
+_REMOVE_LEFT_EPISODES_TASK_KEY = "remove_left_episodes"
 
 
 class _CollectionOperation(OperationDefinition[Collection]):
@@ -218,6 +219,14 @@ class CollectionRenumberOperation(_CollectionOperation):
 
     def context(self) -> dict[str, object]:
         return {**super().context(), "renumber": self.renumber}
+
+
+class CollectionRemoveLeftEpisodesOperation(_CollectionOperation):
+    """Let the episodes go that left the collection with their downloaded files: the files first, then the episodes,
+    as after the user chose to let them go in the Seasons dialog or on Home."""
+
+    kind = "collection.remove_left_episodes"
+    task = _REMOVE_LEFT_EPISODES_TASK_KEY
 
 
 class _CollectionDownloadMaintenanceOperation(_CollectionOperation):
