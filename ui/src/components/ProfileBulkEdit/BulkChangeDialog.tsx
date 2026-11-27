@@ -1,4 +1,4 @@
-import {type FormEvent, type ReactNode, useId, useMemo, useRef, useState} from 'react'
+import {type FormEvent, type ReactNode, useEffect, useId, useMemo, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useQuery} from '@tanstack/react-query'
@@ -150,6 +150,13 @@ export default function BulkChangeDialog({endpoint, ids, noun, names, fields: gi
         resolver: ((...args: Parameters<ReturnType<typeof zodResolver>>) => zodResolver(schema.current)(...args)) as never,
         defaultValues: getZodDefaults(bulkFormSchema(givenFields)) as BulkFormValues,
     })
+    // Settings that came with the summary start at their default, as the others do, so what a control shows is what
+    // the form sends.
+    useEffect(() => {
+        for (const spec of fields) {
+            if (form.getValues(`${spec.key}.value`) === undefined) form.setValue(`${spec.key}.value`, spec.defaultValue)
+        }
+    }, [fields]) // eslint-disable-line react-hooks/exhaustive-deps
     const values = useWatch({control: form.control})
     const ticked = fields.filter((spec) => values[spec.key]?.apply).length
 
