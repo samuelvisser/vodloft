@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>VODLoft</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+<header>
+    <img src="icons/icon-32.png" alt="" width="24" height="24">
+    <h1>VODLoft</h1>
+</header>
+
+<!-- Where the user's VODLoft is, asked once. -->
+<form id="setup" hidden>
+    <p>Send the cookies of a site you are signed in to straight to VODLoft, so it can download what your account can see.</p>
+    <label for="address">Your VODLoft address</label>
+    <input id="address" type="url" placeholder="https://vodloft.example.com" autocomplete="url" required>
+    <p class="error" id="setup-error" role="alert" hidden></p>
+    <p class="help">Your browser asks you to let the extension read sites' cookies. It only reads a site's cookies when
+        you choose Send, and only sends them to this address.</p>
+    <div class="actions">
+        <button type="submit" class="primary">Save</button>
+        <button type="button" id="setup-cancel" hidden>Cancel</button>
+    </div>
+</form>
+
+<!-- Sending the cookies of the site the current tab shows. -->
+<section id="send" hidden>
+    <p id="page">Cookies for <strong id="page-host"></strong></p>
+    <button type="button" id="send-button" class="primary">Send cookies to VODLoft</button>
+    <p id="result" role="status" hidden></p>
+    <div class="actions" id="result-actions" hidden>
+        <a id="open-vodloft" class="button" target="_blank" rel="noreferrer">Open VODLoft</a>
+    </div>
+    <footer>
+        <span id="vodloft-address"></span>
+        <button type="button" id="change" class="link">Change</button>
+    </footer>
+</section>
+
+<!-- A tab that shows no web page, such as a new tab. -->
+<section id="no-page" hidden>
+    <p>Open a page of the site whose cookies VODLoft should have, such as a video, while you are signed in there.</p>
+    <footer>
+        <span id="vodloft-address-no-page"></span>
+        <button type="button" id="change-no-page" class="link">Change</button>
+    </footer>
+</section>
+
+<script src="popup.js"></script>
+</body>
+</html>
