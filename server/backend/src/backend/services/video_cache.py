@@ -197,7 +197,7 @@ def prepare_cached_mp4(source_url: str, *, episode_uuid: str) -> Path:
             except FileNotFoundError as exc:
                 raise VideoCacheError(503, "ffmpeg is required to prepare cached RSS video") from exc
             except OSError as exc:
-                raise VideoCacheError(502, "Could not prepare Daily Wire video") from exc
+                raise VideoCacheError(502, "Could not prepare the video") from exc
 
             try:
                 prepared = temporary.is_file() and temporary.stat().st_size > 0
@@ -214,7 +214,7 @@ def prepare_cached_mp4(source_url: str, *, episode_uuid: str) -> Path:
                     completed.returncode,
                     stderr[-4000:],
                 )
-                raise VideoCacheError(502, "Daily Wire video could not be prepared as MP4")
+                raise VideoCacheError(502, "The video could not be prepared as MP4")
 
             try:
                 os.replace(temporary, target)

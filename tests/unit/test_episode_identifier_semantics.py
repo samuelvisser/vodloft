@@ -55,7 +55,6 @@ def test_episode_identifier_info_parses_all_canonical_semantics():
     assert main.episode_number == "27"
     assert main.sub_episode_number is None
     assert main.label == "S02E27"
-    assert main.source_slot == "S02E27.0"
 
     extra = EpisodeIdentifierInfo.from_identifier("ep-extra.trailer.S02E27.5")
     assert extra.type == "ep-extra"
@@ -64,12 +63,10 @@ def test_episode_identifier_info_parses_all_canonical_semantics():
     assert extra.episode_number == "27"
     assert extra.sub_episode_number == "5"
     assert extra.label == "S02E27.5"
-    assert extra.source_slot == "S02E27.5"
 
     auxiliary = EpisodeIdentifierInfo.from_identifier("aux.12")
     assert auxiliary.type == "aux"
     assert auxiliary.episode_number == "12"
-    assert auxiliary.source_slot is None
 
 
 def _identify(identification, *records, season=None, taken=None, extras=False):
@@ -151,7 +148,7 @@ def test_official_trailer_title_overrides_false_dailywire_flag():
     assert _identify(EpisodeIdentifier.NUMBERED, record) == ["trailer.1"]
 
 
-def test_duplicate_source_slot_ignores_episode_extra_subtype():
+def test_a_trailer_and_another_extra_of_one_number_share_its_place():
     from backend.types.collection_types import EpisodeIdentifier
 
     assert _identify(

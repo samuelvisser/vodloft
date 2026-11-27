@@ -33,7 +33,6 @@ DAILYWIRE_FEATURE_MODULES = {
     "backend/src/backend/services/movies.py",
     "task_manager/src/task_manager/tasks/helpers/episodes/metadata.py",
     "task_manager/src/task_manager/tasks/helpers/episodes/same_episode.py",
-    "task_manager/src/task_manager/tasks/helpers/collections.py",
     "task_manager/src/task_manager/tasks/workers/debug_ep_details/service.py",
     "task_manager/src/task_manager/tasks/workers/monitor_pending_episode/_helpers.py",
     "task_manager/src/task_manager/tasks/workers/monitor_pending_episode/service.py",
