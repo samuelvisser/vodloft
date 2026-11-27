@@ -78,7 +78,12 @@ class ServiceDefinition:
 
 
 class InvalidDestination(ValueError):
-    """The submitted values do not describe a destination Apprise can send to."""
+    """The submitted values do not describe a destination Apprise can send to. ``field`` names the setting that
+    can fix it, when one can."""
+
+    def __init__(self, message: str, *, field: str | None = None):
+        super().__init__(message)
+        self.field = field
 
 
 def _field_kind(token: Mapping, *, private: bool) -> FieldKind:

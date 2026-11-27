@@ -75,7 +75,8 @@ def notification_destinations():
 @router.post("/destinations/preview", response_model=DestinationPreviewRead)
 def notification_destination_preview(body: DestinationInput):
     """Check what was entered and show it as it will be listed, without saving."""
-    return service.preview(body)
+    with db_session() as s:
+        return service.preview(s, body)
 
 
 @router.post("/destinations/test", response_model=TestRead)
