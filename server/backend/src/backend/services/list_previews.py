@@ -15,8 +15,10 @@ import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import Enum
+
+from progress_plan import PlanSnapshot, PlanTracker, StageSpec
 
 from backend.services.source_options import ytdlp_call_options
 from sources import get_source
@@ -74,6 +76,8 @@ class _Dialog:
     """How many reviews the dialog asked for: only the latest is still wanted."""
     kept: dict = field(default_factory=dict)
     """What the dialog's previews and reviews read of the collection, kept for the next one."""
+    saving: dict | None = None
+    """The plan of the save the dialog runs now, or ran last, as ``{"main_activity", "stages"}``."""
 
 
 _lock = threading.Lock()
@@ -168,10 +172,40 @@ def kept_for_dialog(collection_slug: str, token: str | None) -> dict | None:
         return dialog.kept
 
 
+def saving_plan(collection_slug: str, token: str | None, steps: list[StageSpec]) -> PlanTracker | None:
+    """Follow the dialog's save by a plan of ``steps``, which the dialog asks for while it waits (``saving``). None
+    without a dialog to show it to."""
+    if token is None:
+        return None
+    with _lock:
+        now = time.monotonic()
+        _forget_old(now)
+        dialog = _dialogs.setdefault((collection_slug, token), _Dialog({}, now))
+        dialog.asked = now
+        # A save before this one, such as one that was refused, is over.
+        dialog.saving = None
+
+    def keep(snapshot: PlanSnapshot) -> None:
+        with _lock:
+            dialog.saving = {"main_activity": snapshot.main_activity, "stages": [asdict(stage) for stage in snapshot.stages]}
+
+    return PlanTracker(steps, keep)
+
+
+def saving(collection_slug: str, token: str) -> dict | None:
+    """How far the dialog's save is, by its plan; None before it started one."""
+    with _lock:
+        dialog = _dialogs.get((collection_slug, token))
+        return None if dialog is None else dialog.saving
+
+
 def forget_listings(collection_slug: str, token: str) -> None:
     """The dialog closed: what it listed is not needed any more. A listing still running finishes unseen."""
     with _lock:
         _dialogs.pop((collection_slug, token), None)
 
 
-__all__ = ["Listing", "ListingState", "ListToList", "forget_listings", "kept_for_dialog", "listings", "newest_review", "start_listings"]
+__all__ = [
+    "Listing", "ListingState", "ListToList", "forget_listings", "kept_for_dialog", "listings", "newest_review", "saving",
+    "saving_plan", "start_listings",
+]

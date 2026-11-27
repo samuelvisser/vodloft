@@ -8,11 +8,13 @@ import '../ChangeIdentificationDialog/ChangeIdentificationDialog.css'
 import {CollectionMoves} from '../ReconcileDialog/ReconcileDialog'
 import {type CauseRow, seasonsRows} from '../ReconcileDialog/MoveCauses'
 import type {Words} from './seasonsSettings'
+import ProgressSteps from '../common/ProgressSteps'
+import type {ProgressStep} from '../../types/progress'
 
 /** The second step of the Seasons dialog: what saving does, as the Move dialog shows a move, with the cards only the
  * Seasons dialog needs besides: the seasons it makes, the videos that get downloaded, the ones that leave, and the
  * downloaded files deleted with them. Nothing is saved until the user agrees to it. */
-export default function SeasonsReview({view, review, failed, changes, words, listName, listing, listed, renumber, onRenumber, onBack, folded, alone = true}: {
+export default function SeasonsReview({view, review, failed, changes, words, listName, listing, listings = [], renumber, onRenumber, onBack, folded, alone = true}: {
     view: CollectionSeasonsRead
     review: SeasonsReviewRead | undefined
     failed: string | null
@@ -23,8 +25,8 @@ export default function SeasonsReview({view, review, failed, changes, words, lis
     listName: string
     /** The dialog still lists a list for the review. */
     listing: boolean
-    /** The lists the dialog listed already, by title, while it waits for the others. */
-    listed: string[]
+    /** What the dialog lists for the review, a step each, while it waits for them. */
+    listings?: ProgressStep[]
     renumber: boolean
     onRenumber: (again: boolean) => void
     onBack: () => void
@@ -43,35 +45,31 @@ export default function SeasonsReview({view, review, failed, changes, words, lis
             </p>
         )
     }
-    if (review.busy) {
+    if (review.busy && listing && listings.length > 0) {
+        const done = listings.filter((step) => step.state !== 'running').length
+        // The ones still listing first, then the ones that could not be listed, then the ones done.
+        const order = {running: 0, failed: 1} as Record<string, number>
+        const steps = [...listings].sort((a, b) => (order[a.state] ?? 2) - (order[b.state] ?? 2))
         return (
             <div className="seasons-review-busy">
                 <p className="change-identification-loading" role="status">
                     <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/>
-                    {review.busy}
+                    <span>Listing what you switched on: <b>{done.toLocaleString()} of {listings.length.toLocaleString()}</b> done</span>
                 </p>
-                {listing && (
-                    <p className="help">
-                        VODLoft started listing it when you switched it on, and carries on from there. Nothing is saved
-                        yet. Once VODLoft knows what is in it, this shows exactly what moves.
-                    </p>
-                )}
-                {listing && listed.length > 0 && (
-                    <div className="seasons-review-chips">
-                        {listed.map((title) => (
-                            <span key={title} className="seasons-review-chip">
-                                <FontAwesomeIcon icon={faIcon('fass', 'check')} aria-hidden="true"/> {title} is listed
-                            </span>
-                        ))}
-                    </div>
-                )}
-                {listing && (
-                    <p className="help">
-                        You can go back and change a setting: what is listed stays known until you close the dialog, so
-                        nothing is listed twice.
-                    </p>
-                )}
+                <ProgressSteps steps={steps} className="is-plain seasons-review-listings" label="Listings"/>
+                <p className="help">
+                    Once VODLoft knows what is in each of them, this shows exactly what moves. Nothing is saved yet, and
+                    going back keeps what is listed.
+                </p>
             </div>
+        )
+    }
+    if (review.busy) {
+        return (
+            <p className="change-identification-loading" role="status">
+                <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/>
+                {review.busy}
+            </p>
         )
     }
     const rows = [
@@ -190,5 +188,19 @@ export function GoBack({onBack}: {onBack: () => void}) {
         <p className="help">
             Not what you want? Go <button type="button" className="seasons-review-back" onClick={onBack}>back</button> and change it.
         </p>
+    )
+}
+
+/** What a save of seasons settings does now, step by step, while the user waits for it. */
+export function SavingProgress({steps}: {steps: ProgressStep[]}) {
+    const now = steps.find((step) => step.state === 'running')
+    return (
+        <section className="seasons-saving" aria-live="polite">
+            <p className="change-identification-loading" role="status">
+                <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/>
+                <b>{now ? now.label : 'Saving'}…</b>
+            </p>
+            {steps.length > 0 && <ProgressSteps steps={steps} className="is-plain" label="What saving does"/>}
+        </section>
     )
 }

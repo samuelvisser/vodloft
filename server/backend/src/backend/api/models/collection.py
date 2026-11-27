@@ -457,6 +457,8 @@ class CollectionBulkChangeIn(BulkChangeIn[CollectionBulkChangesIn]):
     keep_numbers: list[int] = Field(default_factory=list, max_length=10_000)
     """The Collections, by id, that keep their episodes' numbers when their downloads move into other seasons, as
     the review let the user choose; the others number them again, as the Seasons dialog does by default."""
+    saving_token: Optional[str] = Field(default=None, max_length=64, pattern=r"^[A-Za-z0-9-]+$")
+    """The review's token, by which it follows how far each collection's save is, as the Seasons dialog does."""
 
 
 class CollectionBulkFeedRead(ResponseBase):

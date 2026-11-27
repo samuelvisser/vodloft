@@ -324,6 +324,7 @@ class CollectionBulkReviewItemRead(ResponseBase):
     """What saving the bulk edit does to the seasons of one collection, as its Seasons dialog's review says it."""
 
     id: int
+    slug: str
     title: str
     view: Optional[CollectionSeasonsAPIRead] = None
     """Its Seasons dialog as it is now, which the review's changes are read against."""
@@ -335,3 +336,10 @@ class CollectionBulkReviewItemRead(ResponseBase):
 class CollectionBulkReviewRead(ResponseBase):
     collections: list[CollectionBulkReviewItemRead]
     """The chosen collections whose seasons the changes change, in the order they were chosen."""
+
+
+class SeasonsSavingAPIRead(ResponseBase):
+    """How far a save of the Seasons dialog is."""
+
+    plan: Optional[dict] = None
+    """Its plan, as tasks report theirs: ``{"main_activity", "stages"}``. None before it started."""

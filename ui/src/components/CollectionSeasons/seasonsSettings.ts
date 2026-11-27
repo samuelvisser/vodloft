@@ -97,3 +97,7 @@ export function useNarrow(query = '(max-width: 640px)') {
     }, [query])
     return matches
 }
+
+/** The open dialog's token, which keeps what it listed for its review apart from other open dialogs'. Not
+ * crypto.randomUUID, which a browser only offers on HTTPS, and VODLoft is often reached over plain HTTP at home. */
+export const newToken = () => Array.from({length: 4}, () => Math.random().toString(36).slice(2, 10)).join('-')

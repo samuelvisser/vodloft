@@ -17,12 +17,14 @@ from backend.api.profile_bulk import in_order, offered_changes, reason_of, skipp
 from backend.db.models import Collection
 from backend.services.errors import ServiceError
 from backend.services.link_seasons import section_list_names
+from backend.services.list_previews import saving_plan
 from backend.services.sites import collection_site
 from backend.types.link_season_types import SourceRole
 from sources import Feature, Names, get_source
 
 from .seasons.service import (
-    channel_feeds, feed_key, feed_roles, review_seasons, seasons_view, settings_with, takes_lists, update_seasons,
+    channel_feeds, feed_key, feed_roles, review_seasons, saving_steps, seasons_view, settings_with, takes_lists,
+    update_seasons,
 )
 from .service import delete_collection, request_collection_sync, update_collection
 
@@ -113,7 +115,8 @@ def change_collections(s: Session, body: CollectionBulkChangeIn) -> BulkResultRe
                     update_collection(s, collection.slug, CollectionAPIUpdate.model_validate({**current.model_dump(), **edit}))
                 seasons = _seasons_changes(body.changes, collection, renumber=collection.id not in body.keep_numbers)
                 if seasons is not None:
-                    update_seasons(s, collection.slug, seasons)
+                    plan = saving_plan(collection.slug, body.saving_token, saving_steps(s, collection.slug, seasons))
+                    update_seasons(s, collection.slug, seasons, plan=plan)
         except (HTTPException, ServiceError, ValidationError) as error:
             left.append(skipped(collection.id, collection.title, reason_of(error)))
             continue
@@ -132,10 +135,10 @@ def review_collections(s: Session, body: CollectionBulkChangeIn) -> CollectionBu
                 continue
             review = review_seasons(s, collection.slug, seasons)
         except (HTTPException, ServiceError, ValidationError) as error:
-            reviews.append(CollectionBulkReviewItemRead(id=collection.id, title=collection.title, skipped=reason_of(error)))
+            reviews.append(CollectionBulkReviewItemRead(id=collection.id, slug=collection.slug, title=collection.title, skipped=reason_of(error)))
             continue
         reviews.append(CollectionBulkReviewItemRead(
-            id=collection.id, title=collection.title, view=seasons_view(s, collection.slug), review=review,
+            id=collection.id, slug=collection.slug, title=collection.title, view=seasons_view(s, collection.slug), review=review,
         ))
     return CollectionBulkReviewRead(collections=reviews)
 

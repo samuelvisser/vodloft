@@ -158,8 +158,16 @@ def test_the_library_bulk_edit_makes_a_feed_a_season_after_its_review(feeds_sour
     assert review_collections(session, _bulk([collection.id], feeds={shorts.key: "part"})).collections == []
     session.rollback()
 
-    result = run_write_transaction(lambda s: change_collections(s, _bulk([collection.id], feeds={shorts.key: "season"})))
+    from backend.services.list_previews import saving
+
+    bulk = _bulk([collection.id], feeds={shorts.key: "season"})
+    bulk.saving_token = "review-token-1"
+    result = run_write_transaction(lambda s: change_collections(s, bulk))
     assert (result.done, result.skipped) == (1, [])
+    # The review followed the save by its steps, each done.
+    plan = saving("creator", "review-token-1")
+    assert [stage["id"] for stage in plan["stages"]] == ["plan", "files", "save", "after"]
+    assert {stage["state"] for stage in plan["stages"]} == {"completed"}
     assert dict(_filled(session)) == {"Collection": ["a"], "Shorts": ["s1", "s2"]}
     assert moved_episodes(session, session.get(Collection, collection.id)) == []
 

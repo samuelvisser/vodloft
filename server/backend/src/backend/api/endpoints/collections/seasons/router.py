@@ -10,15 +10,18 @@ from backend.app import db_session
 from backend.api.models.collection_seasons import (
     AddedLinkAPIRead, CollectionSeasonsAPIRead, CollectionSeasonsAPIUpdate, CollectionListAddAPIIn, MovedEpisodesAPIRead,
     SeasonsListingAPIRead, SeasonsListingsAPIIn, SeasonsListingsAPIRead, SeasonsPreviewAPIRead, SeasonsReviewAPIRead,
+    SeasonsSavingAPIRead,
     TOKEN_PATTERN,
 )
 from backend.db.core import run_write_transaction
 from backend.security.access import Area, Level
 from backend.security.deps import requires
-from backend.services.list_previews import forget_listings, kept_for_dialog, listings, newest_review, start_listings
+from backend.services.list_previews import (
+    forget_listings, kept_for_dialog, listings, newest_review, saving, saving_plan, start_listings,
+)
 
 from .service import (
-    CollectionNotFoundError, Listed, check_added_link, link_to_add, lists_to_list, look_up_added_link, look_up_links,
+    CollectionNotFoundError, Listed, check_added_link, plan_step, saving_steps, link_to_add, lists_to_list, look_up_added_link, look_up_links,
     links_lookup, moved_view, preview_seasons, review_seasons, save_listed_links, seasons_view, update_seasons,
 )
 
@@ -64,11 +67,25 @@ def collection_seasons_put(collection_slug: str, body: CollectionSeasonsAPIUpdat
     channel's feeds, set how its lists are seasons, and move the downloads that belong in another season then. The
     links the user adds are looked up first, outside the write."""
     listed = _listed(collection_slug, body.listing_token)
-    added = [
-        replace(_look_up(collection_slug, link.url), as_season=link.as_season, items=listed.links.get(link.url, ()))
-        for link in body.added_links
-    ]
-    return _found(lambda: run_write_transaction(lambda s: update_seasons(s, collection_slug, body, added, listed)))
+    with db_session() as s:
+        steps = _found(lambda: saving_steps(s, collection_slug, body, listed))
+    # The dialog follows how far the save is by its token (``collection_seasons_saving``).
+    plan = saving_plan(collection_slug, body.listing_token, steps)
+    with plan_step(plan, "look_up"):
+        added = [
+            replace(_look_up(collection_slug, link.url), as_season=link.as_season, items=listed.links.get(link.url, ()))
+            for link in body.added_links
+        ]
+    return _found(lambda: run_write_transaction(lambda s: update_seasons(s, collection_slug, body, added, listed, plan)))
+
+
+@router.get(
+    "/{collection_slug}/season-settings/saving", dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
+    response_model=SeasonsSavingAPIRead,
+)
+def collection_seasons_saving(collection_slug: str, token: str = Query(min_length=8, max_length=64, pattern=TOKEN_PATTERN)):
+    """How far the save of the open Seasons dialog, or of the Library's bulk edit, is: the steps of its plan."""
+    return SeasonsSavingAPIRead(plan=saving(collection_slug, token))
 
 
 def _listed(collection_slug: str, token: str | None) -> Listed:

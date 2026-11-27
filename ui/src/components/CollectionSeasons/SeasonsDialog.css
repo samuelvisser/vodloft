@@ -524,3 +524,10 @@ button.bulk-seasons-review-head { cursor: pointer; }
 .bulk-seasons-review-state svg { margin: 0; width: auto; opacity: 1; }
 .bulk-seasons-review-state.is-saved { color: #16a34a; }
 .bulk-seasons-review-state.is-failed { color: #dc2626; }
+/* What the review waits for while the dialog lists, and what saving does now. */
+.seasons-review-listings { max-height: 12rem; overflow-y: auto; font-size: .875rem; }
+.seasons-saving {
+    display: grid; gap: 8px; padding: 10px 12px; margin-bottom: 12px; border-radius: 10px;
+    border: 1px solid rgba(37, 99, 235, 0.35); background: rgba(37, 99, 235, 0.06); font-size: .875rem;
+}
+.seasons-saving .change-identification-loading { margin: 0; }

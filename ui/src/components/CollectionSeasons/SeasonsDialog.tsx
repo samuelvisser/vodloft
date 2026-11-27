@@ -25,8 +25,10 @@ import {
     SeasonsListingsReadSchema, SeasonsReviewReadSchema,
 } from '../../types/schemas/collection_seasons'
 import './SeasonsDialog.css'
-import {dialogWords, namesOf, readSeasons, registries, type SourceRole, useNarrow, type Words} from './seasonsSettings'
-import SeasonsReview from './SeasonsReview'
+import {dialogWords, namesOf, newToken, readSeasons, registries, type SourceRole, useNarrow, type Words} from './seasonsSettings'
+import SeasonsReview, {SavingProgress} from './SeasonsReview'
+import {useSavingSteps} from './savingProgress'
+import type {ProgressStep} from '../../types/progress'
 import type {CauseRow} from '../ReconcileDialog/MoveCauses'
 import {collectionWords, CollectionWords, wordsOf} from '../../lib/collectionWords'
 import {nameInText} from '../../lib/nameInText'
@@ -45,9 +47,6 @@ type Props = {
     words?: CollectionWords
 }
 
-/** The open dialog's token, which keeps what it listed for its review apart from other open dialogs'. Not
- * crypto.randomUUID, which a browser only offers on HTTPS, and VODLoft is often reached over plain HTTP at home. */
-const newToken = () => Array.from({length: 4}, () => Math.random().toString(36).slice(2, 10)).join('-')
 
 async function failure(response: Response, fallback: string): Promise<Error> {
     const body = await response.json().catch(() => null)
@@ -716,10 +715,16 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         }
         return rows
     }
-    const listedTitles = (listings?.listings ?? []).filter((listing) => listing.state === 'listed').flatMap((listing) => {
+    // What the dialog lists for its review, one step each, as the review shows them while it waits.
+    const listingSteps: ProgressStep[] = (listings?.listings ?? []).flatMap((listing) => {
         const title = listing.listId !== null ? playlistsById.get(listing.listId)?.title : newLinks.find((link) => link.url === listing.link)?.title
-        return title ? [title] : []
+        if (!title) return []
+        return [{
+            id: `${listing.listId ?? listing.link}`, label: title, percent: null,
+            state: listing.state === 'listing' ? 'running' as const : listing.state === 'listed' ? 'completed' as const : 'failed' as const,
+        }]
     })
+    const savingSteps = useSavingSteps(collectionSlug, token, isSubmitting && !!reviewing)
 
     /** One source: its name, what it has, and what it is in the collection. */
     const sourceRow = (row: {key: string, title: string, details: (string | null)[], role: SourceRole, onRole: (role: SourceRole) => void,
@@ -811,13 +816,14 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                             {!view && !error && <p className="seasons-dialog-muted">Loading the {season.plural}…</p>}
                             {errors.root && <div className="form-error-card" role="alert">{String(errors.root.message)}</div>}
 
+                            {view && names && reviewing && isSubmitting && <SavingProgress steps={savingSteps}/>}
                             {view && names && reviewing && (
                                 <SeasonsReview
                                     view={view} review={review} failed={reviewError ? reviewError.message : null}
                                     changes={formChanges(reviewing)} words={words}
                                     listName={view.creatorListNames.plural}
                                     listing={(listings?.listings ?? []).some((listing) => listing.state === 'listing')}
-                                    listed={listedTitles}
+                                    listings={listingSteps}
                                     renumber={renumber} onRenumber={setRenumber} onBack={() => setReviewing(null)} folded={narrow}
                                 />
                             )}

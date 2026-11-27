@@ -8,13 +8,15 @@ import {apiUrl} from '../../lib/api'
 import {wordsOf} from '../../lib/collectionWords'
 import {CollectionSeasonsReadSchema, SeasonsReviewReadSchema} from '../../types/schemas/collection_seasons'
 import type {BulkSaving} from '../ProfileBulkEdit/BulkChangeDialog'
-import SeasonsReview, {GoBack, SavingDoes} from './SeasonsReview'
-import {dialogWords, useNarrow} from './seasonsSettings'
+import SeasonsReview, {GoBack, SavingDoes, SavingProgress} from './SeasonsReview'
+import {useSavingSteps} from './savingProgress'
+import {dialogWords, newToken, useNarrow} from './seasonsSettings'
 import './SeasonsDialog.css'
 
 const BulkReviewSchema = z.object({
     collections: z.object({
         id: z.number(),
+        slug: z.string(),
         title: z.string(),
         view: CollectionSeasonsReadSchema.nullable().default(null),
         review: SeasonsReviewReadSchema.nullable().default(null),
@@ -66,6 +68,8 @@ export default function BulkSeasonsReview({ids, changes, onReady, onBack, saving
     // The collections that keep their episodes' numbers, as each review's numbering choice says.
     const [keep, setKeep] = useState<number[]>([])
     const [open, setOpen] = useState<number[]>([])
+    // By which the save of each collection says how far it is.
+    const [token] = useState(newToken)
     const reviews = useQueries({
         queries: ids.map((id) => ({
             queryKey: ['collectionsBulkReview', id, changes] as const,
@@ -83,17 +87,18 @@ export default function BulkSeasonsReview({ids, changes, onReady, onBack, saving
 
     useEffect(() => {
         // Each collection whose seasons change saves on its own, so its card can show when it is done.
-        onReady(ready ? {extra: {keepNumbers: keep}, oneByOne: items.filter((item) => !item.skipped).map((item) => item.id)} : null)
+        onReady(ready ? {extra: {keepNumbers: keep, savingToken: token}, oneByOne: items.filter((item) => !item.skipped).map((item) => item.id)} : null)
     }, [ready, keep, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
     const savingNow = saving?.at != null ? items.find((item) => item.id === saving.at) : undefined
+    const savingSteps = useSavingSteps(savingNow?.slug, token, !!savingNow)
     const toSave = items.filter((item) => !item.skipped).length
     const savedCount = items.filter((item) => saving?.saved.includes(item.id) || saving?.skipped[item.id] !== undefined).length
     /** Where saving is with one collection. */
     const savedState = (id: number) => !saving ? null
         : saving.skipped[id] !== undefined ? <span className="bulk-seasons-review-state is-failed"><FontAwesomeIcon icon={faIcon('fass', 'triangle-exclamation')} aria-hidden="true"/> Not saved: {saving.skipped[id]}</span>
             : saving.saved.includes(id) ? <span className="bulk-seasons-review-state is-saved"><FontAwesomeIcon icon={faIcon('fass', 'circle-check')} aria-hidden="true"/> Saved</span>
-                : saving.at === id ? <span className="bulk-seasons-review-state"><FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/> Saving…</span>
+                : saving.at === id ? null
                     : <span className="bulk-seasons-review-state is-waiting">Waiting to be saved</span>
     const toggle = (id: number) => setOpen((current) => current.includes(id) ? current.filter((x) => x !== id) : [...current, id])
     return (
@@ -130,12 +135,13 @@ export default function BulkSeasonsReview({ids, changes, onReady, onBack, saving
                                         <FontAwesomeIcon icon={faIcon('fass', shown ? 'chevron-down' : 'chevron-right')} aria-hidden="true"/>
                                         <span><b>{item.title}</b><span className="help">{inShort(item)}</span>{savedState(item.id)}</span>
                                     </button>
+                                    {saving?.at === item.id && <div className="bulk-seasons-review-body"><SavingProgress steps={savingSteps}/></div>}
                                     {shown && (
                                         <div id={bodyId} className="bulk-seasons-review-body">
                                             <SeasonsReview
                                                 view={item.view} review={item.review ?? undefined} failed={null} changes={[]}
                                                 words={dialogWords(wordsOf(item.view.words), item.view)} listName={item.view.creatorListNames.plural}
-                                                listing={false} listed={[]} renumber={!keep.includes(item.id)}
+                                                listing={false} renumber={!keep.includes(item.id)}
                                                 onRenumber={(again) => setKeep((current) => again ? current.filter((x) => x !== item.id) : [...current, item.id])}
                                                 onBack={onBack} folded={narrow} alone={false}
                                             />

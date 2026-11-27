@@ -3,10 +3,12 @@ from __future__ import annotations
 
 from backend.utils.helpers import name_in_text
 from collections import Counter
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 
+from progress_plan import PlanTracker, StageSpec
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
@@ -22,7 +24,7 @@ from backend.services.new_lists import checked_new_link_seasons
 from backend.services.collection_health import note_collection_health
 from backend.services.episode_identification import collection_work, queue_renumber
 from backend.services.list_previews import Listing, ListingState, ListToList
-from backend.services.reconcile import list_labels, move_preview, moves_made
+from backend.services.reconcile import MovesMade, list_labels, move_preview, moves_made
 from backend.services.link_seasons import (
     adds_outside_videos, collection_list_kinds, collection_new_lists, feed_season_ids, held_back, leaving, lists_in, moved,
     place,
@@ -40,6 +42,7 @@ from backend.services.season_order import (
 from backend.services.source_requests import asking_source
 from config.network import is_no_internet_error
 from backend.types.collection_contracts import collection_contract
+from backend.types.work_weights import DEFAULT
 from backend.types.collection_types import EpisodeIdentifier
 from backend.types.season_types import SeasonType
 from backend.types.resource_names import OWN_LINK_NAMES, RESOURCE_NAMES
@@ -379,15 +382,43 @@ class Listed:
         )
 
 
+def saving_steps(s: Session, collection_slug: str, body: CollectionSeasonsAPIUpdate, listed: Listed = Listed()) -> list[StageSpec]:
+    """The steps of saving the Seasons dialog, which the dialog shows while it waits for the save. Reading only."""
+    words = collection_contract(_collection(s, collection_slug).type).words
+    return [
+        *([StageSpec(id="look_up", code="look_up_links", label="Looking up the links you added")] if body.added_links else []),
+        *([StageSpec(id="store", code="store_listed", label="Keeping what was listed")] if listed.lists or listed.links else []),
+        StageSpec(id="plan", code="plan_seasons", label=f"Placing each {words.episode.singular} in its {words.season.singular}"),
+        StageSpec(id="files", code="plan_moves", label="Working out which downloaded files move"),
+        StageSpec(
+            id="save", code="save_seasons", weight=3 * DEFAULT,
+            label=f"Saving the {words.season.plural} and {words.episode.plural}",
+        ),
+        StageSpec(id="after", code="queue_work", label="Starting the moves and the listing"),
+    ]
+
+
+@contextmanager
+def plan_step(plan: PlanTracker | None, step: str) -> Iterator[None]:
+    """Runs ``step`` of the save's plan for as long as the block does, when the save has a plan with that step. A
+    save that runs again, after another write was in the way, goes on under the steps it ran already."""
+    pending = plan is not None and any(stage.id == step and stage.state == "pending" for stage in plan.snapshot().stages)
+    if not pending:
+        yield
+        return
+    with plan.running(step):
+        yield
+
+
 def update_seasons(
     s: Session, collection_slug: str, body: CollectionSeasonsAPIUpdate, added: Sequence[AddedLink] = (),
-    listed: Listed = Listed(),
+    listed: Listed = Listed(), plan: PlanTracker | None = None,
 ) -> CollectionSeasonsAPIRead:
     """Save the Seasons dialog as its review showed it (``review_seasons``): rename and order the collection's seasons,
     set which feeds of its channel it takes and how its lists are seasons, as ``plan_seasons_dialog`` plans it, and
     move the downloads that then belong in another season, which numbers its episodes again unless ``body`` says not
     to. ``added`` are the links the user adds, looked up before the transaction (see ``look_up_added_link``), and
-    ``listed`` what the dialog listed for its review.
+    ``listed`` what the dialog listed for its review. ``plan`` follows the save's steps (``saving_steps``).
 
     ``s`` is a write transaction's session."""
     collection = _collection(s, collection_slug)
@@ -395,24 +426,37 @@ def update_seasons(
     was_settings = settings_of(collection, MoveCauseOrigin.SEASONS)
     _check_added(collection, body, bool(added))
     _check_seasons(collection, body)
-    links = [(link, _add_link(s, collection, link)) for link in added]
-    s.flush()
-    for playlist in collection.lists:
-        if playlist.id in listed.lists:
-            _store_items(s, playlist, listed.lists[playlist.id])
-    for link, playlist in links:
-        if playlist is not None and link.items:
-            _store_items(s, playlist, link.items)
-    s.flush()
-    state = load_state(s, collection)
-    before = {episode.id: episode.season_id for episode in state.episodes.values() if episode.has_files}
-    planned = plan_seasons_dialog(state, body)
-    # The user saw and agreed to what moves, so the downloads that belong in another season now move along.
-    # Downloads whose files keep their paths move along too, as the next look at the collection would move them.
-    place(state, with_files={episode.id for episode in moved(state)}, drop=False)
-    done = moves_made(s, state, before, list_labels(state))
-    apply_state(s, state)
-    s.flush()
+    with plan_step(plan, "store"):
+        links = [(link, _add_link(s, collection, link)) for link in added]
+        s.flush()
+        for playlist in collection.lists:
+            if playlist.id in listed.lists:
+                _store_items(s, playlist, listed.lists[playlist.id])
+        for link, playlist in links:
+            if playlist is not None and link.items:
+                _store_items(s, playlist, link.items)
+        s.flush()
+    with plan_step(plan, "plan"):
+        state = load_state(s, collection)
+        before = {episode.id: episode.season_id for episode in state.episodes.values() if episode.has_files}
+        planned = plan_seasons_dialog(state, body)
+        # The user saw and agreed to what moves, so the downloads that belong in another season now move along.
+        # Downloads whose files keep their paths move along too, as the next look at the collection would move them.
+        place(state, with_files={episode.id for episode in moved(state)}, drop=False)
+    with plan_step(plan, "files"):
+        done = moves_made(s, state, before, list_labels(state))
+    with plan_step(plan, "save"):
+        apply_state(s, state)
+        s.flush()
+    with plan_step(plan, "after"):
+        return _after_saving(s, collection, collection_slug, body, added, planned, done, was_settings)
+
+
+def _after_saving(
+    s: Session, collection: Collection, collection_slug: str, body: CollectionSeasonsAPIUpdate, added: Sequence[AddedLink],
+    planned: _Planned, done: MovesMade, was_settings: dict,
+) -> CollectionSeasonsAPIRead:
+    """What saving the dialog sets going once its seasons and episodes are written."""
     again = EpisodeIdentifier(collection.episode_identifier) is not EpisodeIdentifier.DATE_BASED and body.renumber
     if done.renamed:
         # Numbers the episodes again, unless the user said not to, then moves each downloaded file to its season's
