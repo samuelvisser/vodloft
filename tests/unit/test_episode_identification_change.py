@@ -260,10 +260,11 @@ def test_rewriting_metadata_retags_the_file_without_downloading_and_clears_numbe
     download = _download(session, profile, episode, file_path=str(media), **available_artifact(media))
     session.commit()
 
-    rewrites, untaggable = plan_metadata_rewrites(
+    plan = plan_metadata_rewrites(
         session, collection_id=collection.id, local_media_profile_id=profile.local_media_profile_id,
     )
-    assert untaggable == 0 and len(rewrites) == 1
+    rewrites = plan.rewrites
+    assert plan.untaggable == 0 and len(rewrites) == 1
     rewrite_metadata(rewrites[0])
     record_metadata_rewrite(rewrites[0])
 
@@ -282,6 +283,56 @@ def test_rewriting_metadata_retags_the_file_without_downloading_and_clears_numbe
     stored = session.get(EpisodeMediaDownload, download.id)
     assert stored.artifact_size_bytes == media.stat().st_size
     assert stored.nfo_path == str(nfo)
+
+
+def test_rewriting_metadata_only_writes_the_files_whose_metadata_changes(session, tmp_path):
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from backend.services.metadata_rewrite import plan_metadata_rewrites, record_metadata_rewrite, rewrite_metadata
+    from downloader.metadata import NO_METADATA
+
+    collection = _collection(session, source_key="dailywire", identification="date_based", season_number=3)
+    profile = _profile(session, collection)
+    profile.local_media_profile.metadata_mode = "nfo"
+    downloads = []
+    for number in (1, 2):
+        media = tmp_path / f"episode-{number}.mp4"
+        media.write_bytes(b"video %d" % number)
+        episode = _episode(session, collection, number, _date(number), number=str(number), title=f"Episode {number}")
+        downloads.append(_download(session, profile, episode, file_path=str(media), **available_artifact(media)))
+    session.commit()
+
+    def plan():
+        session.expire_all()
+        return plan_metadata_rewrites(
+            session, collection_id=collection.id, local_media_profile_id=profile.local_media_profile_id,
+        )
+
+    # Never written by VODLoft with a fingerprint: both files are written once.
+    first = plan()
+    assert len(first.rewrites) == 2 and first.unchanged == 0
+    rewrite_metadata(first.rewrites[0])
+    record_metadata_rewrite(first.rewrites[0])
+    # The second file's rewrite stopped before it was recorded: it is still to be written, the first is right.
+    second = plan()
+    assert [rewrite.download_id for rewrite in second.rewrites] == [downloads[1].id] and second.unchanged == 1
+    rewrite_metadata(second.rewrites[0])
+    record_metadata_rewrite(second.rewrites[0])
+    assert plan().rewrites == [] and plan().unchanged == 2
+
+    # Only the episode whose metadata changes is written again.
+    session.get(EpisodeMediaDownload, downloads[1].id).media.title = "A new title"
+    session.commit()
+    third = plan()
+    assert [rewrite.download_id for rewrite in third.rewrites] == [downloads[1].id] and third.unchanged == 1
+
+    # A file VODLoft embedded no tags in is left alone when the profile embeds them, and only its NFO is written.
+    session.get(EpisodeMediaDownload, downloads[1].id).tags_fingerprint = NO_METADATA
+    profile.local_media_profile.metadata_mode = "embed_and_nfo"
+    session.commit()
+    fourth = plan()
+    assert [(rewrite.download_id, rewrite.tags is None, rewrite.nfo is not None) for rewrite in fourth.rewrites] == [
+        (downloads[0].id, False, False), (downloads[1].id, True, True),
+    ]
 
 
 def test_asking_the_api_for_another_identification_starts_an_operation(session):
@@ -407,3 +458,18 @@ def test_rewriting_counts_what_each_profile_calls_its_files(session):
     update_progress(PlanStep(plan, progress, f"rewrite:{sound.id}"), 10, "Rewriting a.m4a", done=11, total=110)
     rewrite = next(stage for stage in progress.reports[-1][2]["plan"]["stages"] if stage["id"] == f"rewrite:{sound.id}")
     assert (rewrite["unit"], rewrite["done"], rewrite["total"]) == ("tracks", 11, 110)
+
+
+def test_a_download_remembers_which_metadata_it_wrote_or_that_it_wrote_none():
+    from types import SimpleNamespace
+
+    from downloader.metadata import NO_METADATA, nfo_fingerprint, tags_fingerprint
+    from task_manager.tasks.download_adapter import _written_metadata
+
+    nfo = SimpleNamespace(id="nfo", kind="nfo", content=b"<episodedetails/>")
+    plan = SimpleNamespace(metadata_tags=(("title", "Episode"),), assets=(nfo,))
+    kept = SimpleNamespace(assets=(SimpleNamespace(id="nfo"),))
+    assert _written_metadata(plan, kept) == (tags_fingerprint({"title": "Episode"}), nfo_fingerprint(nfo.content))
+    # No tags embedded, and the NFO was not kept: VODLoft knows neither is there.
+    plan = SimpleNamespace(metadata_tags=(), assets=(nfo,))
+    assert _written_metadata(plan, SimpleNamespace(assets=())) == (NO_METADATA, NO_METADATA)
