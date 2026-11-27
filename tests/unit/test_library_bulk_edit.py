@@ -47,10 +47,9 @@ def _collections(s: Session):
 
 
 def _changes(ids, **changes):
-    from backend.api.models.collection import CollectionBulkChangesIn
-    from backend.api.models.profile_bulk import BulkChangeIn
+    from backend.api.models.collection import CollectionBulkChangeIn
 
-    return BulkChangeIn[CollectionBulkChangesIn].model_validate({"ids": ids, "changes": changes})
+    return CollectionBulkChangeIn.model_validate({"ids": ids, "changes": changes})
 
 
 def test_collection_changes_skip_settings_a_site_does_not_have(session) -> None:

@@ -567,6 +567,19 @@ export const frontendOperationDefinitions = {
         : `${collectionTitle} has its moved episodes in place`
     },
   },
+  'collection.remove_left_episodes': {
+    kind: 'collection.remove_left_episodes',
+    resourceType: 'collection',
+    label: 'Removing what left',
+    invalidate: (operation, invalidations) => {
+      invalidateCollectionStructure(operation, invalidations)
+      invalidateCollectionFiles(operation, invalidations)
+    },
+    success: (operation) => {
+      const collectionTitle = nameInText(contextString(operation, 'collection_title') || operation.title)
+      return operation.result?.summary ? `${collectionTitle}: ${operation.result.summary}` : `${collectionTitle} let go of what left it`
+    },
+  },
   'collection.scan_existing_files': {
     kind: 'collection.scan_existing_files',
     resourceType: 'collection',

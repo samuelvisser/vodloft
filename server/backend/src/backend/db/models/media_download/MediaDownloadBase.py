@@ -77,6 +77,14 @@ class MediaDownloadBase(HasMetadataMixin, HasTaskResourcesMixin, Base):
     artifact_stat_ino: Mapped[Optional[str]] = mapped_column(String(32))
     artifact_size_bytes: Mapped[Optional[int]] = mapped_column(BigInteger)
     artifact_fingerprint: Mapped[Optional[str]] = mapped_column(String(64))
+    # What VODLoft last wrote completely as the file's metadata, so a rewrite only writes what changes. None when it
+    # wrote none or does not know.
+    tags_fingerprint: Mapped[Optional[str]] = mapped_column(
+        String(64), comment='The fingerprint of the tags VODLoft last embedded in the file, "none" when it embedded none; None when unknown',
+    )
+    nfo_fingerprint: Mapped[Optional[str]] = mapped_column(
+        String(64), comment='The fingerprint of the NFO VODLoft last wrote beside the file, "none" when it wrote none; None when unknown',
+    )
 
     # A user cancellation prevents an automatic Download Profile sweep from
     # immediately recreating the same operation. An explicit Retry/Download

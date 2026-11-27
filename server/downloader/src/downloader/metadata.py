@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -199,6 +202,22 @@ def _text(parent: ET.Element, name: str, value) -> None:
         return
     element = ET.SubElement(parent, name)
     element.text = str(value)
+
+
+NO_METADATA = "none"
+"""What a download stores as a metadata fingerprint when VODLoft knows that metadata is not supposed to be there: no
+tags in the file, such as when its profile only writes an NFO or its format takes none, or no NFO beside it. Rewriting
+metadata leaves that part alone then. A fingerprint of None means VODLoft does not know what is there."""
+
+
+def tags_fingerprint(tags: Mapping[str, str]) -> str:
+    """The tags VODLoft embeds in a file, as a SHA-256. The tags it clears follow from the tags it writes."""
+    return hashlib.sha256(b"vodloft-tags-v1\0" + json.dumps(sorted(tags.items()), ensure_ascii=False).encode()).hexdigest()
+
+
+def nfo_fingerprint(nfo: bytes) -> str:
+    """An NFO VODLoft writes beside a file, as a SHA-256."""
+    return hashlib.sha256(b"vodloft-nfo-v1\0" + nfo).hexdigest()
 
 
 def render_nfo(metadata: MediaServerMetadata, *, kodi_safe: bool = False) -> bytes:

@@ -30,12 +30,31 @@ def _still_leaving(s: Session, episode: Episode) -> bool:
     return episode.id in {e.id for e in leaving_outside(s, episode.collection)} and not held_back(episode)
 
 
+def episode_words(s: Session, collection_id: int):
+    """What the collection calls its episodes, as ``Names``; None when it is gone."""
+    from backend.services.sites import collection_words
+
+    collection = s.get(Collection, collection_id)
+    return collection_words(collection).episode if collection is not None else None
+
+
 def run_remove_left_episodes(s: Session, *, collection_id: int, progress=None) -> int:
     removed = 0
     leaving = _leaving_ids(s, collection_id)
     s.rollback()
+    words = episode_words(s, collection_id)
+    s.rollback()
     for position, episode_id in enumerate(leaving):
-        update_progress(progress, position * 100 // len(leaving), f"Removing {len(leaving)} episode(s) and their files")
+        # Stops here when the user cancels or a save of the collection's seasons replaces it, between two episodes.
+        update_progress(
+            progress, position * 100 // len(leaving), f"Removing {len(leaving)} {words.plural} and their files",
+            done=position, total=len(leaving),
+        )
+        episode = s.get(Episode, episode_id)
+        if episode is None or not _still_leaving(s, episode):
+            # A list took it again meanwhile, or the user keeps its files now: its files stay.
+            s.rollback()
+            continue
         downloads = list(s.scalars(select(EpisodeMediaDownload).where(EpisodeMediaDownload.media_item_id == episode_id)))
         cancel_active_download_attempts(s, downloads, reason="The episode left its collection")
         for download_id in [download.id for download in downloads]:

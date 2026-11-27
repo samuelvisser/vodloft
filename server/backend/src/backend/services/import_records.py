@@ -359,7 +359,8 @@ class _Applier:
         download = existing or model(**{
             name: value for name, value in values.items()
             if name not in ("artifact_stat_dev", "artifact_stat_ino", "artifact_size_bytes", "artifact_fingerprint",
-                            "artifact_status", "artifact_error")
+                            "artifact_status", "artifact_error", "tags_fingerprint",
+                            "nfo_fingerprint")
         })
         if existing is None:
             download.file_path = str(recorded or record.values.get("original_path") or "")

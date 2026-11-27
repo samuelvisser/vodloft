@@ -4,7 +4,7 @@ from controller.db_utils import db_session
 from task_manager.scheduler.registry import task
 from task_manager.scheduler.results import TaskResult
 
-from .service import run_remove_left_episodes
+from .service import episode_words, run_remove_left_episodes
 
 
 @task(
@@ -19,7 +19,12 @@ async def remove_left_episodes(*, resource_id: int | None = None, progress=None)
         raise ValueError("Removing episodes that left a collection requires a collection resource")
     with db_session() as s:
         removed = run_remove_left_episodes(s, collection_id=resource_id, progress=progress)
+        words = episode_words(s, resource_id)
+        s.rollback()
+    if words is None:
+        return TaskResult(summary="The collection is gone", data={"episodes": removed})
+    named = words.singular if removed == 1 else words.plural
     return TaskResult(
-        summary=f"Removed {removed} {'episode' if removed == 1 else 'episodes'} and {'its' if removed == 1 else 'their'} files",
+        summary=f"Removed {removed} {named} and {'its' if removed == 1 else 'their'} files",
         data={"episodes": removed},
     )

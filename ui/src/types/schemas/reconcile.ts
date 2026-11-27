@@ -23,8 +23,10 @@ export const MovedPartSchema = z.object({
     toSeason: z.string(),
     /** The titles of the videos, newest first, up to a few dozen. */
     examples: z.array(z.string()),
-    /** Downloads whose files move along into their new season. */
+    /** Downloaded files that get another path in their new season. */
     filesMoved: z.number().default(0),
+    /** Those files, with the path each has now and gets, newest first; no new path when only moving it tells. */
+    files: z.array(z.object({title: z.string(), fromPath: z.string(), toPath: z.string().nullable().default(null)})).default([]),
 })
 export type MovedPart = z.infer<typeof MovedPartSchema>
 
@@ -45,6 +47,8 @@ export const MovePreviewSchema = z.object({
     profiles: z.array(z.object({name: z.string(), filesRenamed: z.number(), metadataRewritten: z.number()})),
     /** Files moved, so its files are renamed and their metadata rewritten also when it keeps its numbers. */
     filesFollow: z.boolean(),
+    /** What the move waits for, such as the listing a saved change started; what moves shows once it is done. */
+    busy: z.string().nullable().default(null),
 })
 export type MovePreview = z.infer<typeof MovePreviewSchema>
 

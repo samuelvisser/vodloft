@@ -21,3 +21,5 @@
 .vl-progress-step.is-pending, .vl-progress-step.is-skipped {opacity:.6}
 .vl-progress-step.is-completed svg {color:var(--success,#16a34a)}
 .vl-progress-step.is-failed svg, .vl-progress-step.is-canceled svg {color:var(--danger,#dc2626)}
+/* Steps shown in place, such as in a dialog that waits for a save, rather than under a popover's text. */
+.vl-progress-steps.is-plain {margin-top:0;padding-top:0;border-top:0}

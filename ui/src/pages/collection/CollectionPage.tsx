@@ -359,6 +359,8 @@ export default function CollectionPage() {
   const downloadAllOperation = useActiveOperation('collection.download_all', 'collection', operationResourceId)
   const metadataRewriteOperation = useActiveOperation('collection.rewrite_metadata', 'collection', operationResourceId)
   const identificationOperation = useActiveOperation('collection.change_identification', 'collection', operationResourceId)
+  const renumberOperation = useActiveOperation('collection.renumber', 'collection', operationResourceId)
+  const removeLeftOperation = useActiveOperation('collection.remove_left_episodes', 'collection', operationResourceId)
   const manualSyncing = syncOperation !== undefined
   const syncBusy = syncStarting || manualSyncing
   const metadataRefreshBusy = metadataRefreshOperation !== undefined
@@ -723,6 +725,18 @@ export default function CollectionPage() {
                 icon: faIcon('fass', 'list-ol'),
                 operation: identificationOperation,
                 controls: operationControls(identificationOperation, `${words.episode.singular} identification change`, false),
+              },
+              {
+                label: 'Numbering again',
+                icon: faIcon('fass', 'list-ol'),
+                operation: renumberOperation,
+                controls: operationControls(renumberOperation, 'numbering again', false),
+              },
+              {
+                label: `Removing the ${words.episode.plural} that left`,
+                icon: faIcon('fass', 'trash'),
+                operation: removeLeftOperation,
+                controls: operationControls(removeLeftOperation, `removing the ${words.episode.plural} that left`),
               },
               {
                 label: 'Sync',

@@ -112,6 +112,42 @@ a.local-media-profile-stat:hover {
 }
 
 
+/* A titled group of properties below the details, such as what the profile saves besides the media. */
+.local-media-profile-section {
+    display: grid;
+    gap: 10px;
+}
+
+.local-media-profile-section-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.media-files-summary__settings,
+.media-files-summary__none,
+.media-files-summary__template-label {
+    color: var(--muted);
+}
+
+.media-files-summary__templates {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 6px 12px;
+    align-items: center;
+}
+
+.media-files-summary__templates .cm-content,
+.media-files-summary__templates .cm-line {
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.media-files-summary__template-label {
+    font-size: 12px;
+    font-weight: 700;
+}
+
 @media (prefers-color-scheme: dark) {
     .local-media-profile-stat {
         background: rgba(255, 255, 255, 0.035);

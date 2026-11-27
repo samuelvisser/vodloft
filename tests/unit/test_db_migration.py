@@ -33,7 +33,8 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "d571b0dc3805"
+HEAD_REVISION = "c41e7d09b2a8"
+EACH_SOURCE_ITS_OWN_CHOICE_REVISION = "a79d0f6c0f17"
 
 
 @pytest.fixture
@@ -1792,7 +1793,7 @@ def test_lists_laid_out_by_year_become_contents_only_lists_with_the_other_videos
                 "(:id, 'PL' || :id, 'ytdlp', 'https://example.test/PL' || :id, 'List', 1)"
             ), {"id": collection_id})
 
-    command.upgrade(config, HEAD_REVISION)
+    command.upgrade(config, "d571b0dc3805")
 
     with engine.connect() as connection:
         found = {row[0]: tuple(row[1:]) for row in connection.execute(text(
@@ -1806,3 +1807,124 @@ def test_lists_laid_out_by_year_become_contents_only_lists_with_the_other_videos
         4: ("season_each", "one_season", 1, 1),
         5: ("season_each", "one_season", 1, 1),
     }
+
+
+def test_each_list_has_its_own_choice_and_lists_laid_out_by_year_are_part_of_the_collection(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "d571b0dc3805")
+    rows = (
+        # Every list in as seasons, every list in as contents only, a few picked, a collection of only its lists laid
+        # out by year, and lists off.
+        (1, "channel", "all", 1, "add", "season_each", '{"playlist": "ask"}'),
+        (2, "channel", "all", 0, "add", "season_each", '{"playlist": "ignore"}'),
+        (3, "channel", "selected", 1, "add", "season_each", '{"playlist": "ask"}'),
+        (4, "custom", "all", 1, "only", "by_year", '{}'),
+        (5, "channel", "off", 1, "add", "season_each", '{}'),
+    )
+    causes = (
+        '[{"origin": "seasons", "setting": "lists_as_seasons", "before": "season", "after": "contents"},'
+        ' {"origin": "seasons", "setting": "link_seasons", "before": "all", "after": "selected"},'
+        ' {"origin": "seasons", "setting": "loose_videos", "before": "one_season", "after": "by_year"}]'
+    )
+    with engine.begin() as connection:
+        for collection_id, kind, link_seasons, as_seasons, outside, layout, new_lists in rows:
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key, episode_order, kind, link_seasons, lists_as_seasons, outside_videos, "
+                "list_layout, new_lists, move_causes) VALUES (:id, 'uuid-' || :id, 'c' || :id, 'C', "
+                "'https://example.test/' || :id, 'free', 'series', 'seasonal', 'Host', 'host', 'ytdlp', 'oldest_first', "
+                ":kind, :link_seasons, :as_seasons, :outside, :layout, :new_lists, :causes)"
+            ), {"id": collection_id, "kind": kind, "link_seasons": link_seasons, "as_seasons": as_seasons,
+                "outside": outside, "layout": layout, "new_lists": new_lists, "causes": causes if collection_id == 1 else "[]"})
+            # A list switched off, which waits for the user's choice.
+            connection.execute(text(
+                "INSERT INTO collection_lists (collection_id, ref, source_key, url, title, as_season, enabled, status) "
+                "VALUES (:id, 'PL' || :id, 'ytdlp', 'https://example.test/PL' || :id, 'List', 1, 0, 'new')"
+            ), {"id": collection_id})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        found = {row[0]: tuple(row[1:]) for row in connection.execute(text(
+            "SELECT c.id, c.link_seasons, c.loose_videos, c.new_lists, l.enabled, l.status, l.as_season FROM collections c "
+            "JOIN collection_lists l ON l.collection_id = c.id"
+        )).all()}
+        columns = {column["name"] for column in inspect(engine).get_columns("collections")}
+        stored_causes = connection.execute(text("SELECT move_causes FROM collections WHERE id = 1")).scalar_one()
+    assert found == {
+        # Every list was in, as a season or part of the collection, and new ones come in the same way.
+        1: ("on", "one_season", '{"playlist": "add"}', 1, "known", 1),
+        2: ("on", "one_season", '{"playlist": "contents"}', 1, "known", 0),
+        # A list that was not picked stays off.
+        3: ("on", "one_season", '{"playlist": "ask"}', 0, "new", 1),
+        # The lists decide what is in, and what is part of the collection goes in a season per year.
+        4: ("on", "by_year", "{}", 1, "known", 0),
+        5: ("off", "one_season", "{}", 0, "new", 1),
+    }
+    assert {"lists_as_seasons", "list_layout"}.isdisjoint(columns) and "feed_seasons" in columns
+    # The waiting changes keep only the settings that are left, as they read now.
+    assert json.loads(stored_causes) == [
+        {"origin": "seasons", "setting": "loose_videos", "before": "one_season", "after": "by_year"},
+    ]
+
+
+def _own_integer_id_tables() -> list:
+    from backend.db.core import Base, load_database_models
+
+    load_database_models()
+    return [
+        table for table in Base.metadata.sorted_tables
+        if [column.name for column in table.primary_key.columns] == ["id"]
+        and table.c.id.type.python_type is int and not table.c.id.foreign_keys
+    ]
+
+
+def test_every_table_with_its_own_integer_id_never_reuses_an_id(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import upgrade_database
+
+    tables = _own_integer_id_tables()
+    assert tables
+    upgrade_database()
+
+    with engine.connect() as connection:
+        created = dict(connection.exec_driver_sql("SELECT name, sql FROM sqlite_master WHERE type = 'table'").all())
+    for table in tables:
+        assert table.dialect_options["sqlite"]["autoincrement"], table.name
+        assert "PRIMARY KEY AUTOINCREMENT" in created[table.name], table.name
+
+
+def test_existing_tables_keep_their_rows_and_never_give_a_deleted_id_again(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, EACH_SOURCE_ITS_OWN_CHOICE_REVISION)
+    with engine.begin() as connection:
+        for user_id in (1, 2, 3):
+            connection.execute(
+                text("INSERT INTO users (id, username, password_hash, stream_token) VALUES (:id, :name, 'x', :name)"),
+                {"id": user_id, "name": f"user-{user_id}"},
+            )
+        connection.execute(text("DELETE FROM users WHERE id = 3"))
+        indexes_before = connection.exec_driver_sql(
+            "SELECT name, sql FROM sqlite_master WHERE type = 'index' ORDER BY name"
+        ).all()
+
+    # The migration that rebuilt the tables, before later ones add indexes of their own.
+    command.upgrade(config, "d0386f2772fc")
+
+    with engine.begin() as connection:
+        assert connection.execute(text("SELECT id FROM users ORDER BY id")).scalars().all() == [1, 2]
+        connection.execute(text("INSERT INTO users (username, password_hash, stream_token) VALUES ('user-4', 'x', 'user-4')"))
+        connection.execute(text("DELETE FROM users WHERE username = 'user-4'"))
+        connection.execute(text("INSERT INTO users (username, password_hash, stream_token) VALUES ('user-5', 'x', 'user-5')"))
+        # The upgrade counts on from the highest id still there; from then on a deleted id never comes back.
+        assert connection.execute(text("SELECT id FROM users WHERE username = 'user-5'")).scalar_one() == 4
+        assert connection.exec_driver_sql(
+            "SELECT name, sql FROM sqlite_master WHERE type = 'index' ORDER BY name"
+        ).all() == indexes_before
+        assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []

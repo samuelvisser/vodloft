@@ -83,9 +83,11 @@
 /* The creator's collections, as the same tiles as the Library. */
 .creator-collections-title { display: flex; align-items: baseline; gap: .5rem; }
 
+/* A section's title with what it offers on the right: the collections' order, the newest episodes' arrows. */
+.creator-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: .25rem; }
+.creator-section-head h2 { margin: 0; }
+
 /* The newest episodes of all of the creator's collections, in a row that scrolls sideways. */
-.creator-shelf-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: .25rem; }
-.creator-shelf-head h2 { margin: 0; }
 .creator-shelf-arrows { display: flex; gap: 6px; }
 .creator-shelf-arrows .btn { width: 34px; height: 34px; padding: 0; border-radius: 50%; justify-content: center; }
 .creator-shelf.episodes-row { grid-auto-columns: 240px; padding-left: 0; padding-right: 0; scrollbar-width: none; }

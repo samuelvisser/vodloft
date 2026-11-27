@@ -87,15 +87,6 @@ def check_after_refusal() -> None:
     look_up_level()
 
 
-def gives(level: DwMembershipLevel | None, needed: str) -> bool:
-    """Whether an account at ``level`` may watch what needs the membership level ``needed``."""
-    try:
-        wanted = DwMembershipLevel(needed)
-    except ValueError:
-        return False
-    return level in LEVEL_ORDER and wanted in LEVEL_ORDER and LEVEL_ORDER.index(level) >= LEVEL_ORDER.index(wanted)
-
-
 def _read() -> DwMembershipLevel | None:
     try:
         from .auth import TokenStore

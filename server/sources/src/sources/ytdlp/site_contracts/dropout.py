@@ -1,4 +1,4 @@
-from ...contract import AccountSignIn, SignInKind
+from ...contract import AccountSignIn, ListOrder, SignInKind
 from .email_sign_in import EMAIL_FIELDS
 from .other_sites import OtherSites
 
@@ -8,6 +8,8 @@ class Dropout(OtherSites):
     name = "Dropout"
     initials = "DO"
     domains = ("dropout.tv",)
+    # A series lists its episodes in their order.
+    list_order = ListOrder.OLDEST_FIRST
     # Every video on Dropout needs a subscription. Its sign-in runs out, so VODLoft signs in again by itself.
     account_sign_in = AccountSignIn(
         SignInKind.PASSWORD,

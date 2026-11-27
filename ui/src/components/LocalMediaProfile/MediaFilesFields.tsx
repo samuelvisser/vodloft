@@ -20,8 +20,8 @@ import './OutputTemplateEditor.css'
 
 /** A mode that says whether something is saved inside the media, beside it, both or neither. */
 type InsideBeside = {none: string, inside: string, beside: string, both: string}
-const THUMBNAIL: InsideBeside = {none: 'no_thumbnail', inside: 'embed', beside: 'sidecar', both: 'embed_and_sidecar'}
-const METADATA: InsideBeside = {none: 'no_metadata', inside: 'embed', beside: 'nfo', both: 'embed_and_nfo'}
+export const THUMBNAIL: InsideBeside = {none: 'no_thumbnail', inside: 'embed', beside: 'sidecar', both: 'embed_and_sidecar'}
+export const METADATA: InsideBeside = {none: 'no_metadata', inside: 'embed', beside: 'nfo', both: 'embed_and_nfo'}
 
 export function isInside(modes: InsideBeside, value: string | undefined): boolean {
     return value === modes.inside || value === modes.both

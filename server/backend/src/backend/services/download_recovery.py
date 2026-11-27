@@ -138,6 +138,8 @@ def _commit_abandoned_replacement(
         download.artifact_stat_ino = final_media_identity.stat_ino
         download.artifact_size_bytes = final_media_identity.size_bytes
         download.artifact_fingerprint = final_media_identity.fingerprint
+        # Which metadata the replacement file has is not known, so the next rewrite writes it.
+        download.tags_fingerprint = download.nfo_fingerprint = None
         download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
         download.artifact_error = None
         download.automatic_retry_suppressed = False

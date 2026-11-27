@@ -31,20 +31,17 @@ def _seasons_settings(collection: Collection) -> Settings:
     settings: Settings = {
         ("link_seasons", None): (collection.link_seasons, None),
         ("outside_videos", None): (collection.outside_videos, None),
-        ("list_layout", None): (collection.list_layout, None),
         ("loose_videos", None): (collection.loose_videos, None),
         ("repeat_videos", None): (collection.repeat_videos, None),
     }
     if collection.kind == CollectionKind.CHANNEL.value:
         settings[("feeds", None)] = (list(collection.feeds) if collection.feeds is not None else None, None)
-    if collection.link_seasons == LinkSeasons.ALL.value:
-        # Every list is in, and each one is a season of its own or contents only, as the collection says.
-        settings[("lists_as_seasons", None)] = ("season" if collection.lists_as_seasons else "contents", None)
-    elif collection.link_seasons != LinkSeasons.OFF.value:
-        # What each list is: off, a season of its own, or only adding its videos to the other seasons.
-        chosen = collection.link_seasons == LinkSeasons.SELECTED.value
+        # Which feeds are a season of their own.
+        settings[("feed_seasons", None)] = (sorted(collection.feed_seasons or {}), None)
+    if collection.link_seasons != LinkSeasons.OFF.value:
+        # What each list is: off, a season of its own, or part of the collection.
         for link in collection.lists:
-            state = "off" if chosen and not link.enabled else "season" if link.as_season else "contents"
+            state = "off" if not link.enabled else "season" if link.as_season else "contents"
             settings[("list", link.id)] = (state, link.title)
     return settings
 
@@ -92,6 +89,20 @@ def note_move_causes(collection: Collection, origin: MoveCauseOrigin, before: Se
         collection.move_causes = stored
 
 
+def changed_settings(collection, origin: MoveCauseOrigin, before: Settings) -> list[MoveCause]:
+    """What the origin's settings of ``collection`` changed from ``before``, such as the planner's copy of it after
+    planning a change that is not saved yet."""
+    changes: list[MoveCause] = []
+    for (setting, subject_id), (now, title) in settings_of(collection, origin).items():
+        was = before.get((setting, subject_id))
+        if was is None:
+            # Something new, such as a link the user adds, is shown by what it brings rather than as a change.
+            continue
+        if was[0] != now:
+            changes.append(MoveCause(origin, setting, was[0], now, subject_id, title))
+    return changes
+
+
 def clear_move_causes(collection: Collection) -> bool:
     """Forget the changes once no download waits for the Move action. Returns whether there were any."""
     if not collection.move_causes:
@@ -100,4 +111,4 @@ def clear_move_causes(collection: Collection) -> bool:
     return True
 
 
-__all__ = ["READERS", "Settings", "clear_move_causes", "move_causes", "note_move_causes", "settings_of"]
+__all__ = ["READERS", "Settings", "changed_settings", "clear_move_causes", "move_causes", "note_move_causes", "settings_of"]

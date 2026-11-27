@@ -16,6 +16,7 @@ _DELETE_DOWNLOADS_TASK_KEY = "delete_collection_downloads_worker"
 _SCAN_EXISTING_FILES_TASK_KEY = "scan_existing_files"
 _REWRITE_METADATA_TASK_KEY = "rewrite_collection_profile_metadata"
 _CHANGE_IDENTIFICATION_TASK_KEY = "change_collection_identification"
+_REMOVE_LEFT_EPISODES_TASK_KEY = "remove_left_episodes"
 
 
 class _CollectionOperation(OperationDefinition[Collection]):
@@ -111,6 +112,7 @@ class CollectionFileRenameOperation(_CollectionOperation):
         local_media_profile_ids: Sequence[int],
         season_folders: bool = True,
         episode_ids: Sequence[int] | None = None,
+        rewrite_metadata: bool = False,
     ) -> None:
         super().__init__(collection)
         self.local_media_profile_ids = tuple(
@@ -118,6 +120,7 @@ class CollectionFileRenameOperation(_CollectionOperation):
         )
         self.season_folders = season_folders
         self.episode_ids = list(episode_ids) if episode_ids is not None else None
+        self.rewrite_metadata = rewrite_metadata
 
     def targets(self) -> tuple[OperationTargetSpec, ...]:
         return tuple(
@@ -128,6 +131,7 @@ class CollectionFileRenameOperation(_CollectionOperation):
                 task_kwargs={
                     "local_media_profile_id": profile_id, "season_folders": self.season_folders,
                     **({"episode_ids": self.episode_ids} if self.episode_ids is not None else {}),
+                    **({"rewrite_metadata": True} if self.rewrite_metadata else {}),
                 },
                 slot_key=f"profile:{profile_id}",
             )
@@ -215,6 +219,14 @@ class CollectionRenumberOperation(_CollectionOperation):
 
     def context(self) -> dict[str, object]:
         return {**super().context(), "renumber": self.renumber}
+
+
+class CollectionRemoveLeftEpisodesOperation(_CollectionOperation):
+    """Let the episodes go that left the collection with their downloaded files: the files first, then the episodes,
+    as after the user chose to let them go in the Seasons dialog or on Home."""
+
+    kind = "collection.remove_left_episodes"
+    task = _REMOVE_LEFT_EPISODES_TASK_KEY
 
 
 class _CollectionDownloadMaintenanceOperation(_CollectionOperation):

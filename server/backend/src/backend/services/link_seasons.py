@@ -24,26 +24,31 @@ from __future__ import annotations
 
 import contextvars
 import logging
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 
-from sqlalchemy import and_, func, inspect, delete, or_, select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Collection, CollectionList, CollectionListItem, Episode, MediaDownloadBase, Season
-from backend.services.season_order import arrange_seasons, link_first_videos, made_season, season_year
-from backend.services.seasons import create_season_record
+from backend.db.models import Collection, CollectionList, CollectionListItem, Episode
+from backend.services.season_order import arrange, link_first_videos, season_year
+from backend.services.file_moves import FileMoves, number_in
+from backend.services.season_state import (
+    EpisodeDraft, Leaving, ListDraft, SeasonDraft, SeasonsState, apply_state, load_state,
+)
 from backend.services.new_lists import ListKind, NewListSetting, list_kinds, new_link_seasons_settings
 from backend.services.sites import collection_creator_names, collection_names, collection_site, collection_words
 from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import EpisodeIdentifier
 from backend.types.season_types import SeasonOrigin, SeasonType
 from backend.types.link_season_types import (
-    CollectionKind, ListLayout, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos, RepeatVideos,
+    CollectionKind, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos, RepeatVideos,
 )
-from backend.utils.helpers import generate_uuid, slugify
-from sources import MAIN_TAG, Feature, ItemRef, Names, SectionKind, SectionRef, SectionType, Source, VideoDetails, get_source
+from backend.utils.helpers import slugify
+from backend.utils.season_ordering import season_type_from_name
+from sources import MAIN_TAG, Feature, ItemRef, ListOrder, Names, SectionKind, SectionRef, SectionType, Source, VideoDetails, get_source
 from sources.ytdlp_options import keep_call_options
 
 logger = logging.getLogger(__name__)
@@ -107,6 +112,12 @@ def made_from_list(collection: Collection) -> bool:
     return collection.kind == CollectionKind.LIST.value and collection.sharing_url is not None and not holds_only_link_seasons(collection)
 
 
+def numbered_in_list_order(collection: Collection) -> bool:
+    """Whether the collection numbers and shows its videos in the order they were added, which is its list's order:
+    a collection made from one list on a Site that lists in an order VODLoft trusts."""
+    return made_from_list(collection) and collection_site(collection).list_order is not ListOrder.NONE
+
+
 def list_in_one_season(collection: Collection) -> bool:
     """Whether the collection made from one list has the list as its one season, rather than a season per year."""
     return made_from_list(collection) and collection.loose_videos == LooseVideos.ONE_SEASON.value
@@ -121,6 +132,29 @@ def lists_own_link(collection: Collection) -> bool:
 def own_feeds(collection: Collection) -> frozenset[str] | None:
     """The channel's feeds the collection lists, or None when it lists all that its link lists."""
     return frozenset(collection.feeds) if collection.feeds is not None else None
+
+
+def feed_seasons(collection: Collection) -> dict[str, str]:
+    """The feeds of the collection's channel that are a season of their own, by the episode tag their videos get, with
+    the feed's ref: such as a YouTube channel's Shorts. Only for a collection that lists its own link, and only feeds
+    it takes."""
+    chosen = collection.feed_seasons or {}
+    if not chosen or not lists_own_link(collection):
+        return {}
+    taken = own_feeds(collection)
+    return {
+        type_.episode_tag: type_.feed_ref for type_ in collection_site(collection).types_of(SectionKind.FEED)
+        if type_.feed_ref in chosen and (taken is None or type_.feed_ref in taken)
+    }
+
+
+def feed_season_ids(collection: Collection) -> dict[str, int]:
+    """The season of each feed that is a season of its own and has one yet, by the feed's ref."""
+    known = {season.id for season in collection.seasons}
+    return {
+        ref: season_id for ref, season_id in (collection.feed_seasons or {}).items()
+        if season_id is not None and season_id in known
+    }
 
 
 def lists_playlists(collection: Collection) -> bool:
@@ -142,40 +176,23 @@ def offers_link_seasons(collection: Collection) -> bool:
     return lists_playlists(collection)
 
 
-def lists_by_year(collection: Collection) -> bool:
-    """Whether the collection, which holds nothing but the videos of its lists, lays them out in seasons per upload
-    year rather than a season each. A collection with videos of its own gets that by including its lists as contents
-    only, with the videos in none of them in a season per year."""
-    return (collection.list_layout == ListLayout.BY_YEAR.value and holds_only_link_seasons(collection)
-            and lists_are_seasons(collection))
-
-
 def lists_are_seasons(collection: Collection) -> bool:
-    """Whether lists of the collection can be seasons of their own: its lists are on, and not every one of them is
-    included as contents only, part of the channel as a feed is. Picked lists that are all contents only are the same
-    as every list included as contents: the channel's own videos are grouped as if it had no lists."""
+    """Whether any list of the collection is a season of its own: its lists are on, and not every one of them is part
+    of the collection, as a feed is. With none, the collection's own videos are grouped as if it had no lists."""
     if not link_seasons_on(collection):
         return False
-    if holds_only_link_seasons(collection):
-        return True
-    if collection.link_seasons == LinkSeasons.ALL.value:
-        return collection.lists_as_seasons
-    if collection.link_seasons == LinkSeasons.SELECTED.value:
-        return any(is_season(collection, playlist) for playlist in collection.lists)
-    return False
+    return any(is_season(collection, playlist) for playlist in collection.lists)
 
 
 def repeats_videos(collection: Collection) -> bool:
-    """Whether a video in several of the collection's lists that are seasons gets an episode in each of their seasons.
-    With the lists laid out by year, a video has one upload year, so it has one episode."""
-    return collection.repeat_videos == RepeatVideos.EACH_SEASON.value and not lists_by_year(collection)
+    """Whether a video in several of the collection's seasons, such as those of its lists, gets an episode in each."""
+    return collection.repeat_videos == RepeatVideos.EACH_SEASON.value
 
 
 def loose_in_one_season(collection: Collection) -> bool:
-    """Whether the videos in none of the lists that are seasons go to one season of their own, which holds the whole
-    channel when it is set to. With the lists laid out by year, they join the year seasons."""
-    return (collection.loose_videos in (LooseVideos.ONE_SEASON.value, LooseVideos.EVERYTHING.value)
-            and not lists_by_year(collection))
+    """Whether what is part of the collection, the videos in no season of their own, goes to one season, which holds
+    the whole channel when it is set to, rather than a season per upload year."""
+    return collection.loose_videos in (LooseVideos.ONE_SEASON.value, LooseVideos.EVERYTHING.value)
 
 
 def loose_season_on(collection: Collection) -> bool:
@@ -186,9 +203,7 @@ def loose_season_on(collection: Collection) -> bool:
 
 def is_in(collection: Collection, playlist: CollectionList) -> bool:
     """Whether the playlist is in the collection, as the collection is set: as one of its seasons, or with its videos
-    in the collection's other seasons."""
-    if collection.link_seasons == LinkSeasons.ALL.value:
-        return True
+    part of the collection. One that waits for the user's choice is not in yet."""
     return playlist.enabled and playlist.status == ListStatus.KNOWN.value
 
 
@@ -205,37 +220,48 @@ def lists_in(collection: Collection) -> list[CollectionList]:
     return [playlist for playlist in collection.lists if is_in(collection, playlist)]
 
 
-def active_lists(s: Session, collection: Collection) -> list[CollectionList]:
+def active_lists(state: SeasonsState) -> list[ListDraft]:
     """The playlists that are seasons, in the order that decides which one keeps a video several of them have: the
     order of their seasons, then the playlist whose first video came out first."""
+    collection = state.collection
     if not link_seasons_on(collection):
         return []
     active = [playlist for playlist in collection.lists if is_season(collection, playlist)]
-    firsts = link_first_videos(s, collection)
+    firsts = link_first_videos(state)
     never = datetime.max.replace(tzinfo=timezone.utc)
-    return sorted(active, key=lambda playlist: (
-        playlist.season is None, playlist.season.index if playlist.season is not None else 0,
-        firsts.get(playlist.id, never), playlist.site_position if playlist.added_by_user else -playlist.site_position,
-    ))
+
+    def key(playlist: ListDraft):
+        season = state.season(playlist.season_id)
+        return (
+            season is None, season.index if season is not None else 0, firsts.get(playlist.id, never),
+            playlist.site_position if playlist.added_by_user else -playlist.site_position,
+        )
+
+    return sorted(active, key=key)
 
 
-def _holders(s: Session, playlists: list[CollectionList]) -> dict[str, CollectionList]:
+def _holders(playlists: list[ListDraft]) -> dict[str, ListDraft]:
     """The playlist that keeps each video, by the video's slug."""
-    return {slug: lists[0] for slug, lists in _every_holder(s, playlists).items()}
+    return {slug: lists[0] for slug, lists in _every_holder(playlists).items()}
 
 
-def _every_holder(s: Session, playlists: list[CollectionList]) -> dict[str, list[CollectionList]]:
+def _every_holder(playlists: list[ListDraft]) -> dict[str, list[ListDraft]]:
     """The playlists that have each video, in the order of ``playlists``, by the video's slug: one for each season,
     the first, where several share one."""
-    found: dict[str, list[CollectionList]] = {}
+    found: dict[str, list[ListDraft]] = {}
     seasons: dict[str, set] = {}
     for playlist in playlists:
         season = playlist.season_id if playlist.season_id is not None else ("list", playlist.id)
-        for slug in s.scalars(select(CollectionListItem.source_slug).where(CollectionListItem.list_id == playlist.id)):
+        for slug in playlist.items:
             if season not in seasons.setdefault(slug, set()):
                 seasons[slug].add(season)
                 found.setdefault(slug, []).append(playlist)
     return found
+
+
+def holder_titles(state: SeasonsState) -> dict[str, str]:
+    """The title of the list in the collection that keeps each video, by the video's slug."""
+    return {slug: playlist.title for slug, playlist in _holders(lists_in(state.collection)).items()}
 
 
 def adds_outside_videos(collection: Collection) -> bool:
@@ -286,23 +312,18 @@ def seasons_plan(collection: Collection) -> str:
             return f"VODLoft puts every {words.episode.singular} in one {season.singular}, {loose_season_name(collection)}."
         return f"VODLoft puts the {episodes} of each upload year in their own {season.singular}."
     settings = collection_new_lists(collection)
-    if collection.link_seasons == LinkSeasons.ALL.value:
-        taken, skipped = [setting.kind.names for setting in settings], []
-    else:
-        actions = {setting.key: setting.action for setting in settings}
-        taken = [s.kind.names for s in settings if actions[s.key] == NewLinkSeasonAction.ADD.value]
-        skipped = [s.kind.names for s in settings if actions[s.key] == NewLinkSeasonAction.IGNORE.value]
+    actions = {setting.key: setting.action for setting in settings}
+    taken = [s.kind.names for s in settings if actions[s.key] == NewLinkSeasonAction.ADD.value]
+    skipped = [s.kind.names for s in settings if actions[s.key] == NewLinkSeasonAction.IGNORE.value]
+    contents = [s.kind.names for s in settings if actions[s.key] == NewLinkSeasonAction.CONTENTS.value]
     creator = collection_creator_names(collection).singular
     sentences = []
     if taken:
         lists = Names.joined(taken)
-        if not lists_are_seasons(collection):
-            sentences.append(f"The {episodes} of every {creator} {lists.singular} are part of the "
-                             f"{collection_names(collection).singular}.")
-        elif lists_by_year(collection):
-            sentences.append(f"The {episodes} of every {creator} {lists.singular} go in {season.a} per upload year.")
-        else:
-            sentences.append(f"Every {creator} {lists.singular} becomes {season.a} in VODLoft.")
+        sentences.append(f"Every {creator} {lists.singular} becomes {season.a} in VODLoft.")
+    if contents:
+        sentences.append(f"The {episodes} of every {creator} {Names.joined(contents).singular} are part of the "
+                         f"{collection_names(collection).singular}.")
     if skipped:
         sentences.append(f"{Names.joined(skipped).plural.capitalize()} are ignored.")
     if collection.loose_videos == LooseVideos.BY_YEAR.value:
@@ -330,12 +351,15 @@ def known_video_slugs(s: Session, collection: Collection, also: frozenset[str] =
     return frozenset(s.scalars(select(Episode.video_slug).where(Episode.collection_id == collection.id))) | also
 
 
-def list_lists(s: Session, collection: Collection, source: Source, also: frozenset[str] = frozenset()) -> LinkListing:
+def list_lists(
+    s: Session, collection: Collection, source: Source, also: frozenset[str] = frozenset(),
+    listed: Callable[[int, int], None] | None = None,
+) -> LinkListing:
     """Ask the collection's Source for its channel's playlists, and each list's Source for the videos of the lists
     that are seasons; for a collection that adds them, look up the videos it has not got that are neither in
-    ``also``, the ones its own link just listed. Slow, so no transaction stays open."""
+    ``also``, the ones its own link just listed. ``listed`` hears how many of how many lists are listed, as each one
+    is. Slow, so no transaction stays open."""
     url = collection.sharing_url if lists_playlists(collection) else None
-    every = collection.link_seasons == LinkSeasons.ALL.value
     action_of = _new_list_actions(collection)
     first = not collection.lists
     known = {
@@ -354,27 +378,38 @@ def list_lists(s: Session, collection: Collection, source: Source, also: frozens
     # Each list is read by its own Source, such as a Daily Wire show among YouTube playlists.
     wanted: dict[str, dict[str, str]] = {}
     for ref, (playlist_url, on, source_key) in known.items():
-        if every or on:
+        if on:
             wanted.setdefault(source_key, {})[ref] = playlist_url
     for playlist in playlists or ():
-        if playlist.ref not in known and _added(action_of(playlist), first=first, every=every):
+        if playlist.ref not in known and _added(action_of(playlist), first=first):
             wanted.setdefault(source.id, {})[playlist.ref] = playlist.url
     items: dict[str, tuple[ItemRef, ...]] = {}
     outside: list[VideoDetails] = []
     sources: dict[str, str] = {}
+    total = sum(len(urls) for urls in wanted.values())
+    done = 0
+
+    def one_more() -> None:
+        nonlocal done
+        done += 1
+        if listed is not None:
+            listed(done, total)
+
     for source_key, urls in wanted.items():
         reader = source if source_key == source.id else get_source(source_key)
-        listed = list_each(reader, urls)
-        items.update(listed)
-        for details in _look_up_outside(reader, adds_outside, known_slugs, listed):
+        found = list_each(reader, urls, each=one_more)
+        items.update(found)
+        for details in _look_up_outside(reader, adds_outside, known_slugs, found):
             outside.append(details)
             sources[details.slug] = source_key
     return LinkListing(playlists, items, outside, sources)
 
 
-def list_each(source: Source, urls: dict[str, str]) -> dict[str, tuple[ItemRef, ...]]:
+def list_each(
+    source: Source, urls: dict[str, str], each: Callable[[], None] | None = None,
+) -> dict[str, tuple[ItemRef, ...]]:
     """The videos of each list, in its order, by the key it has in ``urls``. A list that could not be listed is left
-    out. Slow, so no transaction stays open."""
+    out. ``each`` hears of every list as it is done. Slow, so no transaction stays open."""
 
     def list_one(url: str) -> tuple[ItemRef, ...] | None:
         try:
@@ -391,6 +426,8 @@ def list_each(source: Source, urls: dict[str, str]) -> dict[str, tuple[ItemRef, 
         for key, future in listed.items():
             if (found := future.result()) is not None:
                 items[key] = found
+            if each is not None:
+                each()
     return items
 
 
@@ -411,10 +448,11 @@ def _look_up_outside(
     return [details for details in found.values() if details is not None]
 
 
-def _added(action: NewLinkSeasonAction, *, first: bool, every: bool) -> bool:
-    """A new list is a season: every list is, in a collection where all are; the lists the channel had when the
-    collection was set up are, but for a kind it skips; and later ones are when the collection adds them."""
-    return every or action is NewLinkSeasonAction.ADD or (first and action is not NewLinkSeasonAction.IGNORE)
+def _added(action: NewLinkSeasonAction, *, first: bool) -> bool:
+    """A new list is in the collection: the lists the channel had when the collection was set up are, but for a kind
+    it skips; and later ones are when the collection adds them, as a season or as part of the collection."""
+    return action in (NewLinkSeasonAction.ADD, NewLinkSeasonAction.CONTENTS) or (
+        first and action is not NewLinkSeasonAction.IGNORE)
 
 
 def save_lists(s: Session, collection: Collection, listing: LinkListing) -> list[CollectionList]:
@@ -425,7 +463,6 @@ def save_lists(s: Session, collection: Collection, listing: LinkListing) -> list
     ``s`` is a write transaction's session."""
     known = {playlist.ref: playlist for playlist in collection.lists}
     first = not known
-    every = collection.link_seasons == LinkSeasons.ALL.value
     action_of = _new_list_actions(collection)
     asked: list[CollectionList] = []
     for position, found in enumerate(listing.playlists or ()):
@@ -433,14 +470,14 @@ def save_lists(s: Session, collection: Collection, listing: LinkListing) -> list
         if playlist is None:
             # Each kind of list has its own setting, such as a SoundCloud artist's albums and their playlists.
             action = action_of(found)
-            asks = not first and not every and action is NewLinkSeasonAction.ASK
+            asks = not first and action is NewLinkSeasonAction.ASK
             playlist = CollectionList(
                 ref=found.ref, source_key=collection.source_key, site_key=collection.site_key,
                 url=found.url, title=found.title, image_path=found.image_url, item_count=found.item_count,
-                site_position=position, enabled=_added(action, first=first, every=every),
+                type_key=found.type.key, site_position=position, enabled=_added(action, first=first),
                 status=(ListStatus.NEW if asks else ListStatus.KNOWN).value,
-                # While every list is in, a new one is included as the others are: a season, or contents only.
-                as_season=collection.lists_as_seasons if every else True,
+                # One the collection takes as part of it adds its videos to the other seasons.
+                as_season=action is not NewLinkSeasonAction.CONTENTS,
             )
             collection.lists.append(playlist)
             known[found.ref] = playlist
@@ -449,7 +486,7 @@ def save_lists(s: Session, collection: Collection, listing: LinkListing) -> list
             continue
         for name, value in (
             ("title", found.title), ("url", found.url), ("image_path", found.image_url), ("item_count", found.item_count),
-            ("site_position", position),
+            ("site_position", position), ("type_key", found.type.key),
         ):
             if value is not None and getattr(playlist, name) != value:
                 setattr(playlist, name, value)
@@ -472,25 +509,24 @@ class SeasonNumbers:
     elsewhere that still has the season's number from before the seasons were numbered again, such as S01E02 in
     what is the third season now."""
 
-    def __init__(self, s: Session):
-        self._s = s
+    def __init__(self, state: SeasonsState):
+        self._state = state
         self._taken: dict[int, set[int]] = {}
 
-    def _of(self, season: Season) -> set[int]:
+    def _of(self, season: SeasonDraft) -> set[int]:
         if season.id not in self._taken:
             prefix = f"ep.S{season.season_number:02d}E"
             taken = set()
-            for identifier in self._s.scalars(select(Episode.episode_identifier).where(or_(
-                Episode.season_id == season.id,
-                and_(Episode.collection_id == season.collection_id, Episode.episode_identifier.startswith(prefix)),
-            ))):
-                number = (identifier or "").rpartition("E")[2]
-                if number.isdigit():
-                    taken.add(int(number))
+            for episode in self._state.episodes.values():
+                identifier = episode.episode_identifier or ""
+                if episode.season_id == season.id or identifier.startswith(prefix):
+                    number = identifier.rpartition("E")[2]
+                    if number.isdigit():
+                        taken.add(int(number))
             self._taken[season.id] = taken
         return self._taken[season.id]
 
-    def take(self, season: Season, wanted: int | None) -> int:
+    def take(self, season: SeasonDraft, wanted: int | None) -> int:
         """The Source's own episode number, unless the season already has an episode with it."""
         taken = self._of(season)
         number = wanted if wanted is not None and wanted not in taken else max(taken, default=0) + 1
@@ -498,7 +534,7 @@ class SeasonNumbers:
         return number
 
 
-def _found_list_season(collection: Collection) -> Season | None:
+def _found_list_season(collection) -> SeasonDraft | None:
     """The one season of a collection made from one list, when it has it: its first season that is not a year's."""
     return next((
         season for season in sorted(collection.seasons, key=lambda season: season.index)
@@ -508,37 +544,42 @@ def _found_list_season(collection: Collection) -> Season | None:
 
 class SeasonFinder:
     """Finds the collection's seasons per year and playlist seasons, makes them when it has none yet, and moves
-    episodes between them."""
+    episodes between them, in the planner's copy of the collection."""
 
-    def __init__(self, s: Session, collection: Collection, now: datetime | None = None):
-        self._s, self._collection, self._now = s, collection, now or datetime.now(timezone.utc)
+    def __init__(self, state: SeasonsState):
+        self._state = state
+        self._collection = collection = state.collection
+        self._now = state.now
         # A Source's own season is found by its slug, a season per year by its year, which is its slug too.
         self._by_slug = {season.slug: season for season in collection.seasons}
         self._by_year = {season_year(season): season for season in collection.seasons if season_year(season) is not None}
-        self.numbers = SeasonNumbers(s)
+        self.numbers = SeasonNumbers(state)
         self._loose_one = loose_season_on(collection)
         self._from_list = made_from_list(collection)
         self._one_list = list_in_one_season(collection)
+        self._feeds = feed_seasons(collection)
 
-    def create(self, *, slug: str, name: str, number: int, origin: SeasonOrigin) -> Season:
+    def _season_args(self, *, slug: str, name: str, number: int, origin: SeasonOrigin) -> dict:
         collection = self._collection
         if collection.custom_season_order:
             # The user's order stays: a new season goes last.
             number = max((x.season_number for x in collection.seasons if x.season_type == SeasonType.NORMAL.value), default=0) + 1
-        taken = {season.slug for season in collection.seasons}
-        unique, suffix = slug, 2
-        while unique in taken:
-            unique, suffix = f"{slug}-{suffix}", suffix + 1
-        season = create_season_record(
-            self._s, collection_id=collection.id, index=max((x.index for x in collection.seasons), default=0) + 1,
-            slug=unique, name=name, season_number=number, origin=origin, update_collection_profiles=True,
+        season_type = season_type_from_name(name)
+        return dict(
+            slug=slug, name=name, number=0 if season_type is SeasonType.EXTRA else number, origin=origin.value,
+            season_type=season_type.value,
         )
-        made_season(self._s, season)
-        self._s.refresh(collection)
+
+    def create(self, *, slug: str, name: str, number: int, origin: SeasonOrigin) -> SeasonDraft:
+        season = self._state.make_season(**self._season_args(slug=slug, name=name, number=number, origin=origin))
         self._by_slug[season.slug] = season
         if season_year(season) is not None:
             self._by_year[season_year(season)] = season
         return season
+
+    def by_slug(self, slug: str) -> SeasonDraft | None:
+        season = self._by_slug.get(slug)
+        return season if season is not None and season.id in self._state.seasons else None
 
     def _named_number(self) -> int:
         """The number a new named season gets: after the other named ones, below the seasons per year."""
@@ -547,7 +588,29 @@ class SeasonFinder:
             default=0,
         ) + 1
 
-    def loose_season(self) -> Season:
+    def planned(self, episode: EpisodeDraft, belonging: Belonging) -> SeasonDraft:
+        """The season ``_season_for`` puts the episode in, without making it: one that is not there yet comes as it
+        would be made, apart from the planner's copy."""
+        collection = self._collection
+        if belonging.link is not None:
+            season, new = self._state.season(belonging.link.season_id), lambda: self._list_new(belonging.link)
+        elif belonging.feed is not None:
+            season, new = self._state.season(feed_season_ids(collection).get(belonging.feed)), lambda: self._feed_new(belonging.feed)
+        elif belonging.loose and self._from_list:
+            season, new = _found_list_season(collection), self._list_own_new
+        elif belonging.loose:
+            season, new = next((season for season in collection.seasons if season.loose), None), self._loose_new
+        else:
+            year = (episode.published_date or self._now).year
+            season, new = self._by_year.get(year), lambda: self._year_new(year)
+            season = season if season is not None and season.id in self._state.seasons else None
+        if season is not None:
+            return season
+        draft = self._state.season_draft(**self._season_args(**new()))
+        draft.loose = belonging.loose and not self._from_list
+        return draft
+
+    def loose_season(self) -> SeasonDraft:
         """The one season of the videos in none of the playlists that are seasons, named as their Site calls it, such
         as Videos, or Singles for an artist. A collection made from one list has no playlists: its one season is the
         list's own."""
@@ -555,49 +618,81 @@ class SeasonFinder:
             return self.list_own_season()
         season = next((season for season in self._collection.seasons if season.loose), None)
         if season is None:
-            name = loose_season_name(self._collection)
-            season = self.create(slug=name.lower(), name=name, number=self._named_number(), origin=SeasonOrigin.VODLOFT)
+            season = self.create(**self._loose_new())
             season.loose = True
-            self._s.flush()
         return season
 
-    def list_own_season(self) -> Season:
+    def _loose_new(self) -> dict:
+        name = loose_season_name(self._collection)
+        return dict(slug=name.lower(), name=name, number=self._named_number(), origin=SeasonOrigin.VODLOFT)
+
+    def list_own_season(self) -> SeasonDraft:
         """The one season of a collection made from one list, named after it, as the collection is."""
         season = _found_list_season(self._collection)
         if season is None:
-            title = self._collection.title
-            season = self.create(slug=slugify(title) or "1", name=title, number=1, origin=SeasonOrigin.LIST)
+            season = self.create(**self._list_own_new())
         return season
 
-    def home_season(self, published_at: datetime | None) -> Season:
-        """Where a new video in no playlist goes: the one season of a collection made from one list, the one season of
-        such videos, or its season per year."""
+    def _list_own_new(self) -> dict:
+        title = self._collection.title
+        return dict(slug=slugify(title) or "1", name=title, number=1, origin=SeasonOrigin.LIST)
+
+    def home_season(self, published_at: datetime | None, tag: str | None = None) -> SeasonDraft:
+        """Where a new video in no playlist goes: the season of its feed, by its episode ``tag``, when that feed is a
+        season of its own; the one season of a collection made from one list, the one season of such videos, or its
+        season per year."""
+        if tag is not None and tag in self._feeds:
+            return self.feed_season(self._feeds[tag])
         if self._one_list:
             return self.list_own_season()
         if self._loose_one:
             return self.loose_season()
         return self.year_season(published_at)
 
-    def year_season(self, published_at: datetime | None) -> Season:
+    def year_season(self, published_at: datetime | None) -> SeasonDraft:
         year = (published_at or self._now).year
-        return self._by_year.get(year) or self.create(slug=str(year), name=str(year), number=year, origin=SeasonOrigin.VODLOFT)
+        season = self._by_year.get(year)
+        if season is None or season.id not in self._state.seasons:
+            season = self.create(**self._year_new(year))
+        return season
 
-    def list_season(self, playlist: CollectionList) -> Season:
+    @staticmethod
+    def _year_new(year: int) -> dict:
+        return dict(slug=str(year), name=str(year), number=year, origin=SeasonOrigin.VODLOFT)
+
+    def list_season(self, playlist: ListDraft) -> SeasonDraft:
         """A playlist's season, made when the playlist gets its first video."""
-        if playlist.season is None:
-            number = self._named_number()
-            playlist.season = self.create(
-                slug=slugify(playlist.title) or str(number), name=playlist.title, number=number, origin=SeasonOrigin.LIST,
-            )
-            self._s.flush()
-        return playlist.season
+        season = self._state.season(playlist.season_id)
+        if season is None:
+            season = self.create(**self._list_new(playlist))
+            playlist.season_id = season.id
+        return season
 
-    def own_season(self, name: str) -> Season:
+    def _list_new(self, playlist: ListDraft) -> dict:
+        number = self._named_number()
+        return dict(slug=slugify(playlist.title) or str(number), name=playlist.title, number=number, origin=SeasonOrigin.LIST)
+
+    def feed_season(self, ref: str) -> SeasonDraft:
+        """A feed's own season, named after the feed, such as Shorts, made when the feed gets its first video there. It
+        may be a season the user put the feed together with."""
+        collection = self._collection
+        season = self._state.season(feed_season_ids(collection).get(ref))
+        if season is None:
+            season = self.create(**self._feed_new(ref))
+            collection.feed_seasons = {**(collection.feed_seasons or {}), ref: season.id}
+        return season
+
+    def _feed_new(self, ref: str) -> dict:
+        type_ = next(type_ for type_ in collection_site(self._collection).types_of(SectionKind.FEED) if type_.feed_ref == ref)
+        number = self._named_number()
+        return dict(slug=slugify(type_.title) or str(number), name=type_.title, number=number, origin=SeasonOrigin.VODLOFT)
+
+    def own_season(self, name: str) -> SeasonDraft:
         """A season of its own, such as for a video split by chapter."""
         number = self._named_number()
         return self.create(slug=slugify(name) or str(number), name=name, number=number, origin=SeasonOrigin.VODLOFT)
 
-    def move(self, episode: Episode, season: Season) -> None:
+    def move(self, episode: EpisodeDraft, season: SeasonDraft) -> None:
         """Move an episode to another season. A seasonal number follows its new season."""
         if episode.season_id == season.id:
             return
@@ -613,17 +708,12 @@ class SeasonFinder:
 class Belonging:
     """Where a video belongs now that the playlists changed."""
 
-    link: CollectionList | None = None
+    link: ListDraft | None = None
     """The link season it belongs in, or None for the season of videos in no playlist."""
     loose: bool = False
     """With no playlist: the one season of videos in no playlist, rather than its season per year."""
-
-
-def _with_files(s: Session, collection: Collection) -> set[int]:
-    return set(s.scalars(
-        select(MediaDownloadBase.media_item_id).join(Episode, Episode.id == MediaDownloadBase.media_item_id)
-        .where(Episode.collection_id == collection.id)
-    ))
+    feed: str | None = None
+    """The feed, by ref, whose own season it belongs in."""
 
 
 class _ChannelSeat:
@@ -638,36 +728,56 @@ class _ChannelSeat:
         return season_id in self._ids
 
 
-_Seat = CollectionList | _ChannelSeat
+@dataclass(frozen=True)
+class _FeedSeat:
+    """A feed's own season, as one of the places a video of the feed belongs in beside its lists' seasons."""
+
+    ref: str
+    season_id: int | None
+
+    def holds(self, season_id: int | None) -> bool:
+        return self.season_id is not None and season_id == self.season_id
+
+
+_Seat = ListDraft | _ChannelSeat | _FeedSeat
 
 
 def _seat_holds(seat: _Seat, season_id: int | None) -> bool:
-    if isinstance(seat, _ChannelSeat):
+    if isinstance(seat, (_ChannelSeat, _FeedSeat)):
         return seat.holds(season_id)
     return seat.season_id is not None and seat.season_id == season_id
 
 
 class _Places:
     """Where each of the collection's videos belongs: the season of the first playlist that has it, or, in a collection
-    that repeats videos, of each one, or else the season of videos in no playlist, as the collection is set. A video
-    of the channel's feeds also belongs in the channel season when it holds everything from the channel. Only videos
-    in such a season move: a Source's own season and a video split by chapter stay.
+    that repeats videos, of each one, or else the season of what is part of the collection, as the collection is set.
+    A video of a feed that is a season of its own belongs in that feed's season, also when a list season has it, if
+    the collection repeats videos; otherwise the list's season wins. A video of the channel's other feeds also belongs
+    in the channel season when it holds everything from the channel. Only videos in such a season move: a Source's own
+    season and a video split by chapter stay.
 
     A video has an episode for each season it belongs in. One more than that is an extra, which leaves the collection:
     such as when the collection stops repeating videos, or a list that is a season no longer has one of them."""
 
-    def __init__(self, s: Session, collection: Collection, left: frozenset[int] = frozenset()):
+    def __init__(self, state: SeasonsState, left: frozenset[int] = frozenset()):
+        self._state = state
+        collection = state.collection
         on = link_seasons_on(collection)
-        every = _every_holder(s, active_lists(s, collection)) if on else {}
+        every = _every_holder(active_lists(state)) if on else {}
         self.holders = {slug: lists[0] for slug, lists in every.items()}
-        self.every = every if on and repeats_videos(collection) else {}
+        self.repeats = repeats_videos(collection)
+        self.every = every if self.repeats else {}
         playlist_ids = {playlist.season_id for playlist in collection.lists if playlist.season_id is not None}
         self.loose_one = loose_season_on(collection)
-        self.by_year = lists_by_year(collection)
-        # A collection that only holds its link seasons has no season of videos in none of them: those leave.
+        # A collection that only holds its link seasons has no season of videos in none of them: those leave, but for
+        # the videos of its lists that are part of it.
         self.only = holds_only_link_seasons(collection)
+        self.parts = _part_slugs(collection) if self.only else frozenset()
         self.loose_ids = {season.id for season in collection.seasons if season.loose}
         self.channel = _ChannelSeat(self.loose_ids) if self.loose_one and holds_whole_channel(collection) else None
+        # The feeds that are a season of their own, by their videos' episode tag, and those seasons.
+        self.feeds = feed_seasons(collection)
+        self.feed_ids = feed_season_ids(collection)
         year_ids = {season.id for season in collection.seasons if season_year(season) is not None}
         # A collection made from one list has no playlists: its videos are in the list's one season, or in a season
         # per upload year, as it is set.
@@ -677,48 +787,70 @@ class _Places:
             self.loose_ids = {own.id} if own is not None else set()
             self.loose_one = list_in_one_season(collection)
             self.channel = None
+            self.feeds = {}
         # A season that its lists just left, for another list's season, empties too.
-        self.movable = playlist_ids | self.loose_ids | year_ids | left
-        self.anything = on or self.loose_one or bool(playlist_ids) or bool(self.loose_ids) or self.from_list
+        self.movable = playlist_ids | self.loose_ids | year_ids | set(self.feed_ids.values()) | left
+        self.anything = (on or self.loose_one or bool(playlist_ids) or bool(self.loose_ids) or self.from_list
+                         or bool(self.feeds) or bool(self.feed_ids))
         self.extras: set[int] = set()
         """The ids of the episodes a video has beyond one for each season it belongs in."""
         self.missing: dict[str, list[_Seat]] = {}
         """The places whose season has no episode of a video yet, by the video's slug."""
         self._planned: dict[int, _Seat | None] = {}
-        self._feed_slugs: set[str] = set()
+        self._feed_of: dict[str, str | None] = {}
+        """The collection's own videos, of its feeds, by slug: with the ref of their feed when it is a season of its
+        own."""
         if self.anything and not self.from_list:
             # A collection made from one list has one place for each video, so nothing to plan.
-            self._plan(s, collection)
+            self._plan()
+
+    def _feed_seat(self, ref: str) -> _FeedSeat:
+        return _FeedSeat(ref, self.feed_ids.get(ref))
+
+    def feed_of(self, episode: EpisodeDraft) -> str | None:
+        """The feed whose own season the collection's own video belongs in, by ref, when its feed is one."""
+        if episode.from_link_season:
+            return None
+        return self.feeds.get(episode_tag(episode))
 
     def seats(self, slug: str) -> list[_Seat]:
-        """Every place the video belongs in: the channel season first, for a video of the channel's feeds, then the
-        seasons of its lists."""
+        """Every place the video belongs in: its feed's own season or the channel season first, for a video of the
+        channel's feeds, then the seasons of its lists."""
         lists: list[_Seat] = list(self.every.get(slug) or ([self.holders[slug]] if slug in self.holders else []))
-        if self.channel is not None and slug in self._feed_slugs:
+        if slug not in self._feed_of:
+            return lists
+        ref = self._feed_of[slug]
+        if ref is not None:
+            # Without repeating, a list that is a season wins over the feed's own season.
+            return [self._feed_seat(ref), *lists] if self.repeats or not lists else lists
+        if self.channel is not None:
             return [self.channel, *lists]
         return lists
 
-    def _plan(self, s: Session, collection: Collection) -> None:
+    def _plan(self) -> None:
         """Give each video's episodes the seasons it belongs in: an episode in one of them stays there, and each other
         one goes to a season that has none of the video yet, or is an extra when there are none left."""
         placed: dict[str, list[tuple[int, int]]] = {}
-        for episode_id, slug, season_id, from_list in s.execute(
-            select(Episode.id, Episode.source_slug, Episode.season_id, Episode.from_link_season)
-            .where(Episode.collection_id == collection.id, Episode.part_of.is_(None)).order_by(Episode.id)
-        ):
-            if not from_list:
-                self._feed_slugs.add(slug)
-            if season_id in self.movable:
-                placed.setdefault(slug, []).append((episode_id, season_id))
+        for episode in sorted(self._state.episodes.values(), key=lambda episode: episode.id):
+            if episode.part_of is not None:
+                continue
+            if not episode.from_link_season:
+                self._feed_of.setdefault(episode.source_slug, self.feeds.get(episode_tag(episode)))
+            if episode.season_id in self.movable:
+                placed.setdefault(episode.source_slug, []).append((episode.id, episode.season_id))
+        downloaded = {episode.id for episode in self._state.episodes.values() if episode.has_files}
         for slug, episodes in placed.items():
             seats = self.seats(slug)
             if len(episodes) == 1 and len(seats) <= 1:
                 continue
-            if self.by_year or not seats:
+            # A downloaded episode goes first, so that an extra is one with nothing downloaded where there is one.
+            episodes.sort(key=lambda episode: episode[0] not in downloaded)
+            if not seats:
                 # One season it belongs in: the first episode goes there.
                 self.extras.update(episode_id for episode_id, _ in episodes[1:])
                 continue
             open_seats, others = list(seats), []
+            kept: list[tuple[int, _Seat]] = []
             for episode_id, season_id in episodes:
                 seat = next((seat for seat in open_seats if _seat_holds(seat, season_id)), None)
                 if seat is None:
@@ -726,15 +858,25 @@ class _Places:
                     continue
                 open_seats.remove(seat)
                 self._planned[episode_id] = None
+                kept.append((episode_id, seat))
             for episode_id in others:
                 if open_seats:
                     self._planned[episode_id] = open_seats.pop(0)
-                else:
+                    continue
+                # No season left for it: a downloaded episode takes the place of one with nothing downloaded, which
+                # is the extra instead, so no download is lost to a copy.
+                swap = next((one for one in kept if one[0] not in downloaded), None) if episode_id in downloaded else None
+                if swap is None:
                     self.extras.add(episode_id)
+                    continue
+                kept.remove(swap)
+                self._planned.pop(swap[0])
+                self.extras.add(swap[0])
+                self._planned[episode_id] = swap[1]
             if open_seats:
                 self.missing[slug] = open_seats
 
-    def belonging(self, episode: Episode) -> Belonging | None:
+    def belonging(self, episode: EpisodeDraft) -> Belonging | None:
         """Where the episode belongs, when that is not where it is. None for an extra, which leaves instead."""
         if episode.part_of is not None or episode.season_id not in self.movable or episode.id in self.extras:
             return None
@@ -742,83 +884,134 @@ class _Places:
             seat = self._planned[episode.id]
             if seat is None:
                 return None
-            return Belonging(loose=True) if isinstance(seat, _ChannelSeat) else Belonging(seat)
-        if self.channel is not None and episode.source_slug in self._feed_slugs:
+            if isinstance(seat, _ChannelSeat):
+                return Belonging(loose=True)
+            if isinstance(seat, _FeedSeat):
+                return Belonging(feed=seat.ref)
+            return Belonging(seat)
+        holder = self.holders.get(episode.source_slug)
+        feed = self.feed_of(episode)
+        if feed is not None and (holder is None or self.repeats):
+            # The feed's own season holds its videos.
+            return None if self._feed_seat(feed).holds(episode.season_id) else Belonging(feed=feed)
+        if self.channel is not None and feed is None and not episode.from_link_season:
             # The channel season holds every video of its feeds.
             return None if episode.season_id in self.loose_ids else Belonging(loose=True)
-        holder = self.holders.get(episode.source_slug)
-        if holder is not None and self.by_year:
-            # The list decides that the video is in; its date decides the season.
-            return None if season_is_year(episode.season) and episode.season_id not in self.loose_ids else Belonging()
         if holder is not None:
             return None if holder.season_id is not None and holder.season_id == episode.season_id else Belonging(holder)
-        if self.only:
+        if self.only and episode.source_slug not in self.parts:
             return None
         if self.loose_one:
             return None if episode.season_id in self.loose_ids else Belonging(loose=True)
-        return None if episode.season_id not in self.loose_ids and season_is_year(episode.season) else Belonging()
+        return None if episode.season_id not in self.loose_ids and season_is_year(self._state.season(episode.season_id)) else Belonging()
 
 
-def season_is_year(season: Season | None) -> bool:
+def _tag_of(identifier: str | None) -> str:
+    """The tag of the feed that brought an episode, from its identifier, as ``episode_tag`` reads it."""
+    tag = (identifier or MAIN_TAG).partition(".")[0]
+    return MAIN_TAG if tag == "aux" else tag
+
+
+def _part_slugs(collection) -> frozenset[str]:
+    """The videos of the collection's lists that are part of it rather than a season of their own."""
+    return frozenset(slug for playlist in lists_in(collection) if not playlist.as_season for slug in playlist.items)
+
+
+def season_is_year(season) -> bool:
     return season is not None and season_year(season) is not None
 
 
-def _season_for(finder: "SeasonFinder", episode: Episode, belonging: Belonging) -> Season:
+def _files_move(
+    state: SeasonsState, finder: SeasonFinder, files: FileMoves, episode: EpisodeDraft, belonging: Belonging,
+) -> bool:
+    """Whether moving the downloaded episode where it belongs moves its files: one of them gets another path there, also
+    in a season that is not made yet."""
+    season = finder.planned(episode, belonging)
+    return bool(files.moving(episode, season, number_in(state, episode.episode_identifier, season)))
+
+
+def _season_for(finder: SeasonFinder, episode: EpisodeDraft, belonging: Belonging) -> SeasonDraft:
     if belonging.link is not None:
         return finder.list_season(belonging.link)
+    if belonging.feed is not None:
+        return finder.feed_season(belonging.feed)
     return finder.loose_season() if belonging.loose else finder.year_season(episode.published_date)
 
 
-def place_in_link_seasons(
-    s: Session, collection: Collection, *, with_files: bool | set[int] = False, now: datetime | None = None,
-    by_user: bool = False, drop: bool = True, left: frozenset[int] = frozenset(),
+def place(
+    state: SeasonsState, *, with_files: bool | set[int] = False, by_user: bool = False, drop: bool = True,
+    left: frozenset[int] = frozenset(),
 ) -> int:
-    """Put each of the collection's videos where it belongs: in the season of the first playlist that has it, or in
-    the season of videos in no playlist. A video with files stays where it is, unless ``with_files`` is True or holds
-    its id. Returns how many moved. ``by_user`` says the user changed the playlists, so the videos that leave take
-    their files with them. The videos that left the collection go, unless ``drop`` is False because the playlists
-    are about to be listed again. ``left`` holds the seasons that the user took lists out of, whose videos move too.
-
-    ``s`` is a write transaction's session."""
-    places = _Places(s, collection, left)
+    """Put each of the collection's videos where it belongs, in the planner's copy: in the season of the first
+    playlist that has it, or in the season of videos in no playlist. A video with files stays where it is, unless
+    ``with_files`` is True or holds its id. Returns how many moved. ``by_user`` says the user changed the playlists,
+    so the videos that leave take their files with them. The videos that left the collection go, unless ``drop`` is
+    False because the playlists are about to be listed again. ``left`` holds the seasons that the user took lists out
+    of, whose videos move too."""
+    places = _Places(state, left)
     if drop:
         # A season the lists just left is one its videos leave too, also the extra episodes there.
-        _drop_outside(s, collection, by_user=by_user, extras=places.extras)
+        _drop_outside(state, by_user=by_user, extras=places.extras)
     if not places.anything:
-        _note_health(s, collection)
-        s.flush()
         return 0
-    kept = set() if with_files is True else _with_files(s, collection) - (with_files or set())
-    finder = SeasonFinder(s, collection, now)
+    kept = set() if with_files is True else {
+        episode.id for episode in state.episodes.values() if episode.has_files
+    } - (with_files or set())
+    finder = SeasonFinder(state)
+    files = FileMoves(state) if kept else None
     moved = 0
-    episodes = s.scalars(
-        select(Episode).where(Episode.collection_id == collection.id, Episode.part_of.is_(None)).order_by(Episode.index)
-    ).all()
-    left: set[int] = set()
-    for episode in episodes:
+    emptied: set[int] = set()
+    for episode in state.in_index_order():
+        if episode.part_of is not None:
+            continue
         if (
             episode.from_link_season and episode.removed_from_source and episode.source_slug in places.holders
             and episode.id not in places.extras
         ):
             # A playlist that is a season lists it again, so it is back at its Site.
             episode.removed_from_source = False
-        if episode.id in kept:
-            continue
         belonging = places.belonging(episode)
         if belonging is None:
             continue
+        if episode.id in kept and _files_move(state, finder, files, episode, belonging):
+            # Its files would move, which waits for the user.
+            continue
         season = _season_for(finder, episode, belonging)
         if season.id != episode.season_id:
-            left.add(episode.season_id)
+            emptied.add(episode.season_id)
             finder.move(episode, season)
             moved += 1
-    s.flush()
     if places.missing:
-        _add_placements(s, collection, finder, places.missing)
-    _drop_emptied(s, collection, left)
-    arrange_seasons(s, collection)
+        _add_placements(state, finder, places.missing)
+    state.drop_emptied(emptied)
+    arrange(state)
+    return moved
+
+
+def place_in_link_seasons(
+    s: Session, collection: Collection, *, with_files: bool | set[int] = False, now: datetime | None = None,
+    by_user: bool = False, drop: bool = True, left: frozenset[int] = frozenset(),
+) -> int:
+    """``place`` for the collection as it is, saved.
+
+    ``s`` is a write transaction's session."""
+    state = load_state(s, collection, now)
+    staying = {episode.id: episode.season_id for episode in state.episodes.values() if episode.has_files}
+    moved = place(state, with_files=with_files, by_user=by_user, drop=drop, left=left)
+    apply_state(s, state)
     _note_health(s, collection)
     s.flush()
+    if with_files is not True:
+        # Downloads that changed season while their files keep their paths: their metadata names the season. Their
+        # files are renamed too, should a path have changed after all.
+        changed = [
+            episode_id for episode_id, season_id in staying.items()
+            if episode_id in state.episodes and state.episodes[episode_id].season_id != season_id
+        ]
+        if changed:
+            from backend.services.season_moves import queue_metadata_rewrite
+
+            queue_metadata_rewrite(s, collection, changed)
     return moved
 
 
@@ -829,61 +1022,33 @@ def _note_health(s: Session, collection: Collection) -> None:
     note_collection_health(s, collection)
 
 
-# What an episode of a video in another season has of its own, rather than of the video.
-_OWN = frozenset({
-    "id", "uuid", "slug", "season_id", "index", "extra_index", "episode_identifier", "created_at", "updated_at",
-    "removed_from_source",
-})
-
-
-def _add_placements(s: Session, collection: Collection, finder: "SeasonFinder", missing: dict[str, list[_Seat]]) -> None:
+def _add_placements(state: SeasonsState, finder: SeasonFinder, missing: dict[str, list[_Seat]]) -> None:
     """Give each video an episode in the seasons of ``missing`` it has none in yet, copied from one it has, with files
     of its own, which its collection's Download Profiles download as for a new video. A video its Site no longer
-    has gets none.
-
-    ``s`` is a write transaction's session."""
-    from task_manager.events.transactional import queue_event
-
-    wanted = list(missing)
-    if not wanted:
-        return
-    originals: dict[str, Episode] = {}
-    for episode in s.scalars(
-        select(Episode).where(
-            Episode.collection_id == collection.id, Episode.part_of.is_(None), Episode.source_slug.in_(wanted),
-        ).order_by(Episode.id)
-    ):
-        if not episode.removed_from_source:
+    has gets none."""
+    originals: dict[str, EpisodeDraft] = {}
+    for episode in sorted(state.episodes.values(), key=lambda episode: episode.id):
+        if episode.part_of is None and episode.source_slug in missing and not episode.removed_from_source and episode.id > 0:
             originals.setdefault(episode.source_slug, episode)
-    copied = [attr.key for attr in inspect(Episode).column_attrs if attr.key not in _OWN]
-    identifiers = set(s.scalars(select(Episode.episode_identifier).where(Episode.collection_id == collection.id)))
-    index = s.scalar(select(func.max(Episode.index)).where(Episode.collection_id == collection.id)) or 0
-    added: list[Episode] = []
-    for slug in wanted:
+    identifiers = {episode.episode_identifier for episode in state.episodes.values()}
+    index = state.next_index() - 1
+    for slug, seats in missing.items():
         original = originals.get(slug)
         if original is None:
             continue
-        for seat in missing[slug]:
-            season = finder.loose_season() if isinstance(seat, _ChannelSeat) else finder.list_season(seat)
+        for seat in seats:
+            season = (finder.loose_season() if isinstance(seat, _ChannelSeat)
+                      else finder.feed_season(seat.ref) if isinstance(seat, _FeedSeat) else finder.list_season(seat))
             index += 1
-            identifier = _identifier_in(collection, season, original.episode_identifier, identifiers, finder.numbers)
+            identifier = _identifier_in(state.collection, season, original.episode_identifier, identifiers, finder.numbers)
             identifiers.add(identifier)
-            episode = Episode(
-                **{key: getattr(original, key) for key in copied}, uuid=generate_uuid(),
-                slug=_placement_slug(s, collection, season, slug), season_id=season.id, index=index,
-                episode_identifier=identifier,
-            )
-            s.add(episode)
-            added.append(episode)
-    s.flush()
-    for episode in added:
-        queue_event(s, "episode.added", {
-            "resource_id": episode.id, "id": episode.id, "slug": episode.slug, "collection_id": collection.id,
-            "collection_slug": collection.slug, "season_id": episode.season_id, "status": episode.publish_status,
-        })
+            state.add_episode(replace(
+                original, id=state.new_id(), season_id=season.id, episode_identifier=identifier, index=index,
+                removed_from_source=False, has_files=False, copy_of=original.id, record=None,
+            ))
 
 
-def _identifier_in(collection: Collection, season: Season, identifier: str, identifiers: set[str], numbers: SeasonNumbers) -> str:
+def _identifier_in(collection, season: SeasonDraft, identifier: str, identifiers: set[str], numbers: SeasonNumbers) -> str:
     """The identifier of a video's episode in another season: the next number in that season, or for a collection
     that numbers its episodes across seasons, the next one there. One by date shares its video's date, so it is
     auxiliary, as a second video of the same moment is."""
@@ -897,15 +1062,6 @@ def _identifier_in(collection: Collection, season: Season, identifier: str, iden
     return next_identifier(identifiers, tag)
 
 
-def _placement_slug(s: Session, collection: Collection, season: Season, source_slug: str) -> str:
-    """A slug of its own for a video's episode in another season, which no other episode has."""
-    slug = f"{collection.slug}-{season.slug}-{source_slug}"
-    unique, suffix = slug, 2
-    while s.scalar(select(func.count()).select_from(Episode).where(Episode.slug == unique)):
-        unique, suffix = f"{slug}-{suffix}", suffix + 1
-    return unique
-
-
 def channel_feeds(collection: Collection) -> list[SectionType]:
     """The feeds of a channel collection's channel, such as a YouTube channel's Videos, Shorts and Live, which it can
     take or leave. Empty for a collection of a list, and one that holds only what its lists have."""
@@ -914,7 +1070,7 @@ def channel_feeds(collection: Collection) -> list[SectionType]:
     return list(collection_site(collection).types_of(SectionKind.FEED))
 
 
-def feed_tags_off(collection: Collection) -> frozenset[str]:
+def feed_tags_off(collection) -> frozenset[str]:
     """The episode tags of the channel's feeds the collection does not take, such as YouTube's short when its Shorts
     are switched off. A tag another feed it takes gives too stays."""
     if collection.feeds is None:
@@ -924,88 +1080,86 @@ def feed_tags_off(collection: Collection) -> frozenset[str]:
     return frozenset(type_.episode_tag for type_ in feeds if type_.feed_ref not in collection.feeds) - on
 
 
-def episode_tag(episode: Episode) -> str:
+def episode_tag(episode) -> str:
     """The tag of the feed that brought an episode, from its identifier: an auxiliary one, of a second video of the
     same moment, is a main one too."""
-    tag = (episode.episode_identifier or MAIN_TAG).partition(".")[0]
-    return MAIN_TAG if tag == "aux" else tag
+    return _tag_of(episode.episode_identifier)
 
 
-def _from_feed_off(collection: Collection, episode: Episode, off: frozenset[str]) -> bool:
+def _from_feed_off(collection, episode, off: frozenset[str]) -> bool:
     return bool(off) and not episode.from_link_season and episode_tag(episode) in off
 
 
-def leaving_outside(s: Session, collection: Collection, extras: set[int] | None = None) -> list[Episode]:
+def leaving(state: SeasonsState, extras: set[int] | None = None) -> list[EpisodeDraft]:
     """The videos the collection added from its playlists that no playlist in it lists any more, or all of them when
     it no longer adds such videos, and the videos of a feed it no longer takes that no playlist in it keeps. They
     leave the collection, files and all. So does a video's extra episode (``extra_episodes``), one more than the
     seasons it belongs in."""
-    held = _holders(s, lists_in(collection)) if adds_outside_videos(collection) else {}
+    collection = state.collection
+    held = _holders(lists_in(collection)) if adds_outside_videos(collection) else {}
     off = feed_tags_off(collection)
-    extras = extra_episodes(s, collection) if extras is None else extras
+    extras = extra_episodes(state) if extras is None else extras
     return [
-        episode for episode in s.scalars(
-            select(Episode).where(Episode.collection_id == collection.id).order_by(Episode.id)
-        )
+        episode for episode in sorted(state.episodes.values(), key=lambda episode: episode.id)
         if episode.id in extras
         or (episode.from_link_season and episode.video_slug not in held)
         or (_from_feed_off(collection, episode, off) and episode.video_slug not in held)
     ]
 
 
-def _kept_by_lists(s: Session, collection: Collection) -> None:
+def leaving_outside(s: Session, collection: Collection) -> list[Episode]:
+    """``leaving`` for the collection as it is."""
+    ids = [episode.id for episode in leaving(load_state(s, collection))]
+    return list(s.scalars(select(Episode).where(Episode.id.in_(ids)).order_by(Episode.id))) if ids else []
+
+
+def _kept_by_lists(state: SeasonsState) -> None:
     """A video of a feed the collection no longer takes that a playlist in it keeps is the playlist's from now on, so
     it leaves with the playlist."""
+    collection = state.collection
     off = feed_tags_off(collection)
     if not off or not adds_outside_videos(collection):
         return
-    held = _holders(s, lists_in(collection))
-    for episode in s.scalars(select(Episode).where(Episode.collection_id == collection.id, Episode.from_link_season.is_(False))):
-        if episode.video_slug in held and _from_feed_off(collection, episode, off):
+    held = _holders(lists_in(collection))
+    for episode in state.episodes.values():
+        if not episode.from_link_season and episode.video_slug in held and _from_feed_off(collection, episode, off):
             episode.from_link_season = True
 
 
-def extra_episodes(s: Session, collection: Collection) -> set[int]:
+def extra_episodes(state: SeasonsState) -> set[int]:
     """The ids of the episodes a video has in the collection beyond one in each season it belongs in, such as after
     the collection stopped repeating videos in each season. Their downloads stay until Home asked whether to keep
     them."""
-    places = _Places(s, collection)
+    places = _Places(state)
     return places.extras if places.anything else set()
 
 
-def outside_only_in(s: Session, collection: Collection) -> dict[int, tuple[int, int]]:
+def outside_only_in(state: SeasonsState) -> dict[int, tuple[int, int]]:
     """For each playlist in the collection, how many of the videos the collection added from its playlists only it
     lists, and so would leave with it, and how many of those have files. By playlist id."""
-    active = {link.id for link in lists_in(collection)}
-    with_files = _with_files(s, collection)
     listed: dict[str, list[int]] = {}
-    for link_id, slug in s.execute(
-        select(CollectionListItem.list_id, CollectionListItem.source_slug)
-        .join(CollectionList, CollectionList.id == CollectionListItem.list_id)
-        .where(CollectionList.collection_id == collection.id)
-    ):
-        if link_id in active:
-            listed.setdefault(slug, []).append(link_id)
+    for playlist in lists_in(state.collection):
+        for slug in dict.fromkeys(playlist.items):
+            listed.setdefault(slug, []).append(playlist.id)
     counts: dict[int, tuple[int, int]] = {}
-    for episode_id, slug in s.execute(
-        select(Episode.id, Episode.video_slug).where(Episode.collection_id == collection.id, Episode.from_link_season)
-    ):
-        holding = listed.get(slug, ())
+    for episode in state.episodes.values():
+        if not episode.from_link_season:
+            continue
+        holding = listed.get(episode.video_slug, ())
         if len(holding) == 1:
             count, files = counts.get(holding[0], (0, 0))
-            counts[holding[0]] = (count + 1, files + (episode_id in with_files))
+            counts[holding[0]] = (count + 1, files + episode.has_files)
     return counts
 
 
 def remove_left_episode(s: Session, episode: Episode) -> None:
-    """Remove an episode that left its collection, with its download records. Its files are gone already.
+    """Remove an episode that left its collection, with its download records, and its season when that holds nothing
+    else. Its files are gone already.
 
     ``s`` is a write transaction's session."""
-    from backend.services.removed_downloads import delete_episode
-
-    collection, season_id = episode.collection, episode.season_id
-    delete_episode(s, episode)
-    _drop_emptied(s, collection, {season_id})
+    state = load_state(s, episode.collection)
+    state.remove_episode(state.episodes[episode.id])
+    apply_state(s, state)
 
 
 def held_back(episode: Episode) -> bool:
@@ -1021,65 +1175,28 @@ def held_back(episode: Episode) -> bool:
     )
 
 
-def _drop_outside(s: Session, collection: Collection, *, by_user: bool = False, extras: set[int] | None = None) -> int:
+def _drop_outside(state: SeasonsState, *, by_user: bool = False, extras: set[int] | None = None) -> None:
     """Remove the videos that left the collection: at once when they have no files, and otherwise by a task that
     deletes their files first. A downloaded video only leaves with its files when the user's own change made it
-    leave; one the creator took out of a playlist stays, and the Home page asks whether to keep it. Returns how many
-    went now.
-
-    ``s`` is a write transaction's session."""
-    from task_manager.scheduler.transactional import queue_task_after_commit
-
-    _kept_by_lists(s, collection)
-    extras = extra_episodes(s, collection) if extras is None else extras
-    leaving = leaving_outside(s, collection, extras)
-    if not leaving:
-        return 0
-    with_files = _with_files(s, collection)
-    gone = [episode for episode in leaving if episode.id not in with_files]
-    now = datetime.now(timezone.utc)
-    removing = False
-    for episode in leaving:
-        if episode.id not in with_files:
+    leave; one the creator took out of a playlist stays, and the Home page asks whether to keep it."""
+    _kept_by_lists(state)
+    extras = extra_episodes(state) if extras is None else extras
+    for episode in leaving(state, extras):
+        if not episode.has_files:
+            state.remove_episode(episode)
             continue
-        if by_user:
-            # The user was told the files go with it.
-            for download in episode.downloads:
-                download.kept = False
-                download.removal_answered_at = download.removal_answered_at or now
-        elif not episode.removed_from_source:
+        if not by_user:
             # As for a video its Site no longer has: the Home page asks whether to keep the files.
             episode.removed_from_source = True
-        removing = removing or not held_back(episode)
-    if removing:
-        queue_task_after_commit(s, def_key="remove_left_episodes", resource_type="collection", resource_id=collection.id)
-    for episode in gone:
-        remove_left_episode(s, episode)
-    return len(gone)
+        state.leaving[episode.id] = Leaving(episode, by_user)
 
 
-def _drop_emptied(s: Session, collection: Collection, season_ids: set[int]) -> None:
-    """Remove the seasons that every video moved out of, so the collection shows no empty seasons."""
-    filled = set(s.scalars(select(Episode.season_id).where(Episode.season_id.in_(season_ids)).distinct()))
-    emptied = [
-        season for season in collection.seasons
-        if season.id in season_ids - filled and season.season_type != SeasonType.EXTRA.value
-    ]
-    for season in emptied:
-        s.delete(season)
-    if emptied:
-        s.flush()
-        s.expire(collection, ["seasons", "lists"])
-
-
-def seasons_with_parts(s: Session, collection: Collection) -> set[int]:
+def seasons_with_parts(state: SeasonsState) -> set[int]:
     """The seasons that hold the parts of a video split by chapter."""
-    return set(s.scalars(
-        select(Episode.season_id).where(Episode.collection_id == collection.id, Episode.part_of.is_not(None)).distinct()
-    ))
+    return {episode.season_id for episode in state.episodes.values() if episode.part_of is not None}
 
 
-def season_removable(season: Season, with_parts: set[int]) -> bool:
+def season_removable(season, with_parts: set[int]) -> bool:
     """Whether the user can remove the season: one that VODLoft or the user made, whose videos go where the
     collection's settings put them, as new videos would. Not a season the Site has itself, such as a show's seasons,
     nor the season of extras or of a video split by chapter."""
@@ -1088,14 +1205,19 @@ def season_removable(season: Season, with_parts: set[int]) -> bool:
     return season.origin != SeasonOrigin.SITE.value
 
 
-def let_go_of_seasons(collection: Collection, season_ids: set[int]) -> dict[int, tuple[str, bool]]:
+def let_go_of_seasons(state: SeasonsState, season_ids: set[int]) -> dict[int, tuple[str, bool]]:
     """Make the seasons the user removes seasons of nothing: no list's, not the one of the videos in no list, no
     year's. Their videos then go where the collection's settings put them, into seasons made anew where needed, which
     take the removed seasons' slugs, so Download Profiles find them again. Returns what each season was, by id: its
     slug and whether it was the season of videos in no list."""
+    collection = state.collection
     for playlist in collection.lists:
         if playlist.season_id in season_ids:
-            playlist.season = None
+            playlist.season_id = None
+    if any(season_id in season_ids for season_id in (collection.feed_seasons or {}).values()):
+        collection.feed_seasons = {
+            ref: None if season_id in season_ids else season_id for ref, season_id in collection.feed_seasons.items()
+        }
     slugs: dict[int, tuple[str, bool]] = {}
     for season in collection.seasons:
         if season.id in season_ids:
@@ -1105,43 +1227,56 @@ def let_go_of_seasons(collection: Collection, season_ids: set[int]) -> dict[int,
     return slugs
 
 
-def rehome_removed(s: Session, collection: Collection, slugs: dict[int, tuple[str, bool]]) -> None:
+def rehome_removed(state: SeasonsState, slugs: dict[int, tuple[str, bool]]) -> None:
     """Move what is still in the removed seasons where a new video would go, and remove the seasons. Run after the
     collection's videos were placed in its seasons. A season its settings put the videos back in, such as the one
-    season of a collection made from one list, stays as it was.
-
-    ``s`` is a write transaction's session."""
-    s.expire(collection, ["seasons", "lists"])
-    finder = SeasonFinder(s, collection)
-    for episode in s.scalars(select(Episode).where(Episode.season_id.in_(slugs)).order_by(Episode.index)).all():
-        finder.move(episode, finder.home_season(episode.published_date))
-    s.flush()
-    filled = set(s.scalars(select(Episode.season_id).where(Episode.season_id.in_(slugs)).distinct()))
-    for season in s.scalars(select(Season).where(Season.id.in_(slugs))).all():
-        if season.id in filled:
-            season.slug, season.loose = slugs[season.id]
+    season of a collection made from one list, stays as it was."""
+    finder = SeasonFinder(state)
+    for episode in state.in_index_order():
+        if episode.season_id in slugs:
+            finder.move(episode, finder.home_season(episode.published_date))
+    filled = {episode.season_id for episode in state.episodes.values()}
+    for season_id, (slug, loose) in slugs.items():
+        season = state.seasons.get(season_id)
+        if season is None:
+            continue
+        if season_id in filled:
+            season.slug, season.loose = slug, loose
         else:
-            s.delete(season)
-    s.flush()
-    s.expire(collection, ["seasons", "lists"])
-    arrange_seasons(s, collection)
+            state.drop_season(season_id)
+    arrange(state)
+
+
+def belonging(state: SeasonsState, episode_id: int) -> Belonging | None:
+    """Where the copy's episode belongs, when its collection's playlists put it in another season than the one it is
+    in. None when it is where it belongs."""
+    places = _Places(state)
+    return places.belonging(state.episodes[episode_id]) if places.anything else None
 
 
 def belongs_elsewhere(s: Session, episode: Episode) -> Belonging | None:
     """Where a video belongs now, when its collection's playlists put it in another season than the one it is in.
     None when it is where it belongs."""
-    places = _Places(s, episode.collection)
-    return places.belonging(episode) if places.anything else None
+    return belonging(load_state(s, episode.collection), episode.id)
+
+
+def moved(state: SeasonsState) -> list[EpisodeDraft]:
+    """The collection's videos that its playlists put in another season than the one they are in: downloaded ones,
+    which wait for the user to move them, since moving renames their files. A download whose files keep their paths
+    in the new season never waits: its episode moves like any other, and its files stay."""
+    places = _Places(state)
+    if not places.anything:
+        return []
+    finder = SeasonFinder(state)
+    files = FileMoves(state)
+    return [
+        episode for episode in sorted(state.episodes.values(), key=lambda episode: episode.id)
+        if episode.season_id in places.movable and (belonging := places.belonging(episode)) is not None
+        and (not episode.has_files or _files_move(state, finder, files, episode, belonging))
+    ]
 
 
 def moved_episodes(s: Session, collection: Collection) -> list[Episode]:
-    """The collection's videos that its playlists put in another season than the one they are in: downloaded ones,
-    which wait for the user to move them, since moving renames their files."""
-    places = _Places(s, collection)
-    if not places.anything:
-        return []
-    episodes = s.scalars(
-        select(Episode).where(Episode.collection_id == collection.id, Episode.season_id.in_(places.movable))
-        .order_by(Episode.id)
-    )
-    return [episode for episode in episodes if places.belonging(episode) is not None]
+    """``moved`` for the collection as it is."""
+    ids = [episode.id for episode in moved(load_state(s, collection))]
+    return list(s.scalars(select(Episode).where(Episode.id.in_(ids)).order_by(Episode.id))) if ids else []

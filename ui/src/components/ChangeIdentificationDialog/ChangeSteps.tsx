@@ -1,4 +1,4 @@
-import {useCallback, useState, type ReactNode} from 'react'
+import {createContext, useCallback, useContext, useId, useState, type ReactNode} from 'react'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 
@@ -80,22 +80,40 @@ export function ChangeChips({before, after}: {before: ReactNode, after: ReactNod
     )
 }
 
+/** Whether the steps below fold to one line each, which opens to show its details: on a phone, where a list of them
+ * otherwise runs off the screen. A step that warns starts open. */
+export const FoldSteps = createContext(false)
+
 /** One thing the change does: an icon, what it is, and how many it touches. */
 export function Step({icon, headline, detail, value, danger = false, children}: {
     /** How many it touches, or a word where that is not known yet, such as After. */
     icon: IconProp; headline: string; detail: ReactNode; value: number | string; danger?: boolean; children?: ReactNode
 }) {
-    return (
-        <li className={`change-identification-step${danger ? ' is-danger' : ''}`}>
+    const folds = useContext(FoldSteps) && (!!detail || !!children)
+    const [open, setOpen] = useState(danger)
+    const moreId = useId()
+    const folded = folds && !open
+    const text = (
+        <>
             <span className="change-identification-step-icon" aria-hidden="true"><FontAwesomeIcon icon={icon}/></span>
             <span className="change-identification-step-text">
                 <b>{headline}</b>
-                <span>{detail}</span>
+                {!folded && detail && <span>{detail}</span>}
             </span>
             <span className={`change-identification-step-count${typeof value === 'string' ? ' is-text' : ''}`}>
                 {typeof value === 'number' ? value.toLocaleString() : value}
             </span>
-            {children && <div className="change-identification-step-more">{children}</div>}
+        </>
+    )
+    return (
+        <li className={`change-identification-step${danger ? ' is-danger' : ''}${folds ? ' is-foldable' : ''}`}>
+            {folds ? (
+                <button type="button" className="change-identification-step-fold" aria-expanded={open} aria-controls={moreId}
+                        onClick={() => setOpen((current) => !current)}>
+                    {text}
+                </button>
+            ) : text}
+            {children && !folded && <div id={moreId} className="change-identification-step-more">{children}</div>}
         </li>
     )
 }

@@ -157,7 +157,34 @@ def answer_keep_question(s: Session, episode_ids: Iterable[int], *, keep: bool) 
 
 def _remove_left(s: Session, collection_ids: set[int]) -> None:
     """Let the videos that left these collections' link seasons go, now that the user doesn't keep their files."""
-    from task_manager.scheduler.transactional import queue_task_after_commit
-
     for collection_id in sorted(collection_ids):
-        queue_task_after_commit(s, def_key="remove_left_episodes", resource_type="collection", resource_id=collection_id)
+        remove_left_episodes(s, collection_id)
+
+
+def remove_left_episodes(s: Session, collection_id: int) -> None:
+    """Start letting the episodes go that left the collection with their files, as an action of the collection that
+    its page shows. One that has not started yet takes these too, as it looks them up when it starts.
+
+    ``s`` is a write transaction's session."""
+    from sqlalchemy import select
+
+    from backend.db.models import Collection
+    from backend.operations.collections import CollectionRemoveLeftEpisodesOperation
+    from task_manager.scheduler.db import TaskOperation
+    from task_manager.scheduler.operation_factory import create_operation
+    from task_manager.scheduler.operations import queue_operation_target_dispatch
+    from task_manager.scheduler.types import OperationStatus
+
+    collection = s.get(Collection, collection_id)
+    if collection is None:
+        return
+    waiting = s.scalar(select(TaskOperation.id).where(
+        TaskOperation.resource_type == "collection", TaskOperation.resource_id == collection_id,
+        TaskOperation.kind == CollectionRemoveLeftEpisodesOperation.kind,
+        TaskOperation.status == OperationStatus.QUEUED.value,
+    ).limit(1))
+    if waiting is not None:
+        return
+    operation = create_operation(s, CollectionRemoveLeftEpisodesOperation(collection))
+    queue_operation_target_dispatch(s, operation.id, operation.targets[0].slot_key)
+    s.flush()

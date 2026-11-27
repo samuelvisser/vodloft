@@ -21,6 +21,7 @@ from backend.services.download_relocation import remove_folders_left_empty
 from backend.services.unplayable_formats import downloads_unplayable_formats, tries_unplayable_formats
 from backend.services.media_access import lock_refused, media_access, media_site_key, site_access
 from backend.services.sites import episode_site
+from backend.services.season_moves import follow_new_place
 from backend.services.throttle_guard import record_throttled
 from backend.services.upgrade_check import schedule_first_upgrade_check
 from backend.services.notifications.emitters import episode_downloaded
@@ -42,6 +43,7 @@ from downloader.coordinator import DownloadExecution, execute_download_plan
 from downloader.storage.replacement import (
     PreviousDownload, capture_previous_download, retire_superseded_files,
 )
+from downloader.metadata import NO_METADATA, nfo_fingerprint, tags_fingerprint
 from downloader.lifecycle import (
     DownloadSnapshot,
     DownloadTracker,
@@ -214,6 +216,17 @@ def _allow_automatic_retry(session: Session, media_download_id: int) -> None:
     current.automatic_retry_suppressed = False
 
 
+def _written_metadata(plan, execution: DownloadExecution) -> tuple[str | None, str | None]:
+    """The fingerprints of the metadata the download wrote: of the tags it embedded and of its NFO, each
+    ``NO_METADATA`` when it wrote none."""
+    kept = {asset.id for asset in execution.assets}
+    nfo = next((asset.content for asset in plan.assets if asset.kind == "nfo" and asset.id in kept), None)
+    return (
+        tags_fingerprint(dict(plan.metadata_tags)) if plan.metadata_tags else NO_METADATA,
+        nfo_fingerprint(nfo) if nfo is not None else NO_METADATA,
+    )
+
+
 def _record_download(
     session: Session, *, media_download_id: int, execution: DownloadExecution, plan, duration, publish_status,
     is_redownload: bool, lifecycle, started: datetime, attempt: dict, title: str, progress,
@@ -234,6 +247,7 @@ def _record_download(
         ))
     download.artifact_stat_dev, download.artifact_stat_ino = identity.stat_dev, identity.stat_ino
     download.artifact_size_bytes, download.artifact_fingerprint = identity.size_bytes, identity.fingerprint
+    download.tags_fingerprint, download.nfo_fingerprint = _written_metadata(plan, execution)
     download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
     download.artifact_error = None
     download.automatic_retry_suppressed = False
@@ -256,6 +270,7 @@ def _record_download(
         download.downloaded_publish_status = publish_status
         schedule_first_upgrade_check(download, episode_site(download.media), finished)
         episode_downloaded(session, download.media, path=execution.result.path, replaced=is_redownload)
+        follow_new_place(session, download)
     result_data = {
         "media_download_id": media_download_id, "is_redownload": is_redownload,
         "file_path": execution.result.path, "downloaded_bytes": execution.result.bytes_downloaded,

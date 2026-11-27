@@ -6,7 +6,7 @@ from .existing_files.router import router as existing_files_router
 from .seasons.router import router as collection_seasons_router
 from .health import router as collection_health_router
 from .sync_log import collection_scans
-from .bulk import change_collections, delete_collections, summarize_collections, sync_collections
+from .bulk import change_collections, delete_collections, review_collections, stop_replaced, summarize_collections, sync_collections
 from backend.api.endpoints.creators.service import (
     CollectionNotFoundError, LookupPlan, add_collection_to_creator, collection_creator_match, collection_link,
     join_collection_creator, leave_collection_creator, look_up_collection_creator,
@@ -60,7 +60,8 @@ from ...models.collection import (
     CollectionRedownloadEpisodesAPIRequest,
 )
 from ...models.source import EpisodeTagAPIRead
-from ...models.collection import CollectionBulkChangesIn
+from ...models.collection import CollectionBulkChangeIn, CollectionBulkSummaryRead
+from ...models.collection_seasons import CollectionBulkReviewRead
 from ...models.profile_bulk import BulkChangeIn, BulkResultRead, BulkSelectionIn, BulkSummaryRead
 from backend.api.endpoints.creators import lookups as creator_lookups
 from backend.api.endpoints.reconcile import collection_scope, move, preview_move
@@ -94,7 +95,7 @@ def collection_list():
         return get_collections_list(s)
 
 
-@router.post("/bulk/summary", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=BulkSummaryRead)
+@router.post("/bulk/summary", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=CollectionBulkSummaryRead)
 def collections_bulk_summary(body: BulkSelectionIn):
     """What the chosen Collections are set to now, for the Library's bulk edit."""
     with db_session() as s:
@@ -102,9 +103,18 @@ def collections_bulk_summary(body: BulkSelectionIn):
 
 
 @router.post("/bulk/change", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=BulkResultRead)
-def collections_bulk_change(body: BulkChangeIn[CollectionBulkChangesIn]):
+def collections_bulk_change(body: CollectionBulkChangeIn):
     """Give the chosen Collections the same settings; a setting a Collection's Site doesn't have is left alone."""
-    return run_write_transaction(lambda s: change_collections(s, body))
+    # As the Seasons dialog's save, it stops the work it replaces on the collections whose seasons change first.
+    replaced = stop_replaced(body)
+    return run_write_transaction(lambda s: change_collections(s, body, replaced))
+
+
+@router.post("/bulk/review", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=CollectionBulkReviewRead)
+def collections_bulk_review(body: CollectionBulkChangeIn):
+    """What the changes do to the seasons of the chosen Collections, before they are saved."""
+    with db_session() as s:
+        return review_collections(s, body)
 
 
 @router.post("/bulk/sync", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=BulkResultRead)
@@ -215,7 +225,8 @@ def collection_rename_files(collection_slug: str, body: CollectionFileRenameAPIR
 )
 def collection_reconcile_preview(collection_slug: str):
     """What moving the collection's Moved episodes to the seasons they belong in now does. Changes nothing."""
-    return run_write_transaction(lambda s: preview_move(s, collection_scope(collection_slug)))
+    with db_session() as s:
+        return preview_move(s, collection_scope(collection_slug))
 
 
 @router.post(

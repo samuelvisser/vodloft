@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from pathlib import PurePath
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from backend.db.models import Collection, CollectionLocalMediaProfile, DownloadProfile, Episode, Season
 from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadBase
@@ -35,8 +35,9 @@ from backend.services.episode_filters import (
     EpisodeSelection, evaluate, filter_leaving_out, retention_downloads, retention_removes,
 )
 from backend.services.errors import ServiceError
-from backend.services.link_seasons import made_from_list
-from backend.services.season_order import number_in_link_order
+from backend.services.link_seasons import numbered_in_list_order
+from backend.services.season_order import number_lists
+from backend.services.season_state import EpisodeDraft, SeasonsState, apply_state, load_state
 from backend.services.sites import collection_words
 from backend.types import work_weights
 from backend.types.collection_types import EpisodeIdentifier, EpisodeOrder
@@ -64,7 +65,7 @@ _ACTIVE = (OperationStatus.QUEUED.value, OperationStatus.RUNNING.value, Operatio
 _BUSY_KINDS = (
     "collection.index", "collection.sync", "collection.rename_files", "collection.rewrite_metadata",
     "collection.change_identification", "collection.renumber", "collection.download_all", "collection.redownload_episodes",
-    "collection.delete_downloads",
+    "collection.delete_downloads", "collection.remove_left_episodes",
 )
 _PHYSICAL = (
     MediaDownloadArtifactStatus.AVAILABLE.value,
@@ -138,20 +139,16 @@ class IdentificationPreview:
     """Why the change can't start now, such as downloads of the collection that are running."""
 
 
-def _episodes(s: Session, collection: Collection) -> list[Episode]:
-    return list(s.scalars(
-        select(Episode).where(Episode.collection_id == collection.id)
-        .options(selectinload(Episode.season))
-        .order_by(Episode.index, Episode.id)
-    ))
+def _episodes(state: SeasonsState) -> list[EpisodeDraft]:
+    return state.in_index_order()
 
 
-def _published(episode: Episode) -> datetime:
+def _published(episode) -> datetime:
     return episode.published_date or episode.went_live_date or episode.scheduled_date or episode.created_at or _EARLIEST
 
 
-def _season_order(episode: Episode) -> tuple[int, int]:
-    season = episode.season
+def _season_order(state: SeasonsState, episode: EpisodeDraft) -> tuple[int, int]:
+    season = state.season(episode.season_id)
     return (season.index if season is not None else 0), (season.id if season is not None else 0)
 
 
@@ -159,13 +156,14 @@ def _tag(identifier: str | None) -> str:
     return (identifier or "").partition(".")[0]
 
 
-def plan_identification(s: Session, collection: Collection, identification: EpisodeIdentifier) -> IdentificationPlan:
-    """The identifiers the collection's episodes get under ``identification``. Only reads."""
-    episodes = _episodes(s, collection)
+def plan_identification(state: SeasonsState, identification: EpisodeIdentifier) -> IdentificationPlan:
+    """The identifiers the copy's episodes get under ``identification``. Changes nothing."""
+    collection = state.collection
+    episodes = _episodes(state)
     if counts_own_numbers(collection):
-        identifiers, counters = _plan_counted(episodes, identification, in_list_order=made_from_list(collection)), {}
+        identifiers, counters = _plan_counted(state, identification, in_list_order=numbered_in_list_order(collection)), {}
     else:
-        identifiers, counters = _plan_source_numbered(episodes, identification)
+        identifiers, counters = _plan_source_numbered(state, identification)
     return IdentificationPlan(
         identification=identification,
         identifiers={
@@ -176,10 +174,35 @@ def plan_identification(s: Session, collection: Collection, identification: Epis
     )
 
 
-def _plan_counted(episodes: list[Episode], identification: EpisodeIdentifier, *, in_list_order: bool) -> dict[int, str]:
+def number_episodes(state: SeasonsState, identification: EpisodeIdentifier) -> IdentificationPlan:
+    """Number the copy's episodes under ``identification``, as saving it does: the plan's identifiers, then, by
+    season, each playlist season in the playlist's order. ``state.changed_identifiers()`` then tells every episode
+    whose identifier changed."""
+    plan = plan_identification(state, identification)
+    for episode_id, identifier in plan.identifiers.items():
+        state.episodes[episode_id].episode_identifier = identifier
+    state.collection.episode_identifier = identification.value
+    if identification is EpisodeIdentifier.SEASONAL:
+        # A playlist season numbers its videos in the playlist's order, as it does when they are added.
+        number_lists(state)
+    return plan
+
+
+def save_numbers(s: Session, state: SeasonsState, plan: IdentificationPlan) -> None:
+    """Save the copy numbered by ``number_episodes``, with the counters its plan keeps.
+
+    ``s`` is a write transaction's session."""
+    apply_state(s, state)
+    for key, value in plan.counters.items():
+        state.record.set_meta(key, str(value))
+    s.flush()
+
+
+def _plan_counted(state: SeasonsState, identification: EpisodeIdentifier, *, in_list_order: bool) -> dict[int, str]:
     """Count the main episodes again, as indexing counts the videos of a Source without episode numbers. Other tags,
     and the parts of a split video, keep theirs. ``in_list_order`` numbers them in the order they were added, which is
     their list's order for a collection made from one list, rather than by date."""
+    episodes = _episodes(state)
     main = [
         episode for episode in episodes
         if episode.part_of is None and _tag(episode.episode_identifier) in {EpIdType.EP.value, EpIdType.AUX.value}
@@ -204,8 +227,8 @@ def _plan_counted(episodes: list[Episode], identification: EpisodeIdentifier, *,
                 identifiers[episode.id] = identifier
         case EpisodeIdentifier.SEASONAL:
             numbers: dict[int, int] = defaultdict(int)
-            for episode in sorted(main, key=lambda episode: (_season_order(episode), episode.index, episode.id)):
-                season = episode.season
+            for episode in sorted(main, key=lambda episode: (_season_order(state, episode), episode.index, episode.id)):
+                season = state.season(episode.season_id)
                 if season is None:
                     continue
                 while True:
@@ -219,28 +242,29 @@ def _plan_counted(episodes: list[Episode], identification: EpisodeIdentifier, *,
 
 
 def _plan_source_numbered(
-        episodes: list[Episode], identification: EpisodeIdentifier,
+        state: SeasonsState, identification: EpisodeIdentifier,
 ) -> tuple[dict[int, str], IdentifierMaxValues]:
     """Give each episode what the Source's own numbering gives it under ``identification``, season by season in the
     order indexing goes. A trailer or auxiliary number VODLoft counted stays where it still applies."""
+    episodes = _episodes(state)
     numbering = {episode.id: EpisodeNumbering.of_episode(episode) for episode in episodes}
-    moving: list[Episode] = []
+    moving: list[EpisodeDraft] = []
     taken: set[str] = set()
     for episode in episodes:
-        season = episode.season
+        season = state.season(episode.season_id)
         if season is None or episode.part_of is not None or keeps_generated_identifier(
             identification, season, numbering[episode.id], episode.episode_identifier,
         ):
             taken.add(episode.episode_identifier)
         else:
             moving.append(episode)
-    by_season: dict[int, list[Episode]] = defaultdict(list)
+    by_season: dict[int, list[EpisodeDraft]] = defaultdict(list)
     for episode in moving:
-        by_season[episode.season.id].append(episode)
+        by_season[episode.season_id].append(episode)
     identifiers: dict[int, str] = {}
     values: IdentifierMaxValues = {}
-    for season_episodes in sorted(by_season.values(), key=lambda items: _season_order(items[0])):
-        season = season_episodes[0].season
+    for season_episodes in sorted(by_season.values(), key=lambda items: _season_order(state, items[0])):
+        season = state.season(season_episodes[0].season_id)
         if (
             identification is EpisodeIdentifier.SEASONAL and season.season_type != SeasonType.EXTRA.value
             and season.season_number < 1
@@ -262,33 +286,63 @@ def _plan_source_numbered(
     return identifiers, values
 
 
-def apply_identification(s: Session, collection: Collection, plan: IdentificationPlan) -> None:
-    """Give the episodes their new identifiers and the collection its new identification.
-
-    ``s`` is a write transaction's session."""
-    episodes = list(s.scalars(select(Episode).where(Episode.id.in_(plan.identifiers)))) if plan.identifiers else []
-    # Two passes, because identifiers are unique in a collection.
-    for episode in episodes:
-        episode.episode_identifier = f"renumbering.{episode.id}"
-    s.flush()
-    for episode in episodes:
-        episode.episode_identifier = plan.identifiers[episode.id]
-    collection.episode_identifier = plan.identification.value
-    for key, value in plan.counters.items():
-        collection.set_meta(key, str(value))
-    s.flush()
-    if plan.identification is EpisodeIdentifier.SEASONAL:
-        # A playlist season numbers its videos in the playlist's order, as it does when they are added.
-        number_in_link_order(s, collection)
-
-
 def _busy(s: Session, collection: Collection) -> str | None:
     return collection_busy(s, collection, "changing how its episodes are numbered")
 
 
-def collection_busy(s: Session, collection: Collection, doing: str) -> str | None:
-    """Why ``doing`` something that numbers the collection's episodes again can't start now: its episodes are
-    downloading, or VODLoft is working on its episodes or files. None when it can."""
+@dataclass(frozen=True)
+class CollectionWork:
+    """Work on a collection that numbering its episodes again has to wait for."""
+
+    title: str
+    downloads: bool
+    """Its episodes are downloading or waiting to download, rather than VODLoft working on its episodes or files,
+    such as listing it again after a change."""
+    operation_id: str | None = None
+    """The task that works on it, when that is not downloading, so a preview that waits can show how far it is."""
+
+    def refusal(self, doing: str) -> str:
+        """Why ``doing`` it can't start now."""
+        if self.downloads:
+            return (
+                f"Episodes of {name_in_text(self.title)} are downloading or waiting to download. "
+                f"Let them finish, or cancel them, before {doing}."
+            )
+        return f"VODLoft is still working on {name_in_text(self.title)}. Try again once that is done."
+
+    def waiting(self) -> str:
+        """What a preview that waits for the work says while it waits."""
+        if self.downloads:
+            return (
+                f"Episodes of {name_in_text(self.title)} are downloading or waiting to download. The changes "
+                "show here once they are done, or once you cancel them."
+            )
+        return (
+            f"VODLoft is still working on {name_in_text(self.title)}. The changes show here once that is done, as what "
+            "it finds can change them."
+        )
+
+
+def collection_work(
+    s: Session, collection: Collection, *, downloads: bool = True, besides: Sequence[str] = (),
+) -> CollectionWork | None:
+    """The work on the collection that numbering its episodes again waits for: its episodes are downloading, or
+    VODLoft is working on its episodes or files. None when there is none. Without ``downloads`` only work on its
+    episodes or files counts, and work of the kinds in ``besides`` never does."""
+    if downloads:
+        return _downloading(s, collection) or collection_work(s, collection, downloads=False, besides=besides)
+    work = s.scalar(
+        select(TaskOperation.id).where(
+            TaskOperation.resource_type == "collection",
+            TaskOperation.resource_id == collection.id,
+            TaskOperation.kind.in_([kind for kind in _BUSY_KINDS if kind not in besides]),
+            TaskOperation.status.in_(_ACTIVE),
+        ).limit(1)
+    )
+    return CollectionWork(collection.title, downloads=False, operation_id=work) if work is not None else None
+
+
+def _downloading(s: Session, collection: Collection) -> CollectionWork | None:
     downloads = s.scalar(
         select(TaskOperation.id).where(
             TaskOperation.kind == "media.download",
@@ -299,22 +353,14 @@ def collection_busy(s: Session, collection: Collection, doing: str) -> str | Non
             ),
         ).limit(1)
     )
-    if downloads is not None:
-        return (
-            f"Episodes of {name_in_text(collection.title)} are downloading or waiting to download. "
-            f"Let them finish, or cancel them, before {doing}."
-        )
-    work = s.scalar(
-        select(TaskOperation.kind).where(
-            TaskOperation.resource_type == "collection",
-            TaskOperation.resource_id == collection.id,
-            TaskOperation.kind.in_(_BUSY_KINDS),
-            TaskOperation.status.in_(_ACTIVE),
-        ).limit(1)
-    )
-    if work is not None:
-        return f"VODLoft is still working on {name_in_text(collection.title)}. Try again once that is done."
-    return None
+    return CollectionWork(collection.title, downloads=True) if downloads is not None else None
+
+
+def collection_busy(s: Session, collection: Collection, doing: str) -> str | None:
+    """Why ``doing`` something that numbers the collection's episodes again can't start now (``collection_work``).
+    None when it can."""
+    work = collection_work(s, collection)
+    return work.refusal(doing) if work is not None else None
 
 
 def _metadata_rewrites(s: Session, collection: Collection, profile: CollectionLocalMediaProfile) -> int:
@@ -425,33 +471,41 @@ def _label(identifier: str) -> str:
 def preview_identification(
         s: Session, collection: Collection, identification: EpisodeIdentifier,
 ) -> IdentificationPreview:
-    """What changing the collection's identification would do. Only reads: the new identifiers are tried on the loaded
-    episodes, without writing them, and put back afterwards."""
+    """What changing the collection's identification would do, as saving it numbers the planner's copy of the
+    collection: nothing is saved."""
     busy = _busy(s, collection)
-    plan = plan_identification(s, collection, identification)
-    episodes = {episode.id: episode for episode in _episodes(s, collection)}
-    changed = [episodes[episode_id] for episode_id in plan.identifiers]
-    newest_first = sorted(changed, key=lambda episode: (_published(episode), episode.id), reverse=True)
-    changes = [
-        IdentificationChange(
-            title=episode.title, before=_label(episode.episode_identifier), after=_label(plan.identifiers[episode.id]),
-        )
-        for episode in newest_first
-    ]
+    state = load_state(s, collection)
+    number_episodes(state, identification)
+    changed = state.changed_identifiers()
+    changes, _ = _changes(s, changed)
     become_auxiliary = sum(
-        1 for episode in changed
-        if _tag(plan.identifiers[episode.id]) == EpIdType.AUX.value
-        and _tag(episode.episode_identifier) in {EpIdType.EP.value, EpIdType.EP_EXTRA.value}
+        1 for before, after in changed.values()
+        if _tag(after) == EpIdType.AUX.value and _tag(before) in {EpIdType.EP.value, EpIdType.EP_EXTRA.value}
     )
-
-    profiles = profile_file_changes(s, collection, set(plan.identifiers))
-
-    download_profiles = _download_profile_changes(s, collection, list(episodes.values()), plan)
     return IdentificationPreview(
-        identification=identification, episodes=len(episodes), episodes_renumbered=len(changed), changes=changes,
-        become_auxiliary=become_auxiliary, profiles=profiles, download_profiles=download_profiles,
+        identification=identification, episodes=len(state.episodes), episodes_renumbered=len(changed), changes=changes,
+        become_auxiliary=become_auxiliary, profiles=profile_file_changes(s, collection, set(changed)),
+        download_profiles=_download_profile_changes(s, collection, {
+            episode_id: after for episode_id, (_before, after) in changed.items()
+        }),
         busy=busy,
     )
+
+
+def _changes(
+        s: Session, changed: dict[int, tuple[str | None, str | None]],
+) -> tuple[list[IdentificationChange], set[int]]:
+    """The episodes that get another identifier, newest first, and their ids."""
+    if not changed:
+        return [], set()
+    episodes = list(s.scalars(select(Episode).where(Episode.id.in_(changed))))
+    newest_first = sorted(episodes, key=lambda episode: (_published(episode), episode.id), reverse=True)
+    return [
+        IdentificationChange(
+            title=episode.title, before=_label(changed[episode.id][0]), after=_label(changed[episode.id][1]),
+        )
+        for episode in newest_first
+    ], set(changed)
 
 
 def profile_file_changes(s: Session, collection: Collection, changed_ids: set[int]) -> list[ProfileFilesChange]:
@@ -473,20 +527,23 @@ def profile_file_changes(s: Session, collection: Collection, changed_ids: set[in
     return profiles
 
 
-def renumber_changes(s: Session, collection: Collection) -> tuple[list[IdentificationChange], set[int]]:
+def renumber_changes(s: Session, state: SeasonsState) -> tuple[list[IdentificationChange], set[int]]:
     """The episodes that get a new number when the collection numbers its episodes again the way it numbers them,
-    as after episodes moved in or out of it: newest first, and their ids."""
-    plan = plan_identification(s, collection, EpisodeIdentifier(collection.episode_identifier))
-    if not plan.identifiers:
-        return [], set()
-    episodes = list(s.scalars(select(Episode).where(Episode.id.in_(plan.identifiers))))
-    newest_first = sorted(episodes, key=lambda episode: (_published(episode), episode.id), reverse=True)
-    return [
-        IdentificationChange(
-            title=episode.title, before=_label(episode.episode_identifier), after=_label(plan.identifiers[episode.id]),
-        )
-        for episode in newest_first
-    ], set(plan.identifiers)
+    as after episodes moved in or out of it: newest first, and their ids. Numbers the planner's copy, which may have
+    moved episodes already, and saves nothing."""
+    was = {episode.id: episode.episode_identifier for episode in state.episodes.values()}
+    number_episodes(state, EpisodeIdentifier(state.collection.episode_identifier))
+    return _changes(s, {
+        episode.id: (was[episode.id], episode.episode_identifier) for episode in state.episodes.values()
+        if episode.id > 0 and episode.id in was and was[episode.id] != episode.episode_identifier
+    })
+
+
+def renumbers(s: Session, collection: Collection) -> bool:
+    """Whether numbering the collection's episodes again the way it numbers them changes any. Reading only."""
+    state = load_state(s, collection)
+    number_episodes(state, EpisodeIdentifier(collection.episode_identifier))
+    return bool(state.changed_identifiers())
 
 
 def queue_renumber(s: Session, collection: Collection, *, renumber: bool) -> TaskOperation:
@@ -504,32 +561,37 @@ def queue_renumber(s: Session, collection: Collection, *, renumber: bool) -> Tas
     return operation
 
 
+class _Numbered:
+    """An episode as it reads with another identifier, for the filters to judge without changing it."""
+
+    def __init__(self, episode: Episode, identifier: str):
+        self._episode = episode
+        self.episode_identifier = identifier
+
+    def __getattr__(self, name):
+        return getattr(self._episode, name)
+
+
 def _download_profile_changes(
-        s: Session, collection: Collection, episodes: list[Episode], plan: IdentificationPlan,
+        s: Session, collection: Collection, identifiers: dict[int, str],
 ) -> list[DownloadProfileChange]:
     """What each Download Profile's filters do with the new identifiers: a filter on episode types can match other
     episodes once their type changes, such as a Daily Wire extra that is an episode when numbered by date."""
     profiles = list(s.scalars(select(DownloadProfile).where(DownloadProfile.collection_id == collection.id)))
-    if not profiles or not plan.identifiers:
+    if not profiles or not identifiers:
         return []
+    episodes = list(s.scalars(select(Episode).where(Episode.collection_id == collection.id)))
     ordered = sorted(episodes, key=lambda episode: (_published(episode), episode.id), reverse=True)
+    renumbered = [
+        _Numbered(episode, identifiers[episode.id]) if episode.id in identifiers else episode for episode in ordered
+    ]
     before: dict[int, tuple] = {}
+    after: dict[int, tuple] = {}
     downloads: dict[int, list[EpisodeMediaDownload]] = {}
-    with s.no_autoflush:
-        for profile in profiles:
-            downloads[profile.id] = retention_downloads(s, profile)
-            before[profile.id] = _judge(s, profile, ordered, downloads[profile.id])
-        old = {episode.id: episode.episode_identifier for episode in episodes}
-        try:
-            for episode in episodes:
-                if episode.id in plan.identifiers:
-                    episode.episode_identifier = plan.identifiers[episode.id]
-            after = {profile.id: _judge(s, profile, ordered, downloads[profile.id]) for profile in profiles}
-        finally:
-            for episode in episodes:
-                if episode.id in plan.identifiers:
-                    episode.episode_identifier = old[episode.id]
-                    s.expire(episode, ["episode_identifier"])
+    for profile in profiles:
+        downloads[profile.id] = retention_downloads(s, profile)
+        before[profile.id] = _judge(s, profile, ordered, downloads[profile.id])
+        after[profile.id] = _judge(s, profile, renumbered, downloads[profile.id])
     changes = []
     for profile in profiles:
         wanted_before, out_before, removed_before = before[profile.id]
@@ -579,7 +641,7 @@ def request_identification_change(
     if busy is not None:
         raise ServiceError(busy, field=_FIELD)
     # Whatever stops the plan, such as a season without a number, stops it here, where the form shows why.
-    plan_identification(s, collection, identification)
+    plan_identification(load_state(s, collection), identification)
     operation = create_operation(s, CollectionIdentificationChangeOperation(
         collection, episode_identifier=identification.value,
         episode_order=episode_order.value if episode_order is not None else None,
@@ -603,9 +665,10 @@ def change_identification(
         return 0, []
     renumbered = 0
     if renumber:
-        plan = plan_identification(s, collection, identification)
-        apply_identification(s, collection, plan)
-        renumbered = len(plan.identifiers)
+        state = load_state(s, collection)
+        plan = number_episodes(state, identification)
+        renumbered = len(state.changed_identifiers())
+        save_numbers(s, state, plan)
     if episode_order is not None:
         collection.episode_order = episode_order.value
     s.flush()

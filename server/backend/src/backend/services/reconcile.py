@@ -2,8 +2,8 @@
 moving renames their files; the Move action of a collection or of one episode moves them.
 
 Afterwards the collection numbers its episodes again, unless the user said not to, renames their files and rewrites
-their metadata. ``preview_reconcile`` makes the same moves and rolls them back, so what the dialog shows is what the
-Move action does.
+their metadata. ``preview_reconcile`` plans the same moves and numbering on the planner's copy of the collection
+without saving it, so what the dialog shows is what the Move action does.
 """
 from __future__ import annotations
 
@@ -16,15 +16,18 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Collection, Episode, EpisodeMediaDownload
 from backend.services.episode_identification import (
-    IdentificationChange, ProfileFilesChange, collection_busy, plan_identification, profile_file_changes,
-    queue_renumber, renumber_changes,
+    IdentificationChange, ProfileFilesChange, collection_busy, collection_work, profile_file_changes, queue_renumber, renumber_changes,
+    renumbers,
 )
 from backend.services.errors import ServiceError
 from backend.services.link_seasons import (
-    _holders, belongs_elsewhere, lists_in, moved_episodes, place_in_link_seasons, seasons_plan,
+    belonging, holder_titles, moved, moved_episodes, place, seasons_plan,
 )
+from backend.services.collection_health import note_collection_health
+from backend.services.file_moves import FileMove, FileMoves
+from backend.services.season_state import SeasonsState, apply_state, load_state
 from backend.services.move_causes import clear_move_causes, move_causes
-from backend.services.season_order import match_seasons_of_downloaded
+from backend.services.season_order import match_downloaded
 from backend.services.sites import collection_words
 from backend.types.collection_contracts import CollectionWords
 from backend.types.collection_types import EpisodeIdentifier
@@ -53,15 +56,16 @@ class ReconcileScope:
         return cls(episode.collection, episode)
 
 
-def _moved(s: Session, scope: ReconcileScope) -> list[Episode]:
+def _waiting(state: SeasonsState, scope: ReconcileScope) -> list[int]:
+    """The ids of the scope's videos that wait to be moved, in the planner's copy of the collection."""
     if scope.episode is not None:
-        return [scope.episode] if belongs_elsewhere(s, scope.episode) is not None else []
-    return list(moved_episodes(s, scope.collection))
+        return [scope.episode.id] if belonging(state, scope.episode.id) is not None else []
+    return [episode.id for episode in moved(state)]
 
 
 def waiting(s: Session, scope: ReconcileScope) -> int:
     """How many of the scope's videos wait to be moved. Reading only."""
-    return len(_moved(s, scope))
+    return len(_waiting(load_state(s, scope.collection), scope))
 
 
 @dataclass(frozen=True)
@@ -72,55 +76,86 @@ class _Group:
     label: str
     to_season: str
     episode_ids: list[int]
-    files_moved: int
+    files: list[FileMove]
 
 
 @dataclass
-class _Done:
+class MovesMade:
+    """What planning moved: the groups of episodes that went to another season."""
+
     groups: list[_Group] = field(default_factory=list)
     renamed: list[int] = field(default_factory=list)
     """The episodes whose files move into their new season's folder."""
 
 
-def _holder_title(s: Session, collection: Collection, slug: str) -> str | None:
-    holder = _holders(s, lists_in(collection)).get(slug)
-    return holder.title if holder is not None else None
-
-
-def _apply(s: Session, scope: ReconcileScope) -> _Done:
+def _plan(s: Session, state: SeasonsState, scope: ReconcileScope) -> MovesMade:
+    """Move the scope's videos where they belong in the planner's copy of the collection, as the Move action does,
+    and say what moved where. Saves nothing."""
     collection = scope.collection
-    episodes = _moved(s, scope)
-    if not episodes:
+    ids = set(_waiting(state, scope))
+    if not ids:
         raise ServiceError("Everything is where it belongs already", status_code=409)
     busy = collection_busy(s, collection, "moving its episodes")
     if busy is not None:
         raise ServiceError(busy)
-    ids = {episode.id for episode in episodes}
-    names = collection_words(collection).episode
-    labels = {episode.id: _holder_title(s, collection, episode.source_slug) for episode in episodes}
-    before = {episode.id: episode.season_id for episode in episodes}
-    place_in_link_seasons(s, collection, with_files=ids, drop=False)
-    s.expire_all()
-    done = _Done()
-    moved = [episode_id for episode_id in sorted(ids) if s.get(Episode, episode_id).season_id != before[episode_id]]
-    if not moved:
+    before = seasons_of(state)
+    labels = list_labels(state)
+    place(state, with_files=ids, drop=False)
+    # Downloads whose files stay where they are move along too, so their metadata is written again.
+    downloaded = ids | {episode.id for episode in state.episodes.values() if episode.has_files}
+    return moves_made(s, state, {episode_id: before[episode_id] for episode_id in downloaded if episode_id in before}, labels)
+
+
+def seasons_of(state: SeasonsState) -> dict[int, int | None]:
+    """The season each episode of the copy is in, by id: take it before planning, for ``moves_made``."""
+    return {episode.id: episode.season_id for episode in state.episodes.values()}
+
+
+def list_labels(state: SeasonsState) -> dict[str, str]:
+    """The title of the list that holds each video, by its slug: take them before planning, for ``moves_made``."""
+    return holder_titles(state)
+
+
+def moves_made(
+    s: Session, state: SeasonsState, before: Mapping[int, int | None], labels: Mapping[str, str],
+) -> MovesMade:
+    """What planning moved: the episodes of ``before`` that are in another season now, grouped by their new season
+    and the list that holds them (``labels``, by video slug). Downloaded ones take their new season's number, as their
+    files move into its folder. A download whose files keep their paths in the new season, as its Local Media Profiles
+    render them, stays where it is: it is in no group, but among ``renamed``, so its metadata is written again. Changes the copy, saves nothing."""
+    names = collection_words(state.record).episode
+    done = MovesMade()
+    moved_ids = [
+        episode_id for episode_id in sorted(before)
+        if episode_id in state.episodes and state.episodes[episode_id].season_id != before[episode_id]
+    ]
+    if not moved_ids:
         return done
     downloaded = set(s.scalars(
         select(EpisodeMediaDownload.media_item_id).where(
-            EpisodeMediaDownload.media_item_id.in_(moved), EpisodeMediaDownload.artifact_status.in_(_ON_DISK),
+            EpisodeMediaDownload.media_item_id.in_(moved_ids), EpisodeMediaDownload.artifact_status.in_(_ON_DISK),
         )
     ))
-    collection = s.get(Collection, collection.id)
     if downloaded:
         # Their files move into their new season's folder, so they take its number.
-        match_seasons_of_downloaded(s, collection, downloaded)
+        match_downloaded(state, downloaded)
         done.renamed = sorted(downloaded)
     grouped: dict[tuple[str, str | None], list[int]] = {}
-    for episode_id in moved:
-        grouped.setdefault((s.get(Episode, episode_id).season.name, labels[episode_id]), []).append(episode_id)
+    files = FileMoves(state, s)
+    moving: dict[int, list[FileMove]] = {}
+    for episode_id in moved_ids:
+        episode = state.episodes[episode_id]
+        season = state.seasons[episode.season_id]
+        if episode_id in downloaded:
+            moving[episode_id] = files.moving(episode, season, episode.episode_identifier)
+            if not moving[episode_id]:
+                # Its files keep their paths in the new season: only its metadata is written again.
+                continue
+        grouped.setdefault((season.name, labels.get(state.episodes[episode_id].source_slug)), []).append(episode_id)
     for (season, label), episode_ids in grouped.items():
         done.groups.append(_Group(
-            names, label or names.plural, season, episode_ids, len(downloaded.intersection(episode_ids)),
+            names, label or names.plural, season, episode_ids,
+            [move for episode_id in episode_ids for move in moving.get(episode_id, [])],
         ))
     return done
 
@@ -137,7 +172,20 @@ class MovedPart:
     examples: list[str]
     """The titles of the videos, newest first, up to a few dozen."""
     files_moved: int = 0
-    """Downloads whose files move along into their new season."""
+    """Downloaded files that get another path in their new season."""
+    files: list[MovedFile] = field(default_factory=list)
+    """Those files, with the path each has now and gets, newest first, up to a few hundred."""
+
+
+@dataclass(frozen=True)
+class MovedFile:
+    """A downloaded file that gets another path."""
+
+    title: str
+    """The episode's title."""
+    from_path: str
+    to_path: str | None
+    """None when only moving it tells, such as with a custom index."""
 
 
 @dataclass(frozen=True)
@@ -161,6 +209,9 @@ class MovePreview:
     """What numbering again does to each Local Media Profile's files; the metadata is rewritten either way."""
     files_follow: bool
     """Files moved, so its files are renamed and their metadata rewritten also when it keeps its numbers."""
+    busy: str | None = None
+    """What the move waits for, such as the listing a saved change started: what moves shows once it is done, as
+    it may change what moves. Nothing else is planned meanwhile."""
 
 
 def _newest_first(episodes: list[tuple[str, datetime | None]]) -> list[str]:
@@ -169,40 +220,67 @@ def _newest_first(episodes: list[tuple[str, datetime | None]]) -> list[str]:
 
 
 def preview_reconcile(s: Session, scope: ReconcileScope) -> MovePreview:
-    """What the Move action does: the moves are made and rolled back.
-
-    ``s`` is a write transaction's session; it is rolled back."""
+    """What the Move action does, as it plans the moves and the numbering after them on the planner's copy of the
+    collection: nothing is saved. While VODLoft works on the collection, such as listing it again after a saved change,
+    the preview says what it waits for instead. With nothing to move, it has no parts. Reading only."""
     collection = scope.collection
-    slug, title, type_ = collection.slug, collection.title, collection.type
-    plan = seasons_plan(collection)
-    causes = move_causes(collection)
-    before = {
-        episode.id: (episode.title, episode.published_date)
-        for episode in s.scalars(select(Episode).where(Episode.collection_id == collection.id))
+    identification = EpisodeIdentifier(collection.episode_identifier)
+
+    def nothing(busy: str | None = None) -> MovePreview:
+        return MovePreview(
+            slug=collection.slug, title=collection.title, type=collection.type, episode_identifier=identification,
+            parts=[], causes=move_causes(collection), seasons_plan=seasons_plan(collection), renumber_offered=False,
+            changes=[], profiles=[], files_follow=False, busy=busy,
+        )
+
+    work = collection_work(s, collection)
+    if work is not None:
+        return nothing(work.waiting())
+    state = load_state(s, collection)
+    if not _waiting(state, scope):
+        # Such as when listing the collection again after a change put everything where it belongs.
+        return nothing()
+    return move_preview(s, collection, state, _plan(s, state, scope))
+
+
+# Files the dialog shows of each group that moves.
+_FILES = 500
+
+
+def _files(moves: list[FileMove], titles: Mapping[int, tuple[str, datetime | None]]) -> list[MovedFile]:
+    earliest = datetime.min.replace(tzinfo=timezone.utc)
+    newest = sorted(moves, key=lambda move: titles.get(move.episode_id, ("", None))[1] or earliest, reverse=True)
+    return [
+        MovedFile(titles.get(move.episode_id, ("", None))[0], move.from_path, move.to_path) for move in newest[:_FILES]
+    ]
+
+
+def move_preview(s: Session, collection: Collection, state: SeasonsState, done: MovesMade) -> MovePreview:
+    """What ``done`` moved in the planner's copy of the collection, and the numbering after it, as the Move dialog
+    shows it. Numbers the copy, saves nothing."""
+    identification = EpisodeIdentifier(collection.episode_identifier)
+    offered = identification is not EpisodeIdentifier.DATE_BASED
+    titles = {
+        episode_id: (title, published) for episode_id, title, published in s.execute(
+            select(Episode.id, Episode.title, Episode.published_date).where(Episode.collection_id == collection.id)
+        )
     }
-    done = _apply(s, scope)
-    s.flush()
-    s.expire_all()
-    collection = s.get(Collection, collection.id)
     parts = [
         MovedPart(
             label=group.label, names=group.names, count=len(group.episode_ids), to_season=group.to_season,
-            examples=_newest_first([before[episode_id] for episode_id in group.episode_ids if episode_id in before]),
-            files_moved=group.files_moved,
+            examples=_newest_first([titles[episode_id] for episode_id in group.episode_ids if episode_id in titles]),
+            files_moved=len(group.files), files=_files(group.files, titles),
         )
         for group in done.groups
     ]
-    identification = EpisodeIdentifier(collection.episode_identifier)
-    offered = identification is not EpisodeIdentifier.DATE_BASED
-    changes, changed_ids = renumber_changes(s, collection) if offered else ([], set())
+    changes, changed_ids = renumber_changes(s, state) if offered else ([], set())
     follow = bool(done.renamed)
-    preview = MovePreview(
-        slug=slug, title=title, type=type_, episode_identifier=identification, parts=parts, causes=causes, seasons_plan=plan,
+    return MovePreview(
+        slug=collection.slug, title=collection.title, type=collection.type, episode_identifier=identification,
+        parts=parts, causes=move_causes(collection), seasons_plan=seasons_plan(collection),
         renumber_offered=offered and bool(changes), changes=changes,
         profiles=profile_file_changes(s, collection, changed_ids) if follow or changes else [], files_follow=follow,
     )
-    s.rollback()
-    return preview
 
 
 def reconcile(s: Session, scope: ReconcileScope, *, renumber: Mapping[str, bool]) -> None:
@@ -211,19 +289,21 @@ def reconcile(s: Session, scope: ReconcileScope, *, renumber: Mapping[str, bool]
     instead.
 
     ``s`` is a write transaction's session."""
-    done = _apply(s, scope)
+    state = load_state(s, scope.collection)
+    done = _plan(s, state, scope)
+    apply_state(s, state)
     collection = s.get(Collection, scope.collection.id)
+    note_collection_health(s, collection)
     if not moved_episodes(s, collection):
         clear_move_causes(collection)
     again = EpisodeIdentifier(collection.episode_identifier) is not EpisodeIdentifier.DATE_BASED and renumber.get(
         collection.slug, True,
     )
-    if done.renamed or (again and plan_identification(
-        s, collection, EpisodeIdentifier(collection.episode_identifier),
-    ).identifiers):
+    if done.renamed or (again and renumbers(s, collection)):
         queue_renumber(s, collection, renumber=again)
 
 
 __all__ = [
-    "MovePreview", "ReconcileScope", "preview_reconcile", "reconcile", "waiting",
+    "MovePreview", "MovesMade", "ReconcileScope", "list_labels", "move_preview", "moves_made", "preview_reconcile", "reconcile",
+    "seasons_of", "waiting",
 ]

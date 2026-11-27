@@ -27,15 +27,28 @@ def get_library_preferences(s: Session, access: Access) -> LibraryPreferencesRea
     return LibraryPreferencesRead(
         collection_sort=user.library_collection_sort,
         collection_sort_reversed=user.library_collection_sort_reversed,
+        creator_collection_sort=user.creator_collection_sort,
+        creator_collection_sort_reversed=user.creator_collection_sort_reversed,
         saved=True,
     )
+
+
+# Where each preference is kept on the user.
+_PREFERENCE_COLUMNS = {
+    "collection_sort": "library_collection_sort",
+    "collection_sort_reversed": "library_collection_sort_reversed",
+    "creator_collection_sort": "creator_collection_sort",
+    "creator_collection_sort_reversed": "creator_collection_sort_reversed",
+}
 
 
 def save_library_preferences(s: Session, access: Access, preferences: LibraryPreferences) -> LibraryPreferencesRead:
     user = s.get(User, access.user_id) if access.user_id is not None else None
     if user is None:
         raise LibraryPreferencesNeedAnAccount("Without user accounts, the browser remembers how you list the Library.")
-    user.library_collection_sort = preferences.collection_sort
-    user.library_collection_sort_reversed = preferences.collection_sort_reversed
+    chosen = preferences.model_dump(exclude_none=True)
+    for field, column in _PREFERENCE_COLUMNS.items():
+        if field in chosen:
+            setattr(user, column, chosen[field])
     s.flush()
     return get_library_preferences(s, access)

@@ -2123,12 +2123,12 @@ export function useLibraryPreferences() {
     })
 }
 
-/** Remember how the signed-in user lists the Library; the page shows the new order right away. */
+/** Remember how the signed-in user lists collections; only what is given changes, and the page shows it right away. */
 export function useSaveLibraryPreferences() {
     const qc = useQueryClient()
     const {queryKey} = libraryPreferencesQueryOptions()
     return useMutation({
-        mutationFn: (preferences: Omit<LibraryPreferences, 'saved'>) => apiJson(
+        mutationFn: (preferences: Partial<Omit<LibraryPreferences, 'saved'>>) => apiJson(
             '/library/preferences', LibraryPreferencesSchema.parse, {method: 'PUT', json: preferences},
         ),
         onMutate: (preferences) => {

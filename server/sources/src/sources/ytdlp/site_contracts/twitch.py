@@ -1,7 +1,7 @@
 from dataclasses import replace
 from datetime import timedelta
 
-from ...contract import LIST_TYPE, VIDEO_TAGS, AccountSignIn, ApiField, SignInKind, EpisodeTag, GuideStep, Names, Retention, SiteApi, RssEpisodeType, SectionKind, SectionRole, SectionType, UpgradeChecks, UpgradeImprovement
+from ...contract import LIST_TYPE, VIDEO_TAGS, AccountSignIn, ApiField, SignInKind, EpisodeTag, GuideStep, ListOrder, Names, Retention, SiteApi, RssEpisodeType, SectionKind, SectionRole, SectionType, UpgradeChecks, UpgradeImprovement
 from .feed_section_type import YtdlpFeedSectionType
 from .other_sites import OtherSites
 
@@ -16,6 +16,8 @@ class Twitch(OtherSites):
     domains = ("twitch.tv",)
     icon = "fab:twitch"
     creators = True
+    # Its playlists keep an order of their own, the first first.
+    list_order = ListOrder.OLDEST_FIRST
     # A channel's videos are its past broadcasts, highlights and uploads; its clips are short parts of them that
     # anyone may have cut.
     episode_tags = (

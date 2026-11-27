@@ -4,7 +4,7 @@ from typing import Optional, Sequence
 
 from sqlalchemy.orm import Session
 from backend.services.custom_indexes import request_collection_custom_index_reconciliation
-from backend.services.link_seasons import made_from_list
+from backend.services.link_seasons import numbered_in_list_order
 from backend.services.metadata_refresh import refreshes_metadata
 from sqlalchemy import and_, case, func, or_, select
 
@@ -14,7 +14,7 @@ from backend.db.model_mapping import create_database_fields, update_database_fie
 from backend.api.models.episode import *
 from backend.api.models.source import NamesAPIRead
 from backend.api.pagination import InvalidCursorError, decode_cursor, encode_cursor, keyset_after, KeysetField
-from backend.db.models import Collection, CollectionList, CollectionListItem
+from backend.db.models import Collection, CollectionList, CollectionListItem, CreatorTier
 from backend.db.models.media_item import Episode
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.collection_contracts import collection_contract
@@ -105,6 +105,10 @@ def episode_view_columns():
         Episode.publish_status.label("publish_status"),
         Episode.drm_protected.label("drm_protected"),
         Episode.access.label("access"),
+        CreatorTier.site_tier_id.label("creator_tier_site_id"),
+        CreatorTier.name.label("creator_tier_name"),
+        CreatorTier.amount.label("creator_tier_amount"),
+        CreatorTier.rank.label("creator_tier_rank"),
         Collection.site_key.label("site_key"),
         Episode.access_refused_at.label("access_refused_at"),
         Episode.access_check_at.label("access_check_at"),
@@ -124,7 +128,7 @@ def _in_list_order(s: Session, collection_slug: str) -> bool:
     """Whether the collection lists its episodes in the order they were added rather than by date: a collection made
     from one list, whose episodes are added in the list's order."""
     collection = s.scalar(select(Collection).where(Collection.slug == collection_slug))
-    return collection is not None and made_from_list(collection)
+    return collection is not None and numbered_in_list_order(collection)
 
 
 def _episode_view_stmt(
@@ -141,6 +145,7 @@ def _episode_view_stmt(
     stmt = (
         select(*episode_view_columns())
         .join(Collection, Episode.collection_id == Collection.id)
+        .outerjoin(CreatorTier, CreatorTier.id == Episode.creator_tier_id)
         .where(Collection.slug == collection_slug)
     )
     if episode_types:

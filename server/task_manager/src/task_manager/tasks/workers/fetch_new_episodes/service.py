@@ -12,7 +12,9 @@ from backend.services.check_frequency import full_scan_done, full_scan_due
 from backend.db.core import run_write_transaction
 from backend.db.models import Episode, Collection
 from backend.services.collection_assets import update_collection_artwork_metadata
-from backend.services.thumbnails import newest_media_item_id, take_first_frames
+from backend.services.thumbnails import newest_media_item_id, keep_own_pictures
+from backend.services.sites import collection_site
+from backend.types.collection_contracts import collection_contract
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.collection_types import EpisodeIdentifier
@@ -39,8 +41,9 @@ from ...helpers.episodes.save import (
     resolve_dw_episodes,
     save_resolved_episodes_per_season_asc,
 )
-from ...helpers.listed_collections import index_listed_collection
-from ...helpers.progress import ProgressBounds, update_progress
+from ...helpers.listed_collections import index_listed_collection, listing_steps
+from ...helpers.progress import PlanStep, ProgressBounds, report_plan, update_progress
+from progress_plan import PlanTracker, StageSpec
 from ...helpers.seasons import create_season_by_dw_season
 from ...types.general import RecordOrder
 
@@ -162,6 +165,8 @@ async def run_fetch_new_episodes(
         # Each Collection's check frequency: on its own schedule it is left out, checked less often it skips scans.
         collections = [collection for collection in collections if full_scan_due(collection)]
     collection_ids = [collection.id for collection in collections]
+    # A scan of one collection shows its steps; a scan of many how far it is with all of them.
+    alone = len(collection_ids) == 1
     daily_wire = _DailyWireClient()
     completed: list[CollectionEpisodeScanResult] = []
     for current_collection_id in collection_ids:
@@ -171,7 +176,7 @@ async def run_fetch_new_episodes(
         full_scan_done(current_collection_id)
         completed.append(await _index_collection(
             s, collection=collection, daily_wire=daily_wire, dry_run=dry_run, initial_index=initial_index,
-            by_user=by_user, progress=progress,
+            by_user=by_user, progress=progress, planned=alone,
         ))
     return FetchNewEpisodesResult(collections=tuple(completed), dry_run=dry_run)
 
@@ -202,8 +207,10 @@ async def _index_collection(
     initial_index: bool,
     by_user: bool = False,
     progress=None,
+    planned: bool = False,
 ) -> CollectionEpisodeScanResult:
-    """Add a collection's new episodes, the same way for every Source once they are found.
+    """Add a collection's new episodes, the same way for every Source once they are found. ``planned`` reports its
+    progress as a plan of steps, for a scan of this collection alone.
 
     A Source that lists its episodes finds them through ``Source.list_episodes``;
     The Daily Wire's are found season by season, with their numbering worked out
@@ -218,10 +225,19 @@ async def _index_collection(
     collection_id = collection.id
     source = get_source(collection.source_key)
     newest = newest_media_item_id(s)
+    plan = None
+    if planned and not dry_run and source.has(Feature.EPISODE_LISTS):
+        media = collection_contract(collection.type).media_names_on(collection_site(collection))
+        plan = PlanTracker([
+            *listing_steps(s, collection),
+            StageSpec(id="pictures", code="check_pictures", label=f"Checking the pictures of the new {media.plural}", unit=media.plural),
+        ], sink=report_plan(progress))
+        s.rollback()
     try:
         if source.has(Feature.EPISODE_LISTS):
             found = index_listed_collection(
                 s, collection_id=collection_id, source=source, progress=progress, dry_run=dry_run, by_user=by_user,
+                plan=plan,
             )
         elif source.has(Feature.EPISODE_LOOKUPS):
             client = daily_wire.get(s)
@@ -241,7 +257,11 @@ async def _index_collection(
                 )
             return result
         s.rollback()
-        finish_index(collection_id=collection_id, found=found, newest=newest, progress=progress)
+        if plan is None:
+            finish_index(collection_id=collection_id, found=found, newest=newest, progress=progress)
+        else:
+            with plan.running("pictures"):
+                finish_index(collection_id=collection_id, found=found, newest=newest, progress=PlanStep(plan, progress, "pictures"))
     except Exception:
         s.rollback()
         raise
@@ -269,7 +289,7 @@ def finish_index(*, collection_id: int, found: int, newest: int, progress=None) 
 
     added = run_write_transaction(work)
     if added:
-        take_first_frames(added, checking=_thumbnail_progress(progress))
+        keep_own_pictures(added, checking=_thumbnail_progress(progress))
 
 
 def _thumbnail_progress(progress):
@@ -284,6 +304,9 @@ def _thumbnail_progress(progress):
         if checked and now - last < 1:
             return
         last = now
+        if isinstance(progress, PlanStep):
+            progress.set(100 * checked // max(1, total), done=checked, total=total)
+            return
         progress.set(
             _CHECKING_THUMBNAILS_PROGRESS, f"Checking the thumbnails of {total} new episodes: {checked} done",
             meta={"thumbnails": {"checked": checked, "total": total}},

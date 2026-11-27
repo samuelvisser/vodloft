@@ -210,6 +210,8 @@ def adopt(
     download.file_path = str(path)
     download.artifact_stat_dev, download.artifact_stat_ino = identity.stat_dev, identity.stat_ino
     download.artifact_size_bytes, download.artifact_fingerprint = identity.size_bytes, identity.fingerprint
+    # VODLoft did not write the adopted file's metadata, so the next rewrite writes it.
+    download.tags_fingerprint = download.nfo_fingerprint = None
     download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
     download.artifact_error = None
     download.downloaded_bytes = identity.size_bytes

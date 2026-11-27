@@ -1,15 +1,16 @@
-import {useId, useMemo, useState} from 'react'
+import {type FormEvent, type ReactNode, useEffect, useId, useMemo, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useQuery} from '@tanstack/react-query'
 import {Controller, useForm, useWatch} from 'react-hook-form'
 import {z} from 'zod'
 import {faIcon} from '../../icons/faIcon'
-import type {BulkResult, BulkSummary} from '../../types/schemas/profile_bulk'
+import {BulkResultSchema, type BulkResult, type BulkSummary} from '../../types/schemas/profile_bulk'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {getZodDefaults} from '../../utils/defaultZod'
 import type {SelectRegistry} from '../../utils/selectRegistry'
 import {SegmentedOptions} from '../SegmentedOptions'
+import ChoiceBar, {type ChoiceBarOption} from '../common/ChoiceBar'
 import NumberInput from '../common/NumberInput'
 import SimpleSelect from '../common/SimpleSelect'
 import Modal from '../Modal/Modal'
@@ -17,14 +18,22 @@ import {SkippedList} from './BulkEditControls'
 import {type BulkEndpoint, countOf, fetchBulkSummary, postBulkChange} from './bulkApi'
 
 type FieldValue = boolean | string | number
+type FieldSummary = BulkSummary['fields'][string]
 
 /** One setting the bulk edit can change, by its name in the API's changes. */
 export type BulkFieldSpec = {
     key: string
     label: string
-    /** A text setting may be left empty, which clears it. */
-    kind: 'switch' | 'select' | 'number' | 'text'
+    /** A text setting may be left empty, which clears it. A choice shows a few short options all in view. */
+    kind: 'switch' | 'select' | 'number' | 'text' | 'choice'
     defaultValue: FieldValue
+    /** The options of a choice. */
+    options?: ChoiceBarOption<string>[]
+    /** Sent inside this setting of the changes, by ``apiKey``, such as one feed among the feeds. */
+    group?: string
+    apiKey?: string
+    /** What the items are set to now, for a setting the summary lists apart from its fields. */
+    summary?: FieldSummary
     registry?: SelectRegistry
     min?: number
     /** The longest text a text setting takes. */
@@ -42,7 +51,7 @@ function valueSchema(spec: BulkFieldSpec) {
     if (spec.kind === 'switch') return z.boolean()
     if (spec.kind === 'number') return z.number({error: 'Enter a number'}).int().min(spec.min ?? 0)
     if (spec.kind === 'text') return z.string().max(spec.maxLength ?? Infinity, `Keep it to ${spec.maxLength} characters`)
-    return z.string().min(1, 'Choose one')
+    return z.string({error: 'Choose one'}).min(1, 'Choose one')
 }
 
 /** Each setting as {apply, value}: only the ticked ones are sent, and their value is checked only then. */
@@ -75,11 +84,32 @@ function sitesWithout(sites: string[]): string {
 }
 
 /** "2 on, 1 off", or "All on" when they agree. */
-function currentValues(spec: BulkFieldSpec, summary: BulkSummary['fields'][string]): string {
+function currentValues(spec: BulkFieldSpec, summary: FieldSummary): string {
     if (summary.values.length === 1) return `All ${valueLabel(spec, summary.values[0].value)}`
     if (spec.kind === 'number') return summary.values.map((item) => `${valueLabel(spec, item.value)} (${item.count})`).join(', ')
     return summary.values.map((item) => `${item.count} ${valueLabel(spec, item.value)}`).join(', ')
 }
+
+/** A look at what the changes do before they are saved, for changes that do more than set a value, such as moving
+ * downloaded files. */
+export type BulkReview = {
+    /** Whether the ticked changes need it. */
+    wanted: (changes: Record<string, unknown>) => boolean
+    /** The step that shows what the changes do. It says when saving can go ahead, with what saving sends besides the
+     * changes, such as a choice the user made there, and the items whose change takes long, which are saved one at a
+     * time so it can show how far saving is; null while it is not ready. While saving, it shows ``saving``. */
+    render: (props: {
+        changes: Record<string, unknown>
+        onReady: (ready: {extra: Record<string, unknown>, oneByOne: number[]} | null) => void
+        onBack: () => void
+        saving: BulkSaving | null
+    }) => ReactNode
+    /** What the save button says there, such as Save and move. */
+    saveLabel: string
+}
+
+/** How far saving after a review is: the item it saves now, and the ones it saved or left as they were. */
+export type BulkSaving = {at: number | null, saved: number[], skipped: Record<number, string>}
 
 type BulkChangeDialogProps = {
     endpoint: BulkEndpoint
@@ -88,57 +118,141 @@ type BulkChangeDialogProps = {
     /** Names of the chosen items that are on screen, to show which ones change. */
     names: string[]
     fields: BulkFieldSpec[]
+    /** Settings that depend on what the chosen items have, such as the feeds of their channels, once that is known. */
+    moreFields?: (summary: BulkSummary) => BulkFieldSpec[]
+    review?: BulkReview
     onClose: () => void
     onChanged: (result: BulkResult) => void
 }
 
 /** Change settings: tick the settings to give every chosen item, such as a profile; the rest keep their own value. */
-export default function BulkChangeDialog({endpoint, ids, noun, names, fields, onClose, onChanged}: BulkChangeDialogProps) {
+export default function BulkChangeDialog({endpoint, ids, noun, names, fields: givenFields, moreFields, review, onClose, onChanged}: BulkChangeDialogProps) {
     const titleId = useId()
     const [result, setResult] = useState<BulkResult | null>(null)
-    const schema = useMemo(() => bulkFormSchema(fields), [fields])
-    const form = useForm<BulkFormValues>({
-        resolver: zodResolver(schema) as never,
-        defaultValues: getZodDefaults(schema) as BulkFormValues,
-    })
-    const values = useWatch({control: form.control})
-    const ticked = fields.filter((spec) => values[spec.key]?.apply).length
+    // On the review: what saving sends besides the changes, once the review is ready.
+    const [reviewing, setReviewing] = useState(false)
+    const [ready, setReady] = useState<{extra: Record<string, unknown>, oneByOne: number[]} | null>(null)
+    const [saving, setSaving] = useState<BulkSaving | null>(null)
 
     const summary = useQuery({
         queryKey: ['profileBulkSummary', endpoint, ids] as const,
         queryFn: ({signal}) => fetchBulkSummary(endpoint, ids, signal),
         staleTime: 0,
     })
-
-    const onSubmit = buildServerAwareSubmit<BulkFormValues, BulkFormValues, BulkResult>(
-        form,
-        async (data) => {
-            const changes = Object.fromEntries(fields
-                .filter((spec) => data[spec.key]?.apply)
-                .map((spec) => {
-                    const value = data[spec.key].value as FieldValue
-                    return [spec.key, spec.toApi ? spec.toApi(value) : value]
-                }))
-            return postBulkChange(endpoint, ids, changes)
-        },
-        {
-            rootServerValidationMessage: 'Nothing was changed.',
-            onSuccess: (changed) => {
-                onChanged(changed)
-                if (changed.skipped.length) setResult(changed)
-                else onClose()
-            },
-        },
+    const fields = useMemo(
+        () => [...givenFields, ...(moreFields && summary.data ? moreFields(summary.data) : [])],
+        [givenFields, moreFields, summary.data],
     )
+    // Checked against the settings shown now, which grow once the summary says what the chosen items have.
+    const schema = useRef(bulkFormSchema(givenFields))
+    schema.current = useMemo(() => bulkFormSchema(fields), [fields])
+    const form = useForm<BulkFormValues>({
+        resolver: ((...args: Parameters<ReturnType<typeof zodResolver>>) => zodResolver(schema.current)(...args)) as never,
+        defaultValues: getZodDefaults(bulkFormSchema(givenFields)) as BulkFormValues,
+    })
+    // Settings that came with the summary start at their default, as the others do, so what a control shows is what
+    // the form sends.
+    useEffect(() => {
+        for (const spec of fields) {
+            if (form.getValues(`${spec.key}.value`) === undefined) form.setValue(`${spec.key}.value`, spec.defaultValue)
+        }
+    }, [fields]) // eslint-disable-line react-hooks/exhaustive-deps
+    const values = useWatch({control: form.control})
+    const ticked = fields.filter((spec) => values[spec.key]?.apply).length
+
+    /** The ticked settings as the API takes them. */
+    const changesOf = (data: Partial<BulkFormValues>) => {
+        const changes: Record<string, unknown> = {}
+        for (const spec of fields) {
+            if (!data[spec.key]?.apply) continue
+            const value = data[spec.key]!.value as FieldValue
+            const sent = spec.toApi ? spec.toApi(value) : value
+            if (spec.group) changes[spec.group] = {...(changes[spec.group] as object | undefined), [spec.apiKey ?? spec.key]: sent}
+            else changes[spec.key] = sent
+        }
+        return changes
+    }
+    const reviewWanted = !!review && ticked > 0 && review.wanted(changesOf(values as BulkFormValues))
+
+    const finished = (changed: BulkResult) => {
+        onChanged(changed)
+        if (changed.skipped.length) setResult(changed)
+        else onClose()
+    }
+    const save = buildServerAwareSubmit<BulkFormValues, BulkFormValues, BulkResult>(
+        form,
+        async (data) => postBulkChange(endpoint, ids, changesOf(data)),
+        {rootServerValidationMessage: 'Nothing was changed.', onSuccess: finished},
+    )
+
+    /** After the review: the items whose change takes long one at a time, each in a short save of its own, so the
+     * review shows how far it is; then the others together. */
+    const saveReviewed = async () => {
+        if (!ready) return
+        const changes = changesOf(form.getValues())
+        const total: BulkResult = {done: 0, skipped: []}
+        let progress: BulkSaving = {at: null, saved: [], skipped: {}}
+        const rest = ids.filter((id) => !ready.oneByOne.includes(id))
+        const batches = [...ready.oneByOne.filter((id) => ids.includes(id)).map((id) => [id]), ...(rest.length ? [rest] : [])]
+        for (const batch of batches) {
+            progress = {...progress, at: batch.length === 1 ? batch[0] : null}
+            setSaving(progress)
+            let changed: BulkResult
+            try {
+                const response = await postBulkChange(endpoint, batch, changes, ready.extra)
+                if (!response.ok) {
+                    const body = await response.json().catch(() => null)
+                    throw new Error(response.status >= 500 && response.status !== 500
+                        ? 'VODLoft took too long to answer. It may still be saving: look again in a minute.'
+                        : typeof body?.detail === 'string' ? body.detail : `Could not save (HTTP ${response.status})`)
+                }
+                changed = BulkResultSchema.parse(await response.json())
+            } catch (error) {
+                // No answer at all, such as when the connection dropped: the save may have gone ahead regardless.
+                const reason = error instanceof TypeError
+                    ? 'No answer from VODLoft. It may still be saving: look again in a minute.'
+                    : error instanceof Error ? error.message : 'Could not save'
+                changed = {done: 0, skipped: batch.map((id) => ({id, name: names[ids.indexOf(id)] ?? String(id), reason}))}
+            }
+            total.done += changed.done
+            total.skipped.push(...changed.skipped)
+            const left = new Set(changed.skipped.map((item) => item.id))
+            progress = {
+                at: null,
+                saved: [...progress.saved, ...batch.filter((id) => !left.has(id))],
+                skipped: {...progress.skipped, ...Object.fromEntries(changed.skipped.map((item) => [item.id, item.reason]))},
+            }
+            setSaving(progress)
+        }
+        finished(total)
+    }
+
+    /** Changes that need a look first open the review; there, the form saves them. */
+    const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+        if (reviewWanted && !reviewing) {
+            event.preventDefault()
+            return form.handleSubmit(() => {
+                setReady(null)
+                setSaving(null)
+                setReviewing(true)
+            })(event)
+        }
+        if (reviewing) {
+            event.preventDefault()
+            return void saveReviewed()
+        }
+        return save(event)
+    }
 
     const shownNames = names.slice(0, 3)
     // A setting none of the chosen profiles have is left out.
-    const shownFields = fields.filter((spec) => !summary.data || (summary.data.fields[spec.key]?.offered ?? 1) > 0)
+    const summaryOf = (spec: BulkFieldSpec): FieldSummary | undefined => spec.summary ?? summary.data?.fields[spec.key]
+    const shownFields = fields.filter((spec) => !summary.data || (summaryOf(spec)?.offered ?? 1) > 0)
     const errors = form.formState.errors
 
     return (
         <Modal
-            onDismiss={onClose}
+            onDismiss={saving ? () => undefined : onClose}
             // Escape cancels, so it only closes before a setting is ticked, or once the result is shown.
             dismissOnEscape={Boolean(result) || (ticked === 0 && !form.formState.isSubmitting)}
             className="modal modal-wide bulk-dialog"
@@ -153,6 +267,8 @@ export default function BulkChangeDialog({endpoint, ids, noun, names, fields, on
             <div className="modal-body">
                 {result ? (
                     <SkippedList result={result} verb="Changed" noun={noun}/>
+                ) : reviewing && review ? (
+                    review.render({changes: changesOf(form.getValues()), onReady: setReady, onBack: () => setReviewing(false), saving})
                 ) : (
                     <>
                         {shownNames.length > 0 && (
@@ -172,7 +288,7 @@ export default function BulkChangeDialog({endpoint, ids, noun, names, fields, on
                         ) : (
                             <div className="bulk-fields">
                                 {shownFields.map((spec) => {
-                                    const fieldSummary = summary.data?.fields[spec.key]
+                                    const fieldSummary = summaryOf(spec)
                                     const count = summary.data?.count ?? ids.length
                                     const offered = fieldSummary?.offered ?? count
                                     const active = !!values[spec.key]?.apply
@@ -197,6 +313,12 @@ export default function BulkChangeDialog({endpoint, ids, noun, names, fields, on
                                                                 value={field.value ? 'on' : 'off'}
                                                                 onChange={(value) => field.onChange(value === 'on')}
                                                                 options={[{value: 'on', label: 'On'}, {value: 'off', label: 'Off'}]}
+                                                            />
+                                                        ) : spec.kind === 'choice' ? (
+                                                            <ChoiceBar
+                                                                ariaLabel={spec.label} options={spec.options ?? []}
+                                                                value={typeof field.value === 'string' ? field.value : null}
+                                                                onChange={field.onChange}
                                                             />
                                                         ) : spec.kind === 'text' ? (
                                                             <input
@@ -258,12 +380,18 @@ export default function BulkChangeDialog({endpoint, ids, noun, names, fields, on
                     <button type="button" className="btn btn-primary" onClick={onClose}>Close</button>
                 ) : (
                     <>
-                        <button type="button" className="btn" onClick={onClose}>Cancel</button>
-                        <button type="submit" className="btn btn-primary" disabled={!ticked || form.formState.isSubmitting}>
-                            {form.formState.isSubmitting && <FontAwesomeIcon icon={faIcon('fass', 'circle-notch')} spin aria-hidden="true"/>}
-                            {ticked
-                                ? `Change ${ticked} setting${ticked === 1 ? '' : 's'} on ${countOf(ids.length, noun)}`
-                                : 'Choose a setting to change'}
+                        <button type="button" className="btn" disabled={!!saving} onClick={reviewing ? () => setReviewing(false) : onClose}>
+                            {reviewing ? 'Back' : 'Cancel'}
+                        </button>
+                        <button type="submit" className="btn btn-primary" disabled={!ticked || form.formState.isSubmitting || (reviewing && (!ready || !!saving))}>
+                            {(form.formState.isSubmitting || !!saving) && <FontAwesomeIcon icon={faIcon('fass', 'circle-notch')} spin aria-hidden="true"/>}
+                            {reviewing && review
+                                ? saving ? 'Saving…' : review.saveLabel
+                                : !ticked
+                                    ? 'Choose a setting to change'
+                                    : reviewWanted
+                                        ? 'Next'
+                                        : `Change ${ticked} setting${ticked === 1 ? '' : 's'} on ${countOf(ids.length, noun)}`}
                         </button>
                     </>
                 )}

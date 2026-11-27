@@ -18,7 +18,7 @@ def _body(session, change):
     session.rollback()
     data = dict(
         seasons=[{"id": x.id, "name": x.name} for x in view.seasons], custom_season_order=view.custom_season_order,
-        link_seasons=view.link_seasons, loose_videos=view.loose_videos, list_layout=view.list_layout,
+        link_seasons=view.link_seasons, loose_videos=view.loose_videos,
         repeat_videos=view.repeat_videos, outside_videos=view.outside_videos,
         playlists=[
             {"id": p.id, "enabled": p.enabled, "season_id": p.season_id, "as_season": p.as_season} for p in view.playlists
@@ -39,6 +39,17 @@ def _set_playlist(data, view, title, **fields):
             playlist.update(fields)
 
 
+def _preview(service, body):
+    """The preview, in a session that refuses to write: the planner saves nothing."""
+    from backend.db.core import get_session
+
+    s = get_session()
+    try:
+        return service.preview_seasons(s, "creator", body)
+    finally:
+        s.close()
+
+
 def _preview_matches_saving(session, source, collection, change, monkeypatch, *, listed=True):
     """Preview ``change``, check it saved nothing, then save it, list the collection again and move what waits for
     the Move dialog: the preview showed the seasons that leaves."""
@@ -50,10 +61,10 @@ def _preview_matches_saving(session, source, collection, change, monkeypatch, *,
     from task_manager.tasks.helpers.listed_collections import index_listed_collection
     from task_manager.tasks.workers.remove_left_episodes.service import run_remove_left_episodes
 
-    monkeypatch.setattr(service, "queue_season_folder_moves", lambda s, c, ids: None)
+    monkeypatch.setattr(service, "queue_renumber", lambda s, c, renumber: None)
     before = _seasons(session)
     body = _body(session, change)
-    preview = run_write_transaction(lambda s: service.preview_seasons(s, "creator", body))
+    preview = _preview(service, body)
     assert _seasons(session) == before
 
     run_write_transaction(lambda s: service.update_seasons(s, "creator", body))
@@ -74,6 +85,14 @@ def _preview_matches_saving(session, source, collection, change, monkeypatch, *,
     ]
 
 
+def _view(session):
+    from backend.api.endpoints.collections.seasons.service import seasons_view
+
+    view = seasons_view(session, "creator")
+    session.rollback()
+    return view
+
+
 def _season_id(view, name):
     return next(x.id for x in view.seasons if x.name == name)
 
@@ -84,9 +103,11 @@ CHANNEL_CHANGES = {
     "the lists contents only and the rest by year": lambda v, d: (
         _set_playlist(d, v, "One", as_season=False), _set_playlist(d, v, "Two", as_season=False),
         d.update(loose_videos="by_year")),
-    "a list switched off": lambda v, d: (d.update(link_seasons="selected"), _set_playlist(d, v, "One", enabled=False)),
+    "a list switched off": lambda v, d: (d.update(link_seasons="on"), _set_playlist(d, v, "One", enabled=False)),
     "lists off": lambda v, d: d.update(link_seasons="off"),
-    "every list contents only": lambda v, d: d.update(link_seasons="all", lists_as_seasons=False),
+    "every list contents only": lambda v, d: (
+        _set_playlist(d, v, "One", as_season=False), _set_playlist(d, v, "Two", as_season=False)),
+    "a feed a season of its own": lambda v, d: d.update(feed_seasons={"videos": None}),
     "lists off and one season": lambda v, d: d.update(link_seasons="off", loose_videos="one_season"),
     "a list joins another's season": lambda v, d: _set_playlist(d, v, "Two", season_id=_playlist(v, "One").season_id),
     "a list no season of its own": lambda v, d: _set_playlist(d, v, "One", as_season=False),
@@ -109,7 +130,7 @@ def test_a_channel_collection(source, session, change, files, loose, monkeypatch
     ]
     source.lists = [_list("PLone", "One"), _list("PLtwo", "Two")]
     source.items = {"PLone": ("a", "c", "f"), "PLtwo": ("c", "d")}
-    collection = _collection(session, mode="selected", loose=loose)
+    collection = _collection(session, mode="on", loose=loose)
     _index(session, collection, source)
     if files:
         _give_files(session, "a", "b", "c", "e")
@@ -125,7 +146,7 @@ def test_a_video_back_in_one_season_only(source, session, files, monkeypatch):
     source.videos = [_video("a", 2023), _video("c", 2024), _video("d", 2024, 6)]
     source.lists = [_list("PLone", "One"), _list("PLtwo", "Two")]
     source.items = {"PLone": ("a", "c"), "PLtwo": ("c", "d")}
-    collection = _collection(session, mode="selected")
+    collection = _collection(session, mode="on")
     _index(session, collection, source)
     body = _body(session, lambda v, d: d.update(repeat_videos="each_season"))
     run_write_transaction(lambda s: service.update_seasons(s, "creator", body))
@@ -158,10 +179,12 @@ def test_a_collection_of_one_playlist(source, session, to, files, monkeypatch):
 
 LINKS_CHANGES = {
     "holds only what its lists have": lambda v, d: d.update(outside_videos="only"),
+    "holds only what its lists have, by year": lambda v, d: (
+        d.update(outside_videos="only", loose_videos="by_year"), _set_playlist(d, v, "One", as_season=False)),
     "adds the videos of its lists": lambda v, d: d.update(outside_videos="add"),
     "a link the user added removed": lambda v, d: d.update(outside_videos="only", removed_links=[_playlist(v, "Mine").id]),
     "a list switched off": lambda v, d: (
-        d.update(outside_videos="only", link_seasons="selected"), _set_playlist(d, v, "One", enabled=False),
+        d.update(outside_videos="only", link_seasons="on"), _set_playlist(d, v, "One", enabled=False),
     ),
 }
 
@@ -177,7 +200,7 @@ def test_a_collection_with_links_the_user_adds(links_source, session, change, fi
     source.lists = [_list("PLone", "One")]
     source.items = {"PLone": ("a",), "PLmine": ("b", "x")}
     source.outside = {"a": _video("a", 2024), "b": _video("b", 2025), "x": _video("x", 2023)}
-    collection = _collection(session, mode="all")
+    collection = _collection(session, mode="on")
     _index(session, collection, source)
     if change in ("a link the user added removed", "a list switched off"):
         mine = AddedLink("PLmine", "https://seasons.example/playlist?list=PLmine", "Mine", None, "seasons")
@@ -187,3 +210,137 @@ def test_a_collection_with_links_the_user_adds(links_source, session, change, fi
         _give_files(session, *session.scalars(select(Episode.source_slug).where(Episode.source_slug.in_(("a", "b", "c")))))
 
     _preview_matches_saving(session, source, collection, LINKS_CHANGES[change], monkeypatch)
+
+
+def test_a_list_switched_on_whose_videos_are_not_listed_yet_shows_the_season_it_waits_for(source, session):
+    """The preview does not fetch a list that may be long: a list VODLoft has not listed yet shows the season it
+    becomes once it has."""
+    from backend.api.endpoints.collections.seasons import service
+    from backend.db.core import run_write_transaction
+    from backend.db.models import CollectionList, CollectionListItem
+    from sqlalchemy import delete
+
+    source.videos = [_video("a", 2024), _video("b", 2024, 2)]
+    source.lists = [_list("PLtour", "The Tour")]
+    source.items = {"PLtour": ("b",)}
+    collection = _collection(session, loose="one_season")
+    _index(session, collection, source)
+
+    # Switched off, it lost its season; VODLoft never listed it, as a list the collection skipped.
+    _update(session, playlists=[{"id": _playlist(_view(session), "The Tour").id, "enabled": False, "season_id": None}])
+
+    def never_listed(s):
+        tour = s.scalars(select(CollectionList).where(CollectionList.ref == "PLtour")).one()
+        s.execute(delete(CollectionListItem).where(CollectionListItem.list_id == tour.id))
+
+    run_write_transaction(never_listed)
+    session.expire_all()
+    assert "The Tour" not in [name for name, _number, _episodes in _seasons(session)]
+    body = _body(session, lambda view, data: _set_playlist(data, view, "The Tour", enabled=True, as_season=True, season_id=None))
+    preview = _preview(service, body)
+    assert [x.title for x in preview.waiting] == ["The Tour"]
+    assert "The Tour" not in [x.name for x in preview.seasons]
+
+
+def _never_listed(session, ref):
+    """The list as one the collection has but VODLoft never listed: switched off, and nothing known of what it holds."""
+    from sqlalchemy import delete
+    from backend.db.models import CollectionList, CollectionListItem
+
+    playlist = session.scalar(select(CollectionList).where(CollectionList.ref == ref))
+    session.execute(delete(CollectionListItem).where(CollectionListItem.list_id == playlist.id))
+    playlist.enabled = False
+    session.commit()
+    return playlist.id
+
+
+def test_the_review_of_a_list_switched_on_plans_with_what_the_dialog_listed_and_saving_takes_it_along(
+    source, session, monkeypatch,
+):
+    from backend.api.endpoints.collections.seasons import service
+    from backend.db.core import get_session, run_write_transaction
+    from backend.db.models import CollectionListItem
+
+    renumbered = []
+    monkeypatch.setattr(service, "queue_renumber", lambda s, c, renumber: renumbered.append(renumber))
+    monkeypatch.setattr(service, "reindex_collection", lambda s, c, by_user: None)
+    source.videos = [_video("a", 2023), _video("b", 2024)]
+    source.lists = [_list("PLone", "One"), _list("PLtwo", "Two")]
+    source.items = {"PLone": ("a",), "PLtwo": ("b",)}
+    collection = _collection(session)
+    _index(session, collection, source)
+    two = _never_listed(session, "PLtwo")
+    _index(session, collection, source)
+    _give_files(session, "b")
+    assert _seasons(session) == [("Videos", 1, ["b"]), ("One", 2, ["a"])]
+    assert not next(p for p in service.seasons_view(session, "creator").playlists if p.id == two).listed
+    session.rollback()
+
+    body = _body(session, lambda v, d: _set_playlist(d, v, "Two", enabled=True))
+    listed = service.Listed(lists={two: ("b",)})
+    reading = get_session()
+    try:
+        # Without the listing, VODLoft can't tell what the list moves; with it, the review says.
+        assert service.review_seasons(reading, "creator", body).moves.parts == []
+        review = service.review_seasons(reading, "creator", body, listed)
+    finally:
+        reading.close()
+    assert [(part.to_season, part.count, part.files_moved) for part in review.moves.parts] == [("Two", 1, 1)]
+    assert "Two" in review.new_seasons and review.deleted_seasons == ["Videos"]
+    assert _seasons(session) == [("Videos", 1, ["b"]), ("One", 2, ["a"])]
+
+    run_write_transaction(lambda s: service.update_seasons(s, "creator", body, (), listed))
+
+    assert [(name, slugs) for name, _, slugs in _seasons(session)] == [("One", ["a"]), ("Two", ["b"])]
+    assert session.scalars(select(CollectionListItem.source_slug).where(CollectionListItem.list_id == two)).all() == ["b"]
+    assert renumbered == [True]
+
+
+def test_a_link_the_user_adds_can_be_part_of_the_collection(links_source, session, monkeypatch):
+    from backend.api.endpoints.collections.seasons import service
+    from backend.api.endpoints.collections.seasons.service import AddedLink
+    from backend.db.models import CollectionList
+
+    monkeypatch.setattr(service, "reindex_collection", lambda s, c, by_user: None)
+    collection = _collection(session)
+    _index(session, collection, links_source)
+    mine = AddedLink("PLmine", "https://seasons.example/playlist?list=PLmine", "Mine", None, "seasons", as_season=False)
+
+    _update(session, added=[mine], outside_videos="add")
+
+    assert session.scalar(select(CollectionList.as_season).where(CollectionList.ref == "PLmine")) is False
+
+
+def test_the_dialog_lists_each_list_once_and_keeps_what_it_listed_until_it_closes(monkeypatch):
+    import threading
+    from backend.services import list_previews
+    from backend.services.list_previews import ListingState, ListToList, forget_listings, listings, start_listings
+
+    asked = []
+    release = threading.Event()
+
+    def listing(wanted):
+        asked.append(wanted.url)
+        release.wait(5)
+        return ("a", "b")
+
+    monkeypatch.setattr(list_previews, "_list", listing)
+    one = ListToList("seasons", "https://seasons.example/playlist?list=PLone", list_id=1)
+    start_listings("creator", "token-one", [one])
+    # Asked again while it runs, such as by the review: it is not listed again.
+    start_listings("creator", "token-one", [one])
+    assert [listing.state for listing in listings("creator", "token-one")] == [ListingState.LISTING]
+
+    release.set()
+    while listings("creator", "token-one")[0].state is ListingState.LISTING:
+        threading.Event().wait(0.01)
+    start_listings("creator", "token-one", [one])
+    assert [(item.list_id, item.state, item.slugs) for item in listings("creator", "token-one")] == [
+        (1, ListingState.LISTED, ("a", "b")),
+    ]
+    assert asked == [one.url]
+    # Another dialog has listings of its own.
+    assert listings("creator", "token-two") == []
+
+    forget_listings("creator", "token-one")
+    assert listings("creator", "token-one") == []

@@ -38,6 +38,7 @@ from sqlalchemy.orm import Session, object_session
 from backend.db.datetime_types import utc_datetime
 from backend.db.core import run_write_transaction
 from backend.db.models import Collection, Episode, Site, Video
+from backend.services.creator_tiers import keep_tiers, unknown_tiers
 from backend.services.media_access import lock_refused
 from backend.services.removed_downloads import back_at_source, left_source
 from backend.services.sites import episode_site_key
@@ -241,6 +242,15 @@ def _refresh(s: Session, due: list[_Watched], now: datetime) -> dict[str, SiteCo
     answers: dict[str, _Answers] = {}
     for source_key in dict.fromkeys(item.source_key for item in batched):
         answers[source_key] = _look_up(source_key, [item.ref for item in batched if item.source_key == source_key])
+    # What the creators call the tiers the items need, for tiers VODLoft does not know the names of yet.
+    tiers = [
+        learned for source_key, answer in answers.items()
+        for learned in unknown_tiers(s, get_source(source_key), [
+            (item.ref.url, _told_access(answer, item.ref.slug)) for item in batched if item.source_key == source_key
+        ])
+    ]
+    if tiers:
+        run_write_transaction(lambda w: [keep_tiers(w, site_key, site_tiers) for site_key, site_tiers in tiers])
 
     sites: dict[str, SiteCounts] = {}
     for item in due:
@@ -257,6 +267,12 @@ def _refresh(s: Session, due: list[_Watched], now: datetime) -> dict[str, SiteCo
         else:
             _failed.pop(item.key, None)
     return sites
+
+
+def _told_access(answer: _Answers, slug: str) -> str | None:
+    """The access the Source said an item needs."""
+    details = answer.details.get(slug)
+    return details.access if details is not None else answer.refused.get(slug)
 
 
 def _store(w: Session, item: _Watched, answer: _Answers | None, now: datetime) -> SiteCounts:

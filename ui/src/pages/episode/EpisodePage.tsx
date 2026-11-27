@@ -17,6 +17,8 @@ import {useActiveOperation} from '../../components/OperationNotifier/OperationNo
 import {formatDate} from "../../utils/formatting";
 import './EpisodePage.css'
 import {faIcon} from '../../icons/faIcon'
+import ProgressButton from '../../components/common/ProgressButton'
+import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 import SiteLink from '../../components/common/SiteLink'
 import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
 import {RemovedBadge, ExpiredBadge} from '../../components/common/RemovedFromSource'
@@ -358,7 +360,24 @@ export default function EpisodePage() {
                     <div className="episode-downloads" aria-labelledby="episode-downloads-title">
                         <h2 id="episode-downloads-title">Downloads</h2>
                         {episode.drmProtected && <DrmNotice unplayableAllowed={collection.allowsUnplayableFormats}/>}
-                        {!drmBlocked && episode.accessLocked && <AccessNotice item={episode}/>}
+                        {!drmBlocked && episode.accessLocked && (
+                            <AccessNotice
+                                item={episode}
+                                action={sourceControls(collection).metadataRefresh && (
+                                    <ProgressButton
+                                        definition={frontendOperationDefinitions['episode.refresh_metadata']}
+                                        resourceId={episode.id}
+                                        label="Recheck now"
+                                        icon={faIcon('fass', 'arrows-rotate')}
+                                        onClick={() => void refreshMetadata()}
+                                        disabled={metadataRefreshBusy}
+                                        primary={false}
+                                        starting={metadataRefreshStarting}
+                                        active={metadataRefreshOperation !== undefined}
+                                    />
+                                )}
+                            />
+                        )}
                         {!locked && downloadStateError && (
                             <div className="form-error-card" role="alert">
                                 Could not load download status: {downloadStateError.message}

@@ -6,7 +6,12 @@ import {faIcon} from '../../icons/faIcon'
 import {removeEpisodePreviewFromStorage, removeSeasonsFromStorage} from '../../lib/cache'
 import {episodeQueryKeys} from '../../lib/collectionQueryOptions'
 import {BulkCheckFrequencyReg, CheckFrequencyReg, CookiesModeReg, EpisodeOrderReg, SplitChaptersReg} from '../../types/collection'
-import BulkChangeDialog, {type BulkFieldSpec} from '../../components/ProfileBulkEdit/BulkChangeDialog'
+import BulkChangeDialog, {type BulkFieldSpec, type BulkReview} from '../../components/ProfileBulkEdit/BulkChangeDialog'
+import BulkSeasonsReview from '../../components/CollectionSeasons/BulkSeasonsReview'
+import {capitalized} from '../../types/creator'
+import {NamesSchema} from '../../types/schemas/source'
+import {BulkFieldSummarySchema, type BulkSummary} from '../../types/schemas/profile_bulk'
+import {z} from 'zod'
 import BulkDeleteDialog from '../../components/ProfileBulkEdit/BulkDeleteDialog'
 import {BulkBar} from '../../components/ProfileBulkEdit/BulkEditControls'
 import {bulkAction, bulkDelete, countOf} from '../../components/ProfileBulkEdit/bulkApi'
@@ -48,6 +53,57 @@ const COLLECTION_FIELDS: BulkFieldSpec[] = [
         help: 'Leave it empty to remove it.',
     },
 ]
+
+/** What the chosen collections have besides their settings: the feeds of their channels, and their lists. */
+const SeasonsSummarySchema = z.object({
+    feeds: z.object({key: z.string(), names: NamesSchema, site: z.string(), summary: BulkFieldSummarySchema}).array().default([]),
+    listNames: NamesSchema.nullable().default(null),
+    looseVideos: BulkFieldSummarySchema.nullable().default(null),
+    seasonNames: NamesSchema.nullable().default(null),
+})
+
+const ROLE_OPTIONS = [
+    {value: 'season', label: 'Own', title: 'A season of its own'},
+    {value: 'part', label: 'Part', title: 'Part of the collection'},
+    {value: 'off', label: 'Off', title: 'Off'},
+]
+const ROLE_WORDS: Record<string, string> = {season: 'own season', part: 'part of the collection', off: 'off'}
+
+/** The Seasons dialog's settings the bulk edit changes: the lists switch and each feed of the chosen collections'
+ * channels, which only changes the collections whose channel has it. */
+function seasonsFields(summary: BulkSummary): BulkFieldSpec[] {
+    const {feeds, listNames, looseVideos, seasonNames} = SeasonsSummarySchema.parse(summary)
+    const sites = new Set(feeds.map((feed) => feed.site))
+    const grouping = seasonNames && {one_season: `One ${seasonNames.singular}`, by_year: `${capitalized(seasonNames.a)} per year`}
+    return [
+        ...(listNames ? [{
+            key: 'linkSeasons', label: `${capitalized(listNames.plural)} and links`, kind: 'switch' as const, defaultValue: true,
+            toApi: (value: unknown) => (value ? 'on' : 'off'),
+            valueLabel: (value: unknown) => (value === 'off' ? 'off' : 'on'),
+            help: `Each ${listNames.singular} keeps what it is in the collection’s Seasons dialog. You see what moves before saving.`,
+        }] : []),
+        ...feeds.map((feed, index) => ({
+            key: `feed${index}`, group: 'feeds', apiKey: feed.key, summary: feed.summary,
+            label: sites.size > 1 ? `${capitalized(feed.names.plural)} on ${feed.site}` : capitalized(feed.names.plural),
+            kind: 'choice' as const, defaultValue: '', options: ROLE_OPTIONS,
+            valueLabel: (value: unknown) => ROLE_WORDS[String(value)] ?? String(value),
+            help: 'You see what moves before saving.',
+        })),
+        ...(looseVideos && grouping ? [{
+            key: 'looseVideos', label: 'What is part of the collection goes in', kind: 'choice' as const, defaultValue: '',
+            summary: looseVideos,
+            options: Object.entries(grouping).map(([value, label]) => ({value, label})),
+            valueLabel: (value: unknown) => grouping[String(value) as keyof typeof grouping]?.toLowerCase() ?? String(value),
+            help: 'You see what moves before saving.',
+        }] : []),
+    ]
+}
+
+/** Changes to the seasons move downloads, so they are reviewed before they are saved. */
+const SEASONS_REVIEW: Omit<BulkReview, 'render'> = {
+    wanted: (changes) => 'linkSeasons' in changes || 'feeds' in changes || 'looseVideos' in changes,
+    saveLabel: 'Save and move',
+}
 
 type Kind = 'creator' | 'collection' | 'movie'
 /** What the Library's bulk edit chooses: a creator, a collection or a movie, each by its id. */
@@ -217,6 +273,13 @@ export default function LibraryBulkEdit({kind, selection, items, creatorNoun}: L
                     noun={collectionNoun}
                     names={idsOf(keys, 'collection').flatMap((id) => items.get(bulkKey('collection', id))?.title ?? [])}
                     fields={COLLECTION_FIELDS}
+                    moreFields={seasonsFields}
+                    review={{
+                        ...SEASONS_REVIEW,
+                        render: ({changes, onReady, onBack, saving}) => (
+                            <BulkSeasonsReview ids={idsOf(keys, 'collection')} changes={changes} onReady={onReady} onBack={onBack} saving={saving}/>
+                        ),
+                    }}
                     onClose={close}
                     onChanged={(result) => {
                         applied.current = true

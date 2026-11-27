@@ -12,7 +12,8 @@ from backend.services.media_access import access_granted, access_locked, site_ac
 from backend.types.collection_types import CollectionType
 from backend.types.link_season_types import CollectionKind
 from config.settings.site_settings import UpgradeRepeat
-from sources import Feature, ProfileSeasons, SignInKind, ReleaseDate, SiteSetting, StreamMethod, UnknownSourceError, UpgradeImprovement, get_source, site_of
+from sources import CreatorTier as SiteTier
+from sources import Access, Feature, ProfileSeasons, SignInKind, ReleaseDate, SiteSetting, StreamMethod, UnknownSourceError, UpgradeImprovement, get_source, site_of
 from sources.ytdlp_options import MAX_OPTIONS_LENGTH, OptionsRefused, ytdlp_option_arguments
 
 
@@ -58,6 +59,25 @@ class LockableResponse(ResponseBase):
     """The Site the media is on, which names the access."""
     access: Optional[str] = None
     """The key of the access the media needs; ``access_label`` is what its Site calls it."""
+    # The creator's tier the media needs, on a Site whose creators set up tiers of their own.
+    creator_tier_site_id: Optional[str] = Field(default=None, exclude=True, validation_alias=AliasChoices(
+        "creator_tier_site_id", AliasPath("creator_tier", "site_tier_id"), AliasPath("episode", "creator_tier", "site_tier_id"),
+    ))
+    creator_tier_name: Optional[str] = Field(default=None, exclude=True, validation_alias=AliasChoices(
+        "creator_tier_name", AliasPath("creator_tier", "name"), AliasPath("episode", "creator_tier", "name"),
+    ))
+    creator_tier_amount: Optional[str] = Field(default=None, exclude=True, validation_alias=AliasChoices(
+        "creator_tier_amount", AliasPath("creator_tier", "amount"), AliasPath("episode", "creator_tier", "amount"),
+    ))
+    creator_tier_rank: Optional[int] = Field(default=None, exclude=True, validation_alias=AliasChoices(
+        "creator_tier_rank", AliasPath("creator_tier", "rank"), AliasPath("episode", "creator_tier", "rank"),
+    ))
+
+    def _access(self) -> Optional[Access]:
+        tier = SiteTier(
+            self.creator_tier_site_id, self.creator_tier_name, self.creator_tier_amount, self.creator_tier_rank,
+        ) if self.creator_tier_site_id is not None else None
+        return site_access(self.source_key, self.site_key, self.access, tier)
     access_refused_at: Optional[datetime] = None
     access_check_at: Optional[datetime] = None
     """When VODLoft next checks whether the locked media opened up."""
@@ -78,14 +98,14 @@ class LockableResponse(ResponseBase):
     @property
     def access_label(self) -> Optional[str]:
         """What the media's Site calls the access, such as Members only or NPO Plus."""
-        found = site_access(self.source_key, self.site_key, self.access)
+        found = self._access()
         return found.label if found is not None else None
 
     @computed_field
     @property
     def access_description(self) -> Optional[str]:
         """One sentence from the media's Site on who can watch it, such as "Only NPO Plus subscribers can watch this."."""
-        found = site_access(self.source_key, self.site_key, self.access)
+        found = self._access()
         return found.description if found is not None else None
 
 
