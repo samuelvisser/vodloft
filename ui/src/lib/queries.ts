@@ -80,7 +80,7 @@ import {VideoRead, VideoReadSchema} from "../types/schemas/video";
 import {
     ApiKeyNoteRead, ApiKeyNoteReadSchema, ApiStatusRead, ApiStatusReadSchema, EpisodeTagRead, EpisodeTagReadSchema, PublishStatusLabelRead, PublishStatusLabelReadSchema, ProgramStatusRead, SourceProblemRead,
     SourceProblemReadSchema, ProgramStatusReadSchema, ResolvedLinkRead,
-    ResolvedLinkReadSchema, LinkFirstLookRead, LinkFirstLookReadSchema, MediaLinksReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SiteReadSchema, SourceRead, SiteAuthenticationRead, SiteAuthenticationReadSchema, CodeSignInRead, CodeSignInReadSchema, SiteChoiceRead, SiteChoiceReadSchema,
+    ResolvedLinkReadSchema, LinkFirstLookRead, LinkFirstLookReadSchema, MediaLinksReadSchema, MediaLinkCheckReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SiteReadSchema, SourceRead, SiteAuthenticationRead, SiteAuthenticationReadSchema, CodeSignInRead, CodeSignInReadSchema, SiteChoiceRead, SiteChoiceReadSchema,
     SourceReadSchema,
     YtdlpOptionsReadSchema,
 } from "../types/schemas/source";
@@ -888,6 +888,30 @@ export function useMediaLinks(urls: string[]) {
         },
         staleTime: 30 * 60 * 1000,
         retry: false,
+    })
+}
+
+/** Which of ``urls`` Add media finds something to add at, each known as soon as its own check is done. The checks
+ * look the links up at their Sites, which takes a while, so they run after the page has shown. */
+export function useWorkingMediaLinks(urls: string[]): Set<string> {
+    return useQueries({
+        queries: urls.map((url) => ({
+            queryKey: ['mediaLinkCheck', url] as const,
+            queryFn: async ({signal}: {signal: AbortSignal}) => {
+                const response = await fetch(`${apiUrl()}/media-links/check`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({url}),
+                    signal,
+                })
+                if (!response.ok) throw await responseError(response)
+                return MediaLinkCheckReadSchema.parse(await response.json()).works
+            },
+            staleTime: 30 * 60 * 1000,
+            retry: false,
+        })),
+        combine: (results) => new Set(urls.filter((_url, index) => results[index].data === true)),
     })
 }
 

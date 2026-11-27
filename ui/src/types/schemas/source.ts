@@ -148,6 +148,7 @@ export function sourceShown(source: SourceRead): boolean {
 
 /** The links of a description that are on a Site VODLoft knows for media. */
 export const MediaLinksReadSchema = z.object({urls: z.array(z.string())})
+export const MediaLinkCheckReadSchema = z.object({works: z.boolean()})
 
 /** What a link shows: its title, description, picture and maker. A lookup may send one early from a quicker look. */
 export const LinkPreviewReadSchema = z.object({
