@@ -4,7 +4,8 @@ from __future__ import annotations
 import logging
 import re
 from collections import Counter
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from backend.db.core import run_write_transaction
 from backend.db.models.media_download import MediaDownloadBase
 from backend.services.media_download_history import record_media_download_history
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
+from backend.utils.file_locks import file_lock, file_lock_if_free, lock_file_path
 from config import get_settings
 from config.settings.base import get_config_path
 from downloader import hls_asset_marker, hls_asset_root
@@ -22,6 +24,21 @@ from downloader.storage.identity import inspect_artifact
 from downloader.storage.relocation import PathMove, RelocationTransaction
 
 logger = logging.getLogger(__name__)
+
+
+def _relocation_lock() -> Path:
+    return lock_file_path("relocation", "downloads")
+
+
+@contextmanager
+def relocations_held_off() -> Iterator[bool]:
+    """Keep relocations from moving files while this runs; yields False when one is moving files right now.
+
+    A relocation holds this lock, shared with other relocations, from moving the first file until the new places
+    are recorded. A file found gone at its recorded place while one runs may simply be on its way to a new one.
+    """
+    with file_lock_if_free(_relocation_lock()) as free:
+        yield free
 
 
 @dataclass(frozen=True)
@@ -128,13 +145,14 @@ def relocate_downloads(
         moves, skipped = filter_relocation_conflicts(moves)
     paths = tuple(path for move in moves for path in move.paths)
     transaction = RelocationTransaction(paths, progress if callable(progress) else lambda: False)
-    try:
-        transaction.execute(lambda value: progress.set(value, 'Renaming media and auxiliary files') if progress else None)
-        identities = [inspect_artifact(move.destination) for move in moves]
-        run_write_transaction(lambda session: _record_relocations(session, moves, identities, reason))
-    except BaseException:
-        transaction.rollback()
-        raise
+    with file_lock(_relocation_lock(), shared=True):
+        try:
+            transaction.execute(lambda value: progress.set(value, 'Renaming media and auxiliary files') if progress else None)
+            identities = [inspect_artifact(move.destination) for move in moves]
+            run_write_transaction(lambda session: _record_relocations(session, moves, identities, reason))
+        except BaseException:
+            transaction.rollback()
+            raise
     # Only once the files are at their new place and recorded there, and only where files left in this run.
     remove_folders_left_empty(
         (path.source.parent for path in transaction.moves),

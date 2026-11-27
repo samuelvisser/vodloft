@@ -62,8 +62,20 @@ function thumbnailCheckLabel(operation: TaskOperationRead): string | null {
     return `Checking thumbnails… ${check.checked.toLocaleString()} of ${check.total.toLocaleString()}`
 }
 
+/** The step of its plan a listing of a collection is on, when it reports a plan. */
+function listingStep(operation: TaskOperationRead): ProgressStep | undefined {
+    return planOf(operation)?.main
+}
+
+/** In a few words, how far a listing of a collection that reports a plan is: what its step counted. */
+function listingStatus(operation: TaskOperationRead, step: ProgressStep): string | null {
+    return step.count ?? (typeof operation.progress === 'number' && operation.progress > 0 ? `${operation.progress}%` : null)
+}
+
 /** How far a Collection's indexing is: its percentage when the Source knows the total, otherwise how many episodes it found so far. */
 export function presentIndexingStatus(operation: TaskOperationRead): string | null {
+    const step = listingStep(operation)
+    if (step) return listingStatus(operation, step)
     const thumbnails = thumbnailCheckLabel(operation)
     if (thumbnails) return thumbnails
     if (typeof operation.progress === 'number' && operation.progress > 0) return `${operation.progress}%`
@@ -72,6 +84,8 @@ export function presentIndexingStatus(operation: TaskOperationRead): string | nu
 }
 
 export function presentIndexingLabel(operation: TaskOperationRead): string {
+    const step = listingStep(operation)
+    if (step) return step.count ? `${step.label}… ${step.count}` : `${step.label}…`
     const thumbnails = thumbnailCheckLabel(operation)
     if (thumbnails) return thumbnails
     const status = presentIndexingStatus(operation)
@@ -80,6 +94,8 @@ export function presentIndexingLabel(operation: TaskOperationRead): string {
 
 /** How far a Collection's Sync now scan is: its percentage when the Source knows the total, otherwise the new episodes it found so far. */
 export function presentScanningStatus(operation: TaskOperationRead): string | null {
+    const step = listingStep(operation)
+    if (step) return listingStatus(operation, step)
     const thumbnails = thumbnailCheckLabel(operation)
     if (thumbnails) return thumbnails
     if (typeof operation.progress === 'number' && operation.progress > 0) return `${operation.progress}%`
@@ -88,6 +104,8 @@ export function presentScanningStatus(operation: TaskOperationRead): string | nu
 }
 
 export function presentScanningLabel(operation: TaskOperationRead): string {
+    const step = listingStep(operation)
+    if (step) return step.count ? `${step.label}… ${step.count}` : `${step.label}…`
     const thumbnails = thumbnailCheckLabel(operation)
     if (thumbnails) return thumbnails
     const status = presentScanningStatus(operation)

@@ -64,7 +64,9 @@ def test_download_profile_view_uses_relationship_aliases():
             title="Collection", slug="collection", type="series", source_key="ytdlp", site_key="youtube",
             episode_identifier="seasonal",
         ),
-        local_media_profile=SimpleNamespace(name="Audio", preferred_format="audio"),
+        local_media_profile=SimpleNamespace(
+            name="Audio", preferred_format="audio", output_template="/downloads/{{ collection_title }}/{{ title }}.ext",
+        ),
         download_with_countdown=False,
         redownload_final=False,
         delete_older_episodes=True,
@@ -89,6 +91,7 @@ def test_download_profile_view_uses_relationship_aliases():
 
     assert view.collection_title == "Collection"
     assert view.local_media_profile_name == "Audio"
+    assert view.local_media_profile_output_template == "/downloads/{{ collection_title }}/{{ title }}.ext"
     assert view.collection_episode_identifier == "seasonal"
     assert view.collection_site_key == "youtube"
     assert view.collection_source_key == "ytdlp"
@@ -153,6 +156,7 @@ def test_media_download_view_maps_composed_sources_without_manual_serialization(
         artifact_size_bytes=123,
         format_downloaded="1080p",
         downloaded_at=NOW,
+        first_downloaded_at=NOW,
         created_at=NOW,
         updated_at=NOW,
         downloaded_publish_status="published_final",

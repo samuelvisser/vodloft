@@ -306,7 +306,7 @@ def test_a_folder_per_creator_is_above_the_collections_own_folder(examples):
         accounts=[SimpleNamespace(handle="@northwind", source_key="ytdlp", site_key="youtube")],
     )
     collection = SimpleNamespace(
-        title="Tool Reviews", slug="tool-reviews", seasons=[], meta_items=[], creator=creator,
+        title="Tool Reviews", slug="tool-reviews", author_name=None, seasons=[], meta_items=[], creator=creator,
     )
 
     resolution = collection_assets.resolve_collection_media_directory(

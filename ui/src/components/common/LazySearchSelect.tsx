@@ -1,6 +1,6 @@
 import {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react'
-import Select, {components, type GroupBase, type MenuListProps} from 'react-select'
-import {useDialogMenuProps} from '../Modal/dialogMenus'
+
+import Select, {type SelectGroup} from './Select'
 
 export type LazySearchSelectOption = {
     value: string
@@ -12,7 +12,6 @@ export type LazySearchSelectOption = {
 type Props = {
     inputId: string
     className?: string
-    classNamePrefix?: string
     options: LazySearchSelectOption[]
     value: LazySearchSelectOption | null
     isLoading: boolean
@@ -32,7 +31,6 @@ type Props = {
 export default function LazySearchSelect({
     inputId,
     className,
-    classNamePrefix = 'select',
     options,
     value,
     isLoading,
@@ -48,10 +46,8 @@ export default function LazySearchSelect({
     maxMenuHeight = 360,
     ariaLabel,
 }: Props) {
-    const dialogMenuProps = useDialogMenuProps()
     const [inputValue, setInputValue] = useState('')
     const onSearchChangeRef = useRef(onSearchChange)
-    const scrollSelectedWhenAvailable = useRef(false)
     const previousPageScrollPosition = useRef<{height: number; top: number} | null>(null)
     const nextPageRequested = useRef(false)
     const menuListRef = useRef<HTMLDivElement | null>(null)
@@ -71,31 +67,6 @@ export default function LazySearchSelect({
     }
 
     const menuListElement = () => menuListRef.current
-
-    const scrollSelectedIntoView = () => {
-        // React Select performs its own selected-option scroll while opening.
-        // Wait until that has settled, then center the option within the menu.
-        window.requestAnimationFrame(() => {
-            window.requestAnimationFrame(() => {
-                if (!scrollSelectedWhenAvailable.current) return
-                const menuList = menuListElement()
-                const selected = menuList
-                    ?.querySelector<HTMLElement>(`.${classNamePrefix}__option--is-selected`)
-                if (!menuList || !selected) return
-
-                const menuRect = menuList.getBoundingClientRect()
-                const selectedRect = selected.getBoundingClientRect()
-                const selectedCenter = (
-                    menuList.scrollTop
-                    + selectedRect.top
-                    - menuRect.top
-                    + selectedRect.height / 2
-                )
-                menuList.scrollTop = selectedCenter - menuList.clientHeight / 2
-                scrollSelectedWhenAvailable.current = false
-            })
-        })
-    }
 
     const handleMenuScroll = useCallback((menuList: HTMLElement) => {
         const {
@@ -128,31 +99,6 @@ export default function LazySearchSelect({
         }
     }, [])
 
-    const MenuList = useCallback((
-        props: MenuListProps<LazySearchSelectOption, false, GroupBase<LazySearchSelectOption>>,
-    ) => {
-        const innerRef = props.innerRef
-        const innerOnScroll = props.innerProps.onScroll
-        return (
-            <components.MenuList
-                {...props}
-                innerRef={(element) => {
-                    menuListRef.current = element
-                    if (typeof innerRef === 'function') innerRef(element)
-                }}
-                innerProps={{
-                    ...props.innerProps,
-                    onScroll: (event) => {
-                        innerOnScroll?.(event)
-                        handleMenuScroll(event.currentTarget)
-                    },
-                }}
-            />
-        )
-    }, [handleMenuScroll])
-
-    const selectComponents = useMemo(() => ({MenuList}), [MenuList])
-
     useEffect(() => {
         onSearchChangeRef.current = onSearchChange
     }, [onSearchChange])
@@ -171,7 +117,7 @@ export default function LazySearchSelect({
         return () => window.clearTimeout(timer)
     }, [debounceMs, inputValue])
 
-    const groupedOptions = useMemo<readonly (LazySearchSelectOption | GroupBase<LazySearchSelectOption>)[]>(() => {
+    const groupedOptions = useMemo<readonly (LazySearchSelectOption | SelectGroup<LazySearchSelectOption>)[]>(() => {
         const groups = new Map<string, LazySearchSelectOption[]>()
         const ungrouped: LazySearchSelectOption[] = []
 
@@ -215,49 +161,35 @@ export default function LazySearchSelect({
         nextPageRequested.current = false
     }, [groupedOptions])
 
-    useEffect(() => {
-        if (scrollSelectedWhenAvailable.current) scrollSelectedIntoView()
-    }, [groupedOptions])
-
     return (
-        <Select<LazySearchSelectOption, false, GroupBase<LazySearchSelectOption>>
-            {...dialogMenuProps}
+        <Select<LazySearchSelectOption>
             inputId={inputId}
             className={className}
-            classNamePrefix={classNamePrefix}
             options={groupedOptions}
             value={value}
             inputValue={inputValue}
-            onInputChange={(nextValue, action) => {
-                if (action.action === 'input-change') setInputValue(nextValue)
-                return nextValue
+            onInputChange={(nextValue, {action}) => {
+                if (action === 'input-change') setInputValue(nextValue)
             }}
             onChange={(option) => {
                 if (!option) return
                 setInputValue('')
                 onChange(option)
             }}
-            onMenuOpen={() => {
-                scrollSelectedWhenAvailable.current = true
-                scrollSelectedIntoView()
-            }}
             onMenuClose={() => {
-                scrollSelectedWhenAvailable.current = false
                 previousPageScrollPosition.current = null
                 nextPageRequested.current = false
-                menuListRef.current = null
             }}
-            components={selectComponents}
-            captureMenuScroll={false}
+            menuListRef={menuListRef}
+            onMenuListScroll={handleMenuScroll}
             isLoading={isLoading}
             isClearable={false}
             isSearchable
-            filterOption={() => true}
+            filterOption={null}
             placeholder={placeholder}
             noOptionsMessage={() => isLoading ? 'Searching…' : noOptionsMessage}
             loadingMessage={() => 'Loading…'}
             maxMenuHeight={maxMenuHeight}
-            menuPlacement="auto"
             formatOptionLabel={(option, {context}) => (
                 context === 'value' ? (option.selectedLabel ?? option.label) : option.label
             )}

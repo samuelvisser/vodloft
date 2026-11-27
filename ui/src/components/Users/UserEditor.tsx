@@ -16,7 +16,7 @@ import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import {hashPasswordForAdminAuth} from '../../utils/security/adminAuth'
 import type {AccessOptionsRead, UserAccessInput, UserRead} from '../../types/schemas/user'
-import type {SourceRead} from '../../types/schemas/source'
+import {sourceShown, type SourceRead} from '../../types/schemas/source'
 
 const SourceRowSchema = z.object({
     sourceKey: z.string(),
@@ -262,6 +262,8 @@ export default function UserEditor({user, options, onDone}: Props) {
                                 const source = sources.find((entry) => entry.id === row.sourceKey)
                                 if (!source) return null
                                 const current = watched.sources?.[index]
+                                // A Source none of whose Sites is added only shows while the user may use it.
+                                if (!sourceShown(source) && !current?.allowed) return null
                                 return (
                                     <div className="user-editor__source" key={row.id}>
                                         <label className="user-editor__switch">
@@ -294,7 +296,7 @@ export default function UserEditor({user, options, onDone}: Props) {
                                 />
                                 <span>
                                     Members-only media
-                                    <small>Uses the memberships signed in under Settings › Sources, such as the Daily Wire’s.</small>
+                                    <small>Uses the memberships signed in under Settings › Sites, such as the Daily Wire’s.</small>
                                 </span>
                             </label>
                         </>

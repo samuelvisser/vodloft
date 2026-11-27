@@ -21,50 +21,11 @@ class BitChute(OtherSites):
     domains = ("bitchute.com",)
 
 
-class Dailymotion(OtherSites):
-    key, name = "dailymotion", "Dailymotion"
-    initials = "DM"
-    domains = ("dailymotion.com", "dai.ly")
-    icon = "fab:dailymotion"
-
-
 class Facebook(OtherSites):
     key, name = "facebook", "Facebook"
     initials = "FB"
     domains = ("facebook.com", "fb.watch")
     icon = "fab:facebook"
-
-
-class Kick(OtherSites):
-    key, name = "kick", "Kick"
-    initials = "KI"
-    domains = ("kick.com",)
-
-
-class Nebula(OtherSites):
-    key, name = "nebula", "Nebula"
-    initials = "NB"
-    domains = ("nebula.tv",)
-
-
-class Odysee(OtherSites):
-    key, name = "odysee", "Odysee"
-    initials = "OD"
-    domains = ("odysee.com",)
-    icon = "fab:odysee"
-
-
-class Patreon(OtherSites):
-    key, name = "patreon", "Patreon"
-    initials = "PA"
-    domains = ("patreon.com",)
-    icon = "fab:patreon"
-
-
-class PeerTube(OtherSites):
-    # Every PeerTube server has a domain of its own, so PeerTube has none.
-    key, name = "peertube", "PeerTube"
-    initials = "PT"
 
 
 class Reddit(OtherSites):
@@ -74,17 +35,12 @@ class Reddit(OtherSites):
     icon = "fab:reddit"
 
 
-class Rumble(OtherSites):
-    key, name = "rumble", "Rumble"
-    initials = "RU"
-    domains = ("rumble.com",)
-
-
 class Vimeo(OtherSites):
     key, name = "vimeo", "Vimeo"
     initials = "VM"
     domains = ("vimeo.com",)
     icon = "fab:vimeo-v"
+    pitch = "Channels, showcases and videos"
 
 
-NAMED = (BBC, Bilibili, BitChute, Dailymotion, Facebook, Kick, Nebula, Odysee, Patreon, PeerTube, Reddit, Rumble, Vimeo)
+NAMED = (BBC, Bilibili, BitChute, Facebook, Reddit, Vimeo)

@@ -3,7 +3,8 @@
 The filters are applied from top to bottom, each to what the filters above it let
 through. Before the first one, the Collection's indexed episodes that cannot be
 downloaded at all are left out (not published yet, DRM, gone from the Source, or
-behind a subscription VODLoft is not signed in with).
+behind a subscription VODLoft is not signed in with). A Collection whose own yt-dlp options
+allow unplayable formats lets its episodes protected by DRM through, and offers a filter on them.
 
 - Only download keeps the episodes that match; Skip leaves them out.
 - A date line (published or downloaded) narrows like Only download. "The latest 25"
@@ -38,6 +39,7 @@ from backend.db.models import Collection, DownloadProfile, DownloadProfileFilter
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.media_access import AccessLocks
 from backend.services.removed_downloads import awaits_keep_answer
+from backend.services.unplayable_formats import collection_allows_unplayable_formats, needs_unplayable_formats
 from backend.services.sites import main_tag_of_type
 from backend.services.regex_check import PatternError, compile_pattern, search, split_inline_ignore_case
 from backend.types.download_profile_types import (
@@ -118,6 +120,8 @@ def filter_matches(item: EpisodeFilter, episode: Episode) -> Optional[bool]:
         return episode_type in (item.episode_types or ())
     if item.field == EpisodeFilterField.SEASONS:
         return episode.season is not None and episode.season.slug in (item.season_slugs or ())
+    if item.field == EpisodeFilterField.UNPLAYABLE_FORMATS:
+        return needs_unplayable_formats(episode)
     if item.field == EpisodeFilterField.DURATION:
         duration = episode.duration or 0
         if duration <= 0 or not item.duration_seconds:
@@ -173,14 +177,17 @@ def _in_date_line(item: EpisodeFilter, episodes: Sequence[Episode], now: datetim
     return {episode.id for episode in episodes}
 
 
-def _available(selection: EpisodeSelection, episode: Episode, locks: AccessLocks, *, at_source: bool = False) -> bool:
+def _available(
+        selection: EpisodeSelection, episode: Episode, locks: AccessLocks, *, at_source: bool = False, unplayable: bool = False,
+) -> bool:
+    """With ``unplayable``, the Collection allows yt-dlp to try media protected by DRM."""
     eligible = {EpisodePublishStatus.PUBLISHED_FINAL.value}
     if selection.download_with_countdown:
         eligible.add(EpisodePublishStatus.PUBLISHED_PRELIMINARY.value)
     return (
         episode.publish_status in eligible
         # Media protected by DRM cannot be downloaded, nor can media the Source no longer has.
-        and not episode.drm_protected
+        and (unplayable or not episode.drm_protected)
         and (at_source or not episode.removed_from_source)
         # Nor can media locked behind an access VODLoft does not have, such as a channel membership.
         and not locks.locked(episode)
@@ -262,11 +269,12 @@ def _walk(
         selection: EpisodeSelection, episodes: Sequence[Episode], locks: AccessLocks, now: datetime, *, at_source: bool,
 ) -> Evaluation:
     filters = list(selection.filters)
+    unplayable = collection_allows_unplayable_formats(selection.collection)
 
     left_out_by: dict[int, str] = {}
     remaining: list[Episode] = []
     for episode in episodes:
-        if _available(selection, episode, locks, at_source=at_source):
+        if _available(selection, episode, locks, at_source=at_source, unplayable=unplayable):
             remaining.append(episode)
         else:
             left_out_by[episode.id] = "unavailable"

@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react'
+import {type ReactNode, useEffect, useState} from 'react'
 import {useQuery, useQueryClient} from '@tanstack/react-query'
 import Switch from 'react-switch'
 import {Link} from 'react-router-dom'
@@ -6,6 +6,8 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import toast from '../../lib/toast'
 
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
+import PathChangeList from '../common/PathChangeList'
+import MoveCauses from './MoveCauses'
 import '../ChangeIdentificationDialog/ChangeIdentificationDialog.css'
 import {faIcon} from '../../icons/faIcon'
 import {previewReconcile, reconcile} from '../../lib/queries'
@@ -42,7 +44,11 @@ export default function ReconcileDialog({open, path, what, onDismiss, onDone}: P
         enabled: open,
         gcTime: 0,
         queryFn: ({signal}) => previewReconcile(path, signal),
+        // While VODLoft works on the collection, such as listing it again after a saved change, the preview waits.
+        refetchInterval: (query) => query.state.data?.busy ? 2000 : false,
     })
+    const ready = preview && !preview.busy
+    const nothing = ready && preview.parts.length === 0
 
     const confirm = async () => {
         setError(null)
@@ -52,7 +58,8 @@ export default function ReconcileDialog({open, path, what, onDismiss, onDone}: P
             await Promise.all([
                 queryClient.invalidateQueries({queryKey: ['collection']}),
                 queryClient.invalidateQueries({queryKey: ['episode']}),
-                queryClient.invalidateQueries({queryKey: ['movesWaiting']}),
+                queryClient.invalidateQueries({queryKey: ['collectionHealth']}),
+                queryClient.invalidateQueries({queryKey: ['collections']}),
             ])
             await onDone?.(result)
             onDismiss()
@@ -68,7 +75,7 @@ export default function ReconcileDialog({open, path, what, onDismiss, onDone}: P
             onDismiss={onDismiss}
             icon={faIcon('fass', 'arrow-right-arrow-left')}
             className="change-identification-dialog move-sections-dialog"
-            confirmButton={{label: 'Move', onClick: confirm, className: 'btn btn-primary', disabled: !preview}}
+            confirmButton={{label: 'Move', onClick: confirm, className: 'btn btn-primary', disabled: !ready || nothing}}
         >
             <p className="help">
                 What is downloaded waits where it is until you move it: moving renames its files into their new place, or
@@ -86,14 +93,26 @@ export default function ReconcileDialog({open, path, what, onDismiss, onDone}: P
                         ? previewError.message : 'VODLoft could not look up what the move does.'}
                 </p>
             )}
-            {preview && <CollectionMoves preview={preview} renumber={renumber} onRenumber={setRenumber}/>}
+            {preview?.busy && (
+                <p className="change-identification-loading" role="status">
+                    <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/>
+                    {preview.busy}
+                </p>
+            )}
+            {nothing && <p role="status">Everything is where it belongs now: there is nothing to move.</p>}
+            {ready && !nothing && <CollectionMoves preview={preview} renumber={renumber} onRenumber={setRenumber}/>}
             {error && <p className="error" role="alert">{error}</p>}
         </ConfirmDialog>
     )
 }
 
-/** What the Move action does to the collection, with its switch to number its episodes again. */
-function CollectionMoves({preview, renumber, onRenumber}: {preview: MovePreview, renumber: boolean, onRenumber: (again: boolean) => void}) {
+/** What the Move action does to the collection, with its switch to number its episodes again. A dialog that moves
+ * episodes as part of a change of its own, such as the Seasons dialog, says why they move itself (``reason`` off) and
+ * adds what else its change does as steps of its own, before and after these. */
+export function CollectionMoves({preview, renumber, onRenumber, reason = true, leading, trailing}: {
+    preview: MovePreview, renumber: boolean, onRenumber: (again: boolean) => void, reason?: boolean
+    leading?: ReactNode, trailing?: ReactNode
+}) {
     const {episode, season} = collectionWords(preview.type)
     const renumbered = renumber ? preview.changes : []
     // Kept numbers rename and rewrite nothing, unless files moved, which go where the collection keeps them.
@@ -102,13 +121,17 @@ function CollectionMoves({preview, renumber, onRenumber}: {preview: MovePreview,
     const metadata = touched ? preview.profiles.reduce((sum, profile) => sum + profile.metadataRewritten, 0) : 0
     return (
         <section className="move-sections-collection" aria-label={preview.title}>
-            <p className="help move-reason">
-                <b>Why they move:</b> {preview.seasonsPlan}{' '}
-                Not what you want? Change it under{' '}
-                <Link to={`/edit-collection/${encodeURIComponent(preview.slug)}?seasons=1`}>{season.Plural}</Link>
-                {' '}instead of moving them.
-            </p>
+            {!reason ? null : preview.causes.length > 0 ? <MoveCauses collectionSlug={preview.slug} causes={preview.causes}/> : (
+                // Downloads can wait without a recorded change, such as after an older VODLoft placed them differently.
+                <p className="help move-reason">
+                    <b>Why they move:</b> {preview.seasonsPlan}{' '}
+                    Not what you want? Change it under{' '}
+                    <Link to={`/edit-collection/${encodeURIComponent(preview.slug)}?seasons=1`}>{season.Plural}</Link>
+                    {' '}instead of moving them.
+                </p>
+            )}
             <ul className="change-identification-steps">
+                {leading}
                 {preview.parts.map((part, index) => <PartStep key={index} part={part} season={season.singular}/>)}
                 {renumbered.length > 0 && (
                     <Step icon={faIcon('fass', 'list-ol')} headline={`${episode.Plural} get a new number`} detail={null} value={renumbered.length}>
@@ -131,6 +154,7 @@ function CollectionMoves({preview, renumber, onRenumber}: {preview: MovePreview,
                         value={metadata}
                     />
                 )}
+                {trailing}
             </ul>
             {preview.renumberOffered && (
                 <label className="change-identification-order">
@@ -168,7 +192,16 @@ function PartStep({part, season}: {part: MovedPart, season: string}) {
             detail={`${label}${files}`.trim() || undefined}
             value={part.count}
         >
-            {part.examples.length > 0 && <TitleList titles={part.examples} total={part.count}/>}
+            {part.files.length > 0 ? (
+                <PathChangeList
+                    changes={part.files.map((file, index) => ({
+                        key: index, from: file.fromPath, to: file.toPath,
+                        toNote: file.toPath === null ? 'Worked out when the move runs' : undefined,
+                        header: <b>{file.title}</b>,
+                    }))}
+                    fromLabel="Now" toLabel="After" endless
+                />
+            ) : part.examples.length > 0 && <TitleList titles={part.examples} total={part.count}/>}
         </Step>
     )
 }

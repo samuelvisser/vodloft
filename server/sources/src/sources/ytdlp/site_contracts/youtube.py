@@ -2,6 +2,7 @@ from dataclasses import replace
 from types import MappingProxyType
 
 from ...contract import (
+    ListOrder,
     LIST_TYPE,
     VIDEO_TAGS,
     SectionKind,
@@ -25,6 +26,7 @@ class YouTube(OtherSites):
     key = "youtube"
     name = "YouTube"
     initials = "YT"
+    pitch = "Channels, playlists, Shorts and live streams"
     domains = ("youtube.com", "youtu.be")
     icon = "fab:youtube"
     # Each search costs YouTube Data API quota, or runs yt-dlp without a key, so it searches when asked.
@@ -78,6 +80,8 @@ class YouTube(OtherSites):
     # A channel's members-only videos sit among its open ones, so its collections start without them.
     shows_locked = False
     creators = True
+    # Its playlists keep an order of their own, the first first.
+    list_order = ListOrder.OLDEST_FIRST
     # A channel's Videos, Live and Shorts tabs, and its playlists.
     section_types = (
         YtdlpFeedSectionType("videos", Names("video", "videos"), "videos"),

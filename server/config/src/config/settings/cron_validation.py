@@ -165,6 +165,10 @@ WORKER_CRON_DEFINITIONS: tuple[WorkerCronDefinition, ...] = (
         setting_name="File watcher scan",
         field_path=("file_watcher", "scan_cron"),
     ),
+    WorkerCronDefinition(
+        setting_name="Collection health check",
+        field_path=("collection_health", "check_cron"),
+    ),
 )
 
 

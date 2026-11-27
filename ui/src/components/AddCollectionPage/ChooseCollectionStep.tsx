@@ -1,4 +1,5 @@
 import {useEffect, useMemo, useRef} from "react";
+import {useSearchParams} from "react-router-dom";
 import DailywireShowCard from "./DailywireShowCard";
 import CollectionPreviewCard from "./CollectionPreviewCard";
 import {useDailywireShow, useDailywireUserInfo, useListedCollectionDetails, useResolvedLink} from "../../lib/queries";
@@ -17,7 +18,7 @@ import {
     type CollectionCreateFormIn, CollectionCreatePayloadOut, CollectionCreatePayloadIn,
 } from "../../types/schemas/collection";
 import {CollectionTypeReg, episodeIdentifierRegFor, musicIdentificationAdvice} from "../../types/collection";
-import Select from "react-select";
+import Select from '../../components/common/Select'
 import {UseQueryResult} from "@tanstack/react-query";
 import {SeasonDetachedOut, SeasonDetachedSchema} from "../../types/schemas/season";
 import {DwMembershipLevelReg} from "../../types/dailywire_user_info";
@@ -64,6 +65,9 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
 
     // --- Watch the URL and extract the slug when valid
     const watchedUrl = watch("url");
+    // Add media opens the page with the link it looked up (?url=...); without one, the link is typed here.
+    const [params] = useSearchParams();
+    const linkGiven = !!params.get("url")?.trim();
     const urlParsed = useMemo(() => CollectionCreateFormSchema.shape.url.safeParse(watchedUrl ?? ""), [watchedUrl]);
 
     // --- The Source that recognises the link says what it points to. A Source that lists its
@@ -223,7 +227,6 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                 name="episodeIdentifier"
                 render={({field}) => (
                     <Select
-                        classNamePrefix="select"
                         inputId="episode-identification"
                         options={episodeIdentifierRegFor(watch("type")).options}
                         value={episodeIdentifierRegFor(watch("type")).options.find(o => o.value === field.value) ?? null}
@@ -275,28 +278,37 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                     {String(errors.root.message)}
                 </div>
             )}
-            <div className="form-row">
-                <label htmlFor="collection-url">Collection link</label>
-                <input
-                    id="collection-url"
-                    className="input"
-                    type="url"
-                    inputMode="url"
-                    placeholder="https://…"
-                    {...register("url")}
-                    aria-invalid={!!errors.url}
-                    aria-describedby={errors.url ? "collection-url-validate" : undefined}
-                />
-                {errors.url && (
-                    <div id="collection-url-validate" className="error" role="alert" aria-live="polite">
-                        {errors.url.message as string}
+            {linkGiven ? (
+                <>
+                    <input type="hidden" {...register("url")}/>
+                    {errors.url && (
+                        <div className="form-error-card" role="alert" aria-live="polite">{errors.url.message as string}</div>
+                    )}
+                </>
+            ) : (
+                <div className="form-row">
+                    <label htmlFor="collection-url">Collection link</label>
+                    <input
+                        id="collection-url"
+                        className="input"
+                        type="url"
+                        inputMode="url"
+                        placeholder="https://…"
+                        {...register("url")}
+                        aria-invalid={!!errors.url}
+                        aria-describedby={errors.url ? "collection-url-validate" : undefined}
+                    />
+                    {errors.url && (
+                        <div id="collection-url-validate" className="error" role="alert" aria-live="polite">
+                            {errors.url.message as string}
+                        </div>
+                    )}
+                    <div id="url-help" className="help">
+                        The link to the collection's own page, such as a Daily Wire show, a YouTube channel or a playlist.
+                        To add something else, use Add media.
                     </div>
-                )}
-                <div id="url-help" className="help">
-                    The link to the collection's own page, such as a Daily Wire show, a YouTube channel or a playlist.
-                    To add something else, use Add media.
                 </div>
-            </div>
+            )}
 
             {/* A show from a Source that lists its episodes */}
             {urlParsed.success && !slugFromUrl && (
@@ -336,7 +348,6 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                                 name="type"
                                 render={({field}) => (
                                     <Select
-                                        classNamePrefix="select"
                                         inputId="collection-type"
                                         options={CollectionTypeReg.options}
                                         value={CollectionTypeReg.options.find(o => o.value === field.value) ?? null}
@@ -388,7 +399,6 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                                     name="membershipLevel"
                                     render={({field}) => (
                                         <Select
-                                            classNamePrefix="select"
                                             inputId="membership-level"
                                             options={DwMembershipLevelReg.options}
                                             value={DwMembershipLevelReg.options.find(o => o.value === field.value) ?? null}
@@ -428,7 +438,6 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                                     name="type"
                                     render={({field}) => (
                                         <Select
-                                            classNamePrefix="select"
                                             inputId="collection-type"
                                             options={CollectionTypeReg.options}
                                             value={CollectionTypeReg.options.find(o => o.value === field.value) ?? null}

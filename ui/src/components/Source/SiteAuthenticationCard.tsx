@@ -7,6 +7,7 @@ import SourceSection from './SourceSection'
 import {sourceComponents} from './sourceComponents'
 import AddSiteByLink from '../Settings/AddSiteByLink'
 import SiteApiSettings from './SiteApiSettings'
+import SiteAccountSettings from './SiteAccountSettings'
 import SiteRow, {SiteBadge, SiteRows} from '../Settings/SiteRow'
 import './SiteAuthenticationCard.css'
 
@@ -123,6 +124,11 @@ function useApiKeyBadge(sourceKey: string | null) {
 function badges(site: SiteAuthenticationRead, apiKey: ReturnType<typeof useApiKeyBadge>) {
     const shown = []
     if (site.signInSourceKey) shown.push(<SiteBadge key="sign-in" tone="own">Own sign-in</SiteBadge>)
+    if (site.accountStatus?.signedIn) {
+        shown.push(site.accountStatus.problem
+            ? <SiteBadge key="account" tone="problem">Sign-in not working</SiteBadge>
+            : <SiteBadge key="account" tone="on">Signed in</SiteBadge>)
+    }
     if (site.cookiesStatus) {
         shown.push(<SiteBadge key="status" tone={site.cookiesStatus.ok ? 'on' : 'problem'}>{site.cookiesStatus.label}</SiteBadge>)
     } else if (site.hasCookies) {
@@ -138,7 +144,12 @@ function badges(site: SiteAuthenticationRead, apiKey: ReturnType<typeof useApiKe
     return shown
 }
 
-function SiteAuthenticationRow({site, onSaved}: {site: SiteAuthenticationRead; onSaved: (site: SiteAuthenticationRead) => void}) {
+function SiteAuthenticationRow({site, onSaved, alone}: {
+    site: SiteAuthenticationRead
+    onSaved: (site: SiteAuthenticationRead) => void
+    /** The only Site listed. */
+    alone: boolean
+}) {
     const {SignIn} = site.signInSourceKey ? sourceComponents(site.signInSourceKey) : {}
     const {ApiKey} = site.apiKeySourceKey ? sourceComponents(site.apiKeySourceKey) : {}
     const apiKeyBadge = useApiKeyBadge(ApiKey ? site.apiKeySourceKey : null)
@@ -146,20 +157,22 @@ function SiteAuthenticationRow({site, onSaved}: {site: SiteAuthenticationRead; o
     return (
         <SiteRow
             siteKey={site.key} name={site.name} domains={site.domains} badges={badges(site, apiKeyBadge)}
-            removable={site.removable}
+            removable={site.removable} alone={alone}
             bodyClassName="source-section__body site-authentication__body"
         >
             {SignIn ? <SignIn/> : null}
             {ApiKey ? <ApiKey/> : null}
+            {site.accountSignIn ? <SiteAccountSettings site={site} onSaved={onSaved}/> : null}
             {site.siteApi ? <SiteApiSettings site={site} onSaved={onSaved}/> : null}
             {takesCookies ? <SiteCookies site={site} onSaved={onSaved}/> : null}
-            {!SignIn && !ApiKey && !site.siteApi && !takesCookies ? <p className="settings-field__help">VODLoft can't sign in on {site.name}.</p> : null}
+            {!SignIn && !ApiKey && !site.accountSignIn && !site.siteApi && !takesCookies ? <p className="settings-field__help">VODLoft can't sign in on {site.name}.</p> : null}
         </SiteRow>
     )
 }
 
-/** Every Site VODLoft knows, with how it signs in there: its own sign-in, its API key or its cookies file. */
-export function SiteAuthentication() {
+/** Every Site VODLoft knows, with how it signs in there: its own sign-in, its API key or its cookies file.
+ *  ``addSites`` offers to add another Site by its address below them. */
+export function SiteAuthentication({addSites = true}: {addSites?: boolean} = {}) {
     const queryClient = useQueryClient()
     const {data: sites, isLoading, error: loadError} = useSiteAuthentication()
 
@@ -181,10 +194,10 @@ export function SiteAuthentication() {
             {loadError && <p className="source-setting-error" role="alert">Could not load the sites: {loadError.message}</p>}
             {sites?.length ? (
                 <SiteRows>
-                    {sites.map((site) => <SiteAuthenticationRow key={site.key} site={site} onSaved={saved}/>)}
+                    {sites.map((site) => <SiteAuthenticationRow key={site.key} site={site} onSaved={saved} alone={sites.length === 1}/>)}
                 </SiteRows>
             ) : null}
-            <AddSiteByLink/>
+            {addSites ? <AddSiteByLink/> : null}
         </>
     )
 }

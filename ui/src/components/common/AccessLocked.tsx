@@ -1,5 +1,7 @@
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
+import type {ReactNode} from 'react'
 import {faIcon} from '../../icons/faIcon'
+import Notice from './Notice'
 import './DrmProtected.css'
 
 type Lockable = {
@@ -36,15 +38,14 @@ export function ItemAccessBadge({item, onCover = false, asText = false}: {item: 
     return item.access ? <AccessBadge label={item.accessLabel} description={item.accessDescription} granted={item.accessGranted} onCover={onCover} asText={asText}/> : null
 }
 
-/** Takes the place of the download controls for locked media. */
-export function AccessNotice({item}: {item: Lockable}) {
+/** Takes the place of the download controls for locked media. ``action`` is a control to check again right away. */
+export function AccessNotice({item, action}: {item: Lockable, action?: ReactNode}) {
     const check = item.accessCheckAt
         ? ` VODLoft checks again on ${checkDate(item.accessCheckAt)} in case it opens up for everyone.`
         : ''
     return (
-        <div className="drm-notice access-notice" role="status">
-            <FontAwesomeIcon icon={faIcon('fass', 'lock')} aria-hidden="true"/>
-            <span>{item.accessDescription ?? 'Only members or subscribers can watch this.'} VODLoft cannot download it.{check}</span>
-        </div>
+        <Notice icon={faIcon('fass', 'lock')} action={action} className="access-notice">
+            {item.accessDescription ?? 'Only members or subscribers can watch this.'} VODLoft cannot download it.{check}
+        </Notice>
     )
 }

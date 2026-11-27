@@ -5,7 +5,7 @@ import {useNavigate, useSearchParams} from 'react-router-dom'
 import {useCollectionDownloadProfilesView, useCollections} from '../../lib/queries'
 import {buildCollectionSelectRegistry} from '../../types/collection'
 import {SelectRegistry} from '../../utils/selectRegistry'
-import Select from '../../components/common/ReactSelect'
+import Select from '../../components/common/Select'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import StreamProfileForm from '../../components/StreamProfile/StreamProfileForm'
@@ -157,7 +157,6 @@ function AddStreamProfileForm({onDiscardDraft}: {onDiscardDraft: () => void}) {
                         render={({field}) => (
                             <Select
                                 inputId="collection-id"
-                                classNamePrefix="select"
                                 options={collectionReg.options}
                                 value={collectionReg.options.find(o => Number(o.value) === field.value) ?? null}
                                 onChange={(opt) => field.onChange((opt as any) ? Number((opt as any).value) : undefined)}

@@ -53,6 +53,19 @@ def file_lock(
             portalocker.unlock(lock_file)
 
 
+@contextmanager
+def file_lock_if_free(path: Path, *, shared: bool = False) -> Iterator[bool]:
+    """Take the lock on ``path`` only when nobody holds it, without waiting; yields whether it did."""
+    with path.open("a+b") as lock_file:
+        if not _try_lock(lock_file, shared):
+            yield False
+            return
+        try:
+            yield True
+        finally:
+            portalocker.unlock(lock_file)
+
+
 @asynccontextmanager
 async def async_file_lock(path: Path, *, shared: bool = False, poll_seconds: float = 0.25) -> AsyncIterator[None]:
     """``file_lock`` for async work: waiting gives way to other tasks."""

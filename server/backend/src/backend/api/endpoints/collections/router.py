@@ -4,8 +4,9 @@ from .as_bundle import collection_as_bundle_router
 from .as_view import collection_view_router
 from .existing_files.router import router as existing_files_router
 from .seasons.router import router as collection_seasons_router
+from .health import router as collection_health_router
 from .sync_log import collection_scans
-from .bulk import change_collections, delete_collections, summarize_collections, sync_collections
+from .bulk import change_collections, delete_collections, review_collections, stop_replaced, summarize_collections, sync_collections
 from backend.api.endpoints.creators.service import (
     CollectionNotFoundError, LookupPlan, add_collection_to_creator, collection_creator_match, collection_link,
     join_collection_creator, leave_collection_creator, look_up_collection_creator,
@@ -59,36 +60,29 @@ from ...models.collection import (
     CollectionRedownloadEpisodesAPIRequest,
 )
 from ...models.source import EpisodeTagAPIRead
-from ...models.collection import CollectionBulkChangesIn
+from ...models.collection import CollectionBulkChangeIn, CollectionBulkSummaryRead
+from ...models.collection_seasons import CollectionBulkReviewRead
 from ...models.profile_bulk import BulkChangeIn, BulkResultRead, BulkSelectionIn, BulkSummaryRead
 from backend.api.endpoints.creators import lookups as creator_lookups
 from backend.api.endpoints.reconcile import collection_scope, move, preview_move
-from backend.api.models.reconcile import MovePreviewAPIRead, MovesWaitingAPIRead, ReconcileAPIIn, ReconcileAPIRead
+from backend.api.models.reconcile import MovePreviewAPIRead, ReconcileAPIIn, ReconcileAPIRead
 from backend.api.steps import STEPS_RESPONSE, plan_lines, stream_steps
 from backend.app import db_session
 from backend.types.collection_types import EpisodeIdentifier
 from backend.security.access import Access, Area, Level
 from backend.security.deps import may_delete_files, requires, signed_in
 from backend.db.core import run_write_transaction
+from backend.db.models import Collection
+from backend.services.collections import downloaded_files_of, remove_downloaded_files
+from sqlalchemy import select
 
 router = APIRouter(prefix="/collections", tags=["Collections"])
 
+router.include_router(collection_health_router)
 router.include_router(collection_view_router)
 router.include_router(collection_as_bundle_router)
 router.include_router(existing_files_router)
 router.include_router(collection_seasons_router)
-
-@router.get("/moves-waiting", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[MovesWaitingAPIRead])
-def collections_moves_waiting():
-    """Every collection whose Moved episodes wait to be moved."""
-    from backend.services.reconcile import waiting_in_library
-
-    with db_session() as s:
-        try:
-            return [MovesWaitingAPIRead.model_validate(item) for item in waiting_in_library(s)]
-        finally:
-            s.rollback()
-
 
 @router.get("", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[CollectionAPIRead])
 def collection_list():
@@ -101,7 +95,7 @@ def collection_list():
         return get_collections_list(s)
 
 
-@router.post("/bulk/summary", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=BulkSummaryRead)
+@router.post("/bulk/summary", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=CollectionBulkSummaryRead)
 def collections_bulk_summary(body: BulkSelectionIn):
     """What the chosen Collections are set to now, for the Library's bulk edit."""
     with db_session() as s:
@@ -109,9 +103,18 @@ def collections_bulk_summary(body: BulkSelectionIn):
 
 
 @router.post("/bulk/change", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=BulkResultRead)
-def collections_bulk_change(body: BulkChangeIn[CollectionBulkChangesIn]):
+def collections_bulk_change(body: CollectionBulkChangeIn):
     """Give the chosen Collections the same settings; a setting a Collection's Site doesn't have is left alone."""
-    return run_write_transaction(lambda s: change_collections(s, body))
+    # As the Seasons dialog's save, it stops the work it replaces on the collections whose seasons change first.
+    replaced = stop_replaced(body)
+    return run_write_transaction(lambda s: change_collections(s, body, replaced))
+
+
+@router.post("/bulk/review", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=CollectionBulkReviewRead)
+def collections_bulk_review(body: CollectionBulkChangeIn):
+    """What the changes do to the seasons of the chosen Collections, before they are saved."""
+    with db_session() as s:
+        return review_collections(s, body)
 
 
 @router.post("/bulk/sync", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=BulkResultRead)
@@ -222,7 +225,8 @@ def collection_rename_files(collection_slug: str, body: CollectionFileRenameAPIR
 )
 def collection_reconcile_preview(collection_slug: str):
     """What moving the collection's Moved episodes to the seasons they belong in now does. Changes nothing."""
-    return run_write_transaction(lambda s: preview_move(s, collection_scope(collection_slug)))
+    with db_session() as s:
+        return preview_move(s, collection_scope(collection_slug))
 
 
 @router.post(
@@ -385,10 +389,11 @@ def collection_sync_log(
     collection_slug: str,
     offset: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
+    hide_empty: bool = False,
 ):
     """The scans that looked at this Collection for new episodes, newest first."""
     with db_session() as s:
-        scans, total = collection_scans(s, collection_slug, offset=offset, limit=limit)
+        scans, total = collection_scans(s, collection_slug, offset=offset, limit=limit, hide_empty=hide_empty)
         return CollectionSyncLogAPIRead(items=scans, total=total)
 
 
@@ -407,17 +412,33 @@ def collection_update(collection_slug: str, body: CollectionAPIUpdate):
 
 
 @router.delete("/{collection_slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=CollectionAPIRead)
-def collection_delete(collection_slug: str):
+def collection_delete(
+    collection_slug: str,
+    delete_files: bool = Query(False, alias="deleteFiles", description="Also delete the collection's downloaded files"),
+    access: Access = signed_in(),
+):
     """
     Delete a show from the system.
 
-    Permanently removes the specified show and its associated data.
-    Returns the deleted show's information for confirmation.
+    Permanently removes the specified show and its associated data, and with ``deleteFiles`` its downloaded files
+    too. Returns the deleted show's information for confirmation.
     """
+    files: list[tuple[str, tuple[str, ...]]] = []
+    if delete_files:
+        if not access.delete_files:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You may not delete downloaded files from disk.")
+        with db_session() as s:
+            collection = s.scalar(select(Collection).where(Collection.slug == collection_slug))
+            if collection is not None:
+                files = downloaded_files_of(s, collection)
+
     def work(s):
         return delete_collection(s, collection_slug)
 
-    return run_write_transaction(work)
+    deleted = run_write_transaction(work)
+    # The files go once VODLoft has forgotten them, so nothing it still knows points at a missing file.
+    remove_downloaded_files(files)
+    return deleted
 
 
 def _collection_found(work):

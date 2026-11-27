@@ -7,14 +7,19 @@ import {faIcon} from '../icons/faIcon'
 import {toImageUrl} from '../components/Episode/EpisodeCard'
 import SourceBadge from '../components/Source/SourceBadge'
 import {useQueryClient} from '@tanstack/react-query'
-import {addVideo, resolveLink, useMovies, useCollections, useSources, useVideos} from '../lib/queries'
+import {addVideo, listedCollectionQuery, resolveLink, useMovies, useCollections, useSources, useVideos} from '../lib/queries'
 import {linkTarget, type MediaLinkTarget} from '../lib/sourceControls'
 import {ResolvedLinkRead, SearchSiteRead, SourceFeature, SourceRead, kindNames, sourceHas} from '../types/schemas/source'
 import {capitalized} from '../types/creator'
 import {DrmNotice} from '../components/common/DrmProtected'
 import {AccessNotice} from '../components/common/AccessLocked'
 import {ClearInputButton} from '../components/common/ClearInputButton'
+import {useAutoLookup} from '../lib/useAutoLookup'
 import AddEmptyCollectionDialog from '../components/AddEmptyCollection/AddEmptyCollectionDialog'
+import LookupSteps from './creator/LookupSteps'
+import type {ProgressStep} from '../types/progress'
+import type {LinkFirstLookRead} from '../types/schemas/source'
+import './creator/CreatorPages.css'
 
 type AddMediaPageProps = {
     onboarding?: boolean
@@ -41,35 +46,72 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
     const [link, setLink] = useState<ResolvedLinkRead | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [resolving, setResolving] = useState(false)
+    // What the lookup is doing, step by step, while it runs.
+    const [steps, setSteps] = useState<ProgressStep[]>([])
+    // A quick first look at the link, such as a YouTube video's title and thumbnail, while the full lookup runs.
+    const [firstLook, setFirstLook] = useState<LinkFirstLookRead | null>(null)
     // The Sources that can handle the link's site, kept while another one is tried.
     const [candidates, setCandidates] = useState<SourceRead[]>([])
     const [askedSource, setAskedSource] = useState<string | null>(null)
     const requestRef = useRef<AbortController | null>(null)
     const inputRef = useRef<HTMLInputElement>(null)
 
+    // Add collection looks the collection up again on its first page. Hand it this lookup, and start its own on the
+    // collection's content now, while the user reads the card, so the page is ready, or nearly so, when it opens.
+    const getCollectionReady = (resolved: ResolvedLinkRead) => {
+        if (resolved.kind !== 'collection' || !sourceHas(resolved.source, SourceFeature.COLLECTIONS)) return
+        queryClient.setQueryData(['resolvedLink', resolved.url], resolved)
+        if (sourceHas(resolved.source, SourceFeature.EPISODE_LISTS)) {
+            void queryClient.prefetchQuery(listedCollectionQuery(resolved.source.id, resolved.url))
+        }
+    }
+
     const lookUp = async (value: string, sourceKey?: string) => {
         const trimmed = value.trim()
         if (!trimmed) return
         if (!sourceKey) setCandidates([])
         setAskedSource(sourceKey ?? null)
+        autoLookup.remember(trimmed)
         requestRef.current?.abort()
         const controller = new AbortController()
         requestRef.current = controller
         setResolving(true)
         setError(null)
         setLink(null)
+        setSteps([])
+        setFirstLook(null)
         try {
-            const resolved = await resolveLink(trimmed, controller.signal, sourceKey)
+            const resolved = await resolveLink(trimmed, controller.signal, sourceKey, {
+                onPlan: (plan) => { if (!controller.signal.aborted) setSteps(plan) },
+                onPreview: (preview) => { if (!controller.signal.aborted) setFirstLook(preview) },
+            })
             if (!controller.signal.aborted) {
                 setLink(resolved)
+                getCollectionReady(resolved)
                 if (resolved.candidates.length) setCandidates(resolved.candidates)
             }
         } catch (exc) {
             if (!controller.signal.aborted) setError(exc instanceof Error ? exc.message : String(exc))
         } finally {
-            if (!controller.signal.aborted) setResolving(false)
+            if (!controller.signal.aborted) {
+                setResolving(false)
+                requestRef.current = null
+            }
         }
     }
+
+    // Stops the lookup of a link the user has since changed.
+    const cancelLookup = () => {
+        if (!requestRef.current) return false
+        requestRef.current.abort()
+        requestRef.current = null
+        setResolving(false)
+        setSteps([])
+        setFirstLook(null)
+        return true
+    }
+
+    const autoLookup = useAutoLookup({lookUp: (value) => void lookUp(value), cancel: cancelLookup})
 
     useEffect(() => {
         const initial = initialUrl ?? params.get('url')
@@ -81,6 +123,7 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
 
     const clear = () => {
         requestRef.current?.abort()
+        autoLookup.reset()
         setUrl('')
         setLink(null)
         setError(null)
@@ -95,9 +138,18 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
         void lookUp(url)
     }
 
+    // What the link is: the full lookup's answer, or until it comes, what the first look could already tell from the
+    // link alone, such as a YouTube video, or that a channel's link is a collection. The user can go on with it while
+    // the rest loads. A collection known only by its link, without its id yet, opens Add collection, which needs no
+    // more; picking one for onboarding needs the id.
+    const firstLookSlug = firstLook?.slug ?? (firstLook?.kind === 'collection' && !onCollection ? '' : null)
+    const known = link ?? (firstLook?.kind && firstLookSlug !== null && firstLook.url ? {
+        source: firstLook.source, kind: firstLook.kind, slug: firstLookSlug, url: firstLook.url,
+        preview: {...firstLook, title: firstLook.title ?? ''}, drmProtected: false, accessLocked: false,
+    } : null)
     // A collection link from a Source that cannot add collections yet, such as a playlist at a video site.
-    const collectionsUnsupported = !!link && (link.kind === 'collection' || link.kind === 'episode') && !sourceHas(link.source, SourceFeature.COLLECTIONS)
-    const target = link && !collectionsUnsupported ? linkTarget(link) : null
+    const collectionsUnsupported = !!known && (known.kind === 'collection' || known.kind === 'episode') && !sourceHas(known.source, SourceFeature.COLLECTIONS)
+    const target = known && !collectionsUnsupported ? linkTarget(known) : null
     const localCollection = target?.kind === 'collection'
         ? localCollections?.find((collection) => collection.slug === target.slug && collection.sourceKey === target.sourceKey)
         : undefined
@@ -165,20 +217,37 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
         && (sources ?? []).some((source) => canUseSource(source.id) && sourceHas(source, SourceFeature.LINK_COLLECTIONS))
 
     // Hand the link to the Quick download page: one video, episode or movie that can be downloaded.
-    const quickDownloadable = !!link && link.kind !== 'collection' && link.kind !== 'creator' && !link.drmProtected && !link.accessLocked
+    const quickDownloadable = !!known && known.kind !== 'collection' && known.kind !== 'creator' && !known.drmProtected && !known.accessLocked
     const quickDownload = () => {
-        if (!link) return
-        navigate(`/quick-download?url=${encodeURIComponent(link.url)}&source=${encodeURIComponent(link.source.id)}`)
+        if (!known) return
+        navigate(`/quick-download?url=${encodeURIComponent(known.url)}&source=${encodeURIComponent(known.source.id)}`)
     }
 
     const image = toImageUrl(link?.preview.imageUrl)
+    const firstLookImage = toImageUrl(firstLook?.imageUrl)
     const actionLabel = (() => {
         if (!target) return null
-        if (target.kind === 'video') return localVideo ? 'Open video' : addingVideo ? 'Adding video…' : 'Add this video'
-        if (target.kind === 'movie') return localMovie ? 'Open movie' : 'Continue with this movie'
+        if (target.kind === 'video') return localVideo ? 'Open video' : addingVideo ? 'Adding to library…' : 'Add to library'
+        if (target.kind === 'movie') return localMovie ? 'Open movie' : 'Add to library'
         if (localCollection) return 'Open collection'
-        return link?.kind === 'episode' ? 'Add its collection' : 'Continue with this collection'
+        return known?.kind === 'episode' ? 'Add its collection' : 'Add to library'
     })()
+
+    const actions = target && (
+        <div className="add-media-preview-actions">
+            <button className="btn btn-primary" type="button" onClick={proceed} disabled={addingVideo}>
+                {actionLabel}
+                <FontAwesomeIcon icon={faIcon('fass', 'arrow-right')}/>
+            </button>
+            {quickDownloadable && !onboarding && (
+                <button className="btn" type="button" onClick={quickDownload}
+                        title="Download the file without adding it to your library">
+                    <FontAwesomeIcon icon={faIcon('fass', 'bolt')}/>
+                    Quick download
+                </button>
+            )}
+        </div>
+    )
 
     return (
         <section className={`view add-media-view${onboarding ? ' add-media-view--onboarding' : ''}`} aria-labelledby="add-media-title">
@@ -210,7 +279,11 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                         autoComplete="off"
                         placeholder="https://…"
                         value={url}
-                        onChange={(event) => setUrl(event.target.value)}
+                        onPaste={autoLookup.onPaste}
+                        onChange={(event) => {
+                            setUrl(event.target.value)
+                            autoLookup.changed(event.target.value)
+                        }}
                     />
                     {url && <ClearInputButton onClear={clear} label="Clear the link"/>}
                 </span>
@@ -242,6 +315,31 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
 
             {error && <div className="form-error-card add-media-error" role="alert">{error}</div>}
 
+            {resolving && (
+                <article className="add-media-preview add-media-preview--loading creator-skeleton" aria-label="Looking up the link" aria-busy="true">
+                    {firstLookImage ? (
+                        <div className="add-media-preview-art">
+                            <img src={firstLookImage} alt="" decoding="async"/>
+                        </div>
+                    ) : <span className="add-media-preview-art skeleton-block" aria-hidden="true"/>}
+                    <div className="add-media-preview-copy">
+                        {firstLook?.title ? (
+                            <div className="add-media-preview-first-look">
+                                {firstLook.authorName && <p>{firstLook.authorName}</p>}
+                                <h2>{firstLook.title}</h2>
+                            </div>
+                        ) : (
+                            <div className="creator-skeleton-copy" aria-hidden="true">
+                                <span className="skeleton-block creator-skeleton-line creator-skeleton-line--kind"/>
+                                <span className="skeleton-block creator-skeleton-line creator-skeleton-line--title-small"/>
+                            </div>
+                        )}
+                        <LookupSteps steps={steps} first="Finding the service the link comes from"/>
+                        {actions}
+                    </div>
+                </article>
+            )}
+
             {link && (
                 <article className="add-media-preview" aria-label="Link preview">
                     {image && (
@@ -259,19 +357,7 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                         {link.drmProtected && <DrmNotice/>}
                         {!link.drmProtected && link.accessLocked && <AccessNotice item={link}/>}
                         {target ? (
-                            <div className="add-media-preview-actions">
-                                <button className="btn btn-primary" type="button" onClick={proceed} disabled={addingVideo}>
-                                    {actionLabel}
-                                    <FontAwesomeIcon icon={faIcon('fass', 'arrow-right')}/>
-                                </button>
-                                {quickDownloadable && !onboarding && (
-                                    <button className="btn" type="button" onClick={quickDownload}
-                                            title="Download the file without adding it to your library">
-                                        <FontAwesomeIcon icon={faIcon('fass', 'bolt')}/>
-                                        Quick download
-                                    </button>
-                                )}
-                            </div>
+                            actions
                         ) : link.kind === 'creator' ? (
                             <p role="alert">
                                 This is the page of {kindNames(link.source, 'creator')?.a}. Paste the link to one of

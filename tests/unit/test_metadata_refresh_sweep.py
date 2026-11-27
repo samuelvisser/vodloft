@@ -206,6 +206,9 @@ def test_a_failed_lookup_is_tried_again_and_a_removed_upload_without_files_goes(
     assert session.query(Episode).filter(Episode.source_slug == "gone").one_or_none() is None
     assert not _episode(session, "flaky").removed_from_source
     assert result.sites["Tube"].failed == 1 and result.sites["Tube"].removed == 1
+    # Its log counts what changed across every Site, so a sweep that changed nothing can be hidden there.
+    data = result.as_data()
+    assert (data["removed"], data["failed"]) == (1, 1) and data["sites"]["Tube"]["removed"] == 1
 
 
 def test_an_upload_only_members_may_see_is_locked_and_checked_again_later(swept, session, site_settings):

@@ -190,8 +190,8 @@ class PlanTracker:
 
     def progress(self, step: str, fraction: float | None, *, done: int | None = None, total: int | None = None) -> None:
         """How far the running step is, from 0 to 1, or None when it cannot tell, and for a step that counts, how many
-        of how many it did."""
-        counted = {"done": done, "total": total} if total is not None else {}
+        of how many it did, or only how many when it cannot know how many there are."""
+        counted = {"done": done, "total": total} if done is not None or total is not None else {}
         with self._lock:
             self._stages[step] = measured(
                 self._stages[step], None if fraction is None else max(0.0, min(1.0, fraction)), time(), **counted,
@@ -208,6 +208,11 @@ class PlanTracker:
             self.fail(step)
             raise
         self.complete(step)
+
+    def step(self, id: str, label: str, *, code: str | None = None):
+        """Adds a step and runs it for as long as the block does, for work that finds its steps as it goes."""
+        self.add(StageSpec(id=id, code=code or id, label=label))
+        return self.running(id)
 
     def follow(self, step: str, future: Future, *, failed: StageState = "failed") -> Future:
         """Runs the step while ``future`` does, for work started at once beside other work: done when it finishes, and

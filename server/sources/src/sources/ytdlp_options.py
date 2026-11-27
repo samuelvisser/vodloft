@@ -10,17 +10,23 @@ options come after them, so they can never change where files go.
 from __future__ import annotations
 
 import contextlib
+import functools
+from contextlib import contextmanager
+from contextvars import ContextVar
 import io
 import optparse
 import shlex
 from dataclasses import dataclass
-from typing import Literal
+from typing import Iterator, Literal
 
 import yt_dlp
 from yt_dlp.options import create_parser
 
 LineStatus = Literal["valid", "blocked", "has_setting", "invalid"]
-Setting = Literal["quality", "subtitles", "thumbnails", "metadata", "file_names", "sponsorblock", "which_episodes", "cookies"]
+Setting = Literal[
+    "quality", "subtitles", "thumbnails", "metadata", "file_names", "sponsorblock", "which_episodes", "cookies",
+    "chapters", "file_date", "download_speed",
+]
 
 MAX_OPTIONS_LENGTH = 8000
 
@@ -37,13 +43,21 @@ _BLOCKED: dict[str, str] = {
                     "Reads more options or links from somewhere else"),
     **dict.fromkeys(("forceprint", "print_to_file", "progress_template", "progress_with_newline", "quiet", "noprogress",
                      "simulate", "skip_download", "dumpjson", "dump_single_json", "geturl", "gettitle", "getid",
-                     "getthumbnail", "getdescription", "getduration", "getfilename", "getformat", "listformats",
+                     "getthumbnail", "getdescription", "getduration", "getfilename", "getformat", "listformats", "print_json",
                      "listsubtitles", "list_thumbnails", "verbose", "dump_intermediate_pages", "write_pages",
                      "print_traffic", "extract_flat", "no_color", "color", "consoletitle"),
                     "VODLoft follows the download through what yt-dlp prints, which this changes"),
     **dict.fromkeys(("noplaylist", "playlist_items", "playliststart", "playlistend", "playlist_reverse",
                      "playlist_random", "lazy_playlist", "download_archive", "break_on_existing", "break_per_url"),
                     "VODLoft downloads one video at a time and keeps track of what it downloaded itself"),
+    **dict.fromkeys(("test",), "Downloads only the first few kilobytes, which VODLoft would keep as the whole video"),
+    **dict.fromkeys(("no_warnings",),
+                    "VODLoft reads yt-dlp's warnings to notice a site holding better versions back, and tries again later"),
+    **dict.fromkeys(("hls_split_discontinuity",), "Can split one video into several files, and VODLoft keeps one file"),
+    **dict.fromkeys(("ignore_no_formats_error",),
+                    "Ends without a file and without saying why, so VODLoft could only try again and again"),
+    **dict.fromkeys(("download_ranges",),
+                    "VODLoft keeps whole videos; only split chapters download a part of one, as an episode of its own"),
     **dict.fromkeys(("update_self",), "VODLoft keeps yt-dlp up to date itself"),
     **dict.fromkeys(("ffmpeg_location",), "VODLoft's download settings say where ffmpeg is"),
     **dict.fromkeys(("split_chapters",), "VODLoft keeps one file per video"),
@@ -65,7 +79,11 @@ _HAS_SETTING: dict[str, Setting] = {
     **dict.fromkeys(("sponsorblock_mark", "sponsorblock_remove", "no_sponsorblock", "sponsorblock_chapter_title",
                      "sponsorblock_api"), "sponsorblock"),
     **dict.fromkeys(("match_filter", "breaking_match_filter", "dateafter", "datebefore", "date", "min_filesize",
-                     "max_filesize", "min_views", "max_views", "age_limit"), "which_episodes"),
+                     "max_filesize", "min_views", "max_views", "age_limit", "matchtitle", "rejecttitle",
+                     "break_on_reject", "max_downloads"), "which_episodes"),
+    **dict.fromkeys(("remove_chapters",), "chapters"),
+    **dict.fromkeys(("updatetime",), "file_date"),
+    **dict.fromkeys(("ratelimit",), "download_speed"),
     **dict.fromkeys(("cookiefile", "cookiesfrombrowser", "no_cookies", "no_cookies_from_browser"), "cookies"),
 }
 
@@ -89,24 +107,30 @@ class OptionsRefused(ValueError):
 
 def _matched(tokens: list[str]) -> list[tuple[str, str]]:
     """Each option in ``tokens`` as (as written, yt-dlp's name), matched the way yt-dlp's parser matches it."""
+    return [(written, dest) for _start, _end, written, dest in _spans(tokens)]
+
+
+def _spans(tokens: list[str]) -> list[tuple[int, int, str, str]]:
+    """Each option in ``tokens`` as (first token, token after its value, as written, yt-dlp's name)."""
     parser = create_parser()
-    found: list[tuple[str, str]] = []
+    found: list[tuple[int, int, str, str]] = []
     index = 0
     while index < len(tokens):
+        start = index
         token = tokens[index]
         index += 1
         if token == "--":
-            found.extend((rest, "url") for rest in tokens[index:])
+            found.extend((position, position + 1, tokens[position], "url") for position in range(index, len(tokens)))
             break
         if not token.startswith("-") or token == "-":
-            found.append((token, "url"))
+            found.append((start, index, token, "url"))
             continue
         if token.startswith("--"):
             name, equals, _rest = token.partition("=")
             try:
                 name = parser._match_long_opt(name)
             except Exception:
-                found.append((name, "unknown"))
+                found.append((start, index, name, "unknown"))
                 continue
             option = parser._long_opt[name]
             inline = bool(equals)
@@ -114,12 +138,12 @@ def _matched(tokens: list[str]) -> list[tuple[str, str]]:
             name = token[:2]
             option = parser._short_opt.get(name)
             if option is None:
-                found.append((name, "unknown"))
+                found.append((start, index, name, "unknown"))
                 continue
             inline = len(token) > 2
         if option.takes_value():
             index += (option.nargs or 1) - (1 if inline else 0)
-        found.append((name, option.dest or name))
+        found.append((start, index, name, option.dest or name))
     return found
 
 
@@ -184,3 +208,84 @@ def ytdlp_option_arguments(text: str) -> tuple[str, ...]:
             raise OptionsRefused(f"Line {line.line}: {line.message}")
         arguments.extend(shlex.split(line.text, comments=True))
     return tuple(arguments)
+
+
+_UNPLAYABLE = "allow_unplayable_formats"
+
+
+def without_unplayable_formats(arguments: tuple[str, ...]) -> tuple[str, ...]:
+    """``arguments`` without ``--allow-unplayable-formats`` and ``--no-allow-unplayable-formats``.
+
+    With it, yt-dlp merges and converts nothing, so it is only kept for media that needs it.
+    """
+    tokens = list(arguments)
+    return tuple(
+        token for start, end, _written, dest in _spans(tokens) if dest != _UNPLAYABLE for token in tokens[start:end]
+    )
+
+
+@functools.lru_cache(maxsize=256)
+def allows_unplayable_formats(text: str) -> bool:
+    """Whether the options in ``text`` turn on yt-dlp's ``--allow-unplayable-formats``.
+
+    yt-dlp then also offers formats it can not play back, such as ones protected by DRM, and saves them as the
+    site has them. VODLoft only passes the option on: it never changes what yt-dlp downloads. Options that can not
+    be used are never handed to yt-dlp, so they turn nothing on. The last of ``--allow-unplayable-formats`` and
+    ``--no-allow-unplayable-formats`` wins, as in yt-dlp.
+    """
+    try:
+        arguments = ytdlp_option_arguments(text)
+    except OptionsRefused:
+        return False
+    parser = create_parser()
+    allowed = False
+    for written, dest in _matched(list(arguments)):
+        if dest == _UNPLAYABLE:
+            option = parser._long_opt.get(written) or parser._short_opt.get(written)
+            allowed = option is not None and option.action == "store_true"
+    return allowed
+# Options that change how yt-dlp reaches a site rather than what it downloads, by yt-dlp's name for them. They
+# go with every yt-dlp VODLoft runs for a Collection: its lookups, scans and streams as well as its downloads.
+_EVERY_CALL = frozenset((
+    "proxy", "geo_verification_proxy", "impersonate", "extractor_args", "user_agent", "referer", "headers",
+    "geo_bypass", "source_address", "socket_timeout", "no_check_certificate", "prefer_insecure",
+    "legacy_server_connect", "extractor_retries", "sleep_interval_requests", "remote_components",
+))
+
+
+def every_call_arguments(text: str) -> tuple[str, ...]:
+    """The options in ``text`` that change how yt-dlp reaches a site, for every yt-dlp VODLoft runs; none when any
+    line can not be used, since such options are never handed to yt-dlp."""
+    try:
+        tokens = list(ytdlp_option_arguments(text))
+    except OptionsRefused:
+        return ()
+    return tuple(
+        token for start, end, _written, dest in _spans(tokens) if dest in _EVERY_CALL for token in tokens[start:end]
+    )
+
+
+_call_options: ContextVar[tuple[str, ...]] = ContextVar("ytdlp_call_options", default=())
+
+
+@contextmanager
+def call_options(arguments: tuple[str, ...]) -> Iterator[None]:
+    """Run every yt-dlp started inside this block with these options too (see ``every_call_arguments``)."""
+    token = _call_options.set(arguments)
+    try:
+        yield
+    finally:
+        _call_options.reset(token)
+
+
+def current_call_options() -> tuple[str, ...]:
+    """The options ``call_options`` gives every yt-dlp started now."""
+    return _call_options.get()
+
+
+def keep_call_options() -> dict:
+    """``ThreadPoolExecutor`` arguments that give its threads the ``call_options`` of this thread.
+
+    A thread starts without them, so yt-dlp started there would leave them out.
+    """
+    return {"initializer": _call_options.set, "initargs": (current_call_options(),)}

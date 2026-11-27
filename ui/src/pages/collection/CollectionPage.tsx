@@ -183,10 +183,16 @@ export default function CollectionPage() {
     isLoading: seasonsLoading,
     isPlaceholderData: seasonsPlaceholder,
   } = useCollectionSeasons(collection ? id : undefined)
+  // The channel season, or Singles, comes first, set apart from the seasons of the lists.
   const seasons = useMemo(
-    () => [...(seasonsData ?? [])].sort((a, b) => b.index - a.index),
+    () => [...(seasonsData ?? [])].sort((a, b) => Number(b.loose) - Number(a.loose) || b.index - a.index),
     [seasonsData],
   )
+  const seasonSections = useMemo(() => {
+    const loose = seasons.filter((season) => season.loose).map((season) => String(season.id))
+    const others = seasons.filter((season) => !season.loose).map((season) => String(season.id))
+    return loose.length && others.length ? [loose, others] : undefined
+  }, [seasons])
   const seasonReg = useMemo(() => {
     const spec: Record<string, {label: string}> = {}
     const values: string[] = []
@@ -353,6 +359,8 @@ export default function CollectionPage() {
   const downloadAllOperation = useActiveOperation('collection.download_all', 'collection', operationResourceId)
   const metadataRewriteOperation = useActiveOperation('collection.rewrite_metadata', 'collection', operationResourceId)
   const identificationOperation = useActiveOperation('collection.change_identification', 'collection', operationResourceId)
+  const renumberOperation = useActiveOperation('collection.renumber', 'collection', operationResourceId)
+  const removeLeftOperation = useActiveOperation('collection.remove_left_episodes', 'collection', operationResourceId)
   const manualSyncing = syncOperation !== undefined
   const syncBusy = syncStarting || manualSyncing
   const metadataRefreshBusy = metadataRefreshOperation !== undefined
@@ -719,6 +727,18 @@ export default function CollectionPage() {
                 controls: operationControls(identificationOperation, `${words.episode.singular} identification change`, false),
               },
               {
+                label: 'Numbering again',
+                icon: faIcon('fass', 'list-ol'),
+                operation: renumberOperation,
+                controls: operationControls(renumberOperation, 'numbering again', false),
+              },
+              {
+                label: `Removing the ${words.episode.plural} that left`,
+                icon: faIcon('fass', 'trash'),
+                operation: removeLeftOperation,
+                controls: operationControls(removeLeftOperation, `removing the ${words.episode.plural} that left`),
+              },
+              {
                 label: 'Sync',
                 icon: faIcon('fass', 'arrows-rotate'),
                 operation: syncOperation,
@@ -807,6 +827,7 @@ export default function CollectionPage() {
               inputId="collection-season"
               className="collection-season-select"
               registry={seasonReg}
+              sections={seasonSections}
               value={selectedSeasonId === null ? null : String(selectedSeasonId)}
               onChange={(value) => {
                 const season = seasons.find((item) => item.id === Number(value))
@@ -877,6 +898,7 @@ export default function CollectionPage() {
                 moved={movedEpisodes?.has(ep.slug)}
                 seasonName={seasonNames?.get(ep.seasonId)}
                 words={words}
+                unplayableAllowed={collection.allowsUnplayableFormats}
               />
             ))}
           </div>

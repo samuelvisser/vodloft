@@ -65,8 +65,9 @@ def _to_view(
     ))
 
 
-def get_collection_views_list(s: Session) -> list[CollectionAPIReadView]:
-    rows = s.execute(_collection_view_statement().order_by(Collection.title.asc())).all()
+def get_collection_views_list(s: Session, *where) -> list[CollectionAPIReadView]:
+    """The collections as the Library shows them, by title; `where` narrows them, such as to one creator's."""
+    rows = s.execute(_collection_view_statement().where(*where).order_by(Collection.title.asc())).all()
     return [_to_view(*row) for row in rows]
 
 

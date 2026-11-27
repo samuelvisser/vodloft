@@ -24,7 +24,7 @@ from config.settings.site_settings import (
 )
 from sources import Feature, ProfileSeasons, Site, Source, all_sources, named_sites, site_of
 
-from backend.services.sites import site_removable, sites_in_use
+from backend.services.sites import site_removable, sites_kept
 
 _UPGRADE_SETTINGS = frozenset({
     SiteSetting.UPGRADE_CHECK, SiteSetting.UPGRADE_AFTER_DAYS, SiteSetting.UPGRADE_REPEAT,
@@ -210,13 +210,13 @@ def list_sites_settings(s: Session) -> list[SiteSettingsListing]:
     """Every Site VODLoft has seen, with the settings it shows. A Site without collections or videos yet
     shows every setting it offers."""
     found = _sources_of_sites(s)
-    in_use = sites_in_use(s)
+    kept = sites_kept(s)
     listings = []
     for record in s.scalars(select(SiteRecord).order_by(SiteRecord.position, SiteRecord.name)).all():
         site = site_of(record.key)
         refreshes, follows = found.get(record.key, (True, True))
         keys = offered_settings(site, refreshes=refreshes, follows_pending=follows)
         listings.append(SiteSettingsListing(
-            record, site, [_offered_setting(site, key) for key in keys], site_removable(record.key, in_use),
+            record, site, [_offered_setting(site, key) for key in keys], site_removable(record.key, kept),
         ))
     return listings

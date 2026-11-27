@@ -481,15 +481,29 @@ def test_a_new_season_joins_seasons_lines_that_include_upcoming_seasons(db_sessi
 
     collection, first = _collection(db_session)
     collection.episode_identifier = "seasonal"
+    from task_manager.scheduler.db import TaskOperation
+
     upcoming = _profile(db_session, collection, only_seasons("which-s1", upcoming=True))
     fixed = _profile(db_session, collection, only_seasons("which-s1"))
 
+    # A season the collection's first index finds is one of its seasons from the start, not an upcoming one.
     create_season_record(
         db_session, collection_id=collection.id, index=2, slug="which-s2", name="Two", origin=SeasonOrigin.SITE,
         update_collection_profiles=True,
     )
+    assert upcoming.filters[0].season_slugs == ["which-s1"]
 
-    assert upcoming.filters[0].season_slugs == ["which-s1", "which-s2"]
+    db_session.add(TaskOperation(
+        id="first-index", kind="collection.index", source="ui", resource_type="collection",
+        resource_id=collection.id, title="Index", status="SUCCEEDED",
+    ))
+    db_session.flush()
+    create_season_record(
+        db_session, collection_id=collection.id, index=3, slug="which-s3", name="Three", origin=SeasonOrigin.SITE,
+        update_collection_profiles=True,
+    )
+
+    assert upcoming.filters[0].season_slugs == ["which-s1", "which-s3"]
     assert fixed.filters[0].season_slugs == ["which-s1"]
 
 

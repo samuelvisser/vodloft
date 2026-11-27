@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from sources import LIST_TYPE, Feature, ItemRef, Names, SectionKind, SectionRef, SectionType, Site
 from test_ytdlp_collections import ListedSource, _video, session  # noqa: F401
@@ -61,14 +61,13 @@ def source(monkeypatch):
     sites._site_of.cache_clear()
 
 
-def _collection(session, *, mode="all", loose="one_season", identifier="seasonal", url=CREATOR, music=False, channel_season="unlisted"):
+def _collection(session, *, mode="on", loose="one_season", identifier="seasonal", url=CREATOR, music=False):
     from backend.db.models import Collection
 
     collection = Collection(
         uuid="uuid-creator", slug="creator", source_key="seasons", title="The Creator", sharing_url=url,
         membership_level="FREE", type="music" if music else "series", episode_identifier=identifier,
         author_name="The Creator", author_slug="the-creator", link_seasons=mode, loose_videos=loose,
-        channel_season=channel_season,
     )
     session.add(collection)
     session.commit()
@@ -104,7 +103,7 @@ def _give_files(session, *slugs):
     if session.get(CollectionLocalMediaProfile, 1) is None:
         session.add(CollectionLocalMediaProfile(
             id=1, slug="videos", name="Videos", preferred_format="format_1080p",
-            output_template="/downloads/{{ collection_title }}/{{ episode_title }}.ext",
+            output_template="/downloads/{{ collection_title }}/{{ season_name }}/{{ episode_title }}.ext",
         ))
         session.flush()
     for slug in slugs:
@@ -184,10 +183,12 @@ def test_a_video_with_files_stays_until_it_is_moved_to_where_it_belongs(source, 
     assert [moved.source_slug for moved in moved_episodes(session, collection)] == ["b"]
     # Home's Needs attention says why: what the collection's settings make its seasons now.
     from backend.services.link_seasons import seasons_plan
-    from backend.services.reconcile import waiting_in_library
-    [waiting] = waiting_in_library(session)
-    assert waiting.moved == 1 and waiting.seasons_plan == seasons_plan(collection)
-    assert "playlist" in waiting.seasons_plan
+    from backend.services.collection_health import MovesIssue, unhealthy_collections
+    # The collection stored it in its health when the check placed its videos; Home reads it from there.
+    assert (collection.healthy, collection.health_issues) == (False, {"moves": 1})
+    [unhealthy] = unhealthy_collections(session)
+    assert unhealthy.issues == [MovesIssue(1, seasons_plan(collection))]
+    assert "playlist" in unhealthy.issues[0].seasons_plan
     episode_id = episode.id
     session.commit()
     run_write_transaction(lambda w: reconcile(w, ReconcileScope.of_episode(w.get(Episode, episode_id)), renumber={}))
@@ -198,6 +199,44 @@ def test_a_video_with_files_stays_until_it_is_moved_to_where_it_belongs(source, 
     assert session.scalar(select(Episode.episode_identifier).where(Episode.source_slug == "b")).startswith("ep.S01E")
     assert belongs_elsewhere(session, session.scalar(select(Episode).where(Episode.source_slug == "b"))) is None
     assert moved_episodes(session, session.get(type(collection), collection.id)) == []
+    # Moving it counted again: nothing waits any more.
+    found = session.get(type(collection), collection.id)
+    assert (found.healthy, found.health_issues) == (True, {})
+    assert unhealthy_collections(session) == []
+
+
+def test_the_collection_health_check_sets_right_health_that_drifted(source, session):
+    from backend.services.collection_health import check_collection_health, unhealthy_collections
+
+    source.videos = [_video("a", 2024), _video("b", 2025)]
+    source.lists = [_list("PLone", "One")]
+    source.items = {"PLone": ("a",)}
+    collection = _collection(session, identifier="seasonal")
+    _index(session, collection, source)
+    _give_files(session, "b")
+    source.items = {"PLone": ("a", "b")}
+    _index(session, collection, source)
+    session.expire_all()
+    assert session.get(type(collection), collection.id).health_issues == {"moves": 1}
+    updated_at = session.get(type(collection), collection.id).updated_at
+
+    # Something VODLoft missed left its health off.
+    drifted = session.get(type(collection), collection.id)
+    drifted.healthy, drifted.health_issues = True, {}
+    session.commit()
+    assert unhealthy_collections(session) == []
+
+    health = check_collection_health(collection.id)
+    assert (health.corrected, health.needs_attention, health.healthy) == (["moves"], ["moves"], False)
+    session.expire_all()
+    found = session.get(type(collection), collection.id)
+    assert (found.healthy, found.health_issues) == (False, {"moves": 1})
+    # Checking is no change to the collection itself.
+    assert found.updated_at == updated_at
+    assert [[issue.count for issue in item.issues] for item in unhealthy_collections(session)] == [[1]]
+    # A count that is right is left alone.
+    assert check_collection_health(collection.id).corrected == []
+    session.rollback()
 
 
 def test_moving_a_video_after_the_seasons_were_put_in_another_order_skips_numbers_downloaded_episodes_keep(source, session):
@@ -206,12 +245,11 @@ def test_moving_a_video_after_the_seasons_were_put_in_another_order_skips_number
     from backend.db.core import run_write_transaction
     from backend.db.models import Collection, Episode
     from backend.services.link_seasons import moved_episodes
-    from backend.services.reconcile import ReconcileScope, reconcile
-
+    
     source.videos = [_video("a", 2023), _video("b", 2023, 6), _video("c", 2024), _video("d", 2024, 6)]
     source.lists = [_list("PLone", "One"), _list("PLtwo", "Two")]
     source.items = {"PLone": ("a", "c"), "PLtwo": ("c", "d")}
-    collection = _collection(session, mode="selected")
+    collection = _collection(session, mode="on")
     _index(session, collection, source)
     _give_files(session, "a", "b", "c")
     assert _seasons(session) == [("Videos", 1, ["b"]), ("One", 2, ["a", "c"]), ("Two", 3, ["d"])]
@@ -221,18 +259,15 @@ def test_moving_a_video_after_the_seasons_were_put_in_another_order_skips_number
     session.rollback()
     body = CollectionSeasonsAPIUpdate(
         seasons=[{"id": x.id, "name": x.name} for x in reversed(view.seasons)], custom_season_order=True,
-        link_seasons="selected", loose_videos="one_season",
+        link_seasons="on", loose_videos="one_season",
         playlists=[{"id": p.id, "enabled": True, "season_id": p.season_id} for p in view.playlists],
     )
     run_write_transaction(lambda s: update_seasons(s, "creator", body))
     session.expire_all()
-    # The downloaded episode of the season that was first keeps its number from before.
+    # The downloaded episode of the season that was first keeps its number from before, until the collection numbers
+    # its episodes again after the save; the downloaded one in both lists moved along, as the review said.
     assert session.scalar(select(Episode.episode_identifier).where(Episode.source_slug == "b")).startswith("ep.S01E")
-    assert [e.source_slug for e in moved_episodes(session, session.get(Collection, collection.id))] == ["c"]
-    session.rollback()
-
-    run_write_transaction(lambda w: reconcile(w, ReconcileScope.of_collection(w.get(Collection, collection.id)), renumber={}))
-
+    assert moved_episodes(session, session.get(Collection, collection.id)) == []
     assert _seasons(session) == [("Two", 1, ["c", "d"]), ("One", 2, ["a"]), ("Videos", 3, ["b"])]
     identifiers = session.scalars(select(Episode.episode_identifier)).all()
     assert len(identifiers) == len(set(identifiers))
@@ -244,7 +279,7 @@ def test_a_new_playlist_waits_for_the_users_choice_when_only_selected_ones_are_s
     source.videos = [_video("a", 2024), _video("b", 2025)]
     source.lists = [_list("PLone", "One")]
     source.items = {"PLone": ("a",), "PLtwo": ("b",)}
-    collection = _collection(session, mode="selected")
+    collection = _collection(session, mode="on")
     collection.new_lists = {LIST_TYPE: "ask"}
     session.commit()
     _index(session, collection, source)
@@ -259,6 +294,29 @@ def test_a_new_playlist_waits_for_the_users_choice_when_only_selected_ones_are_s
     event = session.scalar(select(NotificationEvent))
     assert (event.title, event.url) == ("New playlist for The Creator", f"/edit-collection/{collection.id}?seasons=1")
     assert _seasons(session) == [("Videos", 1, ["b"]), ("One", 2, ["a"])]
+
+
+def test_a_new_playlist_the_collection_takes_as_contents_adds_its_videos_without_a_season(source, session):
+    from backend.db.models import CollectionList
+
+    source.videos = [_video("a", 2024), _video("b", 2025), _video("c", 2025, 6)]
+    source.lists = [_list("PLone", "One")]
+    source.items = {"PLone": ("a",), "PLtwo": ("b",)}
+    collection = _collection(session, mode="on")
+    collection.new_lists = {LIST_TYPE: "contents"}
+    session.commit()
+    _index(session, collection, source)
+    # Set up with it, the channel's first playlist is contents only too.
+    assert _seasons(session) == [("Collection", 1, ["a", "b", "c"])]
+
+    source.lists = [_list("PLtwo", "Two"), _list("PLone", "One")]
+    _index(session, collection, source)
+
+    session.expire_all()
+    assert {link.ref: (link.enabled, link.status, link.as_season) for link in session.scalars(select(CollectionList))} == {
+        "PLone": (True, "known", False), "PLtwo": (True, "known", False),
+    }
+    assert _seasons(session) == [("Collection", 1, ["a", "b", "c"])]
 
 
 def test_an_artists_albums_are_named_as_music(source, session):
@@ -305,7 +363,7 @@ def test_the_user_renames_and_orders_the_seasons_and_a_new_one_goes_last(source,
     videos, one = view.seasons
     body = CollectionSeasonsAPIUpdate(
         seasons=[{"id": one.id, "name": "The One"}, {"id": videos.id, "name": "Uploads"}], custom_season_order=True,
-        link_seasons="all", loose_videos="one_season",
+        link_seasons="on", loose_videos="one_season",
     )
     run_write_transaction(lambda s: update_seasons(s, "creator", body))
 
@@ -340,7 +398,7 @@ def test_a_contents_only_list_adds_its_videos_to_the_other_seasons_and_can_be_a_
         one = next(playlist for playlist in view.playlists if playlist.ref == "PLone")
         body = CollectionSeasonsAPIUpdate(
             seasons=[{"id": season.id, "name": season.name} for season in view.seasons], custom_season_order=False,
-            link_seasons="all", playlists=[{"id": one.id, "enabled": True, "as_season": as_season}],
+            link_seasons="on", playlists=[{"id": one.id, "enabled": True, "as_season": as_season}],
         )
         run_write_transaction(lambda s: update_seasons(s, "creator", body))
         return view
@@ -358,25 +416,38 @@ def test_a_contents_only_list_adds_its_videos_to_the_other_seasons_and_can_be_a_
     ]
 
 
-def test_a_collection_of_only_its_lists_has_no_other_seasons_for_a_contents_only_list(source, session):
-    from backend.api.endpoints.collections.seasons.service import seasons_view, update_seasons
-    from backend.api.models.collection_seasons import CollectionSeasonsAPIUpdate
-    from backend.db.core import run_write_transaction
-    from backend.services.errors import ServiceError
-
-    source.videos = [_video("a", 2024)]
-    source.lists = [_list("PLone", "One")]
-    source.items = {"PLone": ("a",)}
+def test_a_collection_of_only_its_lists_puts_a_list_that_is_part_of_it_in_its_own_season_of_the_rest(links_source, session):
+    source = links_source
+    source.videos = [_video("a", 2024), _video("b", 2025)]
+    source.lists = [_list("PLone", "One"), _list("PLtwo", "Two")]
+    source.items = {"PLone": ("a",), "PLtwo": ("b", "guest")}
+    source.outside = {"a": _video("a", 2024), "b": _video("b", 2025), "guest": _video("guest", 2023)}
     collection = _collection(session)
+    collection.outside_videos = "only"
+    session.commit()
     _index(session, collection, source)
-    view = seasons_view(session, "creator")
+    view = _update(session, playlists=[
+        {"id": playlist.id, "enabled": True, "as_season": playlist.ref == "PLone"}
+        for playlist in seasons_view_of(session).playlists
+    ])
+
+    # Two is part of the collection: its videos, also another creator's, share the season of what is part of it.
+    assert [(name, episodes) for name, _number, episodes in _seasons(session) if episodes] == [
+        (view.channel_season_names["one_season"], ["b", "guest"]), ("One", ["a"]),
+    ]
+
+    _update(session, loose_videos="by_year")
+    assert [(name, episodes) for name, _number, episodes in _seasons(session) if episodes] == [
+        ("2023", ["guest"]), ("One", ["a"]), ("2025", ["b"]),
+    ]
+
+
+def seasons_view_of(session, slug="creator"):
+    from backend.api.endpoints.collections.seasons.service import seasons_view
+
+    view = seasons_view(session, slug)
     session.rollback()
-    body = CollectionSeasonsAPIUpdate(
-        seasons=[{"id": season.id, "name": season.name} for season in view.seasons], custom_season_order=False,
-        link_seasons="all", outside_videos="only", playlists=[{"id": view.playlists[0].id, "enabled": True, "as_season": False}],
-    )
-    with pytest.raises(ServiceError, match="no other seasons"):
-        run_write_transaction(lambda s: update_seasons(s, "creator", body))
+    return view
 
 
 def test_turning_link_seasons_off_puts_the_videos_back_in_a_season_per_year(source, session):
@@ -394,12 +465,40 @@ def test_turning_link_seasons_off_puts_the_videos_back_in_a_season_per_year(sour
     seasons = session.scalars(select(Season).order_by(Season.index)).all()
     body = CollectionSeasonsAPIUpdate(
         seasons=[{"id": season.id, "name": season.name} for season in seasons], custom_season_order=False,
-        link_seasons="off",
+        link_seasons="off", loose_videos="by_year",
     )
     session.rollback()
     run_write_transaction(lambda s: update_seasons(s, "creator", body))
 
     assert [(name, episodes) for name, _number, episodes in _seasons(session) if episodes] == [("2024", ["a"]), ("2025", ["b"])]
+
+
+def test_without_link_seasons_the_whole_channel_can_be_one_season(source, session):
+    from backend.api.endpoints.collections.seasons import service
+    from backend.api.models.collection_seasons import CollectionSeasonsAPIUpdate
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Season
+
+    source.videos = [_video("a", 2024), _video("b", 2025)]
+    source.lists = [_list("PLone", "One")]
+    source.items = {"PLone": ("a",)}
+    collection = _collection(session, mode="off", loose="by_year")
+    _index(session, collection, source)
+    assert [(name, episodes) for name, _number, episodes in _seasons(session) if episodes] == [("2024", ["a"]), ("2025", ["b"])]
+    view = service.seasons_view(session, "creator")
+    assert view.channel_season_offered
+
+    seasons = session.scalars(select(Season).order_by(Season.index)).all()
+    body = CollectionSeasonsAPIUpdate(
+        seasons=[{"id": season.id, "name": season.name} for season in seasons], custom_season_order=False,
+        link_seasons="off", loose_videos="everything",
+    )
+    session.rollback()
+    run_write_transaction(lambda s: update_seasons_call(service, s, body))
+
+    # Named as the Site calls a channel, as it is while it holds the whole channel.
+    assert [(name, episodes) for name, _number, episodes in _seasons(session) if episodes] == [
+        (view.channel_season_names["everything"], ["a", "b"])]
 
 
 def test_only_a_whole_creator_can_turn_link_seasons_on(source, session):
@@ -409,7 +508,7 @@ def test_only_a_whole_creator_can_turn_link_seasons_on(source, session):
     from backend.services.errors import ServiceError
 
     _collection(session, mode="off", url="https://seasons.example/playlist?list=PLone")
-    body = CollectionSeasonsAPIUpdate(seasons=[], custom_season_order=False, link_seasons="all")
+    body = CollectionSeasonsAPIUpdate(seasons=[], custom_season_order=False, link_seasons="on")
 
     with pytest.raises(ServiceError) as refused:
         run_write_transaction(lambda s: update_seasons(s, "creator", body))
@@ -451,7 +550,7 @@ def test_a_site_can_name_its_link_seasons_itself(source, monkeypatch, session):
     from backend.services import sites
 
     sites._site_of.cache_clear()
-    collection = _collection(session)
+    collection = _collection(session, loose="by_year")
     assert (section_list_names(collection), loose_season_name(collection)) == (Names("set or mix", "sets and mixes"), "Loose")
     collection.type = "music"
     assert loose_season_name(collection) == "Singles"
@@ -528,7 +627,7 @@ def test_an_artists_albums_follow_the_artists_order_and_can_be_reordered(source,
     singles, debut, latest = seasons
     body = CollectionSeasonsAPIUpdate(
         seasons=[{"id": x.id, "name": x.name} for x in (latest, debut, singles)], custom_season_order=True,
-        link_seasons="all",
+        link_seasons="on",
     )
     session.rollback()
     run_write_transaction(lambda s: update_seasons(s, "creator", body))
@@ -556,6 +655,16 @@ def test_videos_of_other_creators_in_a_playlist_join_the_collection_when_it_adds
     source.items = {"PLcollab": ("a",)}
     _index(session, collection, source)
     assert _seasons(session) == [("Collabs", 1, ["a"])]
+
+
+def _removing(session) -> list[int]:
+    """The collections whose episodes that left with their files wait to be let go, as an action of the collection."""
+    from task_manager.scheduler.db import TaskOperation
+
+    session.expire_all()
+    return list(session.scalars(
+        select(TaskOperation.resource_id).where(TaskOperation.kind == "collection.remove_left_episodes")
+    ))
 
 
 def test_a_video_from_outside_with_files_leaves_with_its_files(source, session, monkeypatch):
@@ -595,17 +704,18 @@ def test_a_video_from_outside_with_files_leaves_with_its_files(source, session, 
     link_id = session.scalar(select(CollectionList.id))
     body = CollectionSeasonsAPIUpdate(
         seasons=[{"id": x.id, "name": x.name} for x in seasons], custom_season_order=False,
-        link_seasons="selected", outside_videos="add", playlists=[{"id": link_id, "enabled": False}],
+        link_seasons="on", outside_videos="add", playlists=[{"id": link_id, "enabled": False}],
     )
     session.rollback()
     run_write_transaction(lambda s: update_seasons(s, "creator", body))
-    assert queued == [{"def_key": "remove_left_episodes", "resource_type": "collection", "resource_id": collection.id}]
+    assert _removing(session) == [collection.id]
 
     assert worker.run_remove_left_episodes(session, collection_id=collection.id) == 1
     assert deleted == ["/downloads/guest.mp4"]
     session.expire_all()
     assert session.scalars(select(Episode.source_slug)).all() == ["a"]
-    assert _seasons(session) == [("Videos", 1, ["a"])]
+    # With no playlist a season, the one season holds the whole channel.
+    assert _seasons(session) == [("Collection", 1, ["a"])]
 
 
 def test_the_downloaded_videos_of_a_playlist_turned_off_move_where_new_videos_would_go(source, session, monkeypatch):
@@ -614,12 +724,11 @@ def test_the_downloaded_videos_of_a_playlist_turned_off_move_where_new_videos_wo
     from backend.db.core import run_write_transaction
     from backend.db.models import Episode, CollectionList, Season
 
-    moved = []
-    monkeypatch.setattr(service, "queue_season_folder_moves", lambda s, collection, ids: moved.append(ids))
+    moved = _files_follow(monkeypatch, service)
     source.videos = [_video("a", 2024), _video("b", 2025)]
     source.lists = [_list("PLone", "One")]
     source.items = {"PLone": ("a",)}
-    collection = _collection(session, mode="selected", loose="by_year")
+    collection = _collection(session, mode="on", loose="by_year")
     _index(session, collection, source)
     _give_files(session, "a")
     assert _seasons(session) == [("One", 1, ["a"]), ("2025", 2, ["b"])]
@@ -628,13 +737,12 @@ def test_the_downloaded_videos_of_a_playlist_turned_off_move_where_new_videos_wo
     link_id = session.scalar(select(CollectionList.id))
     body = CollectionSeasonsAPIUpdate(
         seasons=[{"id": x.id, "name": x.name} for x in seasons], custom_season_order=False,
-        link_seasons="selected", loose_videos="by_year", playlists=[{"id": link_id, "enabled": False}],
+        link_seasons="on", loose_videos="by_year", playlists=[{"id": link_id, "enabled": False}],
     )
     session.rollback()
     run_write_transaction(lambda s: update_seasons_call(service, s, body))
 
-    episode_a = session.scalar(select(Episode).where(Episode.source_slug == "a"))
-    assert moved == [[episode_a.id]]
+    assert moved == [True]
     assert _seasons(session) == [("2024", 1, ["a"]), ("2025", 2, ["b"])]
     assert session.scalar(select(Episode.episode_identifier).where(Episode.source_slug == "a")).startswith("ep.S01E")
 
@@ -645,11 +753,11 @@ def test_a_season_of_a_list_left_over_while_link_seasons_were_off_empties_when_s
     from backend.db.core import run_write_transaction
     from backend.db.models import Collection, CollectionList, Season
 
-    monkeypatch.setattr(service, "queue_season_folder_moves", lambda s, collection, ids: None)
+    _files_follow(monkeypatch, service)
     source.videos = [_video("a", 2024), _video("b", 2025)]
     source.lists = [_list("PLone", "One")]
     source.items = {"PLone": ("a",)}
-    collection = _collection(session, mode="selected", loose="by_year")
+    collection = _collection(session, mode="on", loose="by_year")
     _index(session, collection, source)
     _give_files(session, "a")
     # As the old creators left it: a season of a list that is off, in a collection whose playlists are off.
@@ -662,7 +770,7 @@ def test_a_season_of_a_list_left_over_while_link_seasons_were_off_empties_when_s
     link_id = session.scalar(select(CollectionList.id))
     body = CollectionSeasonsAPIUpdate(
         seasons=[{"id": x.id, "name": x.name} for x in seasons], custom_season_order=False,
-        link_seasons="selected", loose_videos="by_year", playlists=[{"id": link_id, "enabled": False}],
+        link_seasons="on", loose_videos="by_year", playlists=[{"id": link_id, "enabled": False}],
     )
     session.rollback()
     run_write_transaction(lambda s: update_seasons_call(service, s, body))
@@ -681,7 +789,7 @@ def test_downloaded_videos_of_year_seasons_wait_for_the_move_after_a_save_puts_t
     source.videos = [_video("a", 2024), _video("b", 2025)]
     source.lists = [_list("PLone", "One")]
     source.items = {"PLone": ()}
-    collection = _collection(session, mode="selected", loose="by_year")
+    collection = _collection(session, mode="on", loose="by_year")
     _index(session, collection, source)
     _give_files(session, "a")
     assert _seasons(session) == [("2024", 2024, ["a"]), ("2025", 2025, ["b"])]
@@ -689,18 +797,14 @@ def test_downloaded_videos_of_year_seasons_wait_for_the_move_after_a_save_puts_t
     seasons = session.scalars(select(Season).order_by(Season.index)).all()
     body = CollectionSeasonsAPIUpdate(
         seasons=[{"id": x.id, "name": x.name} for x in seasons], custom_season_order=False,
-        link_seasons="selected", loose_videos="one_season",
+        link_seasons="on", loose_videos="one_season",
     )
     session.rollback()
     run_write_transaction(lambda s: update_seasons_call(service, s, body))
 
-    # The video without files moved at once; the downloaded one waits for the Move dialog the save opens.
-    assert _seasons(session) == [("Videos", 1, ["b"]), ("2024", 2, ["a"])]
-    assert [episode.source_slug for episode in moved_episodes(session, session.get(Collection, collection.id))] == ["a"]
-    session.rollback()
-    run_write_transaction(lambda w: reconcile(w, ReconcileScope.of_collection(w.get(Collection, collection.id)), renumber={}))
-    session.expire_all()
+    # The downloaded one moves along with the one without files, as the review the user agreed to said.
     assert _seasons(session) == [("Videos", 1, ["a", "b"])]
+    assert moved_episodes(session, session.get(Collection, collection.id)) == []
 
 
 def test_the_channel_season_takes_its_new_name_when_it_holds_the_whole_channel(source, session, monkeypatch):
@@ -712,16 +816,16 @@ def test_the_channel_season_takes_its_new_name_when_it_holds_the_whole_channel(s
     source.videos = [_video("a", 2024), _video("b", 2025)]
     source.lists = [_list("PLone", "One")]
     source.items = {"PLone": ("a",)}
-    collection = _collection(session, mode="selected", loose="one_season")
+    collection = _collection(session, mode="on", loose="one_season")
     _index(session, collection, source)
     view = service.seasons_view(session, "creator")
     session.rollback()
     loose = next(season for season in view.seasons if season.loose)
-    assert loose.name == view.channel_season_names["unlisted"]
+    assert loose.name == view.channel_season_names["one_season"]
 
     body = CollectionSeasonsAPIUpdate(
         seasons=[{"id": x.id, "name": x.name} for x in view.seasons], custom_season_order=False,
-        link_seasons="selected", loose_videos="one_season", channel_season="everything",
+        link_seasons="on", loose_videos="everything",
     )
     run_write_transaction(lambda s: update_seasons_call(service, s, body))
 
@@ -736,7 +840,7 @@ def _remove(session, service, *names, **settings):
     session.rollback()
     body = CollectionSeasonsAPIUpdate(
         seasons=[{"id": x.id, "name": x.name} for x in view.seasons], custom_season_order=False,
-        link_seasons=settings.pop("link_seasons", "selected"), loose_videos=settings.pop("loose_videos", "by_year"),
+        link_seasons=settings.pop("link_seasons", "on"), loose_videos=settings.pop("loose_videos", "by_year"),
         playlists=[{"id": p.id, "enabled": p.enabled, "season_id": p.season_id} for p in view.playlists],
         removed_seasons=[x.id for x in view.seasons if x.name in names], **settings,
     )
@@ -749,12 +853,11 @@ def test_a_removed_season_per_year_comes_back_when_the_settings_put_its_videos_t
     from backend.api.endpoints.collections.seasons import service
     from backend.db.models import Season
 
-    moved = []
-    monkeypatch.setattr(service, "queue_season_folder_moves", lambda s, collection, ids: moved.append(ids))
+    moved = _files_follow(monkeypatch, service)
     source.videos = [_video("a", 2024), _video("b", 2025)]
     source.lists = []
     source.items = {}
-    collection = _collection(session, mode="selected", loose="by_year")
+    collection = _collection(session, mode="on", loose="by_year")
     _index(session, collection, source)
     _give_files(session, "a")
     view = _remove(session, service, "2024", "2025")
@@ -767,18 +870,18 @@ def test_a_removed_season_per_year_comes_back_when_the_settings_put_its_videos_t
 
     # In one season instead, they go for good.
     _remove(session, service, "2024", "2025", loose_videos="one_season")
-    assert [(name, episodes) for name, _number, episodes in _seasons(session)] == [("Videos", ["a", "b"])]
+    assert [(name, episodes) for name, _number, episodes in _seasons(session)] == [("Collection", ["a", "b"])]
 
 
 def test_a_removed_season_of_a_list_or_a_leftover_season_goes_to_the_seasons_the_settings_give(source, session, monkeypatch):
     from backend.api.endpoints.collections.seasons import service
     from backend.db.models import Episode, Season
 
-    monkeypatch.setattr(service, "queue_season_folder_moves", lambda s, collection, ids: None)
+    _files_follow(monkeypatch, service)
     source.videos = [_video("a", 2024), _video("b", 2025)]
     source.lists = [_list("PLone", "One")]
     source.items = {"PLone": ("a",)}
-    collection = _collection(session, mode="selected", loose="one_season")
+    collection = _collection(session, mode="on", loose="one_season")
     _index(session, collection, source)
     # A season no setting makes, as an older VODLoft left one.
     leftover = Season(collection_id=collection.id, index=99, slug="old", name="Old", season_number=9)
@@ -802,7 +905,7 @@ def test_a_season_the_site_has_itself_is_not_removable(source, session):
     source.videos = [_video("a", 2024)]
     source.lists = []
     source.items = {}
-    collection = _collection(session, mode="selected", loose="one_season")
+    collection = _collection(session, mode="on", loose="one_season")
     _index(session, collection, source)
     session.add(Season(
         collection_id=collection.id, index=99, slug="season-1", name="Season 1", season_number=1,
@@ -812,9 +915,17 @@ def test_a_season_the_site_has_itself_is_not_removable(source, session):
 
     view = service.seasons_view(session, "creator")
     session.rollback()
-    assert {x.name: x.removable for x in view.seasons} == {"Videos": True, "Season 1": False}
+    assert {x.name: x.removable for x in view.seasons} == {"Collection": True, "Season 1": False}
     with pytest.raises(ServiceError):
         _remove(session, service, "Season 1", loose_videos="one_season")
+
+
+def _files_follow(monkeypatch, service):
+    """What saving queues to move downloaded files: the task that numbers the collection's episodes again, or keeps
+    their numbers, and gives every file its new name and folder. Each entry says whether it numbers them again."""
+    queued = []
+    monkeypatch.setattr(service, "queue_renumber", lambda s, collection, renumber: queued.append(renumber))
+    return queued
 
 
 def update_seasons_call(service, s, body):
@@ -896,7 +1007,7 @@ def test_a_downloaded_video_the_creator_takes_out_of_a_playlist_stays_until_the_
     assert sorted(session.scalars(select(Episode.source_slug)).all()) == ["a", "guest"]
     guest = session.scalar(select(Episode).where(Episode.source_slug == "guest"))
     assert guest.removed_from_source
-    assert queued == []
+    assert queued == [] and _removing(session) == []
     (question,) = get_keep_questions(session)
     assert (question.episode_title, question.left_link) == ("Video guest", "Collabs")
     assert worker.run_remove_left_episodes(session, collection_id=collection.id) == 0
@@ -905,7 +1016,7 @@ def test_a_downloaded_video_the_creator_takes_out_of_a_playlist_stays_until_the_
 
     # Don't keep lets it go, files and all.
     run_write_transaction(lambda s: answer_keep_question(s, [guest.id], keep=False))
-    assert queued == [{"def_key": "remove_left_episodes", "resource_type": "collection", "resource_id": collection.id}]
+    assert _removing(session) == [collection.id]
     assert worker.run_remove_left_episodes(session, collection_id=collection.id) == 1
     assert deleted == ["/downloads/guest.mp4"]
     session.expire_all()
@@ -964,6 +1075,11 @@ def links_source(monkeypatch):
     sites._site_of.cache_clear()
 
 
+def _every_list(session, *, as_season: bool, slug="creator") -> list[dict]:
+    """Every list of the collection on, each a season of its own or part of the collection."""
+    return [{"id": playlist.id, "enabled": True, "as_season": as_season} for playlist in seasons_view_of(session, slug).playlists]
+
+
 def _update(session, slug="creator", added=(), **changes):
     from backend.api.endpoints.collections.seasons.service import seasons_view, update_seasons
     from backend.api.models.collection_seasons import CollectionSeasonsAPIUpdate
@@ -976,7 +1092,9 @@ def _update(session, slug="creator", added=(), **changes):
         "custom_season_order": view.custom_season_order, "link_seasons": view.link_seasons,
         "new_lists": {setting.key: setting.action for setting in view.new_lists}, "loose_videos": view.loose_videos,
         "outside_videos": view.outside_videos,
-        "playlists": [{"id": playlist.id, "enabled": playlist.enabled} for playlist in view.playlists],
+        "playlists": [
+            {"id": playlist.id, "enabled": playlist.enabled, "as_season": playlist.as_season} for playlist in view.playlists
+        ],
         **changes,
     }
     return run_write_transaction(lambda s: update_seasons(s, slug, CollectionSeasonsAPIUpdate(**body), added))
@@ -990,7 +1108,7 @@ def test_a_collection_that_holds_only_its_playlists_leaves_the_creators_other_vi
     source.lists = [_list("PLbest", "Best Of")]
     source.items = {"PLbest": ("a", "guest")}
     source.outside = {"a": _video("a", 2024), "guest": _video("guest", 2023)}
-    collection = _collection(session, mode="all")
+    collection = _collection(session, mode="on")
     collection.outside_videos = "only"
     session.commit()
 
@@ -1018,16 +1136,47 @@ def test_switching_to_only_the_playlists_removes_the_videos_none_of_them_has(lin
     _give_files(session, "b", "a")
 
     view = _update(session, outside_videos="only")
-    # Nothing leaves before the playlists are listed again.
+    # Nothing leaves before the playlists are listed again, which the save asks for as the user's change.
     assert (view.outside_videos, view.only_leaving_count) == ("only", 0)
     assert sorted(session.scalars(select(Episode.source_slug)).all()) == ["a", "b", "c"]
+    from task_manager.scheduler.db.TaskOperationTarget import TaskOperationTarget
+    assert [target.task_kwargs for target in session.scalars(select(TaskOperationTarget))] == [{"by_user": True}]
+    queued.clear()
 
-    _index(session, collection, source)
-    # The one without files leaves; the downloaded one stays until the user answers the Home page.
+    from task_manager.tasks.helpers.listed_collections import index_listed_collection
+    index_listed_collection(session, collection_id=collection.id, source=source, by_user=True)
+    # The one without files leaves; the downloaded one leaves with its files, by the task that deletes them first,
+    # since the user chose this: the Home page asks nothing.
     session.expire_all()
     assert sorted(session.scalars(select(Episode.source_slug)).all()) == ["a", "b"]
-    assert session.scalar(select(Episode.removed_from_source).where(Episode.source_slug == "b"))
+    b = session.scalar(select(Episode).where(Episode.source_slug == "b"))
+    assert not b.removed_from_source and b.downloads[0].removal_answered_at is not None
+    assert _removing(session) == [collection.id]
     assert _seasons(session)[-1] == ("Best Of", 2, ["a"])
+
+
+def test_a_check_that_finds_a_video_gone_from_the_playlists_leaves_it_for_the_home_page(links_source, session, monkeypatch):
+    from backend.db.models import Collection, Episode
+
+    monkeypatch.setattr("task_manager.scheduler.transactional.queue_task_after_commit", lambda s, **kwargs: None)
+    source = links_source
+    source.videos = []
+    source.lists = [_list("PLbest", "Best Of")]
+    source.items = {"PLbest": ("a", "b")}
+    source.outside = {"a": _video("a", 2024), "b": _video("b", 2025)}
+    collection = _collection(session, mode="on")
+    collection.outside_videos = "only"
+    session.commit()
+    _index(session, collection, source)
+    _give_files(session, "b")
+
+    # The creator takes the downloaded video out of the playlist; nobody in VODLoft chose that.
+    source.items = {"PLbest": ("a",)}
+    _index(session, session.get(Collection, collection.id), source)
+
+    session.expire_all()
+    b = session.scalar(select(Episode).where(Episode.source_slug == "b"))
+    assert b.removed_from_source and b.downloads[0].removal_answered_at is None
 
 
 def test_an_empty_collection_takes_links_the_user_adds(links_source, session):
@@ -1262,8 +1411,7 @@ def test_the_downloaded_videos_of_a_list_that_joins_another_season_move_with_the
     from backend.api.endpoints.collections.seasons import service
     from backend.db.models import Episode
 
-    moved = []
-    monkeypatch.setattr(service, "queue_season_folder_moves", lambda s, collection, ids: moved.append(ids))
+    moved = _files_follow(monkeypatch, service)
     source.videos = [_video("a", 2023), _video("c", 2024)]
     source.lists = [_list("PLtwo", "Part 2"), _list("PLone", "Part 1")]
     source.items = {"PLone": ("a",), "PLtwo": ("c",)}
@@ -1273,7 +1421,7 @@ def test_the_downloaded_videos_of_a_list_that_joins_another_season_move_with_the
 
     _put_together(session, {"PLtwo": _season_of(session, "PLone")})
 
-    assert moved == [[session.scalar(select(Episode.id).where(Episode.source_slug == "c"))]]
+    assert moved == [True]
     assert _seasons(session) == [("Part 1", 1, ["a", "c"])]
 
 
@@ -1292,7 +1440,7 @@ def test_a_list_only_joins_a_season_of_the_collections_lists(source, session):
         _put_together(session, {"PLone": videos})
 
 
-def test_lists_laid_out_by_year_still_decide_what_is_in(source, session):
+def test_lists_included_as_contents_with_the_rest_by_year_still_decide_what_is_in(source, session):
     from backend.services.link_seasons import moved_episodes
 
     source.videos = [_video("a", 2023), _video("b", 2024), _video("c", 2024, 6), _video("d", 2025)]
@@ -1303,18 +1451,18 @@ def test_lists_laid_out_by_year_still_decide_what_is_in(source, session):
     _give_files(session, "d")
     assert _seasons(session) == [("Videos", 1, ["c", "d"]), ("The Tour", 2, ["a", "b"])]
 
-    _update(session, list_layout="by_year")
+    _update(session, playlists=_every_list(session, as_season=False), loose_videos="by_year")
 
-    # The playlist's videos and the others share the year seasons; the other creator's video stays out. The
-    # downloaded one stays where it is until it is moved, as with any season change.
-    assert _seasons(session) == [("Videos", 1, ["d"]), ("2023", 2, ["a"]), ("2024", 3, ["b", "c"])]
-    assert [episode.source_slug for episode in moved_episodes(session, collection)] == ["d"]
+    # The playlist's videos and the others share the year seasons, the downloaded one too; the other creator's
+    # video stays out.
+    assert _seasons(session) == [("2023", 1, ["a"]), ("2024", 2, ["b", "c"]), ("2025", 3, ["d"])]
+    assert moved_episodes(session, collection) == []
 
-    _update(session, list_layout="season_each")
+    _update(session, playlists=_every_list(session, as_season=True), loose_videos="one_season")
     assert _seasons(session) == [("Videos", 1, ["c", "d"]), ("The Tour", 2, ["a", "b"])]
 
 
-def test_an_episode_of_a_list_laid_out_by_year_names_its_list_in_templates(source, session):
+def test_an_episode_of_a_list_included_as_contents_names_its_list_in_templates(source, session):
     from backend.db.models import Episode
     from backend.utils.output_template import _creator_values
 
@@ -1323,7 +1471,7 @@ def test_an_episode_of_a_list_laid_out_by_year_names_its_list_in_templates(sourc
     source.items = {"PLtour": ("a",)}
     collection = _collection(session)
     _index(session, collection, source)
-    _update(session, list_layout="by_year")
+    _update(session, playlists=_every_list(session, as_season=False), loose_videos="by_year")
     session.expire_all()
 
     titles = {
@@ -1363,7 +1511,7 @@ def _switch_off(session, *refs: str):
     session.rollback()
     body = CollectionSeasonsAPIUpdate(
         seasons=[{"id": season.id, "name": season.name} for season in view.seasons],
-        custom_season_order=view.custom_season_order, link_seasons="selected", loose_videos=view.loose_videos,
+        custom_season_order=view.custom_season_order, link_seasons="on", loose_videos=view.loose_videos,
         playlists=[
             {"id": playlist.id, "enabled": playlist.ref not in refs, "season_id": playlist.season_id}
             for playlist in view.playlists
@@ -1385,9 +1533,9 @@ def test_a_shared_season_stays_until_every_list_in_it_is_switched_off(source, se
     _switch_off(session, "PLone")
     assert _seasons(session) == [("Videos", 1, ["a", "b", "e"]), ("Cabin, Part 1", 2, ["c"])]
 
-    # With its last list off, the season is deleted.
+    # With its last list off, the season is deleted, and the channel's season holds the whole channel.
     _switch_off(session, "PLone", "PLtwo")
-    assert _seasons(session) == [("Videos", 1, ["a", "b", "c", "e"])]
+    assert _seasons(session) == [("Collection", 1, ["a", "b", "c", "e"])]
 
 
 def test_the_preview_shows_the_seasons_a_save_would_leave_and_saves_nothing(source, session):
@@ -1398,7 +1546,7 @@ def test_the_preview_shows_the_seasons_a_save_would_leave_and_saves_nothing(sour
     source.videos = [_video("a", 2024), _video("b", 2025)]
     source.lists = []
     source.items = {}
-    collection = _collection(session, mode="selected", loose="by_year")
+    collection = _collection(session, mode="on", loose="by_year")
     _index(session, collection, source)
     before = _seasons(session)
     assert before == [("2024", 2024, ["a"]), ("2025", 2025, ["b"])]
@@ -1407,11 +1555,11 @@ def test_the_preview_shows_the_seasons_a_save_would_leave_and_saves_nothing(sour
     session.rollback()
     body = CollectionSeasonsAPIUpdate(
         seasons=[{"id": x.id, "name": x.name} for x in view.seasons], custom_season_order=False,
-        link_seasons="selected", loose_videos="one_season", playlists=[],
+        link_seasons="on", loose_videos="one_season", playlists=[],
     )
     preview = run_write_transaction(lambda s: preview_seasons(s, "creator", body))
 
-    assert [(season.name, season.episode_count) for season in preview.seasons] == [("Videos", 2)]
+    assert [(season.name, season.episode_count) for season in preview.seasons] == [("Collection", 2)]
     assert _seasons(session) == before
 
 
@@ -1442,7 +1590,7 @@ def _save(session, *, custom: bool, order=None, off=(), preview=False, loose=Non
     seasons = sorted(view.seasons, key=lambda x: order.index(x.name)) if order else view.seasons
     body = CollectionSeasonsAPIUpdate(
         seasons=[{"id": x.id, "name": x.name} for x in seasons], custom_season_order=custom,
-        link_seasons="selected", loose_videos=loose or view.loose_videos,
+        link_seasons="on", loose_videos=loose or view.loose_videos,
         playlists=[{"id": p.id, "enabled": p.ref not in off, "season_id": p.season_id} for p in view.playlists],
     )
     work = preview_seasons if preview else update_seasons
@@ -1453,25 +1601,25 @@ def test_the_seasons_left_after_others_are_deleted_are_numbered_from_one_in_eith
     source.videos = [_video("a", 2023), _video("b", 2024), _video("c", 2025)]
     source.lists = [_list("PLone", "Cabin, Part 1"), _list("PLtwo", "Cabin, Part 2")]
     source.items = {"PLone": ("a",), "PLtwo": ("b",)}
-    collection = _collection(session, mode="selected")
+    collection = _collection(session, mode="on")
     _index(session, collection, source)
     _save(session, custom=True, order=["Cabin, Part 2", "Cabin, Part 1", "Videos"])
     assert [(name, number) for name, number, _ in _seasons(session)] == [("Cabin, Part 2", 1), ("Cabin, Part 1", 2), ("Videos", 3)]
 
     # Back in VODLoft's order, the only season left is the first.
     preview = _save(session, custom=False, off=("PLone", "PLtwo"), preview=True)
-    assert [(x.name, x.season_number) for x in preview.seasons] == [("Videos", 1)]
+    assert [(x.name, x.season_number) for x in preview.seasons] == [("Collection", 1)]
 
     # In the user's own order too: the order stays, and the numbers close up.
     _save(session, custom=True, off=("PLone", "PLtwo"))
-    assert [(name, number) for name, number, _ in _seasons(session)] == [("Videos", 1)]
+    assert [(name, number) for name, number, _ in _seasons(session)] == [("Collection", 1)]
 
 
 def test_seasons_per_year_made_in_the_users_own_order_go_by_year(source, session):
     source.videos = [_video("a", 2023), _video("b", 2024), _video("c", 2025), _video("d", 2021), _video("e", 2022)]
     source.lists = [_list("PLone", "Cabin")]
     source.items = {"PLone": ("b",)}
-    collection = _collection(session, mode="selected")
+    collection = _collection(session, mode="on")
     _index(session, collection, source)
     _save(session, custom=True, order=["Cabin", "Videos"])
 
@@ -1489,39 +1637,129 @@ def test_the_seasons_list_marks_the_channel_season_while_it_holds_the_whole_chan
     source.videos = [_video("a", 2024), _video("b", 2025)]
     source.lists = [_list("PLone", "One")]
     source.items = {"PLone": ("a",)}
-    collection = _collection(session, channel_season="everything")
+    collection = _collection(session, loose="everything")
     _index(session, collection, source)
 
     assert [(season.name, season.whole_channel) for season in get_seasons_list(session, "creator")
             if season.whole_channel] == [(next(season.name for season in collection.seasons if season.loose), True)]
-    collection.channel_season = "unlisted"
+    collection.loose_videos = "one_season"
     session.commit()
     assert not any(season.whole_channel for season in get_seasons_list(session, "creator"))
+    # The season of what is in no list stays marked, so a collection page lists it first.
+    assert [season.name for season in get_seasons_list(session, "creator") if season.loose] == [
+        next(season.name for season in collection.seasons if season.loose)]
 
 
-def test_a_channel_collection_takes_links_in_the_same_save_that_makes_it_hold_only_its_playlists(links_source, session):
+def test_a_channel_collection_takes_links_beside_its_playlists(links_source, session):
     from backend.api.endpoints.collections.seasons.service import AddedLink, link_to_add
-    from backend.db.models import CollectionList
+    from backend.db.models import Collection, CollectionList
     from backend.services.errors import ServiceError
 
     source = links_source
-    source.videos = [_video("a", 2024)]
+    source.videos = [_video("a", 2024), _video("b", 2025)]
     source.lists = [_list("PLbest", "Best Of")]
-    source.items = {"PLbest": ("a",)}
-    collection = _collection(session, mode="all")
+    source.items = {"PLbest": ("a",), "PLmine": ("b", "guest")}
+    source.outside = {"b": _video("b", 2025), "guest": _video("guest", 2023)}
+    collection = _collection(session, mode="on")
     session.commit()
     _index(session, collection, source)
 
-    # It does not hold only its playlists yet, but a link can be looked up for the save that makes it.
     assert link_to_add(session, "creator", "https://seasons.example/playlist?list=PLmine").url.endswith("PLmine")
     session.rollback()
     mine = AddedLink("PLmine", "https://seasons.example/playlist?list=PLmine", "Mine", None, "seasons")
-    with pytest.raises(ServiceError, match="holds only"):
-        _update(session, added=[mine])
+    # A link needs the lists on.
+    with pytest.raises(ServiceError, match="Switch the"):
+        _update(session, added=[mine], link_seasons="off")
     session.rollback()
 
-    _update(session, added=[mine], outside_videos="only")
+    _update(session, added=[mine])
     session.expire_all()
     assert {(link.ref, link.added_by_user) for link in session.scalars(select(CollectionList))} == {
         ("PLbest", False), ("PLmine", True),
     }
+    _index(session, session.get(Collection, collection.id), source)
+    # The link is a season of its own, with the channel's own video; another creator's stays out, as the collection
+    # leaves them out of its lists.
+    assert ("Mine", ["b"]) in [(name, episodes) for name, _number, episodes in _seasons(session)]
+
+def test_a_channel_season_of_everything_holds_only_the_channels_own_videos(source, session):
+    from backend.db.models import Episode
+
+    source.videos = [_video("a", 2024)]
+    source.lists = [_list("PLcollab", "Collabs")]
+    source.items = {"PLcollab": ("guest", "a")}
+    source.outside = {"guest": _video("guest", 2023)}
+    collection = _collection(session, loose="everything")
+    collection.outside_videos = "add"
+    collection.repeat_videos = "each_season"
+    session.commit()
+
+    _index(session, collection, source)
+
+    # Another channel's video in a playlist is in that playlist's season only, once.
+    seasons = dict((name, episodes) for name, _number, episodes in _seasons(session))
+    assert seasons["Collabs"] == ["a", "guest"]
+    assert "guest" not in next(episodes for name, episodes in seasons.items() if name != "Collabs")
+    assert session.scalar(select(func.count()).select_from(Episode).where(Episode.source_slug.like("guest%"))) == 1
+
+
+def test_every_list_can_be_included_as_contents_only_part_of_the_channel(source, session):
+    from backend.api.endpoints.collections.seasons import service
+    from backend.api.models.collection_seasons import CollectionSeasonsAPIUpdate
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Collection, CollectionList
+
+    source.videos = [_video("a", 2024), _video("b", 2025)]
+    source.lists = [_list("PLone", "One")]
+    source.items = {"PLone": ("guest", "a")}
+    source.outside = {"guest": _video("guest", 2023)}
+    collection = _collection(session, mode="on", loose="one_season")
+    collection.outside_videos = "add"
+    session.commit()
+    _index(session, collection, source)
+    assert "One" in [name for name, _number, episodes in _seasons(session) if episodes]
+
+    view = service.seasons_view(session, "creator")
+    assert all(playlist.as_season for playlist in view.playlists)
+    body = CollectionSeasonsAPIUpdate(
+        seasons=[{"id": x.id, "name": x.name} for x in view.seasons], custom_season_order=False,
+        link_seasons="on", loose_videos="one_season", outside_videos="add", new_lists={LIST_TYPE: "contents"},
+        playlists=[{"id": playlist.id, "enabled": True, "as_season": False} for playlist in view.playlists],
+    )
+    session.rollback()
+    run_write_transaction(lambda s: update_seasons_call(service, s, body))
+    session.expire_all()
+
+    # The list is part of the channel, as a feed is: its videos, also another creator's, are in the channel's season,
+    # which holds the whole channel now that no list is a season of its own.
+    assert [(name, episodes) for name, _number, episodes in _seasons(session) if episodes] == [
+        (view.channel_season_names["everything"], ["a", "b", "guest"])]
+    assert not any(link.as_season for link in session.scalars(select(CollectionList)))
+
+    # A list the channel adds later is included as the collection takes new ones: part of it.
+    source.lists = [_list("PLone", "One"), _list("PLtwo", "Two")]
+    source.items = {"PLone": ("guest", "a"), "PLtwo": ("b",)}
+    _index(session, session.get(Collection, collection.id), source)
+    session.expire_all()
+    assert {link.ref: link.as_season for link in session.scalars(select(CollectionList))} == {"PLone": False, "PLtwo": False}
+
+
+def test_picked_lists_that_are_all_contents_only_are_as_every_list_included_as_contents(source, session):
+    from backend.db.models import Collection
+    from backend.services.link_seasons import holds_whole_channel, lists_are_seasons
+
+    source.videos = [_video("a", 2023), _video("b", 2024)]
+    source.lists = [_list("PLone", "One"), _list("PLtwo", "Two")]
+    source.items = {"PLone": ("a",), "PLtwo": ("b",)}
+    collection = _collection(session, mode="on")
+    _index(session, collection, source)
+    view = _update(session, playlists=[
+        {"id": link.id, "enabled": link.title == "One", "as_season": False}
+        for link in session.get(Collection, collection.id).lists
+    ])
+
+    collection = session.get(Collection, collection.id)
+    assert not lists_are_seasons(collection) and holds_whole_channel(collection)
+    # One season holding the whole channel, as with every list included as contents.
+    assert _seasons(session) == [("Collection", 1, ["a", "b"])]
+    assert view.loose_videos == "one_season"

@@ -40,7 +40,7 @@ from backend.types.media_download_history_types import MediaDownloadHistoryActio
 from backend.utils.custom_index import CustomIndexNotReadyError
 from backend.utils.output_template import resolve_episode_output_path
 from config.settings.submodels import MetadataMode, ThumbnailMode
-from downloader.metadata import render_nfo
+from downloader.metadata import nfo_fingerprint, render_nfo
 from downloader.storage.identity import inspect_artifact
 from task_manager.tasks.media_download_operations import get_active_media_download_operation
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
@@ -476,6 +476,8 @@ def fill_missing_sidecars(download_id: int) -> int:
                 asset_key=asset_key, kind=kind, path=str(path), suffix=path.name[len(media_path.stem):],
                 size_bytes=identity.size_bytes, fingerprint=identity.fingerprint,
             ))
+            if kind == "nfo":
+                download.nfo_fingerprint = nfo_fingerprint(nfo)
         return len(written)
 
     return run_write_transaction(record)

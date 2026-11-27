@@ -1,6 +1,6 @@
 # Settings
 
-Most VODLoft configuration can be changed from the **Settings** page. The interface groups normal options into General, Downloads, Quick download, Automation, Messages and actions, Sources, Users, Import and Advanced tabs, and explains environment-variable overrides when they are active. Notifications, media server refreshes, webhooks and scripts have their own page: [[Messages-and-Actions]].
+Most VODLoft configuration can be changed from the **Settings** page. The interface groups normal options into General, Downloads, Quick download, Automation, Messages and actions, Sites, Users, Import and Advanced tabs, and explains environment-variable overrides when they are active. Notifications, media server refreshes, webhooks and scripts have their own page: [[Messages-and-Actions]].
 
 This page is the complete 1.1 reference for settings users may need to configure.
 
@@ -220,6 +220,23 @@ A quick check looks only at a collection's newest videos and looks up the ones V
 
 Metadata intervals accept positive values using `s`, `m`, `h`, or `d`, separated by commas and ordered from shortest to longest.
 
+### Collection health
+
+| Setting | Environment variable | Default | What it does |
+| --- | --- | --- | --- |
+| `collectionHealth.checkCronEnabled` | `VL_COLLECTION_HEALTH__CHECK_CRON_ENABLED` | `true` | Enables the collection health check. |
+| `collectionHealth.checkCron` | `VL_COLLECTION_HEALTH__CHECK_CRON` | `0 4 * * *` | Checks every collection once a night, and marks the ones that need you. |
+
+VODLoft keeps track of what each collection needs from you as it works. Home lists those collections under **Needs attention**, and the Library marks them with a badge. The health check works this out again for every collection, in case something was missed, and sets it right. **Run now** runs it at once.
+
+Below the schedule you choose which checks run. They are saved as soon as you change them:
+
+- **Downloads to move**: downloaded videos that your season settings put in another season, which wait for you to move them. Home shows them as a warning.
+- **New lists to choose**: lists a channel added later, such as a new playlist, which wait for you to choose whether they are added. Home shows them as info.
+- **Creators to group**: VODLoft finds the creator behind each collection that is in no creator yet. When three or more of your collections are by one creator, Home suggests grouping them under that creator, to keep the Library tidy. **Group** groups them, **Later** asks again in a week, **Dismiss** stops asking about that creator, and **Never suggest grouping creators** turns this check off.
+
+**Reset dismissed suggestions** brings back every suggestion you dismissed or put off.
+
 ### Per-Site scheduling
 
 Each Site follows the settings above unless you give it settings of its own under **Settings → Automation → Per-Site
@@ -260,15 +277,15 @@ These are safeguards for unusual Daily Wire publication states. Most users shoul
 
 ---
 
-## Sources
+## Sites
 
-The Sources tab lists every Source VODLoft can add media from, with what it supports. See [[Sources]] for what each one does. Signing in and API keys are set up per site, under **Authentication** at the top. The Daily Wire's card contains advanced integration settings. Ordinary installations should leave the endpoint, OAuth, and pacing values unchanged.
+The Sites tab holds sign-ins per site and the settings of each Source VODLoft fetches with. A Source with nothing to set, such as NPO Start, is not listed. A Source made for one site, such as The Daily Wire, only shows while that site is added. A site that has nothing in VODLoft can be removed with the trash button on its row, but VODLoft always keeps at least one site. See [[Sources]] for what each one does. Signing in and API keys are set up per site, under **Authentication** at the top. The Daily Wire's card contains advanced integration settings. Ordinary installations should leave the endpoint, OAuth, and pacing values unchanged.
 
 ### Authentication
 
 Signing in is optional, and only needed for content that requires an account, such as members-only or age-restricted
 videos. It is set up per site, so YouTube, Twitch and NPO Start each have their own. **Authentication** lists every site
-VODLoft knows: the sites a Source is made for, and every site you added something from. Each site shows whether it is
+VODLoft knows: the sites you picked in the first-run setup, and every site you added since. Each site shows whether it is
 signed in and whether it has an API key; open it to change that.
 
 - **The Daily Wire** has a sign-in of its own: follow the steps shown and authorize VODLoft on The Daily Wire's site.
@@ -277,6 +294,17 @@ signed in and whether it has an API key; open it to change that.
   where you are signed in on that site, with a browser extension made for that. Every Source that fetches the site uses
   the site's own file, for every lookup and download there: yt-dlp on YouTube, and both NPO Start and yt-dlp on npo.nl.
   A site keeps only its own cookies from the file you choose, so a file with cookies of other sites is fine.
+- **Some sites also let you sign in with your account**, without a cookies file. The cookies file stays available on
+  them too, and when you use both, the sign-in counts where they overlap.
+  - **Nebula, CuriosityStream, Dropout and Niconico**: fill in your email address and password. Nebula and
+    CuriosityStream give VODLoft a sign-in that lasts until you sign out, so VODLoft does not keep your password. Dropout
+    and Niconico end their sign-in after a while, so VODLoft keeps your email address and password to sign in again by
+    itself. A Niconico account that asks for a one-time code can't sign in this way.
+  - **Twitch**: choose **Sign in to Twitch**, open Twitch's activation page and enter the code VODLoft shows, as you
+    would for Twitch's TV app. Twitch made no sign-in for other programs, so this may stop working one day; a cookies
+    file still works then.
+  - **SoundCloud**: paste the sign-in token SoundCloud's website keeps in your browser. **Where to find it** shows
+    the steps.
 - **NPO Start** checks its cookies file with npo.nl, and shows whether it signs in with NPO Plus.
 - **YouTube** also takes an optional YouTube Data API key, which makes VODLoft much faster there. See
   [[Settings#youtube-data-api-key]].
@@ -308,8 +336,9 @@ parser as you type, and gets one of these results:
 - **VODLoft already has a setting for this**, naming that setting: for example subtitles, thumbnails, the container
   or SponsorBlock.
 
-The options can only be saved when every line passes. A Collection can add its own options on its Edit page, for
-exceptions; they come after these, so for an option set in both places the Collection's wins.
+The options can only be saved when every line passes. A creator can add options of their own on their Edit page,
+for all their collections, and a Collection can add its own on its Edit page, for exceptions. They come in that order
+after these, so for an option set in more than one place the Collection's own wins, then the creator's.
 
 #### YouTube Data API key
 

@@ -15,7 +15,8 @@ from urllib.parse import urljoin
 
 from progress_plan import PlanTracker, StageSpec
 
-from ...contract import MAIN_TAG, CollectionDetails, CreatorDetails, SearchResults, SectionRef, SectionRole, Site, link_host
+from ...contract import MAIN_TAG, CollectionDetails, CreatorDetails, CreatorTier, DeviceCode, SearchResults, SectionRef, SectionRole, SignInRejected, Site, link_host
+from ...site_accounts import SignedIn
 import requests
 
 from ... import ytdlp_runner as runner
@@ -66,6 +67,27 @@ class OtherSitesImplementation:
         when it lists one already."""
         return url
 
+    def listing(self, url: str, limit: int | None = None) -> dict | None:
+        """A page's videos, as yt-dlp's flat listing of it gives them, for a page the implementation lists itself
+        because yt-dlp can't, or can only slowly, such as Patreon's; None for yt-dlp to list it. ``limit`` is how many
+        videos are wanted, the first first, and 0 for the page alone. An entry may be complete, such as a video the
+        Site locks, with what a lookup would give: its ``_access`` and ``_access_refused``; it is then not looked up."""
+        return None
+
+    def refused_access(self, info: dict, key: str) -> str:
+        """The access a video needs that yt-dlp could not get for lack of ``key``, where the Site tells it more
+        exactly, such as the cheapest of the creator's tiers that unlocks a Patreon post."""
+        return key
+
+    def creator_tiers(self, url: str) -> tuple[CreatorTier, ...]:
+        """The paid tiers of the creator a link is of, on a Site whose creators set up tiers of their own."""
+        return ()
+
+    def served_picture(self, url: str | None) -> str | None:
+        """The picture yt-dlp gives a video, or None when the Site is known not to serve it, so that VODLoft shows its
+        own picture instead of an empty one."""
+        return url
+
     def episode_tag(self, info: dict, url: str) -> str:
         """Which of the Site's episode tags yt-dlp's full lookup of a video gives it."""
         return MAIN_TAG
@@ -74,6 +96,25 @@ class OtherSitesImplementation:
         """Ask the Site's own API (``Site.site_api``) once with these values. Raises ApiKeyRejected when the Site does
         not accept them."""
         raise runner.YtDlpError(f"VODLoft uses no API of {self.site.name}")
+
+    def sign_in(self, values: Mapping[str, str]) -> SignedIn:
+        """Sign in on the Site with what the user filled in for its ``PASSWORD`` or ``TOKEN`` account sign-in
+        (``Site.account_sign_in``). Raises SignInRejected when the Site does not accept it."""
+        raise SignInRejected(f"VODLoft can't sign in on {self.site.name} with an account")
+
+    def start_code_sign_in(self) -> DeviceCode:
+        """Ask the Site for a code the user enters on its own page, for a ``DEVICE_CODE`` account sign-in."""
+        raise SignInRejected(f"VODLoft can't sign in on {self.site.name} with a code")
+
+    def finish_code_sign_in(self, code: DeviceCode, stop: Callable[[float], bool]) -> SignedIn:
+        """Wait until the user entered the code; ``stop`` waits the seconds it is given and tells whether to give up.
+        Raises SignInCodeEnded when the code ran out or the user turned it down."""
+        raise SignInRejected(f"VODLoft can't sign in on {self.site.name} with a code")
+
+    def renew_sign_in(self, signed_in: SignedIn) -> SignedIn:
+        """The sign-in again, before it runs out (``SignedIn.renew_at``). Raises SignInRejected when the Site no
+        longer accepts it."""
+        raise SignInRejected(f"VODLoft can't renew a sign-in on {self.site.name}")
 
     def search(self, query: str) -> SearchResults:
         """The Site's collections and videos whose name matches the query, on a Site whose contract makes it

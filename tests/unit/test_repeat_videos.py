@@ -2,10 +2,12 @@
 its lists that are seasons an episode in each, with files of its own; one that does not keeps it in the first."""
 from __future__ import annotations
 
+import pytest
+
 from sqlalchemy import select
 
 from test_link_seasons import (  # noqa: F401
-    CreatorSource, _collection, _index, _list, _seasons, session, source,
+    CreatorSource, _collection, _index, _list, _seasons, links_source, session, source,
 )
 from test_ytdlp_collections import _video
 
@@ -69,48 +71,67 @@ def test_a_video_that_leaves_one_album_stays_on_the_other(source, session):
     assert ("Best Of", 3, ["c"]) in _seasons(session)
 
 
-def test_a_downloaded_extra_waits_for_home_and_one_without_files_leaves(source, session):
+@pytest.mark.parametrize("by_user", [True, False], ids=["the user's change", "found by a check"])
+def test_a_downloaded_extra_leaves_with_its_files_when_the_user_made_it_one_and_waits_for_home_otherwise(
+    source, session, by_user,
+):
     from backend.db.models import Collection
     from backend.db.core import run_write_transaction
     from backend.services.link_seasons import active_lists, extra_episodes, held_back, place_in_link_seasons
+    from backend.services.season_state import load_state
 
     source.videos = [_video("a", 2024, 1), _video("b", 2024, 2)]
     source.lists = [_list("PLfirst", "First Album"), _list("PLbest", "Best Of")]
     source.items = {"PLfirst": ("a", "b"), "PLbest": ("a", "b")}
     collection = _collection(session, music=True)
     _index(session, collection, source)
-    # Files for the episode of a on the album that does not come first, which it loses.
-    first_season = active_lists(session, session.get(Collection, collection.id))[0].season_id
-    a_later = next(episode for episode in _episodes(session, "a") if episode.season_id != first_season)
+    # Files for both episodes of a: the one on the album that does not come first is the one it loses. (With files
+    # only there, that one would stay instead, and the episode without files would go.)
+    first_season = active_lists(load_state(session, session.get(Collection, collection.id)))[0].season_id
+    a_first, a_later = sorted(_episodes(session, "a"), key=lambda episode: episode.season_id != first_season)
+    _give_files_to(session, a_first.id)
     _give_files_to(session, a_later.id)
 
     def one_season(w):
         found = w.get(Collection, collection.id)
         found.repeat_videos = "one_season"
-        place_in_link_seasons(w, found, by_user=True)
+        place_in_link_seasons(w, found, by_user=by_user)
 
     run_write_transaction(one_season)
 
-    # The one without files left; the downloaded one stays, marked removed, until Home asked whether to keep it.
+    # The one without files left at once.
     assert len(_episodes(session, "b")) == 1
     kept, extra = sorted(_episodes(session, "a"), key=lambda episode: episode.id != a_later.id)[::-1]
     assert (kept.season_id, kept.removed_from_source) == (first_season, False)
-    assert (extra.id, extra.removed_from_source) == (a_later.id, True)
-    assert extra.downloads[0].removal_answered_at is None and held_back(extra)
-    assert extra_episodes(session, session.get(Collection, collection.id)) == {extra.id}
+    assert extra.id == a_later.id
+    assert extra_episodes(load_state(session, session.get(Collection, collection.id))) == {extra.id}
+    if by_user:
+        # The user was told its files go: the task that deletes them removes it, and Home asks nothing.
+        assert not extra.removed_from_source and extra.downloads[0].removal_answered_at is not None
+        assert not held_back(extra)
+    else:
+        # Nobody chose this: it stays, marked removed, until Home asked whether to keep it.
+        assert extra.removed_from_source and extra.downloads[0].removal_answered_at is None
+        assert held_back(extra)
 
 
-def test_lists_by_year_give_a_video_one_episode(source, session):
-    from backend.db.models import Collection
+def test_lists_part_of_the_collection_by_year_give_a_video_one_episode(links_source, session):
+    from backend.db.models import Collection, CollectionList
 
+    source = links_source
     _albums(source)
+    source.outside = {video.slug: video for video in source.videos}
     collection = _collection(session, music=True)
     collection = session.get(Collection, collection.id)
-    collection.list_layout = "by_year"
+    # A collection of nothing but its lists, which are part of it, with what is part of it in a season per year.
+    collection.outside_videos = "only"
+    collection.loose_videos = "by_year"
+    collection.new_lists = {"list": "contents"}
     session.commit()
 
     _index(session, collection, source)
 
+    assert not any(link.as_season for link in session.scalars(select(CollectionList)))
     assert len(_episodes(session, "b")) == 1
 
 
@@ -158,7 +179,7 @@ def test_the_seasons_dialog_sets_it_in_the_collections_words(source, session):
 
     body = {
         "seasons": [{"id": season["id"], "name": season["name"]} for season in view["seasons"]],
-        "customSeasonOrder": False, "linkSeasons": "all", "repeatVideos": "one_season",
+        "customSeasonOrder": False, "linkSeasons": "on", "repeatVideos": "one_season",
     }
     saved = client.put(f"/api/collections/{collection.slug}/season-settings", json=body)
     assert saved.status_code == 200, saved.text
@@ -172,11 +193,12 @@ def _give_files_to(session, episode_id):
     from backend.db.models.media_download import EpisodeMediaDownload
     from conftest import available_artifact
 
-    session.add(CollectionLocalMediaProfile(
-        id=1, slug="videos", name="Videos", preferred_format="format_1080p",
-        output_template="/downloads/{{ collection_title }}/{{ episode_title }}.ext",
-    ))
-    session.flush()
+    if session.get(CollectionLocalMediaProfile, 1) is None:
+        session.add(CollectionLocalMediaProfile(
+            id=1, slug="videos", name="Videos", preferred_format="format_1080p",
+            output_template="/downloads/{{ collection_title }}/{{ season_name }}/{{ episode_title }}.ext",
+        ))
+        session.flush()
     session.add(EpisodeMediaDownload(
         type="episode", media_item_id=episode_id, local_media_profile_id=1, file_path=f"/downloads/{episode_id}.mp4",
         **available_artifact(),

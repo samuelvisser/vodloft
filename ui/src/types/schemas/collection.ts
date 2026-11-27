@@ -1,4 +1,5 @@
 import {z} from "zod";
+import {HealthIssueKindSchema} from './collection_health'
 import {EpisodeIdentifierReg, EpisodeOrderReg, CollectionTypeReg} from "../collection";
 import {DwMembershipLevelReg} from "../dailywire_user_info";
 import {ApiDateTimeSchema} from "./datetime";
@@ -132,6 +133,8 @@ export const CollectionReadSchema = z.looseObject({
     linkImagePath: z.string().nullable().optional(),
     /** Your own yt-dlp options for this Collection, added after its Local Media Profile's. */
     ytdlpOptions: z.string().default(''),
+    /** Its own yt-dlp options include --allow-unplayable-formats, so media protected by DRM can still be downloaded. */
+    allowsUnplayableFormats: z.boolean().default(false),
     genre: z.string().nullable().optional(),
     contentRating: z.string().nullable().optional(),
     cookiesMode: z.enum(['automatic', 'never', 'always']).default('automatic'),
@@ -149,6 +152,10 @@ export const CollectionReadSchema = z.looseObject({
     updatedAt: ApiDateTimeSchema,
     /** Who added it, with user accounts on. */
     addedBy: z.string().nullable().optional(),
+    /** Whether it needs nothing from the user, as it stored its health. */
+    healthy: z.boolean().default(true),
+    /** What it needs the user for, by kind of issue, with how many things each concerns. */
+    healthIssues: z.partialRecord(HealthIssueKindSchema, z.int()).default({}),
 })
 export type CollectionRead = z.infer<typeof CollectionReadSchema>;
 

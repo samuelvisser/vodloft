@@ -103,7 +103,7 @@ def _enable_file_watcher(monkeypatch, tmp_path):
 def _run(session, **kwargs):
     from task_manager.tasks.workers.file_watcher.service import run_file_watcher
 
-    asyncio.run(run_file_watcher(session, **kwargs))
+    return asyncio.run(run_file_watcher(session, **kwargs))
 
 
 def test_healthy_download_is_left_untouched(tmp_path):
@@ -111,10 +111,12 @@ def test_healthy_download_is_left_untouched(tmp_path):
 
     session, engine, _collection, _episode, download = _db_with_download(tmp_path)
 
-    _run(session)
+    result = _run(session)
 
     assert download.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
     assert download.artifact_error is None
+    # Nothing changed, so the run's log entry counts as one that found nothing.
+    assert result.data == {"checked": 1, "updated": 0}
 
     session.close()
     engine.dispose()
@@ -126,10 +128,11 @@ def test_deleted_file_is_flagged_missing(tmp_path):
     session, engine, _collection, _episode, download = _db_with_download(tmp_path)
     os.remove(download.file_path)
 
-    _run(session)
+    result = _run(session)
 
     assert download.artifact_status == MediaDownloadArtifactStatus.MISSING.value
     assert "not found" in download.artifact_error
+    assert result.data == {"checked": 1, "updated": 1}
 
     session.close()
     engine.dispose()

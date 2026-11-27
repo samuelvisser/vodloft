@@ -1,6 +1,6 @@
 import {useState} from 'react'
 import {useWatch, type UseFormReturn} from 'react-hook-form'
-import Select from '../common/ReactSelect'
+import Select from '../../components/common/Select'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 
 import {faIcon} from '../../icons/faIcon'
@@ -170,7 +170,6 @@ export default function SubtitleFields({form, mode: profileType, onSubtitleModeC
                         <li className="subtitle-language subtitle-language--add">
                             <Select
                                 inputId="subtitle-language-add"
-                                classNamePrefix="select"
                                 className="subtitle-language__add"
                                 placeholder="+ Add a language…"
                                 options={addable}

@@ -172,6 +172,35 @@ def test_stale_filesystem_result_does_not_overwrite_newer_download(tmp_path, mon
     engine.dispose()
 
 
+def test_missing_file_waits_while_files_are_being_moved(tmp_path, monkeypatch):
+    from config import get_settings
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from backend.services.download_relocation import _relocation_lock
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+    from backend.utils.file_locks import file_lock
+    from task_manager.tasks.workers.file_watcher import service
+
+    monkeypatch.setattr(get_settings().download_settings, "lock_root", tmp_path / "locks")
+    session, engine, download_id, file_path = _db_with_download(tmp_path)
+    os.remove(file_path)
+
+    # A move holds the relocation lock until it has recorded the new places.
+    with file_lock(_relocation_lock(), shared=True):
+        asyncio.run(service.run_file_watcher(session))
+    with Session(engine) as verify_session:
+        current = verify_session.get(EpisodeMediaDownload, download_id)
+        assert current.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
+
+    # Once no move runs, the next scan reports the file missing.
+    asyncio.run(service.run_file_watcher(session))
+    with Session(engine) as verify_session:
+        current = verify_session.get(EpisodeMediaDownload, download_id)
+        assert current.artifact_status == MediaDownloadArtifactStatus.MISSING.value
+
+    session.close()
+    engine.dispose()
+
+
 def test_resolve_media_download_file_reconciles_and_persists_manual_rename(tmp_path, monkeypatch):
     from backend.db.models.media_download import EpisodeMediaDownload
     from backend.types.download_profile_types import MediaDownloadArtifactStatus

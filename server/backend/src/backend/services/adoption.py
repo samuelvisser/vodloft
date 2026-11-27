@@ -133,6 +133,9 @@ def sidecar_assets(media_path: Path) -> list[tuple[str, str, Path]]:
         found.append(("nfo", "nfo", media_path.parent / f"{stem}.nfo"))
     if f"{stem}.info.json" in names:
         found.append(("info_json", "info_json", media_path.parent / f"{stem}.info.json"))
+    if f"{stem}.audio.m4a" in names:
+        # The sound yt-dlp kept apart from a video of unplayable formats.
+        found.append(("separate_audio", "audio", media_path.parent / f"{stem}.audio.m4a"))
     for name in names:
         if not name.startswith(f"{stem}."):
             continue
@@ -207,10 +210,12 @@ def adopt(
     download.file_path = str(path)
     download.artifact_stat_dev, download.artifact_stat_ino = identity.stat_dev, identity.stat_ino
     download.artifact_size_bytes, download.artifact_fingerprint = identity.size_bytes, identity.fingerprint
+    # VODLoft did not write the adopted file's metadata, so the next rewrite writes it.
+    download.tags_fingerprint = download.nfo_fingerprint = None
     download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
     download.artifact_error = None
     download.downloaded_bytes = identity.size_bytes
-    download.downloaded_at = found.modified_at
+    download.mark_downloaded(found.modified_at)
     if isinstance(download, EpisodeMediaDownload) and isinstance(media, Episode):
         download.downloaded_publish_status = media.publish_status
         if download.download_profile_id is None:

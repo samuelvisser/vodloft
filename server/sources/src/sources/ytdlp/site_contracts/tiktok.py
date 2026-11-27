@@ -9,8 +9,11 @@ class TikTok(OtherSites):
     key = "tiktok"
     name = "TikTok"
     initials = "TT"
+    pitch = "Accounts and videos"
     domains = ("tiktok.com",)
     icon = "fab:tiktok"
+    # yt-dlp titles a video with the start of its caption, hashtags and all.
+    titles_from_description = True
     # Its apps share short links, which redirect to its pages.
     share_hosts = ("vm.tiktok.com", "vt.tiktok.com")
     creators = True

@@ -10,6 +10,8 @@ from backend.utils.custom_index import CustomIndexNotReadyError
 from task_manager.scheduler.registry import task
 from task_manager.scheduler.results import TaskResult
 
+from task_manager.tasks.workers.rewrite_collection_profile_metadata.service import run_rewrite_collection_profile_metadata
+
 from .service import run_rename_collection_profile_files
 
 
@@ -29,6 +31,7 @@ async def rename_collection_profile_files(
     episode_ids: list[int] | None = None,
     expected_sources: dict[str, str] | None = None,
     season_folders: bool = True,
+    rewrite_metadata: bool = False,
 ) -> TaskResult:
     if resource_id is None or local_media_profile_id is None:
         raise ValueError("Batch File Rename requires a Collection and Local Media Profile")
@@ -46,6 +49,11 @@ async def rename_collection_profile_files(
                     season_folders=season_folders,
                     progress=progress,
                 )
+                if rewrite_metadata:
+                    # Files that were downloaded under an episode's old place also have its old metadata.
+                    run_rewrite_collection_profile_metadata(
+                        collection_id=resource_id, local_media_profile_id=local_media_profile_id, episode_ids=episode_ids,
+                    )
                 run_write_transaction(lambda session: request_collection_asset_reconciliation(session, resource_id))
                 return result
     except CustomIndexNotReadyError as exc:

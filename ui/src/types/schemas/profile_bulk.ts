@@ -10,14 +10,17 @@ const BulkValueCountSchema = z.object({
     count: z.int(),
 })
 
-/** What the chosen profiles are set to now, by setting. */
-export const BulkSummarySchema = z.object({
+export const BulkFieldSummarySchema = z.object({
+    offered: z.int(),
+    sitesWithout: z.string().array(),
+    values: BulkValueCountSchema.array(),
+})
+
+/** What the chosen profiles are set to now, by setting. A table can send more, such as settings that depend on what
+ * the chosen items have, which it reads itself. */
+export const BulkSummarySchema = z.looseObject({
     count: z.int(),
-    fields: z.record(z.string(), z.object({
-        offered: z.int(),
-        sitesWithout: z.string().array(),
-        values: BulkValueCountSchema.array(),
-    })),
+    fields: z.record(z.string(), BulkFieldSummarySchema),
 })
 export type BulkSummary = z.infer<typeof BulkSummarySchema>
 

@@ -46,6 +46,7 @@ from task_manager.scheduler.operations import queue_operation_target_dispatch
 from backend.log_file import configure_log_file
 from backend.operations.settings import (
     FileWatcherCronOperation,
+    CollectionHealthCronOperation,
     FullRescanCronOperation,
     QuickCheckCronOperation,
     FindEpisodesCronOperation,
@@ -657,6 +658,7 @@ _CRON_OPERATION_FACTORIES = {
     "full-rescan": FullRescanCronOperation,
     "verify-downloads": VerifyDownloadsCronOperation,
     "file-watcher": FileWatcherCronOperation,
+    "collection-health": CollectionHealthCronOperation,
 }
 
 

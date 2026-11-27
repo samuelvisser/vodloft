@@ -138,12 +138,14 @@ def _commit_abandoned_replacement(
         download.artifact_stat_ino = final_media_identity.stat_ino
         download.artifact_size_bytes = final_media_identity.size_bytes
         download.artifact_fingerprint = final_media_identity.fingerprint
+        # Which metadata the replacement file has is not known, so the next rewrite writes it.
+        download.tags_fingerprint = download.nfo_fingerprint = None
         download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
         download.artifact_error = None
         download.automatic_retry_suppressed = False
         download.downloaded_bytes = record["downloaded_bytes"]
         download.format_downloaded = record["format_downloaded"]
-        download.downloaded_at = replacement_time
+        download.mark_downloaded(replacement_time)
         if isinstance(download, EpisodeMediaDownload):
             download.downloaded_publish_status = record["downloaded_publish_status"]
 

@@ -156,7 +156,8 @@ def episode_season_place_get(episode_slug: str):
 )
 def episode_reconcile_preview(episode_slug: str):
     """What moving the episode to the season its collection's lists put it in now does. Changes nothing."""
-    return run_write_transaction(lambda s: preview_move(s, episode_scope(episode_slug)))
+    with db_session() as s:
+        return preview_move(s, episode_scope(episode_slug))
 
 
 @router.post(

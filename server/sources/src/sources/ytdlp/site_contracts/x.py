@@ -10,6 +10,8 @@ class X(OtherSites):
     initials = "X"
     domains = ("x.com", "twitter.com")
     icon = "fab:x-twitter"
+    # yt-dlp titles a post "<account> - <the start of its text>".
+    titles_from_description = True
     # yt-dlp downloads the videos of single posts; it can't list an account's posts, so X has no creators. X has
     # no subtitles, and keeps its videos at 1080p at most.
     downloads = replace(OtherSites.downloads, video_heights=(360, 480, 720, 1080), subtitles=False)

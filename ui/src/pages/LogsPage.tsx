@@ -16,8 +16,8 @@ import {createSelectRegistry} from '../utils/selectRegistry'
 import './LogsPage.css'
 import {apiUrl} from '../lib/api'
 
+// Each level shows itself and every more severe level.
 const LogLevelReg = createSelectRegistry('LogLevelFilter', {
-    '': {label: 'All'},
     DEBUG: {label: 'Debug'},
     INFO: {label: 'Info'},
     WARNING: {label: 'Warning'},
@@ -35,6 +35,7 @@ const LOAD_OLDER_MARGIN = 400
 type LogWindow = {
     items: ApplicationLogEntryRead[]
     total: number
+    level: ApplicationLogPageRead['level']
     hasOlder: boolean
 }
 
@@ -72,7 +73,8 @@ const LogEntryRow = memo(function LogEntryRow({entry}: {entry: ApplicationLogEnt
 })
 
 export default function LogsPage() {
-    const [level, setLevel] = useState('')
+    // Until the user picks one, the server shows the level configured in the log settings.
+    const [level, setLevel] = useState<string | null>(null)
     const [search, setSearch] = useState('')
     const [hidePullRequests, setHidePullRequests] = useState(true)
     const pageActive = usePageActive()
@@ -87,15 +89,13 @@ export default function LogsPage() {
     const [loadingOlder, setLoadingOlder] = useState(false)
     const loadingOlderRef = useRef(false)
 
-    const canShowPullRequests = level === '' || level === 'INFO'
-    const hidePulls = canShowPullRequests && hidePullRequests
     const filters = useMemo(() => {
         const query = new URLSearchParams()
         if (level) query.set('level', level)
         if (search.trim()) query.set('search', search.trim())
-        if (hidePulls) query.set('hidePullRequests', 'true')
+        if (hidePullRequests) query.set('hidePullRequests', 'true')
         return query.toString()
-    }, [level, search, hidePulls])
+    }, [level, search, hidePullRequests])
     const filtersRef = useRef(filters)
 
     const updateWindow = useCallback((change: (current: LogWindow | null) => LogWindow | null) => {
@@ -112,9 +112,10 @@ export default function LogsPage() {
         setError(null)
     }
 
-    // Load the newest page, then keep adding what comes in after the last record shown.
+    // Load the newest page, then keep adding what comes in after the last record shown. A page the user is not
+    // looking at, such as in a window without focus, still shows the newest page, and waits to look for more.
     useEffect(() => {
-        if (!pageActive) return
+        if (!pageActive && windowRef.current !== null) return
         const controller = new AbortController()
         let timer: ReturnType<typeof setTimeout> | undefined
         const poll = async () => {
@@ -129,7 +130,7 @@ export default function LogsPage() {
                 )
                 if (controller.signal.aborted) return
                 updateWindow((current) => current === null || lastId === undefined
-                    ? {items: page.items, total: page.total, hasOlder: page.hasOlder}
+                    ? {items: page.items, total: page.total, level: page.level, hasOlder: page.hasOlder}
                     : {...current, items: [...current.items, ...page.items], total: page.total})
                 setError(null)
                 if (page.hasNewer) delay = 0
@@ -137,7 +138,7 @@ export default function LogsPage() {
                 if (controller.signal.aborted) return
                 setError(caught instanceof Error ? caught.message : 'Could not load logs.')
             }
-            timer = setTimeout(poll, delay)
+            if (pageActive || windowRef.current === null) timer = setTimeout(poll, delay)
         }
         void poll()
         return () => {
@@ -171,6 +172,9 @@ export default function LogsPage() {
 
     const items = logWindow?.items ?? []
     const total = logWindow?.total ?? 0
+    const shownLevel = level ?? logWindow?.level ?? null
+    // Pull requests are logged at Info, so the switch only matters from Info down.
+    const canShowPullRequests = shownLevel === 'DEBUG' || shownLevel === 'INFO'
 
     useLayoutEffect(() => {
         const panel = panelRef.current
@@ -191,7 +195,9 @@ export default function LogsPage() {
                     <p>
                         Logs from the backend, scheduler, task workers, downloads and web server are collected here.
                         The latest 20,000 records from the current server process are retained. The newest are shown
-                        first; scroll up to load older ones. Very long messages are cut short here.
+                        first; scroll up to load older ones. A level shows its own records and every more severe
+                        one, and the page opens at the level set in the log settings. Very long messages are cut
+                        short here.
                     </p>
                 </PageSubtitle>
             </div>
@@ -214,7 +220,7 @@ export default function LogsPage() {
                         inputId="logs-level-select"
                         className="logs-level-select"
                         registry={LogLevelReg}
-                        value={level}
+                        value={shownLevel}
                         onChange={setLevel}
                     />
                 </div>

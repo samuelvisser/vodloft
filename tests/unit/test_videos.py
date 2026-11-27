@@ -33,7 +33,7 @@ class VideoSource(Source):
         self.titles: dict[str, str] = {}
         self.playback_requests: list[tuple[str, str]] = []
 
-    def resolve(self, url):
+    def resolve(self, url, plan=None):
         slug = url.rstrip("/").rsplit("/", 1)[-1]
         return ResolvedLink(kind=LinkKind.VIDEO, slug=slug, url=url, title=f"Clip {slug}")
 

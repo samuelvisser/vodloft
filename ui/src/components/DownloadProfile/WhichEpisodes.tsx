@@ -2,7 +2,7 @@ import {collectionWords, type Noun} from '../../lib/collectionWords'
 import {Fragment, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent} from 'react'
 import {Controller, useFieldArray, useWatch, type UseFormReturn} from 'react-hook-form'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import Select from '../common/ReactSelect'
+import Select from '../../components/common/Select'
 import Switch from 'react-switch'
 
 import {faIcon} from '../../icons/faIcon'
@@ -178,6 +178,8 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
     const fieldRegFor = (index: number) => createSelectRegistry('WhichEpisodesFilterField', Object.fromEntries(
         EpisodeFilterFieldReg.values.filter((field) => {
             if (field === 'seasons') return seasonal || seasons.length > 0 || filters[index]?.field === 'seasons'
+            // Only a collection whose own yt-dlp options allow unplayable formats downloads them.
+            if (field === 'unplayable') return !!result?.unplayableFormats || filters[index]?.field === 'unplayable'
             if (isDateLine({field})) return !filters.some((filter, other) => other !== index && filter.field === field)
             return true
         }).map((field) => [field, field === 'seasons' ? {label: season.singular} : EpisodeFilterFieldReg.spec[field]]),
@@ -307,7 +309,6 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
                     <label htmlFor={`${id}-types`}>Is any of</label>
                     <Select
                         inputId={`${id}-types`} isMulti closeMenuOnSelect={false}
-                        classNamePrefix="select"
                         options={tagOptions}
                         value={tagOptions.filter((option) => (filter.episodeTypes ?? []).includes(option.value))}
                         onChange={(options) => setValue(`${name}.episodeTypes`, options.map((option) => option.value), {shouldDirty: true})}
@@ -340,7 +341,6 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
                     </SelectAllLabel>
                     <Select
                         inputId={`${id}-seasons`} isMulti closeMenuOnSelect={false} isClearable
-                        classNamePrefix="select"
                         options={seasonOptions}
                         value={seasonOptions.filter((option) => chosen.includes(option.value))}
                         onChange={(options) => {
@@ -350,6 +350,15 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
                         }}
                     />
                     <div className="help">With upcoming {season.plural}, {season.a} the collection gets later is added to this filter.</div>
+                </div>
+            )
+        }
+        if (filter.field === 'unplayable') {
+            return (
+                <div className="help">
+                    Matches what yt-dlp can only download because this collection’s yt-dlp options
+                    include <code>--allow-unplayable-formats</code>: media protected by DRM, or that yt-dlp found no
+                    playable formats for. VODLoft saves what yt-dlp downloads as it is, so it may not play.
                 </div>
             )
         }
@@ -655,7 +664,7 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
                                 <label htmlFor="which-episodes-shown">Show</label>
                                 <SimpleSelect
                                     inputId="which-episodes-shown" registry={shownReg} value={shown} className="which-episodes-shown-select"
-                                    onChange={setShown} menuPlacement="auto"
+                                    onChange={setShown}
                                 />
                             </div>
                         )}

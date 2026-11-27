@@ -1,20 +1,21 @@
 """Adding a Collection to the Library, the same way wherever it comes from."""
 from __future__ import annotations
 
+from pathlib import Path
+
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from backend.db.mixins.HasTaskResourcesMixin import delete_task_rows
-from backend.db.models import Collection, Episode, MediaDownloadBase, MediaItemBase, Metadata
+from backend.db.models import Collection, CollectionLocalAsset, Episode, MediaDownloadBase, MediaItemBase, Metadata
 from backend.operations.collections import CollectionIndexOperation, CollectionSyncOperation
 from backend.services.errors import ServiceError
-from backend.services.new_lists import album_kinds, list_kinds
 from backend.services.sites import collection_kind, place_collection
 from backend.types import work_weights
-from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.dailywire_user_info import DwMembershipLevel
-from backend.types.link_season_types import CollectionKind, LinkSeasons, OutsideVideos, RepeatVideos
+from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from backend.types.link_season_types import ChannelSeason, CollectionKind, LinkSeasons, LooseVideos, OutsideVideos, RepeatVideos
 from backend.utils.helpers import generate_uuid, slugify
 from sources import Feature, SectionKind, UnknownSourceError, all_sources, get_source, source_site
 from task_manager.events.transactional import queue_event
@@ -57,7 +58,7 @@ def add_collection(s: Session, collection: Collection, *, added_by_id: int | Non
 
 def set_kind(collection: Collection) -> None:
     """Tell a new collection what its link is, and give a channel collection its Site's defaults where the request
-    left them: every list is a season, or only the lists the user picks, new lists of the channel are added, the videos
+    left them: its lists are on, each new list of the channel is added as its kind says, the videos
     they have that the channel's feeds don't are added too, a video in several lists is in each where the Site says
     so, and the channel season holds what its Site's channels hold. A type that takes only albums, such as Music,
     starts with only the kinds of list that are albums, where its Site tells them apart."""
@@ -70,12 +71,12 @@ def set_kind(collection: Collection) -> None:
     # The defaults are about the channel's lists, which only a Site whose lists can be seasons has.
     if not site.link_seasons:
         return
-    if collection.channel_season is None:
-        collection.channel_season = site.channel_season.value
+    if collection.loose_videos is None:
+        # The channel season holds what its Site's channels hold: the whole channel, or what is in no list.
+        whole = site.channel_season == ChannelSeason.EVERYTHING
+        collection.loose_videos = (LooseVideos.EVERYTHING if whole else LooseVideos.ONE_SEASON).value
     if collection.link_seasons is None:
-        albums_only = collection_contract(collection.type).album_lists and album_kinds(list_kinds(site))
-        every = site.every_list_a_season and not albums_only
-        collection.link_seasons = (LinkSeasons.ALL if every else LinkSeasons.SELECTED).value
+        collection.link_seasons = LinkSeasons.ON.value
         if collection.outside_videos is None:
             collection.outside_videos = OutsideVideos.ADD.value
     if site.whole_lists and collection.repeat_videos is None:
@@ -94,11 +95,12 @@ def _check_list_type(collection: Collection) -> None:
         raise ServiceError(f"{site.name} has no type of list {collection.list_type!r}", field="list_type")
 
 
-def reindex_collection(s: Session, collection: Collection) -> None:
+def reindex_collection(s: Session, collection: Collection, *, by_user: bool = False) -> None:
     """List a Collection again, as Sync now does, after its links changed. VODLoft starts it itself, so it runs in the
-    background without a toast when it finishes."""
+    background without a toast when it finishes. ``by_user`` says the user's change asked for it: the downloaded
+    videos that leave then go with their files, as the user was told when saving."""
     s.flush()
-    operation = create_operation(s, CollectionSyncOperation(collection, source=OperationSource.SYSTEM.value))
+    operation = create_operation(s, CollectionSyncOperation(collection, source=OperationSource.SYSTEM.value, by_user=by_user))
     queue_operation_target_dispatch(s, operation.id, operation.targets[0].slot_key)
 
 
@@ -131,12 +133,41 @@ def add_links_only_collection(
         uuid=generate_uuid(), slug=slug, source_key=source.id, title=title.strip(), sharing_url=None,
         membership_level=DwMembershipLevel.FREE.value, type=collection_type.value,
         episode_identifier=episode_identifier.value, author_name="", author_slug="",
-        link_seasons=LinkSeasons.ALL.value, outside_videos=OutsideVideos.ONLY.value,
+        link_seasons=LinkSeasons.ON.value, outside_videos=OutsideVideos.ONLY.value,
     )
     add_collection(s, collection, added_by_id=added_by_id)
     s.flush()
     queue_event(s, "collection.added", CollectionAdded(collection))
     return collection
+
+
+def downloaded_files_of(s: Session, collection: Collection) -> list[tuple[str, tuple[str, ...]]]:
+    """The files on disk of the collection's downloads: each media file, with the files VODLoft wrote beside it, such
+    as subtitles and thumbnails, and the collection's own artwork and NFO files."""
+    episodes = select(Episode.id).where(Episode.collection_id == collection.id).scalar_subquery()
+    downloads = s.scalars(select(MediaDownloadBase).where(
+        MediaDownloadBase.media_item_id.in_(episodes),
+        MediaDownloadBase.artifact_status != MediaDownloadArtifactStatus.ABSENT.value,
+    )).all()
+    own = s.scalars(select(CollectionLocalAsset.file_path).where(CollectionLocalAsset.collection_id == collection.id))
+    return [
+        *((download.file_path, tuple(asset.path for asset in download.assets)) for download in downloads if download.file_path),
+        *((path, ()) for path in own),
+    ]
+
+
+def remove_downloaded_files(files: list[tuple[str, tuple[str, ...]]]) -> None:
+    """Delete these downloaded files, such as those of a collection that was just deleted, and the folders they
+    leave empty. Runs after the transaction that forgot them."""
+    from backend.services.download_relocation import remove_folders_left_empty
+    from downloader.storage.artifacts import remove_download_artifacts
+
+    folders: set[Path] = set()
+    for path, sidecars in files:
+        remove_download_artifacts(path, sidecar_paths=sidecars)
+        folders.add(Path(path).parent)
+        folders.update(Path(sidecar).parent for sidecar in sidecars)
+    remove_folders_left_empty(folders)
 
 
 def delete_episodes_of(s: Session, collection: Collection) -> None:

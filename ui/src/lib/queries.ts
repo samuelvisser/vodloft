@@ -4,6 +4,7 @@ import {
     type InfiniteData,
     keepPreviousData,
     QueryClient,
+    queryOptions,
     useInfiniteQuery,
     useMutation,
     useQueries,
@@ -30,7 +31,8 @@ import {
     CreatorEpisodePageReadSchema, CreatorOfferingsSchema, CreatorPageReadSchema, CreatorReadSchema, type CreatorPageRead, type CreatorRead,
     CollectionCreatorMatchSchema, type CollectionCreatorMatch,
 } from '../types/schemas/creator'
-import {MovePreviewSchema, type MovePreview, ReconcileResultSchema, type ReconcileResult, MovesWaitingSchema} from '../types/schemas/reconcile'
+import {MovePreviewSchema, type MovePreview, ReconcileResultSchema, type ReconcileResult} from '../types/schemas/reconcile'
+import {HealthChecksSchema, LibraryHealthSchema, type HealthChecks, type HealthIssueKind} from '../types/schemas/collection_health'
 import {downloadStatusesForApi} from './downloadStatusFilters'
 import {
     episodeQueryKeys,
@@ -78,7 +80,7 @@ import {VideoRead, VideoReadSchema} from "../types/schemas/video";
 import {
     ApiKeyNoteRead, ApiKeyNoteReadSchema, ApiStatusRead, ApiStatusReadSchema, EpisodeTagRead, EpisodeTagReadSchema, PublishStatusLabelRead, PublishStatusLabelReadSchema, ProgramStatusRead, SourceProblemRead,
     SourceProblemReadSchema, ProgramStatusReadSchema, ResolvedLinkRead,
-    ResolvedLinkReadSchema, MediaLinksReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SiteReadSchema, SourceRead, SiteAuthenticationRead, SiteAuthenticationReadSchema,
+    ResolvedLinkReadSchema, LinkFirstLookRead, LinkFirstLookReadSchema, MediaLinksReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SiteReadSchema, SourceRead, SiteAuthenticationRead, SiteAuthenticationReadSchema, CodeSignInRead, CodeSignInReadSchema, SiteChoiceRead, SiteChoiceReadSchema,
     SourceReadSchema,
     YtdlpOptionsReadSchema,
 } from "../types/schemas/source";
@@ -540,6 +542,44 @@ export async function changeSiteApi(
     return SiteAuthenticationReadSchema.parse(await response.json())
 }
 
+/** The address of a Site's account sign-in. */
+const accountUrl = (siteKey: string) => `${apiUrl()}/sources/authentication/${encodeURIComponent(siteKey)}/account`
+
+/** Ask the Site for a code to sign in with on its own page. */
+export async function startCodeSignIn(siteKey: string): Promise<CodeSignInRead> {
+    const response = await fetch(`${accountUrl(siteKey)}/code`, {method: 'POST', credentials: 'include'})
+    if (!response.ok) throw await responseError(response)
+    return CodeSignInReadSchema.parse(await response.json())
+}
+
+/** A sign-in with a code that ended without signing in: the code ran out, was turned down, or was cancelled. */
+export class CodeSignInEndedError extends Error {}
+
+/** Wait until the user entered the code of a sign-in that started. */
+export async function finishCodeSignIn(siteKey: string, flowId: string, signal: AbortSignal): Promise<SiteAuthenticationRead> {
+    const response = await fetch(`${accountUrl(siteKey)}/code/${encodeURIComponent(flowId)}`, {
+        method: 'POST', credentials: 'include', signal,
+    })
+    if (response.status === 410) {
+        const body = await response.json().catch(() => null)
+        throw new CodeSignInEndedError(typeof body?.detail === 'string' ? body.detail : 'The code is no longer valid.')
+    }
+    if (!response.ok) throw await responseError(response)
+    return SiteAuthenticationReadSchema.parse(await response.json())
+}
+
+/** Stop waiting for the code of a sign-in that started. */
+export async function cancelCodeSignIn(siteKey: string, flowId: string): Promise<void> {
+    await fetch(`${accountUrl(siteKey)}/code/${encodeURIComponent(flowId)}`, {method: 'DELETE', credentials: 'include'})
+}
+
+/** Forget the account sign-in on a Site. */
+export async function signOutOfSite(siteKey: string): Promise<SiteAuthenticationRead> {
+    const response = await fetch(accountUrl(siteKey), {method: 'DELETE', credentials: 'include'})
+    if (!response.ok) throw await responseError(response)
+    return SiteAuthenticationReadSchema.parse(await response.json())
+}
+
 /** Remove a Site that has nothing in VODLoft, with its cookies file, from every list of Sites. */
 export function useRemoveSite() {
     const queryClient = useQueryClient()
@@ -554,6 +594,9 @@ export function useRemoveSite() {
             queryClient.invalidateQueries({queryKey: ['sitesSettings']}),
             queryClient.invalidateQueries({queryKey: ['sourceSites']}),
             queryClient.invalidateQueries({queryKey: ['localMediaProfileSites']}),
+            // A profile only for movies shows only while a Site that has movies is added.
+            queryClient.invalidateQueries({queryKey: ['localMediaProfilesView']}),
+            queryClient.invalidateQueries({queryKey: ['siteChoices']}),
             // Add Media only offers the search of a Site that is added.
             queryClient.invalidateQueries({queryKey: ['sources']}),
         ])
@@ -762,6 +805,17 @@ export function useSourceSites() {
     })
 }
 
+/** The popular Sites VODLoft suggests, then every other Site it knows, to pick the ones the user uses from. */
+export function useSiteChoices() {
+    return useQuery<SiteChoiceRead[], Error, SiteChoiceRead[], readonly ['siteChoices']>({
+        queryKey: ['siteChoices'] as const,
+        queryFn: async ({signal}) => {
+            const value = await fetchJSON<unknown>(`${apiUrl()}/sources/site-choices`, signal)
+            return SiteChoiceReadSchema.array().parse(value)
+        },
+    })
+}
+
 /** The settings a Site can have of its own, and every Site VODLoft has seen with the ones it shows. */
 export function useSitesSettings() {
     return useQuery<SitesSettingsRead, Error, SitesSettingsRead, readonly ['sitesSettings']>({
@@ -838,8 +892,10 @@ export function useMediaLinks(urls: string[]) {
 }
 
 /** A collection to add, at a Source that lists its episodes. */
-export function useListedCollectionDetails(sourceId: string | undefined, url: string | undefined) {
-    return useQuery<CollectionDetailsRead, Error, CollectionDetailsRead, readonly ['listedCollection', string | undefined, string | undefined]>({
+/** The query of a collection as a Source lists it, as the first page of Add collection asks for it. Add media
+ * starts it as soon as it knows the collection, so that page has it ready, or nearly so, when it opens. */
+export function listedCollectionQuery(sourceId: string | undefined, url: string | undefined) {
+    return queryOptions<CollectionDetailsRead, Error, CollectionDetailsRead, readonly ['listedCollection', string | undefined, string | undefined]>({
         queryKey: ['listedCollection', sourceId, url] as const,
         enabled: !!sourceId && !!url,
         queryFn: async ({signal}) => {
@@ -856,11 +912,15 @@ export function useListedCollectionDetails(sourceId: string | undefined, url: st
     })
 }
 
-/** Ask the backend which Source recognises a link, and what it points to. ``sourceKey`` asks only that Source. */
-/** Reads a creator lookup's answer, sent a line of JSON at a time: tells ``onPlan`` the steps of the lookup's plan each
- * time it changes, and returns the result line after them. */
+export function useListedCollectionDetails(sourceId: string | undefined, url: string | undefined) {
+    return useQuery(listedCollectionQuery(sourceId, url))
+}
+
+/** Reads a lookup's answer, such as a creator's or a link's, sent a line of JSON at a time: tells ``onPlan`` the steps of the lookup's plan each
+ * time it changes, and ``onPreview`` a quick first look at what it is finding when one comes, and returns the result
+ * line after them. */
 async function readLookup(
-    response: Response, {onPlan}: {onPlan: (steps: ProgressStep[]) => void},
+    response: Response, {onPlan, onPreview}: {onPlan: (steps: ProgressStep[]) => void, onPreview?: (preview: unknown) => void},
 ): Promise<Record<string, unknown>> {
     if (!response.ok || !response.body) throw await responseError(response)
     const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
@@ -873,6 +933,7 @@ async function readLookup(
         for (const line of lines.filter((item) => item.trim())) {
             const message = JSON.parse(line) as Record<string, unknown>
             if (message.plan) onPlan(lookupSteps(PlanSchema.parse(message.plan)))
+            else if (message.preview) onPreview?.(message.preview)
             else if (typeof message.error === 'string') throw new ApiError(message.error, 502)
             else return message
         }
@@ -960,13 +1021,50 @@ export async function reconcile(path: string, renumber: Record<string, boolean>)
     return ReconcileResultSchema.parse(await response.json())
 }
 
-/** The collections whose Moved episodes wait to be moved. */
-export function useMovesWaiting(enabled = true) {
+/** What the collection health check found that needs the user: the collections that need them, as each stored its
+ * health, and the creators whose collections they could group. */
+export function useCollectionHealth(enabled = true) {
     return useQuery({
-        queryKey: ['movesWaiting'],
+        queryKey: ['collectionHealth'],
         enabled,
-        queryFn: ({signal}) => apiJson('/collections/moves-waiting', (data) => z.array(MovesWaitingSchema).parse(data), {signal}),
+        queryFn: ({signal}) => apiJson('/collections/health', (data) => LibraryHealthSchema.parse(data), {signal}),
     })
+}
+
+/** The checks of the collection health check, and which are on. */
+export function useHealthChecks(enabled = true) {
+    return useQuery({
+        queryKey: ['collectionHealth', 'checks'],
+        enabled,
+        queryFn: ({signal}) => apiJson('/collections/health/checks', (data) => HealthChecksSchema.parse(data), {signal}),
+    })
+}
+
+/** Turn one check of the collection health check on or off. */
+export function setHealthCheck(kind: HealthIssueKind, on: boolean): Promise<HealthChecks> {
+    return apiJson(`/collections/health/checks/${kind}`, (data) => HealthChecksSchema.parse(data), {method: 'PUT', json: {on}})
+}
+
+/** Show every suggestion the user put off or dismissed again. */
+export function resetHealthDismissals(): Promise<HealthChecks> {
+    return apiJson('/collections/health/dismissals', (data) => HealthChecksSchema.parse(data), {method: 'DELETE'})
+}
+
+function creatorSuggestionPath(siteKey: string, ref: string) {
+    return `/collections/health/creators/${encodeURIComponent(siteKey)}/${encodeURIComponent(ref)}`
+}
+
+/** Put a suggestion to group a creator's collections off for a week, or dismiss it for good. */
+export async function answerCreatorSuggestion(siteKey: string, ref: string, answer: 'later' | 'dismiss'): Promise<void> {
+    const response = await fetch(apiUrl(`${creatorSuggestionPath(siteKey, ref)}/answer`), {
+        method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({answer}),
+    })
+    if (!response.ok) throw await responseError(response)
+}
+
+/** Group the collections of a suggestion under their creator. Answers with the creator's slug. */
+export function groupCreatorSuggestion(siteKey: string, ref: string): Promise<string> {
+    return apiJson(`${creatorSuggestionPath(siteKey, ref)}/group`, (data) => z.object({creatorSlug: z.string()}).parse(data).creatorSlug, {method: 'POST'})
 }
 
 /** Make one of a creator's accounts a creator of their own again, with its collections. Answers with the new
@@ -1034,7 +1132,13 @@ export async function addCollectionToCreator(slug: string, creatorSlug: string):
     if (!response.ok) throw await responseError(response)
 }
 
-export async function resolveLink(url: string, signal?: AbortSignal, sourceKey?: string): Promise<ResolvedLinkRead> {
+/** Ask the backend which Source recognises a link, and what it points to. ``sourceKey`` asks only that Source.
+ * ``onPlan`` hears the steps of the lookup as it goes, such as asking yt-dlp, and ``onPreview`` a quick first look
+ * at the link, such as a YouTube video's title and thumbnail, when one comes before the lookup is done. */
+export async function resolveLink(
+    url: string, signal?: AbortSignal, sourceKey?: string,
+    {onPlan = () => {}, onPreview = () => {}}: {onPlan?: (steps: ProgressStep[]) => void, onPreview?: (preview: LinkFirstLookRead) => void} = {},
+): Promise<ResolvedLinkRead> {
     const response = await fetch(`${apiUrl()}/resolve`, {
         method: 'POST',
         credentials: 'include',
@@ -1042,8 +1146,8 @@ export async function resolveLink(url: string, signal?: AbortSignal, sourceKey?:
         body: JSON.stringify(sourceKey ? {url, sourceKey} : {url}),
         signal,
     })
-    if (!response.ok) throw await responseError(response)
-    return ResolvedLinkReadSchema.parse(await response.json())
+    const result = await readLookup(response, {onPlan, onPreview: (preview) => onPreview(LinkFirstLookReadSchema.parse(preview))})
+    return ResolvedLinkReadSchema.parse(result.link)
 }
 
 export function useDailywireCatalog() {
@@ -1522,7 +1626,7 @@ function syntheticDownload(operation: TaskOperationRead): MediaDownloadDomainVie
         downloadedBytes: null,
         formatDownloaded: null,
         downloadedAt: null,
-        firstSuccessfulDownloadAt: null,
+        firstDownloadedAt: null,
         canDelete: true,
         createdAt,
         updatedAt: operationDate(operation.updatedAt) || createdAt,
@@ -2019,12 +2123,12 @@ export function useLibraryPreferences() {
     })
 }
 
-/** Remember how the signed-in user lists the Library; the page shows the new order right away. */
+/** Remember how the signed-in user lists collections; only what is given changes, and the page shows it right away. */
 export function useSaveLibraryPreferences() {
     const qc = useQueryClient()
     const {queryKey} = libraryPreferencesQueryOptions()
     return useMutation({
-        mutationFn: (preferences: Omit<LibraryPreferences, 'saved'>) => apiJson(
+        mutationFn: (preferences: Partial<Omit<LibraryPreferences, 'saved'>>) => apiJson(
             '/library/preferences', LibraryPreferencesSchema.parse, {method: 'PUT', json: preferences},
         ),
         onMutate: (preferences) => {

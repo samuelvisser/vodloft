@@ -1,4 +1,4 @@
-import {useState} from 'react'
+import {useRef, useState, type MouseEvent} from 'react'
 import {Link, useNavigate} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
@@ -8,6 +8,7 @@ import {can} from '../../lib/access'
 import {addCollectionToCreator, addCreatorMovies, useCreatorOfferings} from '../../lib/queries'
 import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import CollectionTileArt from '../../components/CollectionTileArt/CollectionTileArt'
+import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import {joinedNames} from '../../types/creator'
 import type {CreatorOffering, CreatorPageRead} from '../../types/schemas/creator'
 import {nameInText} from '../../lib/nameInText'
@@ -34,6 +35,9 @@ export default function CreatorOfferings({creator}: {creator: CreatorPageRead}) 
     const [open, setOpen] = useState(false)
     const [showAll, setShowAll] = useState(false)
     const [busy, setBusy] = useState<string | null>(null)
+    // The tile whose + menu is open, and whether one was open when the pointer went down on a tile.
+    const [menuFor, setMenuFor] = useState<string | null>(null)
+    const menuWasOpen = useRef(false)
     if (!offers) return null
     if (isLoading) {
         return (
@@ -83,6 +87,21 @@ export default function CreatorOfferings({creator}: {creator: CreatorPageRead}) 
         }
     }
 
+    // A click on the + adds the tile at once; a click anywhere else on it opens the + as a menu with that action.
+    // A click that only closes an open menu leaves it closed, and a link on the tile keeps opening its page.
+    const tileClick = (item: Item) => (event: MouseEvent<HTMLDivElement>) => {
+        if ((event.target as Element).closest('.creator-more-add, a') || menuWasOpen.current) return
+        setMenuFor(key(item))
+    }
+    const addAction = ({offering}: Item) => {
+        if (offering.collectionSlug || offering.movieSlug) {
+            return {label: `Add to ${nameInText(creator.title)}`, description: 'Join it to this creator in your library'}
+        }
+        return offering.kind === 'show'
+            ? {label: 'Add as a collection', description: 'Opens the Add Collection wizard for it'}
+            : {label: 'Add to your library', description: `Adds it as a movie of ${nameInText(creator.title)}`}
+    }
+
     const away = items.some(({offering}) => offering.collectionSlug || offering.movieSlug) ? `not with ${nameInText(creator.title)}` : 'not in your library'
     return (
         <section className={`creator-more${open ? ' is-open' : ''}`} aria-label="Not in your library">
@@ -122,7 +141,11 @@ export default function CreatorOfferings({creator}: {creator: CreatorPageRead}) 
                                 offering.year, inLibrary ? 'In your library' : null, several ? item.siteName : null,
                             ].filter(Boolean).join(' · ')
                             return (
-                                <div key={key(item)} role="listitem" className={`creator-more-tile${mayAdd ? ' is-addable' : ''}`}>
+                                <div
+                                    key={key(item)} role="listitem" className={`creator-more-tile${mayAdd ? ' is-addable' : ''}`}
+                                    onPointerDownCapture={mayAdd ? () => { menuWasOpen.current = menuFor === key(item) } : undefined}
+                                    onClick={mayAdd ? tileClick(item) : undefined}
+                                >
                                     <span className="library-tile-art creator-more-art">
                                         {image
                                             ? <CollectionTileArt key={image} src={image}/>
@@ -130,13 +153,18 @@ export default function CreatorOfferings({creator}: {creator: CreatorPageRead}) 
                                     </span>
                                     {mayAdd && (
                                         <div className="creator-more-add">
-                                            <button
-                                                type="button" className="btn btn-secondary creator-more-plus" disabled={busy !== null}
-                                                aria-label={`Add ${offering.title}`} title={inLibrary ? `Add to ${nameInText(creator.title)}` : 'Add to your library'}
-                                                onClick={() => void add(item)}
-                                            >
-                                                <FontAwesomeIcon icon={faIcon('fass', busy === key(item) ? 'spinner' : 'plus')} spin={busy === key(item)}/>
-                                            </button>
+                                            {busy === key(item) ? (
+                                                <span className="btn btn-secondary creator-more-plus" aria-label="Adding…">
+                                                    <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin/>
+                                                </span>
+                                            ) : (
+                                                <ActionMenu
+                                                    label={`Add ${offering.title}`} triggerIcon={faIcon('fass', 'plus')}
+                                                    onTriggerClick={busy === null ? () => void add(item) : () => undefined}
+                                                    open={menuFor === key(item)} onOpenChange={(open) => setMenuFor(open ? key(item) : null)}
+                                                    items={[{...addAction(item), disabled: busy !== null, onSelect: () => void add(item)}]}
+                                                />
+                                            )}
                                         </div>
                                     )}
                                     <span className="library-tile-copy">

@@ -84,8 +84,6 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
                     <label htmlFor="join-creator-target">Add it to</label>
                     <SimpleSelect
                         inputId="join-creator-target" registry={targets} value={target}
-                        menuPortalTarget={document.body} menuPlacement="auto"
-                        styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
                         onChange={(value) => setTarget(value ?? null)}
                     />
                 </div>

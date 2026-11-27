@@ -27,6 +27,7 @@ from backend.services.link_seasons import (
 from ...helpers.listed_collections import (
     add_listed_episodes, index_listed_collection, known_episode_slugs, splits_chapters, with_chapters,
 )
+from backend.services.source_options import ytdlp_call_options
 from backend.services.thumbnails import newest_media_item_id
 from .service import finish_index
 
@@ -91,6 +92,11 @@ def _check_collection(s: Session, *, collection: Collection, source: Source) -> 
     """Look at the collection's newest videos, and add the ones it does not have yet. When it found some and the
     collection's playlists are seasons, it looks at the playlists too, so a new video goes to its playlist's season
     before it is downloaded."""
+    with ytdlp_call_options(source, *collection.ytdlp_option_texts, session=s):
+        return _check_collection_now(s, collection=collection, source=source)
+
+
+def _check_collection_now(s: Session, *, collection: Collection, source: Source) -> int:
     collection_id, url, feeds = collection.id, collection.sharing_url, own_feeds(collection)
     known = known_episode_slugs(s, collection)
     split = splits_chapters(collection)

@@ -5,6 +5,7 @@ from typing import Optional
 from config import get_settings
 from controller.db_utils import db_session
 from task_manager.scheduler.registry import task, on_cron, on_event
+from task_manager.scheduler.results import TaskResult
 from .service import run_file_watcher
 
 
@@ -27,8 +28,9 @@ from .service import run_file_watcher
     allowed_resource_types=("collection",),
     default_max_retries=5,
     tracks_progress=False,
+    findings=("updated",),
 )
-async def file_watcher(*, resource_id: Optional[int] = None, slug: Optional[str] = None, progress=None) -> None:
+async def file_watcher(*, resource_id: Optional[int] = None, slug: Optional[str] = None, progress=None) -> TaskResult:
     """
     Reconciles downloaded episode files on disk with the VODLoft database.
 
@@ -41,4 +43,4 @@ async def file_watcher(*, resource_id: Optional[int] = None, slug: Optional[str]
         A progress tracker object.
     """
     with db_session() as s:
-        await run_file_watcher(s, collection_id=resource_id, collection_slug=slug, progress=progress)
+        return await run_file_watcher(s, collection_id=resource_id, collection_slug=slug, progress=progress)

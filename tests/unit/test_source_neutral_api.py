@@ -2,6 +2,8 @@
 when that Source has the Feature they belong to."""
 from __future__ import annotations
 
+import json
+
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
@@ -27,7 +29,7 @@ class StubSource(Source):
     sites = (Site("stub", "Stub", domains),)
     features = frozenset()
 
-    def resolve(self, url):
+    def resolve(self, url, plan=None):
         if "/watch/" not in url:
             return None
         slug = url.rstrip("/").rsplit("/", 1)[-1]
@@ -46,7 +48,7 @@ class CatchAllSource(StubSource):
     domains = (ANY_DOMAIN,)
     sites = ()
 
-    def resolve(self, url):
+    def resolve(self, url, plan=None):
         return ResolvedLink(kind=LinkKind.COLLECTION, slug="anything", url=url, title="Anything")
 
 
@@ -102,7 +104,7 @@ def _collection(source_key: str):
         membership_level="ALL_ACCESS", type=CollectionType.PODCAST.value,
         episode_identifier=EpisodeIdentifier.NUMBERED.value, author_name="Host", author_slug="host",
         source_key=source_key, ytdlp_options="", cookies_mode="automatic", split_chapters=False, check_frequency="default",
-        episode_order="newest_first",
+        episode_order="newest_first", healthy=True, health_issues={},
         created_at=now, updated_at=now,
     )
 
@@ -140,10 +142,25 @@ def test_a_daily_wire_host_link_is_recognised(monkeypatch):
     assert links.resolve_link("https://www.dailywire.com/hosts/nobody") is None
 
 
+def _resolve(client, body):
+    """The last line /resolve sends: the link it found, or what went wrong."""
+    response = client.post("/api/resolve", json=body)
+    assert response.status_code == 200, response.text
+    return json.loads(response.text.strip().splitlines()[-1])
+
+
+def _resolved(client, body):
+    answer = _resolve(client, body)
+    assert "link" in answer, answer
+    return answer["link"]
+
+
 def test_resolve_stops_at_the_first_source_that_recognises_the_link(client):
-    response = client.post("/api/resolve", json={"url": "stub.example/watch/clip-1"})
-    assert response.status_code == 200
-    body = response.json()
+    lines = [json.loads(line) for line in client.post("/api/resolve", json={"url": "stub.example/watch/clip-1"}).text.splitlines()]
+    # The plan of the lookup comes first, as it goes, then the link.
+    assert lines[0]["plan"]["stages"][0]["label"] == "Finding the service the link comes from"
+    assert lines[-2]["plan"]["stages"][-1]["id"] == "check_library"
+    body = lines[-1]["link"]
     # A Source that names no kinds itself gets VODLoft's own name for each.
     assert body["source"].pop("kindNames")["movie"] == {"singular": "movie", "plural": "movies", "a": "a movie"}
     assert body["source"] == {"id": "stub", "name": "Stub Video", "domains": ["stub.example"], "features": [], "sitesLabel": None, "sites": [{"key": "stub", "name": "Stub", "added": False}], "searchSites": [], "siteKeys": ["stub"], "releaseDate": "start",
@@ -154,7 +171,7 @@ def test_resolve_stops_at_the_first_source_that_recognises_the_link(client):
     assert body["preview"]["title"] == "Stub clip-1"
 
     # The stub does not recognise this path, so the catch-all Source answers.
-    fallback = client.post("/api/resolve", json={"url": "https://stub.example/about"}).json()
+    fallback = _resolved(client, {"url": "https://stub.example/about"})
     assert fallback["source"]["id"] == "catch_all"
 
 
@@ -167,19 +184,17 @@ def test_resolve_explains_an_unrecognised_link(client, monkeypatch):
 
 def test_a_link_looked_up_with_one_source_names_that_source(client, monkeypatch):
     monkeypatch.setattr(registry, "_sources", {"stub": StubSource()})
-    response = client.post("/api/resolve", json={"url": "https://stub.example/about", "sourceKey": "stub"})
-    assert response.status_code == 422
-    assert response.json()["detail"] == "Stub Video does not recognise this link"
+    answer = _resolve(client, {"url": "https://stub.example/about", "sourceKey": "stub"})
+    assert answer == {"error": "Stub Video does not recognise this link"}
 
 
-def test_resolve_reports_a_failing_source_as_bad_gateway(client, monkeypatch):
-    def broken(url):
+def test_resolve_reports_a_failing_source(client, monkeypatch):
+    def broken(url, plan=None):
         raise RuntimeError("upstream down")
 
     monkeypatch.setattr(registry.get_source("stub"), "resolve", broken)
-    response = client.post("/api/resolve", json={"url": "https://stub.example/watch/x"})
-    assert response.status_code == 502
-    assert "Stub Video could not look up this link" in response.json()["detail"]
+    answer = _resolve(client, {"url": "https://stub.example/watch/x"})
+    assert "Stub Video could not look up this link" in answer["error"]
 
 
 def test_resolve_finds_the_collection_of_a_known_episode(client, session, monkeypatch):
@@ -198,9 +213,9 @@ def test_resolve_finds_the_collection_of_a_known_episode(client, session, monkey
 
     monkeypatch.setattr(
         registry.get_source("stub"), "resolve",
-        lambda url: ResolvedLink(kind=LinkKind.EPISODE, slug="ep-1", url=url, title="Episode 1"),
+        lambda url, plan=None: ResolvedLink(kind=LinkKind.EPISODE, slug="ep-1", url=url, title="Episode 1"),
     )
-    body = client.post("/api/resolve", json={"url": "https://stub.example/episode/ep-1"}).json()
+    body = _resolved(client, {"url": "https://stub.example/episode/ep-1"})
     assert body["kind"] == "episode"
     assert body["collectionSlug"] == "a-collection"
     assert body["collectionUrl"] == "https://example.test/a-collection"
@@ -282,16 +297,19 @@ def test_a_preferred_source_is_asked_first(client, stub_sources):
     assert registry.sources_for("https://www.stub.example/watch/x", {"stub": "catch_all"}) == [catch_all, stub]
     assert registry.sources_for("https://elsewhere.example/", {"stub": "catch_all"}) == [catch_all]
 
-    body = client.post("/api/resolve", json={"url": "https://stub.example/watch/clip-1"}).json()
+    body = _resolved(client, {"url": "https://stub.example/watch/clip-1"})
     assert body["source"]["id"] == "stub"
     assert [candidate["id"] for candidate in body["candidates"]] == ["stub", "catch_all"]
 
-    picked = client.post("/api/resolve", json={"url": "https://stub.example/watch/clip-1", "sourceKey": "catch_all"}).json()
+    picked = _resolved(client, {"url": "https://stub.example/watch/clip-1", "sourceKey": "catch_all"})
     assert picked["source"]["id"] == "catch_all"
     assert client.post("/api/resolve", json={"url": "https://stub.example/x", "sourceKey": "nope"}).status_code == 422
 
 
 def test_the_preferred_source_per_site_is_saved(client):
+    # Only a Site added to VODLoft is listed.
+    assert "stub" not in {row["key"] for row in client.get("/api/sources/sites").json()}
+    assert client.post("/api/sources/sites", json={"url": "https://stub.example/"}).status_code == 200
     sites = {row["key"]: row for row in client.get("/api/sources/sites").json()}
     assert sites["stub"] == {
         "key": "stub", "name": "Stub", "domains": ["stub.example"], "sourceKeys": ["stub", "catch_all"],
@@ -300,14 +318,14 @@ def test_the_preferred_source_per_site_is_saved(client):
 
     saved = client.put("/api/sources/sites/stub", json={"preferredSourceKey": "catch_all"}).json()
     assert saved["preferredSourceKey"] == "catch_all"
-    body = client.post("/api/resolve", json={"url": "https://stub.example/watch/clip-1"}).json()
+    body = _resolved(client, {"url": "https://stub.example/watch/clip-1"})
     assert body["source"]["id"] == "catch_all"
 
     assert client.put("/api/sources/sites/stub", json={"preferredSourceKey": "nope"}).status_code == 422
     assert client.put("/api/sources/sites/other", json={"preferredSourceKey": "stub"}).status_code == 422
     reset = client.put("/api/sources/sites/stub", json={"preferredSourceKey": None}).json()
     assert reset["preferredSourceKey"] is None
-    assert client.post("/api/resolve", json={"url": "https://stub.example/watch/clip-1"}).json()["source"]["id"] == "stub"
+    assert _resolved(client, {"url": "https://stub.example/watch/clip-1"})["source"]["id"] == "stub"
 
 
 def test_a_source_with_search_is_searched_by_name(client, monkeypatch):
@@ -335,3 +353,39 @@ def test_a_source_with_search_is_searched_by_name(client, monkeypatch):
             "linkLabel": None, "linkPath": None,
         },
     }
+
+
+def test_a_quick_first_look_comes_before_the_link(client, monkeypatch):
+    import threading
+    import time
+
+    from sources.contract import LinkPreview
+
+    stub = registry.get_source("stub")
+    previewed = threading.Event()
+
+    def preview(url):
+        previewed.set()
+        return LinkPreview(
+            title="Quick title", image_url="https://img/quick.jpg", author_name="Maker",
+            kind=LinkKind.MOVIE, slug="clip-1", url="https://stub.example/watch/clip-1",
+        )
+
+    def resolve(url, plan=None):
+        # The full lookup takes longer than the first look.
+        previewed.wait(5)
+        time.sleep(0.3)
+        return ResolvedLink(kind=LinkKind.MOVIE, slug="clip-1", url=url, title="Full title")
+
+    monkeypatch.setattr(stub, "preview", preview)
+    monkeypatch.setattr(stub, "resolve", resolve)
+    lines = [json.loads(line) for line in client.post("/api/resolve", json={"url": "https://stub.example/watch/clip-1"}).text.splitlines()]
+    first_look = next(line["preview"] for line in lines if "preview" in line)
+    # What the link is, so Add media can go on with it before the full lookup is done.
+    assert first_look.pop("source")["id"] == "stub"
+    assert first_look == {
+        "title": "Quick title", "description": None, "imageUrl": "https://img/quick.jpg", "authorName": "Maker",
+        "kind": "movie", "slug": "clip-1", "url": "https://stub.example/watch/clip-1",
+    }
+    assert next(index for index, line in enumerate(lines) if "preview" in line) < len(lines) - 1
+    assert lines[-1]["link"]["preview"]["title"] == "Full title"

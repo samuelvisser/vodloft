@@ -160,13 +160,20 @@ class SidecarDownloads:
                 self._tracker.fail(error)
 
     def fulfil(self, asset_id: str, result: DownloadResult) -> None:
-        """What yt-dlp wrote for a ``ytdlp`` spec: its info file, or its subtitles, one asset per language and kind."""
+        """What yt-dlp wrote for a ``ytdlp`` spec: its info file, the sound it kept apart, or its subtitles, one asset
+        per language and kind."""
         spec = self._specs[asset_id]
         items = []
         if spec.kind == "info_json":
             if result.info_json is not None:
                 path = Path(result.info_json)
                 items.append(AcquiredSidecar(spec, path, spec.target_suffix or ".info.json", path.stat().st_size))
+            self._ytdlp[asset_id] = tuple(items)
+            return
+        if spec.kind == "audio":
+            if result.separate_audio is not None:
+                path = Path(result.separate_audio)
+                items.append(AcquiredSidecar(spec, path, spec.target_suffix or ".audio.m4a", path.stat().st_size))
             self._ytdlp[asset_id] = tuple(items)
             return
         for subtitle in result.subtitles:

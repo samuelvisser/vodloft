@@ -5,14 +5,13 @@ import {useQueryClient} from '@tanstack/react-query'
 
 import LocalMediaProfileCard from '../LocalMediaProfile/LocalMediaProfileCard'
 import LocalMediaProfileForm from '../LocalMediaProfile/LocalMediaProfileForm'
-import {useLocalMediaProfiles} from '../../lib/queries'
+import {useLocalMediaProfileSites, useLocalMediaProfiles} from '../../lib/queries'
 import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {
     DEFAULT_MOVIE_OUTPUT_TEMPLATE,
     VideoLocalMediaProfileCreateIn,
     VideoLocalMediaProfileCreateSchema,
 } from '../../types/schemas/video_local_media_profile'
-import {DAILYWIRE_SOURCE_KEY} from '../../types/schemas/source'
 import {isLocalMediaProfileAvailableForSite, videoProfileKeeps} from '../../types/local_media_profile'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
 import {getZodDefaults} from '../../utils/defaultZod'
@@ -25,21 +24,26 @@ type Props = {
     onContinue: (profile: LocalMediaProfileRead) => void
 }
 
-// Movies come from The Daily Wire, whose Site has its Source's key. A profile made here is only for its movies.
-const MOVIE_SITE_KEY = DAILYWIRE_SOURCE_KEY
-
+// A profile made here is only for movies, from the Sites VODLoft knows that have them; ``siteKeys`` is set once
+// those are known.
 const NEW_PROFILE_DEFAULTS: VideoLocalMediaProfileCreateIn = {
     ...getZodDefaults(VideoLocalMediaProfileCreateSchema),
     name: 'My Movies',
     videoScope: 'movies',
     outputTemplate: DEFAULT_MOVIE_OUTPUT_TEMPLATE,
     subtitleMode: 'sidecar',
-    siteKeys: [MOVIE_SITE_KEY],
+    siteKeys: [],
     includeUpcomingSites: false,
 }
 
 export default function OnboardingMovieProfileStep({movieTitle, onBack, onContinue}: Props) {
     const profilesQuery = useLocalMediaProfiles()
+    const {data: profileSites} = useLocalMediaProfileSites()
+    const movieSiteKeys = useMemo(
+        () => profileSites?.sites.filter((site) => site.movies).map((site) => site.key) ?? [],
+        [profileSites],
+    )
+    const newProfile = useMemo(() => ({...NEW_PROFILE_DEFAULTS, siteKeys: movieSiteKeys}), [movieSiteKeys])
     const queryClient = useQueryClient()
     const initialized = useRef(false)
     const [selectedSlug, setSelectedSlug] = useState<string | null>(null)
@@ -53,9 +57,10 @@ export default function OnboardingMovieProfileStep({movieTitle, onBack, onContin
 
     const movieProfiles = useMemo(
         () => profilesQuery.data?.filter((profile) => (
-            profile.type === 'video' && videoProfileKeeps(profile, 'movies') && isLocalMediaProfileAvailableForSite(profile, MOVIE_SITE_KEY)
+            profile.type === 'video' && videoProfileKeeps(profile, 'movies')
+            && movieSiteKeys.some((key) => isLocalMediaProfileAvailableForSite(profile, key))
         )) ?? [],
-        [profilesQuery.data],
+        [profilesQuery.data, movieSiteKeys],
     )
 
     const selectProfile = useCallback((profile: LocalMediaProfileRead) => {
@@ -74,15 +79,16 @@ export default function OnboardingMovieProfileStep({movieTitle, onBack, onContin
     }, [form])
 
     useEffect(() => {
-        if (initialized.current || profilesQuery.isPending || profilesQuery.isError) return
+        if (initialized.current || profilesQuery.isPending || profilesQuery.isError || !profileSites) return
         initialized.current = true
         const starter = movieProfiles.find((profile) => profile.slug === 'vodloft-movies') ?? movieProfiles[0]
         if (starter) selectProfile(starter)
-    }, [movieProfiles, profilesQuery.isError, profilesQuery.isPending, selectProfile])
+        else form.reset(newProfile)
+    }, [movieProfiles, profilesQuery.isError, profilesQuery.isPending, profileSites, selectProfile, form, newProfile])
 
     const createNew = () => {
         setSelectedSlug(null)
-        form.reset(NEW_PROFILE_DEFAULTS)
+        form.reset(newProfile)
     }
 
     const submit = form.handleSubmit(async (input) => {

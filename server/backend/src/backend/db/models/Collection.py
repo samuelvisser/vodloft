@@ -2,7 +2,7 @@ from datetime import datetime
 from collections.abc import Iterable
 from typing import Optional, TYPE_CHECKING, TypeAlias
 
-from sqlalchemy import JSON, ForeignKey, Text, UniqueConstraint, func
+from sqlalchemy import JSON, ForeignKey, Text, UniqueConstraint, func, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
@@ -11,8 +11,9 @@ from backend.db.mixins.MediaContentMetadataMixin import PICTURE_PATH_COMMENT
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 from backend.db.mixins.CreatedByMixin import CreatedByMixin
 from backend.types.collection_types import EpisodeOrder
+from backend.types.collection_health_types import HealthIssueKind
 from backend.types.collection_contracts import collection_contract
-from backend.types.link_season_types import ChannelSeason, CollectionKind, ListLayout, LooseVideos, LinkSeasons, OutsideVideos
+from backend.types.link_season_types import CollectionKind, LooseVideos, LinkSeasons, OutsideVideos
 
 if TYPE_CHECKING:
     from backend.db.models.media_item import Episode
@@ -68,24 +69,17 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     )
     link_seasons: Mapped[str] = mapped_column(
         default=LinkSeasons.OFF.value, server_default=LinkSeasons.OFF.value,
-        comment="Whether the channel's playlists are seasons: off, all or selected",
+        comment="Whether the collection takes lists, its channel's playlists and links the user adds: off or on",
     )
     new_lists: Mapped[dict[str, str]] = mapped_column(
         JSON, default=dict, server_default="{}",
-        comment="What happens with a list the channel adds, by the kind of list, when only selected lists are seasons: "
-                "ask, add or ignore",
-    )
-    list_layout: Mapped[str] = mapped_column(
-        default=ListLayout.SEASON_EACH.value, server_default=ListLayout.SEASON_EACH.value,
-        comment="How the lists that are seasons are laid out: season_each, or by_year in a season per upload year",
+        comment="What happens with a list the channel adds, by the kind of list: ask, add, contents or ignore",
     )
     loose_videos: Mapped[str] = mapped_column(
         default=LooseVideos.ONE_SEASON.value, server_default=LooseVideos.ONE_SEASON.value,
-        comment="Where the channel's own videos go: one_season, the channel season, or by_year",
-    )
-    channel_season: Mapped[str] = mapped_column(
-        default=ChannelSeason.EVERYTHING.value, server_default=ChannelSeason.UNLISTED.value,
-        comment="What the channel season holds: everything, every video of the feeds, or unlisted, those in no list",
+        comment="How the collection groups its own videos: everything, one channel season with every video of its "
+                "feeds; one_season, one season of those in none of its playlists that are seasons, or of the list it "
+                "is made from; or by_year",
     )
     repeat_videos: Mapped[str] = mapped_column(
         default=_default_repeat_videos, server_default="one_season",
@@ -106,9 +100,38 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
             "Videos; null lists every feed"
         ),
     )
+    feed_seasons: Mapped[dict[str, Optional[int]]] = mapped_column(
+        JSON, default=dict, server_default="{}",
+        comment="The feeds of the channel that are a season of their own, by ref, with their season's id once it has "
+                "one, which lists or other feeds may share",
+    )
     custom_season_order: Mapped[bool] = mapped_column(
         default=False, server_default="0",
         comment="The user put the seasons in their own order, so a new season goes last instead of where its date puts it",
+    )
+    healthy: Mapped[bool] = mapped_column(
+        default=True, server_default=true(), index=True,
+        comment="Whether nothing in it needs the user, as its health_issues say",
+    )
+    health_issues: Mapped[dict[str, int]] = mapped_column(
+        JSON, default=dict, server_default="{}",
+        comment="What it needs the user for, by the kind of issue, with how many things each concerns, such as moves: 3 "
+                "downloads that wait for its Move action. Kept up to date as VODLoft works on it, and set right by the "
+                "nightly collection health check",
+    )
+    move_causes: Mapped[list[dict]] = mapped_column(
+        JSON, default=list, server_default="[]",
+        comment="The setting changes that put its downloads in another season, which wait for its Move action: each "
+                "setting as it was before and is now, by where it is changed, such as its Seasons dialog. Empty once "
+                "nothing waits, or when none was recorded",
+    )
+    site_creator_ref: Mapped[Optional[str]] = mapped_column(
+        index=True,
+        comment="The Site's id of the creator behind its link, as the collection health check found it, for suggesting "
+                "to group a creator's collections; null when none was found or it has not been looked up",
+    )
+    site_creator_url: Mapped[Optional[str]] = mapped_column(
+        comment="The link that site_creator_ref was looked up for: a link it no longer has is looked up again",
     )
     split_chapters: Mapped[bool] = mapped_column(
         default=False, server_default="0",
@@ -183,6 +206,24 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     lists: Mapped[list["CollectionList"]] = relationship(
         back_populates="collection", cascade="all, delete-orphan", order_by="CollectionList.site_position",
     )
+
+    def note_health(self, kind: "HealthIssueKind", count: int) -> bool:
+        """Store how many things of one kind of issue need the user, none when it is healthy in that way. Returns
+        whether that changed what it stored."""
+        issues = {key: value for key, value in (self.health_issues or {}).items() if key != kind.value}
+        if count:
+            issues[kind.value] = count
+        if issues == (self.health_issues or {}):
+            return False
+        self.health_issues = issues
+        self.healthy = not issues
+        return True
+
+    @property
+    def ytdlp_option_texts(self) -> tuple[str, ...]:
+        """Your own yt-dlp options for the collection, in the order yt-dlp gets them after the Source's: its creator's,
+        then its own, so that its own win where the two disagree."""
+        return (self.creator.ytdlp_options if self.creator is not None else "", self.ytdlp_options)
 
     @property
     def link_site_keys(self) -> list[Optional[str]]:

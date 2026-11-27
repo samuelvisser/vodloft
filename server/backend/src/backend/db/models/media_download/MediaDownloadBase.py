@@ -77,6 +77,14 @@ class MediaDownloadBase(HasMetadataMixin, HasTaskResourcesMixin, Base):
     artifact_stat_ino: Mapped[Optional[str]] = mapped_column(String(32))
     artifact_size_bytes: Mapped[Optional[int]] = mapped_column(BigInteger)
     artifact_fingerprint: Mapped[Optional[str]] = mapped_column(String(64))
+    # What VODLoft last wrote completely as the file's metadata, so a rewrite only writes what changes. None when it
+    # wrote none or does not know.
+    tags_fingerprint: Mapped[Optional[str]] = mapped_column(
+        String(64), comment='The fingerprint of the tags VODLoft last embedded in the file, "none" when it embedded none; None when unknown',
+    )
+    nfo_fingerprint: Mapped[Optional[str]] = mapped_column(
+        String(64), comment='The fingerprint of the NFO VODLoft last wrote beside the file, "none" when it wrote none; None when unknown',
+    )
 
     # A user cancellation prevents an automatic Download Profile sweep from
     # immediately recreating the same operation. An explicit Retry/Download
@@ -107,6 +115,9 @@ class MediaDownloadBase(HasMetadataMixin, HasTaskResourcesMixin, Base):
         comment="The length of the downloaded file in seconds; the media item's duration is the length the site lists",
     )
     downloaded_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
+    first_downloaded_at: Mapped[Optional[datetime]] = mapped_column(
+        UTCDateTime(), comment="When this download first had a file; unlike downloaded_at, a new download keeps it",
+    )
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now()
     )
@@ -128,6 +139,12 @@ class MediaDownloadBase(HasMetadataMixin, HasTaskResourcesMixin, Base):
         back_populates="media_download", cascade="all, delete-orphan",
         passive_deletes=True, lazy="selectin",
     )
+
+    def mark_downloaded(self, at: datetime) -> None:
+        """Record that the file was downloaded at ``at``; the first download's time stays."""
+        self.downloaded_at = at
+        if self.first_downloaded_at is None or at < self.first_downloaded_at:
+            self.first_downloaded_at = at
 
     def asset_path(self, asset_key: str) -> str | None:
         return next((asset.path for asset in self.assets if asset.asset_key == asset_key), None)

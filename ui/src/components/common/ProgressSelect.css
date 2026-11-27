@@ -8,7 +8,7 @@
     cursor: not-allowed;
 }
 
-/* react-select lets the pointer pass through a disabled field, so a click or tap reaches the wrapper that explains
+/* A disabled Select lets the pointer pass through, so a click or tap reaches the wrapper that explains
    why. Only the cancel button takes the pointer itself. */
 .progress-select-host.is-progress {
     cursor: not-allowed;
@@ -65,7 +65,7 @@
     text-overflow: ellipsis;
 }
 
-/* The chevron fades, because the menu won't open; react-select's own disabled grey would vanish on the fill. */
+/* The chevron fades, because the menu won't open; the disabled grey would vanish on the fill. */
 .progress-select.is-progress .select__dropdown-indicator {
     color: var(--text);
     opacity: 0.45;

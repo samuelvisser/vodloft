@@ -23,9 +23,10 @@ export async function fetchBulkSummary(endpoint: BulkEndpoint, ids: readonly num
     return parsed(await post(endpoint, 'summary', {ids}, signal), BulkSummarySchema)
 }
 
-/** Sends the changes; the response is left to the caller so form errors can show under the fields. */
-export function postBulkChange(endpoint: BulkEndpoint, ids: readonly number[], changes: Record<string, unknown>) {
-    return post(endpoint, 'change', {ids, changes})
+/** Sends the changes, with what else the change takes, such as a choice made on its review; the response is left to
+ * the caller so form errors can show under the fields. */
+export function postBulkChange(endpoint: BulkEndpoint, ids: readonly number[], changes: Record<string, unknown>, extra: Record<string, unknown> = {}) {
+    return post(endpoint, 'change', {...extra, ids, changes})
 }
 
 export async function bulkChange(endpoint: BulkEndpoint, ids: readonly number[], changes: Record<string, unknown>): Promise<BulkResult> {

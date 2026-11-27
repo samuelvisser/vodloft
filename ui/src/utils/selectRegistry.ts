@@ -22,7 +22,7 @@ export function createSelectRegistry<const T extends string>(
     orderedValues?: readonly T[],
 ) {
     // Object.keys moves integer-like keys ahead of other keys. Dynamic registries can
-    // provide their source order explicitly so a ReactSelect keeps the caller's order.
+    // provide their source order explicitly so a Select keeps the caller's order.
     const declaredValues = Object.keys(spec) as T[];
     const requestedValues = orderedValues ? [...new Set(orderedValues)] : undefined;
     const orderedSet = new Set(requestedValues ?? []);

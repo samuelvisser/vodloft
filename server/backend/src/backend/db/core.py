@@ -61,6 +61,14 @@ class Base(DeclarativeBase):
     # SQLAlchemy 2.1 maps a bare ``float`` to Double; the migrations create FLOAT columns.
     type_annotation_map = {datetime: UTCDateTime(), float: Float()}
 
+    def __init_subclass__(cls, **kwargs) -> None:
+        super().__init_subclass__(**kwargs)
+        # SQLite gives a deleted row's id to the next row unless the table says AUTOINCREMENT, and VODLoft never
+        # reuses an id: a new record must not inherit what still points at an old one. PostgreSQL never reuses ids.
+        table = cls.__dict__.get("__table__")
+        if table is not None:
+            table.dialect_options["sqlite"]["autoincrement"] = True
+
 
 create_case_insensitive_collation(Base.metadata)
 

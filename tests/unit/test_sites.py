@@ -195,7 +195,10 @@ def test_add_media_offers_only_the_search_and_catalogue_of_added_sites():
             return ["youtube"]
 
     sources = {source.id: source for source in list_sources(OnlyYouTubeAdded())}
-    assert {site.key: site.added for site in sources["ytdlp"].search_sites} == {"youtube": True, "twitch": False, "soundcloud": False}
+    assert {site.key: site.added for site in sources["ytdlp"].search_sites} == {
+        "youtube": True, "twitch": False, "soundcloud": False, "dailymotion": False, "kick": False, "nebula": False,
+        "lbry": False, "peertube": False, "niconico": False,
+    }
     assert [(site.key, site.added) for site in sources["dailywire"].sites] == [("dailywire", False)]
     assert [(site.key, site.added) for site in sources["npo"].search_sites] == [("npo", False)]
 
@@ -271,3 +274,10 @@ def test_a_new_collection_of_a_set_keeps_only_a_type_of_list_its_site_has():
 
     with pytest.raises(ServiceError):
         set_kind(Collection(sharing_url="https://soundcloud.com/flume/sets/palaces", source_key="ytdlp", list_type="tracks"))
+
+
+def test_a_site_of_its_own_domain_is_named_after_it_by_its_key():
+    from sources import site_of
+
+    site = site_of("generic:example.com")
+    assert (site.name, site.initials, site.domains) == ("example.com", "EX", ("example.com",))

@@ -17,6 +17,11 @@ class EncryptedMediaError(DownloadError):
     """The HLS stream is encrypted; this downloader does not support DRM."""
 
 
+class UnplayableFormatsError(DownloadError):
+    """yt-dlp found no formats it can play back, for another reason than DRM. With yt-dlp's
+    ``--allow-unplayable-formats`` it also offers the others."""
+
+
 class AccessRequiredError(DownloadError):
     """The Source only gives the media with an access VODLoft does not have, such as a paid
     subscription or a channel membership. ``access`` is the Source's key for it, when known."""

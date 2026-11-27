@@ -36,6 +36,7 @@ from backend.api.models.media_download import (
 )
 from backend.db.model_mapping import update_database_fields
 from backend.db.models import (
+    CreatorTier,
     Episode,
     LocalMediaProfileBase,
     MediaDownloadBase,
@@ -55,6 +56,7 @@ from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.types.episode_types import EpisodePublishStatus
 from backend.services.media_access import media_access, media_locked
+from backend.services.unplayable_formats import blocked_by_drm
 from backend.services.local_media_profile_sites import profile_offered_for_site
 from backend.services.removed_downloads import answer_keep_question, downloads_awaiting_keep_answer
 from backend.services.sites import collection_site, collection_site_key, movie_site_key, video_site_key
@@ -193,6 +195,7 @@ def _load_media_items_for_view(
                     Episode.access_check_at,
                     raiseload=True,
                 ),
+                _with_creator_tier(Episode),
                 joinedload(Episode.collection).load_only(
                     Collection.id,
                     Collection.slug,
@@ -223,6 +226,7 @@ def _load_media_items_for_view(
                     Movie.access_check_at,
                     raiseload=True,
                 ),
+                _with_creator_tier(Movie),
                 raiseload("*"),
             )
         )
@@ -247,6 +251,7 @@ def _load_media_items_for_view(
                     MovieExtra.access_check_at,
                     raiseload=True,
                 ),
+                _with_creator_tier(MovieExtra),
                 joinedload(MovieExtra.movie).load_only(
                     Movie.id,
                     Movie.slug,
@@ -281,12 +286,20 @@ def _load_media_items_for_view(
                     Video.access_check_at,
                     raiseload=True,
                 ),
+                _with_creator_tier(Video),
                 raiseload("*"),
             )
         )
         media_by_id.update((video.id, video) for video in videos)
 
     return media_by_id
+
+
+def _with_creator_tier(model):
+    """Loads the creator's tier media needs, which names its access."""
+    return joinedload(model.creator_tier).load_only(
+        CreatorTier.site_tier_id, CreatorTier.name, CreatorTier.amount, CreatorTier.rank, raiseload=True,
+    )
 
 
 def _media_download_view_statement(
@@ -564,7 +577,7 @@ DRM_PROTECTED_MESSAGE = "Protected by DRM, cannot be downloaded"
 
 
 def _ensure_downloadable(media) -> None:
-    if media.drm_protected:
+    if blocked_by_drm(media):
         raise HTTPException(status_code=422, detail=DRM_PROTECTED_MESSAGE)
     if media_locked(media):
         access = media_access(media)

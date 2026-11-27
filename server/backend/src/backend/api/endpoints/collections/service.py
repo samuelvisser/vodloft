@@ -5,7 +5,7 @@ from datetime import datetime, time, timedelta, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import exists, func, or_, select, update
+from sqlalchemy import exists, func, or_, select, true, update
 
 from sqlalchemy.orm import Session
 
@@ -19,6 +19,7 @@ from backend.db.models import Episode, Season, Collection, CollectionLocalMediaP
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.episode_types import EpisodePublishStatus
 from backend.services.errors import ServiceError
+from backend.services.unplayable_formats import collection_allows_unplayable_formats
 from backend.services.access_checks import ask_for_check, refused_media
 from backend.services.media_access import locked_clause
 from backend.services.local_media_profile_sites import profile_offered_for_site
@@ -495,8 +496,9 @@ def request_collection_download_all(
             EpisodePublishStatus.PUBLISHED_PRELIMINARY,
         )),
         episode_identifier_type_predicate(Episode.episode_identifier, set(body.episode_types)),
-        # Media protected by DRM, or no longer at the Source, cannot be downloaded.
-        Episode.drm_protected.is_(False),
+        # Media no longer at the Source cannot be downloaded, nor can media protected by DRM unless the
+        # Collection's own yt-dlp options allow unplayable formats.
+        true() if collection_allows_unplayable_formats(collection) else Episode.drm_protected.is_(False),
         Episode.removed_from_source.is_(False),
         # Nor can media locked behind an access VODLoft does not have, such as a channel membership.
         ~locked_clause(Episode),

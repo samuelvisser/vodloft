@@ -60,7 +60,7 @@ export default function ApiKeyNote() {
                     A {note.siteName} API key is free and makes VODLoft a lot quicker on {note.siteName}: without one,
                     the first look at a large channel can take hours instead of a minute.
                 </p>
-                <p>You can still add a key later under Settings › Sources.</p>
+                <p>You can still add a key later under Settings › Sites.</p>
             </ConfirmDialog>
         </section>
     )

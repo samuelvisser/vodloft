@@ -20,6 +20,7 @@ from .service import run_rename_file_worker
 @on_event(EPISODE_IDENTIFIER_CHANGED_EVENT, resource_type="episode")
 @task(
     key="rename_file_worker",
+    findings=("files_renamed", "files_recovered"),
     title="Rename episode file",
     description="Rename existing episode files to match their current output templates and metadata.",
     allowed_resource_types=("episode",),

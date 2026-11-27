@@ -1,0 +1,393 @@
+/* VODLoft's dropdown (Select.tsx). The classes follow React Select's, which VODLoft used before, so the look and
+   every per-field override stayed the same. */
+.select {
+    position: relative;
+    box-sizing: border-box;
+}
+
+/* A disabled field lets the pointer through, so a wrapper can explain why it can't be changed. */
+.select--is-disabled {
+    pointer-events: none;
+}
+
+.select__live-region {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.select__control {
+    anchor-name: var(--select-anchor);
+    position: relative;
+    box-sizing: border-box;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 38px;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    box-shadow: none;
+    outline: 0;
+    cursor: default;
+    transition: border-color 100ms, box-shadow 100ms;
+}
+
+.select__control:hover {
+    border-color: #60a5fa;
+}
+
+.select__control--is-focused {
+    border-color: #60a5fa;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.25);
+}
+
+.select__value-container {
+    position: relative;
+    box-sizing: border-box;
+    display: grid;
+    flex: 1;
+    flex-wrap: wrap;
+    align-items: center;
+    min-width: 0;
+    padding: 2px 8px;
+    overflow: hidden;
+    color: var(--text);
+}
+
+.select__value-container--is-multi.select__value-container--has-value {
+    display: flex;
+}
+
+.select__single-value,
+.select__placeholder {
+    grid-area: 1 / 1 / 2 / 3;
+    box-sizing: border-box;
+    max-width: 100%;
+    margin: 0 2px;
+}
+
+.select__single-value {
+    overflow: hidden;
+    color: var(--text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.select__placeholder {
+    color: var(--muted);
+}
+
+.select--is-disabled .select__single-value {
+    color: var(--muted);
+}
+
+/* The input grows with what is typed: an invisible copy of the text beside it sets its width. */
+.select__input-container {
+    visibility: visible;
+    display: inline-grid;
+    flex: 1 1 auto;
+    grid-area: 1 / 1 / 2 / 3;
+    grid-template-columns: 0 min-content;
+    box-sizing: border-box;
+    margin: 2px;
+    padding: 2px 0;
+    color: var(--text);
+}
+
+.select__input-container::after {
+    content: attr(data-value) " ";
+    visibility: hidden;
+    grid-area: 1 / 2;
+    min-width: 2px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    font: inherit;
+    white-space: pre;
+}
+
+.select__input {
+    grid-area: 1 / 2;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 2px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 16px;
+    opacity: 1;
+}
+
+/* A field without search keeps its input for the keyboard and screen readers, but it takes no room and can't be
+   seen. */
+.select__input-container--read-only {
+    margin: 0;
+    padding: 0;
+}
+
+.select__input-container--read-only::after {
+    content: none;
+}
+
+.select__input-container--read-only .select__input {
+    position: relative;
+    left: -100px;
+    width: 1px;
+    color: transparent;
+    caret-color: transparent;
+    font-size: inherit;
+    opacity: 0;
+    transform: scale(0.01);
+}
+
+.select__indicators {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    align-self: stretch;
+    box-sizing: border-box;
+}
+
+.select__indicator-separator {
+    align-self: stretch;
+    box-sizing: border-box;
+    width: 1px;
+    margin: 8px 0;
+    background-color: hsl(0, 0%, 80%);
+}
+
+.select__control--is-focused .select__indicator-separator {
+    background-color: hsl(0, 0%, 60%);
+}
+
+.select__indicator {
+    display: flex;
+    box-sizing: border-box;
+    padding: 8px;
+    color: var(--muted);
+    transition: color 150ms;
+}
+
+.select__indicator svg {
+    display: inline-block;
+    fill: currentColor;
+    line-height: 1;
+    stroke: currentColor;
+    stroke-width: 0;
+}
+
+.select__dropdown-indicator:hover,
+.select__clear-indicator:hover {
+    color: var(--text);
+}
+
+.select__loading-indicator {
+    align-self: center;
+    margin-right: 4px;
+    font-size: 4px;
+    line-height: 1;
+    text-align: center;
+    vertical-align: middle;
+}
+
+.select__loading-indicator span {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    border-radius: 1em;
+    background-color: currentColor;
+    vertical-align: top;
+    animation: select-loading-dots 1s ease-in-out infinite;
+}
+
+.select__loading-indicator span + span {
+    margin-left: 1em;
+}
+
+.select__loading-indicator span:nth-child(2) { animation-delay: 160ms; }
+.select__loading-indicator span:nth-child(3) { animation-delay: 320ms; }
+
+@keyframes select-loading-dots {
+    0%, 80%, 100% { opacity: 0; }
+    40% { opacity: 1; }
+}
+
+.select__multi-value {
+    display: flex;
+    box-sizing: border-box;
+    min-width: 0;
+    margin: 2px;
+    border-radius: 2px;
+    background: rgba(14, 165, 233, 0.15);
+}
+
+.select__multi-value__label {
+    box-sizing: border-box;
+    padding: 3px 3px 3px 6px;
+    overflow: hidden;
+    border-radius: 2px;
+    color: var(--text);
+    font-size: 85%;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.select__multi-value__remove {
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    padding: 0 4px;
+    border-radius: 2px;
+    color: var(--text);
+}
+
+.select__multi-value__remove svg {
+    fill: currentColor;
+}
+
+.select__multi-value__remove:hover {
+    background: rgba(14, 165, 233, 0.25);
+}
+
+/* The menu opens in the top layer (a manual popover) and is attached to its field with CSS anchor positioning: below
+   it, above it when there is no room below, and otherwise on the side with room, made shorter to fit. */
+.select__menu {
+    position: fixed;
+    inset: auto;
+    position-anchor: var(--select-anchor);
+    position-area: block-end span-inline-end;
+    position-try-fallbacks: flip-block, --select-menu-fit-below, --select-menu-fit-above;
+    position-visibility: anchors-visible;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    width: anchor-size(width);
+    margin: 8px 0;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    border-radius: 8px;
+    background: var(--select-menu-bg);
+    color: var(--text);
+    box-shadow: 0 0 0 1px hsla(0, 0%, 0%, 0.1), 0 4px 11px hsla(0, 0%, 0%, 0.1);
+}
+
+@position-try --select-menu-fit-below {
+    position-area: block-end span-inline-end;
+    min-height: 9rem;
+    max-height: calc(100% - 16px);
+}
+
+@position-try --select-menu-fit-above {
+    position-area: block-start span-inline-end;
+    max-height: calc(100% - 16px);
+}
+
+/* Browsers without popovers keep the menu in the page, under the field. */
+.select__menu--in-place {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 1000;
+    width: 100%;
+}
+
+.select__menu-list {
+    position: relative;
+    box-sizing: border-box;
+    flex: 0 1 auto;
+    min-height: 0;
+    max-height: var(--select-menu-max-height, 300px);
+    padding: 4px 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--select-menu-bg);
+    -webkit-overflow-scrolling: touch;
+}
+
+.select__option {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    padding: 8px 12px;
+    background: transparent;
+    color: var(--text);
+    font-size: inherit;
+    cursor: default;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.select__option:hover,
+.select__option--is-focused {
+    background: rgba(14, 165, 233, 0.18);
+}
+
+.select__option:active {
+    background: rgba(14, 165, 233, 0.26);
+}
+
+.select__option--is-selected,
+.select__option--is-selected:hover,
+.select__option--is-selected:active {
+    background: #0ea5e9;
+    color: #ffffff;
+}
+
+.select__option--is-disabled,
+.select__option--is-disabled:hover,
+.select__option--is-disabled:active {
+    background: transparent;
+    color: var(--muted);
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.select__group {
+    padding: 8px 0;
+}
+
+.select__divider {
+    height: 1px;
+    margin: 4px 0;
+    background: var(--select-menu-border);
+}
+
+.select__group-heading {
+    display: block;
+    margin-bottom: 0.25em;
+    padding: 0 12px;
+    color: var(--muted);
+    font-size: 75%;
+    font-weight: 500;
+    text-transform: uppercase;
+    cursor: default;
+}
+
+.select__menu-notice {
+    padding: 8px 12px;
+    color: hsl(0, 0%, 60%);
+    text-align: center;
+}
+
+@media (prefers-color-scheme: dark) {
+    .select__multi-value {
+        background: rgba(56, 189, 248, 0.22);
+    }
+
+    .select__multi-value__remove:hover {
+        background: rgba(56, 189, 248, 0.34);
+    }
+}

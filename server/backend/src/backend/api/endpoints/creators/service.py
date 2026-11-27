@@ -1,7 +1,7 @@
 """The creators API: the Library's creators, their pages, and grouping collections under them."""
 from __future__ import annotations
 
-from backend.utils.helpers import name_in_text, year_range
+from backend.utils.helpers import name_in_text
 import logging
 import threading
 import time
@@ -20,16 +20,16 @@ from backend.api.models.creator import (
 )
 from backend.api.pagination import InvalidCursorError, decode_cursor, encode_cursor
 from backend.api.models.collection import CollectionAPIRead
+from backend.api.endpoints.collections.as_view.service import get_collection_views_list
 from backend.api.endpoints.episodes.service import episode_view_columns
 from backend.api.endpoints.movies.service import add_movies
-from backend.db.models import Creator, CreatorAccount, Collection, Episode
+from backend.db.models import Creator, CreatorAccount, CreatorTier, Collection, Episode
 from backend.services import creators
 from backend.services.errors import ServiceError
-from backend.services.link_seasons import link_seasons_on, loose_in_one_season, loose_season_name
-from backend.services.sites import collection_site
 from progress_plan import PlanSnapshot, PlanTracker, StageSpec
 from sources import CreatorDetails, Feature, Names, SectionRef, SectionType, Site, get_source
 from backend.services.source_requests import asking_source
+from backend.services.source_options import ytdlp_call_options
 
 
 logger = logging.getLogger(__name__)
@@ -198,6 +198,10 @@ class _CreatorRead:
         return creators.creator_words(self.creator)
 
     @property
+    def takes_ytdlp_options(self) -> bool:
+        return creators.takes_ytdlp_options(self.creator)
+
+    @property
     def open_count(self) -> int:
         """How often its page and its collections' pages were opened."""
         return self.creator.open_count + sum(collection.open_count for collection in self.creator.collections)
@@ -239,34 +243,6 @@ def list_creators(s: Session) -> list[CreatorAPIRead]:
     ]
 
 
-@dataclass(frozen=True)
-class _CollectionRead:
-    collection: Collection
-    episode_count: int
-    first_published_date: datetime | None
-    last_published_date: datetime | None
-
-    @property
-    def years(self) -> str:
-        return year_range(
-            self.first_published_date.year if self.first_published_date else None,
-            self.last_published_date.year if self.last_published_date else None,
-        )
-
-    @property
-    def loose_season(self) -> str | None:
-        if not (link_seasons_on(self.collection) and loose_in_one_season(self.collection)):
-            return None
-        return loose_season_name(self.collection)
-
-    @property
-    def site(self) -> Site | None:
-        return collection_site(self.collection) if self.collection.site_key else None
-
-    def __getattr__(self, name):
-        return getattr(self.collection, name)
-
-
 def creator_page(s: Session, slug: str) -> CreatorPageAPIRead:
     creator = s.scalar(
         select(Creator).where(Creator.slug == slug)
@@ -275,26 +251,19 @@ def creator_page(s: Session, slug: str) -> CreatorPageAPIRead:
     if creator is None:
         raise CreatorNotFoundError(f"Creator '{slug}' not found")
     collections_count, episodes = _counts(s, [creator.id])
-    stats = {
-        row.collection_id: row for row in s.execute(
-            select(
-                Episode.collection_id, func.count().label("episode_count"),
-                func.min(Episode.published_date).label("first"), func.max(Episode.published_date).label("last"),
-            ).where(Episode.collection_id.in_([c.id for c in creator.collections])).group_by(Episode.collection_id)
-        )
-    }
-    collections = [
-        _CollectionRead(
-            collection, stats[collection.id].episode_count if collection.id in stats else 0,
-            stats[collection.id].first if collection.id in stats else None,
-            stats[collection.id].last if collection.id in stats else None,
-        )
-        for collection in sorted(creator.collections, key=lambda c: c.created_at or c.id)
-    ]
+    # The cards are the Library's own, so the collections are read as the Library reads them.
+    collections = sorted(
+        get_collection_views_list(s, Collection.creator_id == creator.id),
+        key=lambda c: c.created_at.isoformat() if c.created_at else str(c.id),
+    )
+    last_published_date = s.scalar(
+        select(func.max(Episode.published_date)).join(Collection, Episode.collection_id == Collection.id)
+        .where(Collection.creator_id == creator.id)
+    )
     return CreatorPageAPIRead.model_validate(_CreatorRead(
         creator, collections_count.get(creator.id, 0), episodes.get(creator.id, 0), collections=collections,
         movies=sorted(creator.movies, key=lambda movie: (movie.release_date or movie.published_at or datetime.min).isoformat(), reverse=True),
-        last_published_date=max((row.last for row in stats.values() if row.last is not None), default=None),
+        last_published_date=last_published_date,
     ))
 
 
@@ -304,8 +273,10 @@ def creator_episodes(s: Session, slug: str, *, cursor: str | None, limit: int) -
     if creator_id is None:
         raise CreatorNotFoundError(f"Creator '{slug}' not found")
     stmt = (
-        select(*episode_view_columns(), Collection.slug.label("collection_slug"), Collection.title.label("collection_title"))
+        select(*episode_view_columns(), Collection.slug.label("collection_slug"), Collection.title.label("collection_title"),
+               Collection.ytdlp_options.label("collection_ytdlp_options"))
         .join(Collection, Episode.collection_id == Collection.id)
+        .outerjoin(CreatorTier, CreatorTier.id == Episode.creator_tier_id)
         .where(Collection.creator_id == creator_id)
         .order_by(Episode.published_date.desc().nulls_last(), Episode.id.desc())
     )
@@ -376,7 +347,8 @@ def offering_accounts(s: Session, slug: str) -> list[AccountLink]:
 def look_up_account(link: AccountLink) -> CreatorDetails | None:
     """Who the account is at its Site now, or None when the Site can't say. Slow: call it outside a transaction."""
     try:
-        return _shared((link.source_key, link.ref), lambda tracker: get_source(link.source_key).creator_details(link.ref, tracker), None)
+        with ytdlp_call_options(link.source_key):
+            return _shared((link.source_key, link.ref), lambda tracker: get_source(link.source_key).creator_details(link.ref, tracker), None)
     except Exception:  # The page shows the rest all the same.
         logger.warning("Could not look up creator account %s at %s", link.ref, link.source_key, exc_info=True)
         return None
@@ -478,7 +450,9 @@ def update_creator(s: Session, slug: str, body: CreatorAPIUpdate) -> CreatorPage
     title = (body.title or "").strip()
     if title and title != creator.title:
         creators.rename_creator(creator, title)
-    creators.update_creator_settings(creator, genre=body.genre, content_rating=body.content_rating)
+    creators.update_creator_settings(
+        creator, genre=body.genre, content_rating=body.content_rating, ytdlp_options=body.ytdlp_options,
+    )
     s.flush()
     return creator_page(s, slug)
 
@@ -570,12 +544,13 @@ def look_up_collection_creator(link: CollectionLink, plan: LookupPlan | None = N
         raise ServiceError(f"{source.name} has no creators")
     site = source.site_for(link.url)
     label = (site.creator_names if site is not None else Site.creator_names).singular
-    with asking_source(f"Could not look up the {label}"), plan.step("find_creator", f"Finding the {label} behind the link"):
-        ref = source.creator_of(link.url)
-    if ref is None:
-        raise ServiceError(f"VODLoft found no {label} behind the link of {name_in_text(link.title)}")
-    with asking_source(f"Could not look up the {label}"):
-        return _shared((link.source_key, ref), lambda tracker: source.creator_details(ref, tracker), plan)
+    with ytdlp_call_options(link.source_key):
+        with asking_source(f"Could not look up the {label}"), plan.step("find_creator", f"Finding the {label} behind the link"):
+            ref = source.creator_of(link.url)
+        if ref is None:
+            raise ServiceError(f"VODLoft found no {label} behind the link of {name_in_text(link.title)}")
+        with asking_source(f"Could not look up the {label}"):
+            return _shared((link.source_key, ref), lambda tracker: source.creator_details(ref, tracker), plan)
 
 
 @dataclass

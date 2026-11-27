@@ -344,7 +344,7 @@ def _join_newest_ahead(
         and episode.publish_status != EpisodePublishStatus.LIVE.value
     ]
     for episode in waiting[:NEWEST_EPISODES_JOINED_AHEAD]:
-        join_in_background(source, EpisodeRef(episode.uuid, episode.sharing_url, use_cookies), height)
+        join_in_background(source, EpisodeRef(episode.uuid, episode.sharing_url, use_cookies, profile.collection.ytdlp_option_texts), height)
 
 
 def render_rss_feed(

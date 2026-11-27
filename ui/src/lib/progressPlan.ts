@@ -8,6 +8,8 @@ export function planSteps<S extends PlanStage>(stages: S[], label: (stage: S) =>
         id: stage.id, label: label(stage), state: stage.state,
         percent: stage.fraction == null ? null : Math.max(0, Math.min(100, Math.floor(stage.fraction * 100))),
         ...(stage.total != null && {count: `${stage.done ?? 0}/${stage.total}${stage.unit ? ` ${stage.unit}` : ''}`}),
+        // A step that cannot know how many there are counts how many it did so far.
+        ...(stage.total == null && stage.done != null && {count: `${stage.done.toLocaleString()}${stage.unit ? ` ${stage.unit}` : ''}`}),
     }))
 }
 

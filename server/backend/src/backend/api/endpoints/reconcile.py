@@ -30,9 +30,7 @@ def episode_scope(slug: str) -> Scope:
 
 
 def preview_move(s: Session, scope: Scope) -> MovePreviewAPIRead:
-    """What the Move action does to the collection. The moves are made and rolled back.
-
-    ``s`` is a write transaction's session."""
+    """What the Move action does to the collection, planned without saving anything. Reading only."""
     return MovePreviewAPIRead.model_validate(preview_reconcile(s, scope(s)))
 
 

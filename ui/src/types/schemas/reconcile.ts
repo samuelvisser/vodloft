@@ -1,6 +1,18 @@
 import {z} from 'zod'
-import {CollectionWordsSchema} from './collection_contract'
 import {NamesSchema} from './source'
+
+/** One setting change that made downloads wait for the Move action, as it was and is now, by where it is changed. */
+export const MoveCauseSchema = z.object({
+    origin: z.enum(['seasons']),
+    setting: z.string(),
+    before: z.union([z.string(), z.array(z.string())]).nullable(),
+    after: z.union([z.string(), z.array(z.string())]).nullable(),
+    /** For a setting of one thing in the collection, such as one of its lists: that thing. */
+    subjectId: z.number().nullable().default(null),
+    subjectTitle: z.string().nullable().default(null),
+})
+export type MoveCause = z.infer<typeof MoveCauseSchema>
+export type MoveCauseOrigin = MoveCause['origin']
 
 /** The videos of one list that move to another season of their collection. */
 export const MovedPartSchema = z.object({
@@ -11,8 +23,10 @@ export const MovedPartSchema = z.object({
     toSeason: z.string(),
     /** The titles of the videos, newest first, up to a few dozen. */
     examples: z.array(z.string()),
-    /** Downloads whose files move along into their new season. */
+    /** Downloaded files that get another path in their new season. */
     filesMoved: z.number().default(0),
+    /** Those files, with the path each has now and gets, newest first; no new path when only moving it tells. */
+    files: z.array(z.object({title: z.string(), fromPath: z.string(), toPath: z.string().nullable().default(null)})).default([]),
 })
 export type MovedPart = z.infer<typeof MovedPartSchema>
 
@@ -23,7 +37,9 @@ export const MovePreviewSchema = z.object({
     type: z.string(),
     episodeIdentifier: z.string(),
     parts: z.array(MovedPartSchema),
-    /** Why they move: what the collection's settings make its seasons now, in words. */
+    /** The setting changes that made them wait, in the order they were made; none when VODLoft recorded none. */
+    causes: z.array(MoveCauseSchema),
+    /** What the collection's settings make its seasons now, in words: why they move when no change was recorded. */
     seasonsPlan: z.string(),
     /** It can number its episodes again: not when it numbers them by date. */
     renumberOffered: z.boolean(),
@@ -31,6 +47,8 @@ export const MovePreviewSchema = z.object({
     profiles: z.array(z.object({name: z.string(), filesRenamed: z.number(), metadataRewritten: z.number()})),
     /** Files moved, so its files are renamed and their metadata rewritten also when it keeps its numbers. */
     filesFollow: z.boolean(),
+    /** What the move waits for, such as the listing a saved change started; what moves shows once it is done. */
+    busy: z.string().nullable().default(null),
 })
 export type MovePreview = z.infer<typeof MovePreviewSchema>
 
@@ -40,15 +58,3 @@ export const ReconcileResultSchema = z.object({
     collectionSlug: z.string().nullable().optional(),
 })
 export type ReconcileResult = z.infer<typeof ReconcileResultSchema>
-
-/** A collection whose Moved episodes wait for its Move action. */
-export const MovesWaitingSchema = z.object({
-    slug: z.string(),
-    title: z.string(),
-    moved: z.number(),
-    /** What it calls its seasons and episodes. */
-    words: CollectionWordsSchema,
-    /** Why they move: what the collection's settings make its seasons now, in words. */
-    seasonsPlan: z.string(),
-})
-export type MovesWaiting = z.infer<typeof MovesWaitingSchema>

@@ -68,6 +68,89 @@ def test_a_youtube_video_resolves_to_a_video_named_by_its_id(lookups):
     assert "--no-playlist" in calls[0]
 
 
+def test_a_youtube_video_is_one_lookup_by_any_of_its_links(lookups):
+    answers, calls = lookups
+    answers["https://youtu.be/dQw4w9WgXcQ"] = YOUTUBE_VIDEO
+    source = YtDlpSource()
+
+    source.resolve("https://youtu.be/dQw4w9WgXcQ")
+    # Add media adds the video by the link the lookup found, which is the same lookup.
+    source.video_details("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+    assert len(calls) == 1
+
+
+def test_asking_for_a_link_being_looked_up_waits_for_that_lookup(monkeypatch):
+    import threading
+
+    started, release = threading.Event(), threading.Event()
+    calls = []
+
+    def run_json(*args, **_kwargs):
+        calls.append(args)
+        started.set()
+        release.wait(5)
+        return YOUTUBE_VIDEO
+
+    monkeypatch.setattr(runner, "run_json", run_json)
+    source = YtDlpSource()
+    found = {}
+    lookup = threading.Thread(target=lambda: found.setdefault("link", source.resolve("https://youtu.be/dQw4w9WgXcQ")))
+    lookup.start()
+    started.wait(5)
+    adding = threading.Thread(target=lambda: found.setdefault("details", source.video_details("https://www.youtube.com/watch?v=dQw4w9WgXcQ")))
+    adding.start()
+    release.set()
+    lookup.join(5)
+    adding.join(5)
+    assert found["link"].slug == found["details"].slug == "dQw4w9WgXcQ"
+    assert len(calls) == 1
+
+
+def test_a_youtube_link_says_what_it_is_from_the_link_alone(monkeypatch):
+    class _OEmbed:
+        def __init__(self, url):
+            self.url = url
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"title": "From oEmbed", "author_name": "A Channel", "thumbnail_url": "https://i.ytimg.com/x.jpg"}
+
+    asked = []
+    monkeypatch.setattr(
+        "sources.ytdlp.source.requests.get", lambda url, params, timeout: asked.append(params["url"]) or _OEmbed(url),
+    )
+    source = YtDlpSource()
+
+    video = source.preview("https://youtu.be/dQw4w9WgXcQ?si=shared")
+    assert (video.kind, video.slug, video.url) == (LinkKind.VIDEO, "dQw4w9WgXcQ", "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+    assert video.title == "From oEmbed"
+
+    playlist = source.preview("https://www.youtube.com/playlist?list=PL123")
+    assert (playlist.kind, playlist.slug) == (LinkKind.COLLECTION, "PL123")
+
+    # A channel has no oEmbed, but its link says it is a collection, at its Videos tab.
+    channel = source.preview("https://www.youtube.com/@a-channel")
+    assert (channel.kind, channel.slug, channel.url, channel.title) == (
+        LinkKind.COLLECTION, None, "https://www.youtube.com/@a-channel/videos", None,
+    )
+    assert len(asked) == 2
+
+
+def test_a_lookup_is_kept_by_the_link_yt_dlp_found_it_at_too(lookups):
+    answers, calls = lookups
+    answers["https://www.youtube.com/@a-channel/videos"] = {
+        "_type": "playlist", "id": "UC1", "channel_id": "UC1", "channel": "A Channel", "title": "A Channel - Videos",
+        "webpage_url": "https://www.youtube.com/channel/UC1/videos", "entries": [],
+    }
+    source = YtDlpSource()
+    link = source.resolve("https://www.youtube.com/@a-channel")
+    # Add collection asks for the collection by the link the lookup found.
+    assert source.collection_details(link.url).slug == "UC1"
+    assert len(calls) == 1
+
+
 def test_other_sites_are_prefixed_and_unknown_pages_are_best_effort(lookups):
     answers, _ = lookups
     answers["https://vimeo.com/1"] = {"id": "1", "extractor_key": "Vimeo", "webpage_url_domain": "vimeo.com", "title": "V", "timestamp": 0}
@@ -75,7 +158,8 @@ def test_other_sites_are_prefixed_and_unknown_pages_are_best_effort(lookups):
     source = YtDlpSource()
 
     vimeo = source.resolve("https://vimeo.com/1")
-    assert (vimeo.slug, vimeo.site) == ("vimeo-1", "vimeo.com")
+    # A link is on its Site, named as the Site's contract names it.
+    assert (vimeo.slug, vimeo.site) == ("vimeo-1", "Vimeo")
     assert source.video_details("https://vimeo.com/1").published_at == datetime(1970, 1, 1, tzinfo=timezone.utc)
     generic = source.resolve("https://example.com/clip.mp4")
     assert (generic.slug, generic.site) == ("generic-clip", GENERIC_SITE)
@@ -375,7 +459,7 @@ class ToolSource(Source):
     def __init__(self, *, due=True, fails=False):
         self.due, self.fails, self.updates = due, fails, 0
 
-    def resolve(self, url):
+    def resolve(self, url, plan=None):
         return None
 
     def episode_media(self, **_kwargs):
@@ -663,3 +747,14 @@ def test_ytdlp_writes_the_info_file_when_asked(fake_ytdlp, tmp_path):
     assert result.info_json == str(keep / "media.info.json")
     assert (keep / "media.info.json").read_text() == '{"id": "x", "title": "Video"}'
     assert download_ytdlp("https://x/video", str(tmp_path / "off.mp4"), command=fake_ytdlp).info_json is None
+
+
+def test_a_link_that_is_no_page_of_its_site_is_not_looked_up(lookups):
+    answers, asked = lookups
+    # yt-dlp's generic extractor would follow it to YouTube's recommended videos.
+    answers["https://www.youtube.com/watch?v="] = {"_type": "playlist", "id": "recommended", "extractor_key": "YoutubeTab"}
+    source = YtDlpSource()
+
+    assert source.resolve("https://www.youtube.com/watch?v=") is None
+    assert source.resolve("https://youtu.be/") is None
+    assert not asked

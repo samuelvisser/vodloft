@@ -28,7 +28,7 @@ function SiteSourceSelect({row, disabled, onChange}: {
             registry={registry}
             value={row.preferredSourceKey ?? row.defaultSourceKey}
             isDisabled={disabled}
-            menuPlacement="auto"
+           
             onChange={onChange}
         />
     )
@@ -59,7 +59,7 @@ export default function SourceSitesCard() {
     if (!loadError && !rows.length) return null
     return (
         <SourceSection
-            title="Sites"
+            title="Which Source to ask first"
             description="Some sites can be handled by more than one Source. VODLoft asks the chosen Source first, and you can still pick another one on the Add media page."
         >
             {loadError && <p className="source-setting-error" role="alert">Could not load sites: {loadError.message}</p>}

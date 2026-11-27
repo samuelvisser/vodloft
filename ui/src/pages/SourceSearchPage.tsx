@@ -43,8 +43,9 @@ export default function SourceSearchPage({sourceId: givenSourceId, siteKey: give
     const source = useSourceLookup().get(sourceId ?? '')
     const site = source?.searchSites.find((candidate) => candidate.key === siteKey)
     const canSearch = !!site && sourceHas(source, SourceFeature.SEARCH) && canUseSource(source?.id ?? '')
-    // Each search costs something on such a Site, so it searches on Enter instead of while typing.
-    const onEnter = !!site?.costlySearch
+    // Every Site's search has a Search button. A Site whose searches cost nothing also searches while the user types;
+    // each search costs something on the others, so they search only when asked.
+    const asYouType = !site?.costlySearch
     const [search, setSearch] = useState(params.get('q') ?? '')
     const [query, setQuery] = useState(search.trim())
     const submit = (value: string) => {
@@ -53,11 +54,11 @@ export default function SourceSearchPage({sourceId: givenSourceId, siteKey: give
         if ((params.get('q') ?? '') !== value) setParams(value ? {q: value} : {}, {replace: true})
     }
     useEffect(() => {
-        if (onEnter) return
+        if (!asYouType) return
         const timer = window.setTimeout(() => submit(search.trim()), 400)
         return () => window.clearTimeout(timer)
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [search, onEnter])
+    }, [search, asYouType])
     const results = useSourceSearch(canSearch ? sourceId : undefined, siteKey, query)
     const searching = !!query && results.isFetching
     const {data: localCollections} = useCollections()
@@ -95,7 +96,7 @@ export default function SourceSearchPage({sourceId: givenSourceId, siteKey: give
                     <p className="view-description">Find a collection or video to add, view, or download.</p>
                 </div>
             </div>
-            <form className={`browse-toolbar${onEnter ? ' browse-toolbar--submit' : ''}`} role="search" onSubmit={(event) => {
+            <form className="browse-toolbar browse-toolbar--submit" role="search" onSubmit={(event) => {
                 event.preventDefault()
                 submit(search.trim())
             }}>
@@ -108,13 +109,17 @@ export default function SourceSearchPage({sourceId: givenSourceId, siteKey: give
                         submit('')
                     }}/>}
                 </label>
-                {onEnter && (
-                    <button className="btn btn-primary browse-search__submit" type="submit" disabled={searching || !search.trim()}>
-                        {searching ? 'Searching…' : 'Search'}
-                    </button>
-                )}
+                <button className="btn btn-primary browse-search__submit" type="submit" disabled={searching || !search.trim()}>
+                    {searching ? 'Searching…' : 'Search'}
+                </button>
             </form>
 
+            {site?.searchNote && (
+                <p className="search-notice search-notice--note" role="note">
+                    <FontAwesomeIcon icon={faIcon('fass', 'circle-info')} aria-hidden="true"/>
+                    <span>{site.searchNote}</span>
+                </p>
+            )}
             {query && results.data?.notice && <SearchNotice notice={results.data.notice}/>}
 
             {!query ? null : results.isPending ? <p>Searching {sourceName}…</p> : results.error ? (

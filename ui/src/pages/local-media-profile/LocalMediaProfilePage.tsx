@@ -14,6 +14,7 @@ import RunningActions from '../../components/RunningActions/RunningActions'
 import DisabledReason from '../../components/common/DisabledReason'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import OpaqueOutputTemplateCode from '../../components/LocalMediaProfile/OpaqueOutputTemplateCode'
+import MediaFilesSummary from '../../components/LocalMediaProfile/MediaFilesSummary'
 import ProfileExistingFilesDialog from '../../components/ExistingFiles/ProfileExistingFilesDialog'
 import MoveEpisodesDialog from '../../components/LocalMediaProfile/MoveEpisodesDialog'
 import {scanProfile, useOpenExistingFilesScans} from '../../components/ExistingFiles/api'
@@ -405,7 +406,9 @@ export default function LocalMediaProfilePage() {
                             <OpaqueOutputTemplateCode
                                 source={profile.outputTemplate}
                                 sourceMode="compact"
+                                renderMode="path"
                                 label="Output path template"
+                                className="wraps-path-sections"
                             />
                         </dd>
                     </div>
@@ -418,6 +421,13 @@ export default function LocalMediaProfilePage() {
                         <dd>{availableFor}</dd>
                     </div>
                 </dl>
+
+                <section className="local-media-profile-section" aria-labelledby="local-media-profile-files-title">
+                    <h2 id="local-media-profile-files-title" className="local-media-profile-section-title">Files and metadata</h2>
+                    <dl className="local-media-profile-properties">
+                        <MediaFilesSummary profile={profile}/>
+                    </dl>
+                </section>
             </article>
 
             <ActionConfirmDialogue

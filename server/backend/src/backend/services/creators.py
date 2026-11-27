@@ -236,9 +236,12 @@ def rename_creator(creator: Creator, title: str) -> None:
         collection.author_name = title
 
 
-def update_creator_settings(creator: Creator, *, genre: str | None, content_rating: str | None) -> None:
-    """Change the genre and rating the creator's collections get. A collection that had the creator's old genre or
-    rating gets the new one; one with its own keeps it."""
+def update_creator_settings(
+    creator: Creator, *, genre: str | None, content_rating: str | None, ytdlp_options: str | None = None,
+) -> None:
+    """Change the genre and rating the creator's collections get, and the yt-dlp options they use. A collection that
+    had the creator's old genre or rating gets the new one; one with its own keeps it. ``ytdlp_options`` None leaves
+    them as they are."""
     for field, new in (("genre", genre or None), ("content_rating", content_rating or None)):
         old = getattr(creator, field)
         if old == new:
@@ -247,6 +250,10 @@ def update_creator_settings(creator: Creator, *, genre: str | None, content_rati
             if getattr(collection, field) in (old, None):
                 setattr(collection, field, new)
         setattr(creator, field, new)
+    if ytdlp_options is not None and ytdlp_options != creator.ytdlp_options:
+        if ytdlp_options and not takes_ytdlp_options(creator):
+            raise ServiceError(f"{creator.title} has no collection that takes yt-dlp options", field="ytdlp_options")
+        creator.ytdlp_options = ytdlp_options
 
 
 def leave_creator(s: Session, collection: Collection) -> None:
@@ -298,6 +305,21 @@ def _sites(creator: Creator) -> dict[str, Site]:
     return sites
 
 
+def takes_ytdlp_options(creator: Creator) -> bool:
+    """Whether the creator can have yt-dlp options of their own: one of their accounts or collections comes from a
+    Source that takes yt-dlp options."""
+    keys = {account.source_key for account in creator.accounts} | {collection.source_key for collection in creator.collections}
+    return any(get_source(key).has(Feature.YTDLP_OPTIONS) for key in keys if _known_source(key))
+
+
+def _known_source(key: str) -> bool:
+    try:
+        get_source(key)
+    except UnknownSourceError:
+        return False
+    return True
+
+
 def is_music_creator(creator: Creator) -> bool:
     """Whether the creator is a music artist: they have a Music collection."""
     return any(collection.type == CollectionType.MUSIC.value for collection in creator.collections)
@@ -346,6 +368,8 @@ def combine_creators(s: Session, creator: Creator, other: Creator) -> None:
     for field in ("description", "avatar_path", "banner_path", "genre", "content_rating"):
         if getattr(creator, field) is None and getattr(other, field) is not None:
             setattr(creator, field, getattr(other, field))
+    if not creator.ytdlp_options:
+        creator.ytdlp_options = other.ytdlp_options
     creator.links = list(dict.fromkeys([*creator.links, *other.links]))
     s.flush()
     s.delete(other)
@@ -370,6 +394,7 @@ def split_account(s: Session, account: CreatorAccount, details: CreatorDetails |
         banner_path=details.banner_url if details else account.banner_path or creator.banner_path,
         links=list(details.links) if details else [], facts=list(details.facts) if details else [],
         added_by_id=creator.added_by_id, genre=creator.genre, content_rating=creator.content_rating,
+        ytdlp_options=creator.ytdlp_options,
     )
     s.add(own)
     creator.accounts.remove(account)

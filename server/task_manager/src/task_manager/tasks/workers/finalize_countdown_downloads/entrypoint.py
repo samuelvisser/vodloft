@@ -11,6 +11,7 @@ from .service import run_finalize_countdown_downloads
 @on_event("episode.published_final", resource_type="episode")
 @task(
     key="finalize_countdown_downloads",
+    findings=("redownloads_queued", "active_downloads_canceled", "redownloads_dispatched"),
     title="Replace countdown downloads",
     description="Replaces episode downloads that were intentionally captured before final media became available.",
     allowed_resource_types=("episode",),

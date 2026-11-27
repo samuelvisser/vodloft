@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useRef} from 'react'
 import {Controller, UseFormReturn} from 'react-hook-form'
 import Switch from 'react-switch'
-import Select from '../common/ReactSelect'
+import Select from '../../components/common/Select'
 import ReadMore from '../../utils/ReadMore'
 import {episodeTagLabel, SourceFeature, sourceHas} from '../../types/schemas/source'
 import {FORMAT_HEIGHTS, PreferredFormatReg} from '../../types/local_media_profile'
@@ -405,7 +405,6 @@ export default function StreamProfileForm({
                         render={({field}) => (
                             <Select
                                 inputId="sp-preferred-format"
-                                classNamePrefix="select"
                                 options={StreamPreferredFormatReg.options.filter((option) => (
                                     !videoHeights || !(option.value in FORMAT_HEIGHTS) || videoHeights.includes(FORMAT_HEIGHTS[option.value])
                                 ))}
@@ -448,7 +447,6 @@ export default function StreamProfileForm({
                         render={({field}) => (
                             <Select
                                 inputId="sp-preferred-format"
-                                classNamePrefix="select"
                                 options={MediaTypeReg.options}
                                 value={MediaTypeReg.options.find(o => o.value === field.value) ?? null}
                                 onChange={(opt) => field.onChange((opt as any)?.value ?? null)}
@@ -487,15 +485,12 @@ export default function StreamProfileForm({
                     name="epIdTypeList"
                     render={() => (
                         <Select
-                            classNamePrefix="select"
                             inputId="sp-episode-types"
                             isMulti
                             options={tagOptions}
                             value={episodeTypeSelectValue}
                             onChange={handleEpisodeTypeChange as any}
                             closeMenuOnSelect={false}
-                            getOptionValue={(option: UIOption) => option.value}
-                            getOptionLabel={(option: UIOption) => option.label}
                             aria-invalid={!!errors.epIdTypeList}
                             aria-describedby={errors.epIdTypeList ? 'sp-episode-types-error' : 'sp-episode-types-help'}
                         />

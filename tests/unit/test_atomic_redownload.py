@@ -32,7 +32,7 @@ def old_download(task_database, tmp_path, monkeypatch):
         download = _make_download(session, slug="replacement")
         download.file_path = str(old)
         download.artifact_status = "available"
-        download.downloaded_at = downloaded_at
+        download.mark_downloaded(downloaded_at)
         download.downloaded_bytes = old_identity.size_bytes
         download.format_downloaded = "old"
         download.artifact_stat_dev = old_identity.stat_dev
@@ -121,6 +121,7 @@ def test_redownload_preserves_old_media_until_processed_and_replaces_in_place(
         assert current.file_path == str(old)
         assert current.artifact_status == "available"
         assert current.downloaded_at > downloaded_at
+        assert current.first_downloaded_at == downloaded_at
         assert current.artifact_fingerprint == inspect_artifact(old).fingerprint
         assert current.assets[0].path == str(sidecar)
         assert current.assets[0].fingerprint == inspect_artifact(sidecar).fingerprint
@@ -435,6 +436,7 @@ def test_startup_recovery_finishes_atomic_replacement_and_database(
         assert refreshed.file_path == str(old)
         assert refreshed.artifact_status == "available"
         assert refreshed.downloaded_at > downloaded_at
+        assert refreshed.first_downloaded_at == downloaded_at
         assert refreshed.artifact_fingerprint == inspect_artifact(old).fingerprint
         assert refreshed.format_downloaded == "new format"
         assert refreshed.assets[0].path == str(sidecar)

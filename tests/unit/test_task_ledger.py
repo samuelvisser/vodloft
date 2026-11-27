@@ -689,3 +689,76 @@ def test_task_ledger_pages_do_not_repeat_rows_stored_without_microseconds():
     finally:
         session.close()
         engine.dispose()
+
+
+def test_task_ledger_can_leave_out_the_runs_that_found_nothing(monkeypatch):
+    import backend.db.models  # noqa: F401
+    from backend.api.endpoints.tasks import service
+    from backend.db import Base
+    from task_manager.scheduler import findings
+    from task_manager.scheduler.db import TaskDefinition, TaskRun
+    from task_manager.scheduler.registry import TaskMeta
+    from task_manager.scheduler.types import ResourceType, TaskStatus
+
+    metas = {
+        "sync": TaskMeta(key="sync", title="Sync", findings=("episodes_found", "refresh.failed", "refresh.flagged")),
+        "plain": TaskMeta(key="plain", title="Plain"),
+    }
+    monkeypatch.setattr(findings, "task_meta", metas.get)
+    monkeypatch.setattr(findings, "all_definitions", lambda: list(metas.values()))
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session = Session(engine)
+    sync = TaskDefinition(key="sync", title="Sync")
+    plain = TaskDefinition(key="plain", title="Plain")
+    session.add_all([sync, plain])
+    session.flush()
+    base = datetime(2026, 11, 24, 10, 0, tzinfo=timezone.utc)
+
+    def run(definition, minute, data, status=TaskStatus.SUCCEEDED):
+        row = TaskRun(
+            definition_id=definition.id, resource_type=ResourceType.SYSTEM, resource_id=0, status=status,
+            result=None if data is None else {"summary": "", "data": data},
+            started_at=base + timedelta(minutes=minute), finished_at=base + timedelta(minutes=minute),
+        )
+        session.add(row)
+        session.flush()
+        return row.id
+
+    run(sync, 0, {"episodes_found": 0, "refresh": {"failed": []}})
+    run(sync, 1, {})
+    run(sync, 2, None)
+    found = run(sync, 3, {"episodes_found": 2})
+    failed_refresh = run(sync, 4, {"episodes_found": 0, "refresh": {"failed": ["A collection"]}})
+    flagged = run(sync, 5, {"refresh": {"flagged": True}})
+    failed = run(sync, 6, None, status=TaskStatus.FAILED)
+    running = run(sync, 7, None, status=TaskStatus.RUNNING)
+    plain_run = run(plain, 8, {})
+    session.commit()
+
+    page = service.query_ledger(session, definition_key="sync", hide_empty=True, limit=2)
+    assert page.can_hide_empty
+    assert page.total == 5
+    ids = [item.id for item in page.items]
+    page = service.query_ledger(session, definition_key="sync", hide_empty=True, limit=2, cursor=page.next_cursor)
+    ids += [item.id for item in page.items]
+    page = service.query_ledger(session, definition_key="sync", hide_empty=True, limit=2, cursor=page.next_cursor)
+    ids += [item.id for item in page.items]
+    assert ids == [running, failed, flagged, failed_refresh, found]
+    assert page.next_cursor is None
+
+    assert service.query_ledger(session, definition_key="sync").total == 8
+    # A task that names nothing its runs find lists every run.
+    plain_page = service.query_ledger(session, definition_key="plain", hide_empty=True)
+    assert not plain_page.can_hide_empty
+    assert [item.id for item in plain_page.items] == [plain_run]
+
+    # The log of every task leaves out the runs that found nothing of each task that names its findings.
+    every_page = service.query_ledger(session, definition_key=None, hide_empty=True, limit=3)
+    assert every_page.can_hide_empty
+    assert every_page.total == 6
+    ids = [item.id for item in every_page.items]
+    every_page = service.query_ledger(session, definition_key=None, hide_empty=True, limit=3, cursor=every_page.next_cursor)
+    ids += [item.id for item in every_page.items]
+    assert ids == [plain_run, running, failed, flagged, failed_refresh, found]

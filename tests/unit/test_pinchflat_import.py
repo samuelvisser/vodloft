@@ -342,7 +342,7 @@ def installation(tmp_path, monkeypatch):
         domains = ("youtube.com",)
         features = frozenset({Feature.COLLECTIONS, Feature.EPISODE_LISTS})
 
-        def resolve(self, url):
+        def resolve(self, url, plan=None):
             return None
 
         def episode_media(self, **_kwargs):
@@ -573,6 +573,44 @@ def test_sponsorblock_and_unmapped_options_come_over(tmp_path):
     ]
     refused = [warning.message for warning in checked.warnings if warning.subject == "yt-dlp options"]
     assert any(message.startswith('--exec "echo done"') and "Runs other programs" in message for message in refused)
+
+
+def test_option_file_lines_vodloft_has_a_setting_for_become_that_setting(tmp_path):
+    from backend.services.imports import _with_checked_options
+
+    path = _pinchflat_db(tmp_path / "pinchflat.db")
+    options = tmp_path / "yt-dlp-configs"
+    options.mkdir()
+    (options / "media-profile-1-config.txt").write_text(
+        "--sponsorblock-mark sponsor,intro\n--remove-chapters '(?i)intro'\n--mtime\n--limit-rate 4M\n"
+        "--reject-title 'trailer'\n--dateafter 20240101\n--write-auto-subs\n"
+        "--max-filesize 2G\n--test\n--xattrs\n"
+    )
+
+    plan = plan_import(read_pinchflat(path), option_directory=options)
+
+    channel, _playlist = plan.profiles
+    veritasium, _lofi = plan.collections
+    assert channel.settings["file_date_from_publish_date"] is True
+    download = veritasium.download_profile
+    assert download["sponsorblock_enabled"] is True
+    assert download["sponsorblock_segments"]["sponsor"] == "chapter"
+    assert download["sponsorblock_segments"]["outro"] == "keep"
+    assert download["cut_chapters"] == ["(?i)intro"]
+    assert download["auto_subtitles"] == "fallback"
+    assert {"action": "skip", "field": "title", "pattern": "trailer", "ignore_case": True} in download["rules"]
+    # The source's own cutoff date wins over the option file's.
+    assert download["download_starting_from"] == "2020-01-01"
+    assert any(warning.subject == "--dateafter" for warning in veritasium.warnings)
+    limits = {setting.key: setting.value for setting in plan.settings}
+    assert limits["settings.download_settings.speed_limit_mode"] == "custom"
+    assert limits["settings.download_settings.speed_limit_mbps"] == 4.19
+
+    # Only what has no setting stays an option; a line VODLoft refuses or has another setting for is left out.
+    checked = _with_checked_options(plan).collections[0]
+    assert checked.settings["ytdlp_options"].splitlines() == ["--xattrs  # media-profile-1-config.txt"]
+    reported = " ".join(warning.message for warning in checked.warnings if warning.subject == "yt-dlp options")
+    assert "--test" in reported and "--max-filesize" in reported
 
 
 def _with_0_7_settings(path: Path) -> Path:

@@ -14,6 +14,8 @@ import {createSelectRegistry} from '../../utils/selectRegistry'
 import EpisodeCard, {toImageUrl} from '../../components/Episode/EpisodeCard'
 import {DrmBadge} from '../../components/common/DrmProtected'
 import CollectionTile from '../../components/CollectionTile/CollectionTile'
+import CollectionSort, {compareCollections} from '../../components/CollectionSort/CollectionSort'
+import {useCollectionSortOrder} from '../../components/CollectionSort/useCollectionSortOrder'
 import SiteLink from '../../components/common/SiteLink'
 import {PageHeaderAction} from '../../components/common/PageHeader'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
@@ -81,7 +83,7 @@ function EpisodeShelf({slug, words}: {slug: string, words: CollectionWords}) {
     const scroll = (direction: number) => row.current?.scrollBy({left: direction * row.current.clientWidth * 0.8, behavior: 'smooth'})
     return (
         <section className="creator-section-group" aria-labelledby="creator-newest-title">
-            <div className="creator-shelf-head">
+            <div className="creator-section-head">
                 <h2 id="creator-newest-title">Newest {words.episode.plural}</h2>
                 <div className="creator-shelf-arrows">
                     <button type="button" className="btn" onClick={() => scroll(-1)} aria-label="Scroll back">
@@ -94,7 +96,7 @@ function EpisodeShelf({slug, words}: {slug: string, words: CollectionWords}) {
             </div>
             <div className="episodes-row creator-shelf" role="list" ref={row}>
                 {episodes.map((episode) => (
-                    <EpisodeCard key={episode.id} ep={episode} collectionSlug={episode.collectionSlug} collectionTitle={episode.collectionTitle} words={words}/>
+                    <EpisodeCard key={episode.id} ep={episode} collectionSlug={episode.collectionSlug} collectionTitle={episode.collectionTitle} words={words} unplayableAllowed={episode.unplayableFormatsAllowed}/>
                 ))}
                 {hasNextPage && <div ref={endRef} className="creator-shelf-more" aria-hidden="true"/>}
             </div>
@@ -128,9 +130,16 @@ export default function CreatorPage() {
     }), [others, slug])
 
     const linkFit = useLinkFit(creator?.accounts.filter((account) => account.url).length ?? 0, can('library', 'manage'))
+    // Creator pages list their collections in an order of their own, apart from the Library's.
+    const {order: collectionSort, known: collectionSortKnown, choose: chooseCollectionSort} = useCollectionSortOrder('creator')
+    const collections = useMemo(
+        () => [...(creator?.collections ?? [])].sort((a, b) => compareCollections(a, b, collectionSort)),
+        [creator?.collections, collectionSort],
+    )
 
     // Right after the page opens, before its request starts, there is no creator yet and no error either.
-    if (!creator && !error) return <section className="view"><p>Loading…</p></section>
+    // The collections wait for the user's order too, so they do not jump from one order to another.
+    if ((!creator && !error) || (creator && !collectionSortKnown)) return <section className="view"><p>Loading…</p></section>
     if (error || !creator) {
         return (
             <section className="view">
@@ -230,13 +239,16 @@ export default function CreatorPage() {
             />
 
             {(creator.collections.length > 0 || !creator.movies.length) && <div className="creator-section-group">
-                <h2 className="creator-collections-title">Collections</h2>
-                {creator.collections.length ? (
+                <div className="creator-section-head">
+                    <h2 className="creator-collections-title">Collections</h2>
+                    {collections.length > 1 && (
+                        <CollectionSort order={collectionSort} onChange={chooseCollectionSort} searching={false}/>
+                    )}
+                </div>
+                {collections.length ? (
                     <div className="library-collection-grid" role="list" aria-label="Collections">
-                        {creator.collections.map((collection) => (
-                            <CollectionTile
-                                key={collection.slug} collection={collection} showSource={several}
-                            />
+                        {collections.map((collection) => (
+                            <CollectionTile key={collection.slug} collection={collection}/>
                         ))}
                     </div>
                 ) : (
@@ -289,8 +301,6 @@ export default function CreatorPage() {
                     <label htmlFor="combine-creator">Who is the same person or group</label>
                     <SimpleSelect
                         inputId="combine-creator" registry={combineRegistry} value={combineWith}
-                        menuPortalTarget={document.body} menuPlacement="auto"
-                        styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
                         onChange={(value) => setCombineWith(value ?? '')}
                     />
                 </div>

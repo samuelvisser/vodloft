@@ -211,6 +211,10 @@ def test_suggestion_after_three_weeks_of_posts(db):
     for number in range(6):
         _episode(db, collection, number, published_date=start + timedelta(days=10 * number))
     assert "every 10 days" in check_suggestion(db, collection)
+    # The same videos in a playlist's season are the same posts, not one a day apart.
+    for number in range(6):
+        _episode(db, collection, 10 + number, published_date=start + timedelta(days=10 * number))
+    assert "every 10 days" in check_suggestion(db, collection)
 
 
 def test_update_needs_a_schedule_for_its_own_schedule():
@@ -223,6 +227,17 @@ def test_update_needs_a_schedule_for_its_own_schedule():
     with pytest.raises(ValidationError):
         CollectionAPIUpdate.model_validate({**base, "checkFrequency": "own", "checkCron": "every day"})
     assert CollectionAPIUpdate.model_validate({**base, "checkFrequency": "own", "checkCron": "0 6 * * *"}).check_cron == "0 6 * * *"
+
+
+def test_a_collection_keeps_a_name():
+    from pydantic import ValidationError
+    from backend.api.models.collection import CollectionAPIUpdate
+
+    base = {"sharingUrl": "https://example.com", "authorName": "Host"}
+    for title in ("", "   "):
+        with pytest.raises(ValidationError):
+            CollectionAPIUpdate.model_validate({**base, "title": title})
+    assert CollectionAPIUpdate.model_validate({**base, "title": " Show "}).title == "Show"
 
 
 def test_automatic_cookies_start_after_a_sign_in_failure(db, monkeypatch):

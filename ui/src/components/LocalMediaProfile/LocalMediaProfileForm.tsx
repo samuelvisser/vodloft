@@ -24,8 +24,6 @@ type Props = {
     isCreating: boolean
     /** Hears the collection root of the output path's example. */
     onCollectionRoot?: (path: string) => void
-    /** Buttons beside the output template's heading. */
-    outputTemplateActions?: ReactNode
 }
 
 export type LocalMediaProfileMode = 'collection' | 'video'
@@ -83,7 +81,7 @@ function RevealRequestedFields({children}: {children: ReactNode}) {
  * The Local Media Profile form, in folding sections. A new profile opens the sections that need a choice; the others
  * start from good defaults and show their values while folded.
  */
-export default function LocalMediaProfileForm({form, mode, isCreating, onCollectionRoot, outputTemplateActions}: Props) {
+export default function LocalMediaProfileForm({form, mode, isCreating, onCollectionRoot}: Props) {
     const {register, formState: {errors}} = form
     const {onSubtitleModeChange, onScopeChange} = useSubtitleModeDefaults(form, mode, isCreating)
     const summaries = useLocalMediaProfileSummaries(form, mode)
@@ -159,7 +157,7 @@ export default function LocalMediaProfileForm({form, mode, isCreating, onCollect
                     summary={summaries.outputPath} fields={OUTPUT_FIELDS} defaultOpen
                 >
                     {mode === 'video' && <VideoLocalMediaProfileForm form={form}/>}
-                    {mode === 'collection' && <CollectionLocalMediaProfileForm form={form} isCreating={isCreating} onCollectionRoot={onCollectionRoot} outputTemplateActions={outputTemplateActions}/>}
+                    {mode === 'collection' && <CollectionLocalMediaProfileForm form={form} isCreating={isCreating} onCollectionRoot={onCollectionRoot}/>}
                 </LocalMediaProfileSection>
             </ExampleEpisodeProvider>
             </RevealRequestedFields>
