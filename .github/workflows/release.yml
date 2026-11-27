@@ -13,10 +13,14 @@ on:
 
 permissions:
   contents: write
+  # The Debian packages take their UI from the release's container image.
+  packages: read
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
     steps:
       - name: Determine release tag
         id: release
@@ -83,6 +87,10 @@ jobs:
           {
             printf '## Upgrading\n\n'
             python release.py upgrade-steps --version "${RELEASE_TAG#v}"
+            # apt's repository is the latest release, which a pre-release never is.
+            if [[ "$channel" == --latest ]]; then
+              printf '\nInstalled with apt on Debian or Ubuntu? `sudo apt update && sudo apt upgrade` installs it.\n'
+            fi
           } > "$RUNNER_TEMP/release-notes.md"
           gh release create "$RELEASE_TAG" \
             --verify-tag \
@@ -92,3 +100,99 @@ jobs:
             "$channel" \
             --title "VODLoft ${RELEASE_TAG#v}" \
             .docker/docker-compose.yml
+
+  # The Debian packages and the apt repository: every release holds its .debs and their signed index, so
+  # apt reads https://github.com/samuelvisser/vodloft/releases/latest/download (see .debian/apt-repo.sh).
+  debian-ui:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Take the UI from the release image
+        env:
+          RELEASE_TAG: ${{ needs.release.outputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          container="$(docker create "ghcr.io/samuelvisser/vodloft:${RELEASE_TAG#v}")"
+          mkdir -p ui-build/ui
+          docker cp "$container:/usr/share/nginx/html/." ui-build/ui/
+          docker cp "$container:/app/build-id" ui-build/build-id
+          docker rm "$container"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: debian-ui
+          path: ui-build
+          retention-days: 3
+
+  debian-package:
+    needs: [release, debian-ui]
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: debian-ui
+          path: ui-build
+
+      - name: Build the package
+        shell: bash
+        run: |
+          .debian/build-deb.sh --ui-dir ui-build/ui --build-id "$(cat ui-build/build-id)" \
+            --arch "${{ matrix.arch }}" --out dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: debian-package-${{ matrix.arch }}
+          path: dist/*.deb
+          retention-days: 3
+
+  debian-repository:
+    needs: [release, debian-package]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: debian-package-*
+          merge-multiple: true
+          path: apt
+
+      - name: Sign the apt index
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+        shell: bash
+        run: |
+          if [ -z "$APT_SIGNING_KEY" ]; then
+            echo "The APT_SIGNING_KEY secret is missing; create it with .debian/new-signing-key.sh." >&2
+            exit 1
+          fi
+          command -v apt-ftparchive >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq apt-utils; }
+          export GNUPGHOME="$RUNNER_TEMP/gnupg"
+          install -d -m 700 "$GNUPGHOME"
+          printf '%s\n' "$APT_SIGNING_KEY" | gpg --batch --import
+          .debian/apt-repo.sh apt
+
+      - name: Attach the packages and index to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.release.outputs.tag }}
+        shell: bash
+        run: |
+          cd apt
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            vodloft_*.deb Packages Packages.gz Release InRelease Release.gpg vodloft-archive-keyring.gpg

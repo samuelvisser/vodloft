@@ -56,6 +56,16 @@ The draft starts with an **Upgrading** section: back up `config`, then two comma
 
 The draft also has the release's `.docker/docker-compose.yml` attached as `docker-compose.yml`, so the compose file for any version can be downloaded from `https://github.com/samuelvisser/vodloft/releases/download/vX.Y.Z/docker-compose.yml`.
 
+### Debian packages and the apt repository
+
+The same workflow builds VODLoft's Debian packages (`vodloft_X.Y.Z_amd64.deb` and `_arm64.deb`, see `.debian/`) and attaches them to the draft with their signed apt index (`Packages`, `Release`, `InRelease`, `Release.gpg`) and the public key users install (`vodloft-archive-keyring.gpg`). The packages take their UI from the release's container image, so `publish` must have pushed the image first.
+
+Users' apt reads `https://github.com/samuelvisser/vodloft/releases/latest/download`, which GitHub sends to the newest published release that is not a pre-release. A version therefore reaches `apt upgrade` when you publish its draft, and never while it is a draft or a `v0.*` pre-release; a pre-release's packages can still be installed from its release page.
+
+The index is signed with the `APT_SIGNING_KEY` repository secret. Create that key once with `.debian/new-signing-key.sh`, which prints how to store it, and keep a backup: users trust this key, so replacing it means every user has to install the new one by hand.
+
+To build a package yourself: `.debian/build-deb.sh --ui-image ghcr.io/samuelvisser/vodloft:X.Y.Z --arch amd64` (or `--ui-dir ui/dist` for a UI you built), which needs Docker and writes it to `dist/`.
+
 If the tag-triggered workflow ever needs to be retried, open **Actions → Publish GitHub Release → Run workflow**, enter the existing application tag (for example `v1.0.0`), and run it. The manual workflow checks out that exact tag and performs the same version verification and draft-release creation as the automatic flow.
 
 If the container has already been published separately, use:

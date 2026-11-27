@@ -1,6 +1,6 @@
 # Installation
 
-Docker is the recommended way to run VODLoft. The published container includes the backend, web interface, FFmpeg, and the web server used to expose them through one HTTP port.
+Docker is the recommended way to run VODLoft. On Debian and Ubuntu you can also [install it with apt](#install-on-debian-or-ubuntu). The published container includes the backend, web interface, FFmpeg, and the web server used to expose them through one HTTP port.
 
 ## Quick start
 
@@ -35,6 +35,28 @@ services:
 ```
 
 After VODLoft opens, continue with [[First-Run-Setup]]. 
+
+## Install on Debian or Ubuntu
+
+VODLoft is also a normal Debian package for Debian 12 or newer and Ubuntu 22.04 or newer, on 64-bit PCs (amd64) and 64-bit ARM, such as a Raspberry Pi 4 or 5 (arm64). It installs everything it needs, including its own Python, and runs as a service that starts with the computer. `apt upgrade` keeps it up to date along with the rest of your system.
+
+Run these commands in a terminal. The first one makes apt trust VODLoft's packages, the second tells apt where they are, and the last one installs VODLoft:
+
+```bash
+curl -fsSL https://github.com/samuelvisser/vodloft/releases/latest/download/vodloft-archive-keyring.gpg | sudo tee /usr/share/keyrings/vodloft-archive-keyring.gpg > /dev/null
+echo "deb [signed-by=/usr/share/keyrings/vodloft-archive-keyring.gpg] https://github.com/samuelvisser/vodloft/releases/latest/download ./" | sudo tee /etc/apt/sources.list.d/vodloft.list
+sudo apt update && sudo apt install vodloft
+```
+
+Then open `http://<your server>:5274` in your browser and continue with [[First-Run-Setup]].
+
+Where things are:
+
+- `/var/lib/vodloft` holds VODLoft's settings (`config.yml`), database, keys and yt-dlp's updates. This is the folder to back up, like `/config` in Docker.
+- Downloads go to `/var/lib/vodloft/downloads` until you choose another **Download root** in Settings. VODLoft runs as the `vodloft` user, so that user must be able to write to the folder you choose, for example after `sudo chown vodloft:vodloft /srv/media`, or by adding `vodloft` to the group that owns it (`sudo usermod -aG media vodloft`).
+- `/etc/vodloft/vodloft.env` holds the few settings of the service itself: the port, and a password to require a login (`VL_ADMIN_AUTH__PASSWORD`). After changing it, run `sudo systemctl restart vodloft`.
+
+`sudo systemctl status vodloft` shows whether VODLoft runs, and `sudo journalctl -u vodloft` shows its log. VODLoft's own commands run with `sudo vodloft`, for example `sudo vodloft db current`.
 
 ## Persistent storage
 

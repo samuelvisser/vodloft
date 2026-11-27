@@ -1,0 +1,31 @@
+[Unit]
+Description=VODLoft
+Documentation=https://github.com/samuelvisser/vodloft/wiki
+Wants=network-online.target
+After=network-online.target postgresql.service
+
+[Service]
+Type=exec
+User=vodloft
+Group=vodloft
+# /var/lib/vodloft holds config.yml, the database, keys and yt-dlp's updates; /var/cache/vodloft the temporary
+# downloads. systemd creates both and gives them to the vodloft user.
+StateDirectory=vodloft
+CacheDirectory=vodloft
+UMask=0022
+Environment=VODLOFT_HOST=0.0.0.0
+Environment=VODLOFT_PORT=5274
+# Your own settings, such as another port or VL_ADMIN_AUTH__PASSWORD, go in this file; they win over the lines above.
+EnvironmentFile=-/etc/vodloft/vodloft.env
+ExecStart=/opt/vodloft/bin/vodloft-service
+# Database migrations run before VODLoft starts, so the first start after an upgrade can take a while.
+TimeoutStartSec=infinity
+TimeoutStopSec=60
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

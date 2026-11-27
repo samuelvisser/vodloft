@@ -1,0 +1,25 @@
+#!/bin/bash
+# Runs a VODLoft maintenance command, such as `sudo vodloft db current`, as the vodloft user and with the
+# same files and settings the service uses.
+set -euo pipefail
+if [ "$#" -eq 0 ]; then
+    echo "Usage: sudo vodloft <command> ...   (sudo vodloft --help lists the commands)" >&2
+    echo "The service itself is run by systemd: sudo systemctl status|restart vodloft" >&2
+    exit 2
+fi
+if [ "$(id -un)" != vodloft ]; then
+    if [ "$(id -u)" -ne 0 ]; then
+        echo "Run this as root, for example: sudo vodloft $*" >&2
+        exit 1
+    fi
+    exec setpriv --reuid=vodloft --regid=vodloft --init-groups -- "$0" "$@"
+fi
+. /opt/vodloft/lib/environment.sh
+if [ -r /etc/vodloft/vodloft.env ]; then
+    set -a
+    . /etc/vodloft/vodloft.env
+    set +a
+fi
+mkdir -p "$TMPDIR"
+cd "$VODLOFT_HOME"
+exec backend-api "$@"

@@ -386,4 +386,10 @@ def create_app() -> FastAPI:
     app.include_router(account_notification_router, prefix="/api")
     app.include_router(push_router, prefix="/api")
 
+    # Last, so every route above wins over the UI's pages.
+    ui_directory = get_settings().ui_directory
+    if ui_directory is not None:
+        from backend.web_ui import add_web_ui
+        add_web_ui(app, ui_directory)
+
     return app

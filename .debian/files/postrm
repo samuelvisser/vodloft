@@ -1,0 +1,19 @@
+#!/bin/sh
+set -e
+if [ -d /run/systemd/system ]; then
+    systemctl --system daemon-reload >/dev/null || true
+fi
+if [ "$1" = remove ]; then
+    deb-systemd-helper mask vodloft.service >/dev/null || true
+fi
+if [ "$1" = purge ]; then
+    deb-systemd-helper purge vodloft.service >/dev/null || true
+    deb-systemd-helper unmask vodloft.service >/dev/null || true
+    # Purging removes the service settings in /etc/vodloft and the temporary downloads. VODLoft's own files
+    # stay, since its downloads are among them.
+    rm -rf /etc/vodloft /var/cache/vodloft
+    if [ -d /var/lib/vodloft ]; then
+        echo "Keeping /var/lib/vodloft (settings, database and downloads); remove it yourself when you no longer need it."
+    fi
+fi
+exit 0

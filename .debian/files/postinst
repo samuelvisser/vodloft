@@ -1,0 +1,43 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = configure ]; then
+    new_folders=""
+    for folder in /var/lib/vodloft /var/cache/vodloft; do
+        if [ ! -d "$folder" ]; then
+            install -d -m 0750 "$folder"
+            new_folders="$new_folders $folder"
+        fi
+    done
+    if ! getent passwd vodloft >/dev/null; then
+        adduser --system --group --home /var/lib/vodloft --no-create-home --gecos VODLoft vodloft >/dev/null
+    fi
+    for folder in $new_folders; do
+        chown vodloft:vodloft "$folder"
+    done
+    # Holds the admin password when one is set, so only root and VODLoft may read it.
+    chown root:vodloft /etc/vodloft/vodloft.env
+    chmod 0640 /etc/vodloft/vodloft.env
+fi
+
+# The service follows Debian's usual rules (as debhelper writes them): enabled on the first install, and
+# left as the admin set it afterwards; deb-systemd-invoke starts it only while it is enabled.
+case "$1" in
+    configure|abort-upgrade|abort-deconfigure|abort-remove)
+        deb-systemd-helper unmask vodloft.service >/dev/null || true
+        if deb-systemd-helper --quiet was-enabled vodloft.service; then
+            deb-systemd-helper enable vodloft.service >/dev/null || true
+        else
+            deb-systemd-helper update-state vodloft.service >/dev/null || true
+        fi
+        if [ -d /run/systemd/system ]; then
+            systemctl --system daemon-reload >/dev/null || true
+            # The new version runs its database migrations before it starts answering.
+            deb-systemd-invoke start vodloft.service >/dev/null || true
+            if [ "$1" = configure ] && [ -z "$2" ]; then
+                echo "VODLoft is starting. Open http://$(hostname -f 2>/dev/null || hostname):5274 in your browser."
+            fi
+        fi
+        ;;
+esac
+exit 0

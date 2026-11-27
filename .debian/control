@@ -1,0 +1,15 @@
+Package: vodloft
+Version: @VERSION@
+Architecture: @ARCH@
+Maintainer: Samuël Visser <9252778+samuelvisser@users.noreply.github.com>
+Installed-Size: @INSTALLED_SIZE@
+Depends: adduser, ca-certificates, ffmpeg, init-system-helpers (>= 1.54), tzdata, util-linux
+Section: video
+Priority: optional
+Homepage: https://github.com/samuelvisser/vodloft
+Description: Downloads and keeps a library of videos, shows and podcasts
+ VODLoft follows creators and shows on The Daily Wire, YouTube and the many
+ other sites yt-dlp supports, downloads what they publish, and serves it to
+ Plex, Jellyfin, podcast apps and IPTV players.
+ .
+ It runs as the vodloft service and is reached in a browser on port 5274.

@@ -1,0 +1,12 @@
+#!/bin/sh
+set -e
+# VODLoft stops before dpkg replaces or removes its files, so it never runs a mix of two versions.
+# postinst starts the new version.
+if [ -d /run/systemd/system ]; then
+    case "$1" in
+        remove|upgrade|deconfigure)
+            deb-systemd-invoke stop vodloft.service >/dev/null || true
+            ;;
+    esac
+fi
+exit 0

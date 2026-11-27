@@ -1,0 +1,15 @@
+#!/bin/bash
+# Starts VODLoft for its systemd service: the Debian package's counterpart of the Docker image's entrypoint.
+set -euo pipefail
+. /opt/vodloft/lib/environment.sh
+
+mkdir -p "$VODLOFT_HOME/downloads" "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$HOME" "$TMPDIR"
+
+if [ ! -f "$VL_CONFIG_FILE" ]; then
+    cp /opt/vodloft/app/config/config.yml.default "$VL_CONFIG_FILE"
+    echo "Seeded default config at $VL_CONFIG_FILE"
+fi
+
+echo "Applying database migrations"
+backend-api db upgrade
+exec backend-api run --host "${VODLOFT_HOST:-0.0.0.0}" --port "${VODLOFT_PORT:-5274}"

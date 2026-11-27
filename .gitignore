@@ -136,3 +136,6 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 .idea/
 /build-id
+
+# The apt signing key .debian/new-signing-key.sh makes
+vodloft-apt-signing-key.*.asc
