@@ -7,6 +7,7 @@ import {faIcon} from '../../icons/faIcon'
 import {apiUrl} from '../../lib/api'
 import {wordsOf} from '../../lib/collectionWords'
 import {CollectionSeasonsReadSchema, SeasonsReviewReadSchema} from '../../types/schemas/collection_seasons'
+import type {BulkSaving} from '../ProfileBulkEdit/BulkChangeDialog'
 import SeasonsReview, {GoBack, SavingDoes} from './SeasonsReview'
 import {dialogWords, useNarrow} from './seasonsSettings'
 import './SeasonsDialog.css'
@@ -53,11 +54,13 @@ function inShort(item: BulkReviewItem): string {
  * The review of the Library's bulk change of seasons settings: what saving does to each chosen collection, as its
  * Seasons dialog's review shows it, one folded card each. Saving can go ahead once every review is in.
  */
-export default function BulkSeasonsReview({ids, changes, onReady, onBack}: {
+export default function BulkSeasonsReview({ids, changes, onReady, onBack, saving}: {
     ids: readonly number[]
     changes: Record<string, unknown>
-    onReady: (extra: Record<string, unknown> | null) => void
+    onReady: (ready: {extra: Record<string, unknown>, oneByOne: number[]} | null) => void
     onBack: () => void
+    /** How far saving is, once the user saved. */
+    saving: BulkSaving | null
 }) {
     const narrow = useNarrow()
     // The collections that keep their episodes' numbers, as each review's numbering choice says.
@@ -79,14 +82,35 @@ export default function BulkSeasonsReview({ids, changes, onReady, onBack}: {
     const unchanged = ids.length - pending - reviews.filter((query) => query.isError).length - items.length
 
     useEffect(() => {
-        onReady(ready ? {keepNumbers: keep} : null)
-    }, [ready, keep]) // eslint-disable-line react-hooks/exhaustive-deps
+        // Each collection whose seasons change saves on its own, so its card can show when it is done.
+        onReady(ready ? {extra: {keepNumbers: keep}, oneByOne: items.filter((item) => !item.skipped).map((item) => item.id)} : null)
+    }, [ready, keep, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
+    const savingNow = saving?.at != null ? items.find((item) => item.id === saving.at) : undefined
+    const toSave = items.filter((item) => !item.skipped).length
+    const savedCount = items.filter((item) => saving?.saved.includes(item.id) || saving?.skipped[item.id] !== undefined).length
+    /** Where saving is with one collection. */
+    const savedState = (id: number) => !saving ? null
+        : saving.skipped[id] !== undefined ? <span className="bulk-seasons-review-state is-failed"><FontAwesomeIcon icon={faIcon('fass', 'triangle-exclamation')} aria-hidden="true"/> Not saved: {saving.skipped[id]}</span>
+            : saving.saved.includes(id) ? <span className="bulk-seasons-review-state is-saved"><FontAwesomeIcon icon={faIcon('fass', 'circle-check')} aria-hidden="true"/> Saved</span>
+                : saving.at === id ? <span className="bulk-seasons-review-state"><FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/> Saving…</span>
+                    : <span className="bulk-seasons-review-state is-waiting">Waiting to be saved</span>
     const toggle = (id: number) => setOpen((current) => current.includes(id) ? current.filter((x) => x !== id) : [...current, id])
     return (
         <div className="bulk-seasons-review">
-            <SavingDoes/>
-            <GoBack onBack={onBack}/>
+            {saving ? (
+                <p className="change-identification-loading" role="status">
+                    <FontAwesomeIcon icon={faIcon('fass', savingNow || savedCount < toSave ? 'spinner' : 'circle-check')} spin={!!savingNow || savedCount < toSave} aria-hidden="true"/>
+                    {savingNow
+                        ? `Saving ${savingNow.title} (${(savedCount + 1).toLocaleString()} of ${toSave.toLocaleString()})…`
+                        : savedCount < toSave ? 'Saving…' : 'Saving the other collections…'}
+                </p>
+            ) : (
+                <>
+                    <SavingDoes/>
+                    <GoBack onBack={onBack}/>
+                </>
+            )}
             {failed && <p className="error" role="alert">{failed.message}</p>}
             <ul className="bulk-seasons-review-list">
                 {items.map((item) => {
@@ -104,7 +128,7 @@ export default function BulkSeasonsReview({ids, changes, onReady, onBack}: {
                                 <>
                                     <button type="button" className="bulk-seasons-review-head" aria-expanded={shown} aria-controls={bodyId} onClick={() => toggle(item.id)}>
                                         <FontAwesomeIcon icon={faIcon('fass', shown ? 'chevron-down' : 'chevron-right')} aria-hidden="true"/>
-                                        <span><b>{item.title}</b><span className="help">{inShort(item)}</span></span>
+                                        <span><b>{item.title}</b><span className="help">{inShort(item)}</span>{savedState(item.id)}</span>
                                     </button>
                                     {shown && (
                                         <div id={bodyId} className="bulk-seasons-review-body">

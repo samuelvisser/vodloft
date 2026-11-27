@@ -5,7 +5,7 @@ import {useQuery} from '@tanstack/react-query'
 import {Controller, useForm, useWatch} from 'react-hook-form'
 import {z} from 'zod'
 import {faIcon} from '../../icons/faIcon'
-import type {BulkResult, BulkSummary} from '../../types/schemas/profile_bulk'
+import {BulkResultSchema, type BulkResult, type BulkSummary} from '../../types/schemas/profile_bulk'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {getZodDefaults} from '../../utils/defaultZod'
 import type {SelectRegistry} from '../../utils/selectRegistry'
@@ -96,11 +96,20 @@ export type BulkReview = {
     /** Whether the ticked changes need it. */
     wanted: (changes: Record<string, unknown>) => boolean
     /** The step that shows what the changes do. It says when saving can go ahead, with what saving sends besides the
-     * changes, such as a choice the user made there; null while it is not ready. */
-    render: (props: {changes: Record<string, unknown>, onReady: (extra: Record<string, unknown> | null) => void, onBack: () => void}) => ReactNode
+     * changes, such as a choice the user made there, and the items whose change takes long, which are saved one at a
+     * time so it can show how far saving is; null while it is not ready. While saving, it shows ``saving``. */
+    render: (props: {
+        changes: Record<string, unknown>
+        onReady: (ready: {extra: Record<string, unknown>, oneByOne: number[]} | null) => void
+        onBack: () => void
+        saving: BulkSaving | null
+    }) => ReactNode
     /** What the save button says there, such as Save and move. */
     saveLabel: string
 }
+
+/** How far saving after a review is: the item it saves now, and the ones it saved or left as they were. */
+export type BulkSaving = {at: number | null, saved: number[], skipped: Record<number, string>}
 
 type BulkChangeDialogProps = {
     endpoint: BulkEndpoint
@@ -122,7 +131,8 @@ export default function BulkChangeDialog({endpoint, ids, noun, names, fields: gi
     const [result, setResult] = useState<BulkResult | null>(null)
     // On the review: what saving sends besides the changes, once the review is ready.
     const [reviewing, setReviewing] = useState(false)
-    const [extra, setExtra] = useState<Record<string, unknown> | null>(null)
+    const [ready, setReady] = useState<{extra: Record<string, unknown>, oneByOne: number[]} | null>(null)
+    const [saving, setSaving] = useState<BulkSaving | null>(null)
 
     const summary = useQuery({
         queryKey: ['profileBulkSummary', endpoint, ids] as const,
@@ -157,27 +167,72 @@ export default function BulkChangeDialog({endpoint, ids, noun, names, fields: gi
     }
     const reviewWanted = !!review && ticked > 0 && review.wanted(changesOf(values as BulkFormValues))
 
+    const finished = (changed: BulkResult) => {
+        onChanged(changed)
+        if (changed.skipped.length) setResult(changed)
+        else onClose()
+    }
     const save = buildServerAwareSubmit<BulkFormValues, BulkFormValues, BulkResult>(
         form,
-        async (data) => postBulkChange(endpoint, ids, changesOf(data), reviewing ? extra ?? {} : {}),
-        {
-            rootServerValidationMessage: 'Nothing was changed.',
-            onSuccess: (changed) => {
-                onChanged(changed)
-                if (changed.skipped.length) setResult(changed)
-                else onClose()
-            },
-        },
+        async (data) => postBulkChange(endpoint, ids, changesOf(data)),
+        {rootServerValidationMessage: 'Nothing was changed.', onSuccess: finished},
     )
+
+    /** After the review: the items whose change takes long one at a time, each in a short save of its own, so the
+     * review shows how far it is; then the others together. */
+    const saveReviewed = async () => {
+        if (!ready) return
+        const changes = changesOf(form.getValues())
+        const total: BulkResult = {done: 0, skipped: []}
+        let progress: BulkSaving = {at: null, saved: [], skipped: {}}
+        const rest = ids.filter((id) => !ready.oneByOne.includes(id))
+        const batches = [...ready.oneByOne.filter((id) => ids.includes(id)).map((id) => [id]), ...(rest.length ? [rest] : [])]
+        for (const batch of batches) {
+            progress = {...progress, at: batch.length === 1 ? batch[0] : null}
+            setSaving(progress)
+            let changed: BulkResult
+            try {
+                const response = await postBulkChange(endpoint, batch, changes, ready.extra)
+                if (!response.ok) {
+                    const body = await response.json().catch(() => null)
+                    throw new Error(response.status >= 500 && response.status !== 500
+                        ? 'VODLoft took too long to answer. It may still be saving: look again in a minute.'
+                        : typeof body?.detail === 'string' ? body.detail : `Could not save (HTTP ${response.status})`)
+                }
+                changed = BulkResultSchema.parse(await response.json())
+            } catch (error) {
+                // No answer at all, such as when the connection dropped: the save may have gone ahead regardless.
+                const reason = error instanceof TypeError
+                    ? 'No answer from VODLoft. It may still be saving: look again in a minute.'
+                    : error instanceof Error ? error.message : 'Could not save'
+                changed = {done: 0, skipped: batch.map((id) => ({id, name: names[ids.indexOf(id)] ?? String(id), reason}))}
+            }
+            total.done += changed.done
+            total.skipped.push(...changed.skipped)
+            const left = new Set(changed.skipped.map((item) => item.id))
+            progress = {
+                at: null,
+                saved: [...progress.saved, ...batch.filter((id) => !left.has(id))],
+                skipped: {...progress.skipped, ...Object.fromEntries(changed.skipped.map((item) => [item.id, item.reason]))},
+            }
+            setSaving(progress)
+        }
+        finished(total)
+    }
 
     /** Changes that need a look first open the review; there, the form saves them. */
     const onSubmit = (event: FormEvent<HTMLFormElement>) => {
         if (reviewWanted && !reviewing) {
             event.preventDefault()
             return form.handleSubmit(() => {
-                setExtra(null)
+                setReady(null)
+                setSaving(null)
                 setReviewing(true)
             })(event)
+        }
+        if (reviewing) {
+            event.preventDefault()
+            return void saveReviewed()
         }
         return save(event)
     }
@@ -190,7 +245,7 @@ export default function BulkChangeDialog({endpoint, ids, noun, names, fields: gi
 
     return (
         <Modal
-            onDismiss={onClose}
+            onDismiss={saving ? () => undefined : onClose}
             // Escape cancels, so it only closes before a setting is ticked, or once the result is shown.
             dismissOnEscape={Boolean(result) || (ticked === 0 && !form.formState.isSubmitting)}
             className="modal modal-wide bulk-dialog"
@@ -206,7 +261,7 @@ export default function BulkChangeDialog({endpoint, ids, noun, names, fields: gi
                 {result ? (
                     <SkippedList result={result} verb="Changed" noun={noun}/>
                 ) : reviewing && review ? (
-                    review.render({changes: changesOf(form.getValues()), onReady: setExtra, onBack: () => setReviewing(false)})
+                    review.render({changes: changesOf(form.getValues()), onReady: setReady, onBack: () => setReviewing(false), saving})
                 ) : (
                     <>
                         {shownNames.length > 0 && (
@@ -318,13 +373,13 @@ export default function BulkChangeDialog({endpoint, ids, noun, names, fields: gi
                     <button type="button" className="btn btn-primary" onClick={onClose}>Close</button>
                 ) : (
                     <>
-                        <button type="button" className="btn" onClick={reviewing ? () => setReviewing(false) : onClose}>
+                        <button type="button" className="btn" disabled={!!saving} onClick={reviewing ? () => setReviewing(false) : onClose}>
                             {reviewing ? 'Back' : 'Cancel'}
                         </button>
-                        <button type="submit" className="btn btn-primary" disabled={!ticked || form.formState.isSubmitting || (reviewing && !extra)}>
-                            {form.formState.isSubmitting && <FontAwesomeIcon icon={faIcon('fass', 'circle-notch')} spin aria-hidden="true"/>}
+                        <button type="submit" className="btn btn-primary" disabled={!ticked || form.formState.isSubmitting || (reviewing && (!ready || !!saving))}>
+                            {(form.formState.isSubmitting || !!saving) && <FontAwesomeIcon icon={faIcon('fass', 'circle-notch')} spin aria-hidden="true"/>}
                             {reviewing && review
-                                ? review.saveLabel
+                                ? saving ? 'Saving…' : review.saveLabel
                                 : !ticked
                                     ? 'Choose a setting to change'
                                     : reviewWanted

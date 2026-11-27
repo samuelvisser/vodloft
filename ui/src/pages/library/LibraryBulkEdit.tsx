@@ -266,8 +266,8 @@ export default function LibraryBulkEdit({kind, selection, items, creatorNoun}: L
                     moreFields={seasonsFields}
                     review={{
                         ...SEASONS_REVIEW,
-                        render: ({changes, onReady, onBack}) => (
-                            <BulkSeasonsReview ids={idsOf(keys, 'collection')} changes={changes} onReady={onReady} onBack={onBack}/>
+                        render: ({changes, onReady, onBack, saving}) => (
+                            <BulkSeasonsReview ids={idsOf(keys, 'collection')} changes={changes} onReady={onReady} onBack={onBack} saving={saving}/>
                         ),
                     }}
                     onClose={close}

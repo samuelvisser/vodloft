@@ -520,3 +520,7 @@ button.bulk-seasons-review-head { cursor: pointer; }
 .bulk-seasons-review-head .help { margin: 0; }
 .bulk-seasons-review-item.is-skipped .bulk-seasons-review-head { opacity: .8; }
 .bulk-seasons-review-body { padding: 0 12px 12px; }
+.bulk-seasons-review-state { display: flex; gap: 6px; align-items: baseline; font-size: .8125rem; color: var(--muted); }
+.bulk-seasons-review-state svg { margin: 0; width: auto; opacity: 1; }
+.bulk-seasons-review-state.is-saved { color: #16a34a; }
+.bulk-seasons-review-state.is-failed { color: #dc2626; }

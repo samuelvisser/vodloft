@@ -81,6 +81,8 @@ def _feeds_summary(collections: list[Collection]) -> list[CollectionBulkFeedRead
 def summarize_collections(s: Session, body: BulkSelectionIn) -> CollectionBulkSummaryRead:
     collections = _collections(s, body.ids)
     summary = summarize(collections, CollectionBulkChangesIn, _offers, _site_name, skip=("feeds",))
+    # Whether a collection takes lists depends on what its link is, not only on its Site.
+    summary.fields["linkSeasons"].sites_without = []
     lists = {}
     for collection in collections:
         if takes_lists(collection):
