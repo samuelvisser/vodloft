@@ -1,1 +1,0 @@
-from .router import router as dw_show_router

@@ -1,17 +1,15 @@
 import {useEffect, useMemo, useRef} from "react";
 import {useSearchParams} from "react-router-dom";
-import DailywireShowCard from "./DailywireShowCard";
 import CollectionPreviewCard from "./CollectionPreviewCard";
-import {useDailywireShow, useDailywireUserInfo, useListedCollectionDetails, useResolvedLink} from "../../lib/queries";
-import {DAILYWIRE_SOURCE_KEY, SourceFeature, sourceHas} from "../../types/schemas/source";
+import {useListedCollectionDetails, useResolvedLink} from "../../lib/queries";
+import {SourceFeature, sourceHas} from "../../types/schemas/source";
 import ReadMore from "../../utils/ReadMore";
 import {collectionWords, creatorNamesFor} from "../../lib/collectionWords";
 import {can} from "../../lib/access";
 import CreatorSwitch, {type CreatorChoice} from "./CreatorSwitch";
-import {dailywireShowDefaults, listedCollectionDefaults} from "./collectionDefaults";
+import {listedCollectionDefaults} from "./collectionDefaults";
 import {Controller, SubmitHandler, useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
-import {ZodSafeParseResult} from "zod";
 import {
     CollectionCreateFormSchema,
     CollectionCreatePayloadSchema,
@@ -19,11 +17,8 @@ import {
 } from "../../types/schemas/collection";
 import {CollectionTypeReg, episodeIdentifierRegFor, musicIdentificationAdvice} from "../../types/collection";
 import Select from '../../components/common/Select'
-import {UseQueryResult} from "@tanstack/react-query";
-import {SeasonDetachedOut, SeasonDetachedSchema} from "../../types/schemas/season";
-import {DwMembershipLevelReg} from "../../types/dailywire_user_info";
-import {DailywireShowRead, DailywireShowReadSchema} from "../../types/schemas/dailywire_show";
-import {DailywireSeasonRead} from "../../types/schemas/dailywire_season";
+import {SeasonDetachedOut} from "../../types/schemas/season";
+import {createSelectRegistry} from "../../utils/selectRegistry";
 
 type Props = {
     value: Partial<CollectionCreatePayloadIn>
@@ -70,13 +65,9 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
     const linkGiven = !!params.get("url")?.trim();
     const urlParsed = useMemo(() => CollectionCreateFormSchema.shape.url.safeParse(watchedUrl ?? ""), [watchedUrl]);
 
-    // --- The Source that recognises the link says what it points to. A Source that lists its
-    // episodes describes the collection itself; a show VODLoft walks itself has its own details.
+    // --- The Source that recognises the link says what it points to, and describes the collection itself.
     const resolved = useResolvedLink(urlParsed.success ? urlParsed.data : undefined)
     const resolvedCollection = resolved.data?.kind === 'collection' ? resolved.data : undefined
-    const slugFromUrl: string | undefined = resolvedCollection && sourceHas(resolvedCollection.source, SourceFeature.EPISODE_LOOKUPS)
-        ? resolvedCollection.slug
-        : undefined
     const listedSource = resolvedCollection && sourceHas(resolvedCollection.source, SourceFeature.COLLECTION_DETAILS)
         ? resolvedCollection.source
         : undefined
@@ -89,7 +80,7 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
     );
     useEffect(() => {
         if (!listed.data) return;
-        setValue("membershipLevel", DwMembershipLevelReg.Enum.FREE, {shouldValidate: true});
+        setValue("membershipLevel", listed.data.membershipLevel, {shouldValidate: true});
         // Suggest the type the backend guessed, from the name or because it is music, and identification to match.
         if (lastListedUrlRef.current === listed.data.sharingUrl) return;
         lastListedUrlRef.current = listed.data.sharingUrl;
@@ -98,123 +89,39 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
         setValue("episodeIdentifier", suggested.episodeIdentifier, {shouldDirty: true});
     }, [listed.data, setValue]);
 
-    // --- Fetch DailyWire data using the slug
-    const lastPrefilledUrlRef = useRef<string | undefined>(
-        value.type && value.episodeIdentifier ? value.url : undefined,
-    );
-    const dw: UseQueryResult<any> = useDailywireShow(slugFromUrl);
-
-    // --- Fetch current DailyWire membership level
-    const dwUserInfo = useDailywireUserInfo();
-    type DwAccessLevelDisplay = typeof DwMembershipLevelReg.values[number] | undefined;
-    const dwAccessLevel: DwAccessLevelDisplay = useMemo(() => {
-        if (dwUserInfo.isSuccess && dwUserInfo.data) {
-            return DwMembershipLevelReg.normalize(dwUserInfo.data.accessLevel) ?? DwMembershipLevelReg.Enum.FREE;
-        }
-        if (dwUserInfo.isError && dwUserInfo.error?.status === 401) {
-            return DwMembershipLevelReg.Enum.FREE;
-        }
-        if (dwUserInfo.isError) {
-            return undefined;
-        }
-        return DwMembershipLevelReg.Enum.FREE;
-    }, [dwUserInfo.isSuccess, dwUserInfo.data, dwUserInfo.isError, dwUserInfo.error]);
-
-    // --- Apply the current membership level to the form
-    useEffect(() => {
-        if (!slugFromUrl) return;
-        setValue('membershipLevel', dwAccessLevel ?? '' as any, {shouldDirty: true});
-
-        if (dwUserInfo.isError) {
-            const status = dwUserInfo.error?.status;
-            if (status !== 401) {
-                setError('membershipLevel', {type: 'server', message: `Failed to fetch current membership level: ${dwUserInfo.error?.detail ?? ''}`});
-            }
-        }
-    }, [dwUserInfo.isError, setValue, setError, dwAccessLevel, slugFromUrl]);
-
-    // --- Prefill defaults for type & episodeIdentifier from the external API when available
-    useEffect(() => {
-        if (!dw.data) return;
-        const currentUrl = watchedUrl ?? "";
-        if (currentUrl === (lastPrefilledUrlRef.current ?? "")) return;
-
-        const suggested = dailywireShowDefaults(dw.data);
-        setValue("type", suggested.type, {shouldDirty: true});
-        setValue("episodeIdentifier", suggested.episodeIdentifier, {shouldDirty: true});
-
-        // Remember that we prefetched for this URL to prevent reapplying on mount/reload
-        lastPrefilledUrlRef.current = currentUrl;
-    }, [dw.data, watchedUrl, setValue]);
+    // The membership levels the collection can list with, at a Source that has them.
+    const membershipLevels = useMemo(() => {
+        const levels = listed.data?.membershipLevels ?? []
+        return createSelectRegistry('MembershipLevel', Object.fromEntries(
+            levels.map(level => [level.key, {label: level.name, help: level.help}]),
+        ), levels.map(level => level.key))
+    }, [listed.data?.membershipLevels])
 
     // --- Submit handler
     const onSubmit: SubmitHandler<CollectionCreateFormIn> = (formOnly: CollectionCreateFormIn) => {
-        if (!slugFromUrl) {
-            if (!listed.data) {
-                setError("url", {type: "validate", message: "Paste the link to a collection or channel"});
-                return;
-            }
-            const details = listed.data;
-            onSeasonsSubmit(details.seasons);
-            onSubmitParent(CollectionCreatePayloadSchema.parse({
-                ...formOnly,
-                membershipLevel: DwMembershipLevelReg.Enum.FREE,
-                sourceKey: details.sourceKey,
-                dwId: details.slug,
-                slug: details.slug,
-                title: details.title,
-                description: details.description ?? null,
-                backgroundImagePath: null,
-                logoImagePath: null,
-                sharingUrl: details.sharingUrl,
-                listType: details.listType,
-                authorName: details.authorName,
-                authorSlug: details.authorSlug,
-                authorHeadshotPath: null,
-                thumbnailLandscapePath: details.thumbnailLandscapePath ?? null,
-                thumbnailPortraitPath: null,
-                thumbnailSquarePath: null,
-            }));
-            onContinue();
+        if (!listed.data) {
+            setError("url", {type: "validate", message: "Paste the link to a collection or channel"});
             return;
         }
-        // Gather/normalize derived fields from the API response
-        const dwShowData = dw.data as DailywireShowRead;
-
-        // Validate dailywire data
-        const dailywireParsed: ZodSafeParseResult<DailywireShowRead> = DailywireShowReadSchema.safeParse(dwShowData);
-
-        // Validate seasons
-        const seasonsRaw: DailywireSeasonRead[] = dwShowData.seasons;
-        const seasonsParsed: ZodSafeParseResult<SeasonDetachedOut[]> = SeasonDetachedSchema.array().safeParse(seasonsRaw);
-
-        if (!dailywireParsed.success) {
-            const first = dailywireParsed.error.issues[0];
-            setError("url", {
-                type: "validate",
-                message: "The source returned invalid collection data: " + (first?.message ?? "invalid data")
-            });
-            throw dailywireParsed.error;
-        }
-
-        if (!seasonsParsed.success) {
-            const first = seasonsParsed.error.issues[0];
-            setError("url", {
-                type: "validate",
-                message: "The source returned invalid seasons: " + (first?.message ?? "invalid seasons"),
-            });
-            throw seasonsParsed.error;
-        }
-
-        // Validate final payload. We do not save anything yet (only in the final widget step)
-        const payload: CollectionCreatePayloadOut = CollectionCreatePayloadSchema.parse({
+        const details = listed.data;
+        onSeasonsSubmit(details.seasons);
+        onSubmitParent(CollectionCreatePayloadSchema.parse({
             ...formOnly,
-            ...dailywireParsed.data,
-            url: resolvedCollection?.url ?? formOnly.url,
-            sourceKey: resolvedCollection?.source.id ?? DAILYWIRE_SOURCE_KEY,
-        });
-        onSeasonsSubmit(seasonsParsed.data);
-        onSubmitParent(payload);
+            sourceKey: details.sourceKey,
+            slug: details.slug,
+            title: details.title,
+            description: details.description ?? null,
+            backgroundImagePath: null,
+            logoImagePath: null,
+            sharingUrl: details.sharingUrl,
+            listType: details.listType,
+            authorName: details.authorName,
+            authorSlug: details.authorSlug,
+            authorHeadshotPath: details.authorHeadshotPath ?? null,
+            thumbnailLandscapePath: details.thumbnailLandscapePath ?? null,
+            thumbnailPortraitPath: null,
+            thumbnailSquarePath: null,
+        }));
         onContinue();
     }
 
@@ -310,14 +217,14 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                 </div>
             )}
 
-            {/* A show from a Source that lists its episodes */}
-            {urlParsed.success && !slugFromUrl && (
+            {/* The collection, as its Source describes it */}
+            {urlParsed.success && (
                 <>
                     <div className="form-row" aria-live="polite">
                         {resolved.isPending || listed.isFetching ? (
                             <div className="dw-card" aria-busy="true">
                                 <div className="dw-card-body">
-                                    <div className="dw-card-title">Checking show…</div>
+                                    <div className="dw-card-title">Checking collection…</div>
                                     <div className="dw-card-desc">Looking up this link</div>
                                 </div>
                             </div>
@@ -340,6 +247,42 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                             </div>
                         )}
                     </div>
+                    {listed.data && listed.data.membershipLevels.length > 0 && (
+                        <div className="form-row">
+                            <label htmlFor="membership-level">Membership level</label>
+                            <Controller
+                                control={control}
+                                name="membershipLevel"
+                                render={({field}) => (
+                                    <Select
+                                        inputId="membership-level"
+                                        options={membershipLevels.options}
+                                        value={membershipLevels.options.find(o => o.value === field.value) ?? null}
+                                        onChange={(opt) => field.onChange(opt?.value ?? "")}
+                                        onBlur={field.onBlur}
+                                        aria-invalid={!!errors.membershipLevel}
+                                        aria-describedby={errors.membershipLevel ? 'membership-level-errors' : 'membership-level-help'}
+                                    />
+                                )}
+                            />
+                            {errors.membershipLevel && (
+                                <div id="membership-level-errors" className="error" role="alert" aria-live="polite">
+                                    {errors.membershipLevel.message as string}
+                                </div>
+                            )}
+                            <div className="help" id="membership-level-help">
+                                <ReadMore summary={<span>The membership level VODLoft indexes this collection with.</span>}>
+                                    <p>VODLoft only indexes {typeWords.episode.plural} up to this membership level. It starts at
+                                        the level of the account you are signed in with at {resolved.data?.source.name}.
+                                        If your membership expires, gives access to a lower level than set here, or VODLoft
+                                        loses access to your account, indexing is paused.</p>
+                                    <p>With <strong>{membershipLevels.getLabelLoose('HIGHEST_ALLOWED')}</strong>, VODLoft indexes
+                                        with whatever level your account has at the time. If that changes, {typeWords.episode.plural} of
+                                        different membership levels can end up mixed in one collection.</p>
+                                </ReadMore>
+                            </div>
+                        </div>
+                    )}
                     {listed.data && (
                         <div className="form-row">
                             <label htmlFor="collection-type">Collection type</label>
@@ -379,98 +322,6 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                     )}
                     {listed.data && episodeIdentifierField}
                     {listed.data && creatorSwitch}
-                </>
-            )}
-
-            {/* Preview fetched DailyWire show info */}
-            {urlParsed.success && slugFromUrl && (
-                <>
-                    <div className="form-row" aria-live="polite">
-                        <DailywireShowCard collectionSlug={slugFromUrl}/>
-                    </div>
-
-                    {/* Remaining fields dependent on data from DailyWire */}
-                    {dw.isSuccess && !!dw.data && (
-                        <>
-                            <div className="form-row">
-                                <label htmlFor="membership-level">Membership level</label>
-                                <Controller
-                                    control={control}
-                                    name="membershipLevel"
-                                    render={({field}) => (
-                                        <Select
-                                            inputId="membership-level"
-                                            options={DwMembershipLevelReg.options}
-                                            value={DwMembershipLevelReg.options.find(o => o.value === field.value) ?? null}
-                                            onChange={(opt) => field.onChange(opt?.value ?? "")}
-                                            onBlur={field.onBlur}
-                                            aria-invalid={!!errors.membershipLevel}
-                                            aria-describedby={errors.membershipLevel ? 'membership-level-errors' : 'membership-level-help'}
-                                            isClearable
-                                        />
-                                    )}
-                                />
-                                {errors.membershipLevel && (
-                                    <div id="membership-level-errors" className="error" role="alert" aria-live="polite">
-                                        {errors.membershipLevel.message as string}
-                                    </div>
-                                )}
-                                <div className="help" id="membership-level-help">
-                                    <ReadMore summary={
-                                        <span>Current membership level at The Daily Wire: {DwMembershipLevelReg.getLabelLoose(dwAccessLevel ?? 'Unknown')}</span>}>
-                                        <p>This sets the membership level used when indexing episodes for this collection.</p>
-                                        <p>VODLoft will make sure to only index episodes with at least this membership level.
-                                            If your subscription expires, gives access to a lower level membership than configured here, or
-                                            VODLoft loses access to your account at The Daily Wire altogether, indexing will be paused.</p>
-                                        <p>If you choose <strong>Highest allowed</strong>, VODLoft will index episodes using the membership level
-                                            currently available on your connected account at The Daily Wire. However, if this ever changes or
-                                            VODLoft loses access to your account, episodes of a different membership level will
-                                            be indexed. This might result in a confusing mix of episodes from different membership
-                                            levels combined.</p>
-                                    </ReadMore>
-                                </div>
-                            </div>
-
-                            <div className="form-row">
-                                <label htmlFor="collection-type">Collection type</label>
-                                <Controller
-                                    control={control}
-                                    name="type"
-                                    render={({field}) => (
-                                        <Select
-                                            inputId="collection-type"
-                                            options={CollectionTypeReg.options}
-                                            value={CollectionTypeReg.options.find(o => o.value === field.value) ?? null}
-                                            onChange={(opt) => field.onChange(opt?.value ?? "")}
-                                            onBlur={field.onBlur}
-                                            aria-invalid={!!errors.type}
-                                            aria-describedby={errors.type ? 'collection-type-errors' : 'collection-type-help'}
-                                            isClearable
-                                        />
-
-                                    )}
-                                />
-                                {errors.type && (
-                                    <div id="collection-type-errors" className="error" role="alert" aria-live="polite">
-                                        {errors.type.message as string}
-                                    </div>
-                                )}
-                                <div className="help" id="collection-type-help">
-                                    <ReadMore summary={<span>Why do I need to choose this?</span>}>
-                                        <p>The collection type defines how download- and stream profiles deal with the collection.</p>
-                                        <p><b>Podcast</b> collections download and stream episodes from <i>newest</i> to <i>oldest</i>.</p>
-                                        <p><b>Series</b> collections download and stream episodes from <i>oldest</i> to <i>newest</i>.</p>
-                                        <p>Further, the collection type also defines what filters are available in the download- and stream profiles.</p>
-                                        <p>Though VODLoft tries to guess the collection type automatically based on various factors, Daily&nbsp;Wire
-                                            unfortunately does not provide a reliable way to determine this. If you're unsure, select "Podcast".</p>
-                                    </ReadMore>
-                                </div>
-                            </div>
-
-                            {episodeIdentifierField}
-                            {creatorSwitch}
-                        </>
-                    )}
                 </>
             )}
 

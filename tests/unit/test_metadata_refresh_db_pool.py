@@ -12,7 +12,7 @@ def _write(session, work):
 
 
 def _final_episode(*, episode_id: int = 71):
-    from backend.types.dailywire_user_info import DwMembershipLevel
+    from sources import FREE_LEVEL
     from backend.types.episode_types import EpisodePublishStatus
 
     return SimpleNamespace(
@@ -25,7 +25,7 @@ def _final_episode(*, episode_id: int = 71):
         safe_published_final=None,
         last_known_pending=None,
         published_date=datetime(2026, 9, 8, tzinfo=timezone.utc),
-        collection=SimpleNamespace(membership_level=DwMembershipLevel.FREE.value, site=None),
+        collection=SimpleNamespace(membership_level=FREE_LEVEL, site=None),
     )
 
 

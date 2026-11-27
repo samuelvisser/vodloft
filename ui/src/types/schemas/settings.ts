@@ -390,7 +390,7 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
     }),
 })
 
-const WORKER_CRON_MINIMUM_MESSAGE = 'This worker runs more often than the configured slow-request delay. Increase this cron interval, or lower the minimum slow-request delay under Sources → Request pacing.'
+const WORKER_CRON_MINIMUM_MESSAGE = 'VODLoft runs a scheduled task at most every 2 minutes. Pick a cron that runs less often.'
 const INVALID_CRON_MESSAGE = 'Enter a valid five-part cron expression.'
 
 const CRON_SERVER_ERRORS = {

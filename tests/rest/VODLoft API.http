@@ -14,18 +14,8 @@ GET http://localhost:5001/api/tasks/runs?resource_type=collection&resource_id=2
 ### TEst
 GET http://localhost:5001/api/local-media-profiles/template/sources?type=collection&collection_scope=false
 
-### Get last 5 episodes for The Ben Shapiro Show
-GET http://localhost:5001/api/dailywire/episodes/by-show-slug/the-ben-shapiro-show
-
-
-
-
 ### Get collections list as view
 GET http://localhost:5001/api/collections/as-view/
-
-### DW episode details
-GET http://localhost:5001/api/dailywire/episodes/ben-shapiro-show-ep-2470
-
 
 <> 2025-10-30T173007.200.json
 <> 2025-10-18T020221.200.json
@@ -33,41 +23,16 @@ GET http://localhost:5001/api/dailywire/episodes/ben-shapiro-show-ep-2470
 ### Get all download profiles views
 GET http://localhost:5001/api/download-profiles/as-view
 
-### Get list of episodes from DailyWire show
-GET http://localhost:5001/api/dailywire/episodes/by-show-slug/the-isabel-brown-show
-
-### Get list of episodes from DailyWire show
-GET http://localhost:5001/api/dailywire/episodes/by-show-slug/the-ben-shapiro-show
-
-### Get show from The Daily Wire (The Ben Shapiro Show)
-GET http://localhost:5001/api/dailywire/shows/the-ben-shapiro-show
-
 ### Get collection episodes (home page)
 GET http://localhost:5001/api/episodes/by-show-slug/the-ben-shapiro-show?limit=20
 
 
-
-### Get show from The Daily WIre
-GET http://localhost:5001/api/dailywire/shows/the-michael-knowles-show
-
-### Get show from The Daily WIre
-GET http://localhost:5001/api/dailywire/shows/the-isabel-brown-show
-
-### Get show from The Daily WIre
-GET http://localhost:5001/api/dailywire/shows/pints-with-aquinas
-
-### Get series from The Daily WIre
-GET http://localhost:5001/api/dailywire/shows/the-pendragon-cycle
 
 ### Get app config
 GET http://localhost:5001/api/config/public
 
 ### Get auth status
 GET http://localhost:5001/api/dailywire/auth/status
-
-###
-GET http://localhost:5001/api/dailywire/shows/fireside-chat-with-dennis-prager
-
 
 ### Get media profiles
 GET http://localhost:5001/api/media-profiles

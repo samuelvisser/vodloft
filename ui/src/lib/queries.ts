@@ -66,7 +66,6 @@ import {
     EpisodeReadViewPage,
 } from "../types/schemas/episode";
 import {DailywireUserInfoRead, DailywireUserInfoReadSchema} from "../types/schemas/dailywire_user_info";
-import {DailywireShowRead} from "../types/schemas/dailywire_show";
 import {
     DownloadedLocalMediaProfileSchema,
     MediaDownloadDomainViewRead,
@@ -1327,36 +1326,6 @@ export function useRecentlyIndexedEpisodes(limit = 7) {
         ),
         placeholderData: keepPreviousData,
         refetchOnMount: 'always',
-    })
-}
-
-// Fetch DailyWire show preview by slug for Add Show URL step
-export function useDailywireShow(slug?: string, membershipPlan?: string) {
-    return useQuery<any, Error, DailywireShowRead, readonly ['dwCollection', string | undefined, string | undefined]>({
-        queryKey: ['dwCollection', slug, membershipPlan] as const,
-        enabled: !!slug,
-        queryFn: async ({signal}) => {
-            const urlBase = apiUrl()
-            const params = membershipPlan ? `?membership_plan=${encodeURIComponent(membershipPlan)}` : ''
-            const url = `${urlBase}/dailywire/shows/${encodeURIComponent(slug!)}` + params
-            const r = await fetch(url, {signal, credentials: 'include'})
-            if (!r.ok) {
-                try {
-                    const body = await r.json()
-                    const detail = typeof body?.detail === 'string' ? body.detail : null
-                    const err: any = new Error(detail || `HTTP ${r.status}`)
-                    err.status = r.status
-                    err.detail = detail
-                    throw err
-                } catch (_) {
-                    const err: any = new Error(`HTTP ${r.status}`)
-                    err.status = r.status
-                    throw err
-                }
-            }
-            return r.json()
-        },
-        retry: false,
     })
 }
 

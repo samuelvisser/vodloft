@@ -613,7 +613,6 @@ class SettingsAPIUpdate(RequestBase):
     @model_validator(mode="after")
     def _validate_worker_crons(self):
         changed = set(self.changed_fields)
-        validate_all_intervals = "dwTimeout.minSlowRequestMs" in changed
         specs = worker_cron_specs(self.values)
         specs_by_path = {spec.field_path: spec for spec in specs}
 
@@ -658,7 +657,7 @@ class SettingsAPIUpdate(RequestBase):
                     {"message": str(error)},
                 )
             else:
-                if not validate_all_intervals and not directly_affected:
+                if not directly_affected:
                     continue
                 error_type = PydanticCustomError(
                     "worker_cron_interval_too_short",

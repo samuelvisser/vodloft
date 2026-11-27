@@ -352,6 +352,33 @@ def test_a_listed_collection_bundle_is_seasonal_and_streams_only_downloads(liste
         create_collection_bundle(session, None, CollectionAPICreateBundle.model_validate({"collection": {**collection, "slug": "x", "sourceKey": "nope"}, "seasons": []}))
 
 
+def test_a_collection_takes_only_a_membership_level_its_source_has(listed, session, monkeypatch):
+    from sources import MembershipLevel
+
+    from backend.api.endpoints.collections.as_bundle.service import create_collection_bundle
+    from backend.api.models.collection_as_bundle import CollectionAPICreateBundle
+    from backend.services.errors import ServiceError
+
+    monkeypatch.setattr(ListedSource, "features", ListedSource.features | {Feature.MEMBERSHIP_LEVELS})
+    monkeypatch.setattr(ListedSource, "membership_levels", (MembershipLevel("FREE", "Free", ""), MembershipLevel("GOLD", "Gold", "")), raising=False)
+    collection = {
+        "slug": "PL1", "sourceKey": "listed", "title": "A playlist", "sharingUrl": "https://listed.example/PL1",
+        "type": "series", "episodeIdentifier": "numbered", "authorName": "A Channel", "authorSlug": "a-channel",
+    }
+
+    with pytest.raises(ServiceError, match="no membership level PLATINUM") as refused:
+        create_collection_bundle(session, None, CollectionAPICreateBundle.model_validate(
+            {"collection": {**collection, "membershipLevel": "PLATINUM"}, "seasons": []},
+        ))
+    assert refused.value.field == "membershipLevel"
+    session.rollback()
+
+    created = create_collection_bundle(session, None, CollectionAPICreateBundle.model_validate(
+        {"collection": {**collection, "membershipLevel": "GOLD"}, "seasons": []},
+    ))
+    assert created.membership_level == "GOLD"
+
+
 @pytest.fixture
 def lookups(monkeypatch):
     answers: dict[tuple[str, ...], dict] = {}

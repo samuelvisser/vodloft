@@ -19,7 +19,6 @@ from sqlalchemy import select
 from backend.db.core import get_session, run_write_transaction
 from backend.db.models import Collection, Episode
 from backend.services.media_access import apply_source_access
-from backend.types.dailywire_user_info import DwMembershipLevel
 from sources.dailywire.api.dw_api.client import ByNextPage, ByShowSeason, MiddlewareAPIError, MiddlewareClient
 from sources.dailywire.auth import DeviceAuthClient
 from sources.dailywire.source import episode_access
@@ -83,8 +82,8 @@ async def migrate(context) -> None:
         context.raise_if_canceled()
         context.update_progress(done, len(shows), f"Reading the membership levels of {slug}'s episodes")
         # The scans list a show set to what the membership allows with the free plan, too.
-        if plan == DwMembershipLevel.HIGHEST_ALLOWED.value:
-            plan = DwMembershipLevel.FREE.value
+        if plan == "HIGHEST_ALLOWED":
+            plan = "FREE"
         try:
             levels = await asyncio.to_thread(_levels, client, slug, plan)
         except MiddlewareAPIError as exc:

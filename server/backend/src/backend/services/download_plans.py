@@ -10,6 +10,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from sources import FREE_LEVEL
 from backend.services.collection_cookies import uses_cookies
 from backend.services.playback import resolve_playback
 from backend.services.local_media_profile_sites import format_for_site
@@ -30,7 +31,6 @@ from backend.services.source_options import ytdlp_source_options
 from backend.services.throttle_guard import refuses_throttled
 from backend.services.unplayable_formats import downloads_unplayable_formats
 from backend.services.movies import update_movie_extra_source_metadata
-from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.local_media_profile_types import LocalMediaProfileSubtitleMode, LocalMediaProfileType, PreferredFormat, keeps_tracks
 from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path, resolve_video_output_path
 from config import get_settings
@@ -143,7 +143,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
             source = resolve_download_source(playback.url, preferred_format=preferred, audio_only=audio_only, remux_video_to_mp4=remux, cancellation=tracker.is_canceled)
     elif episode is not None:
         video_url, audio_url = episode.video_url, episode.audio_url
-        member_only = episode.collection.membership_level != DwMembershipLevel.FREE.value
+        member_only = episode.collection.membership_level != FREE_LEVEL
         page_url = episode.sharing_url
         session.rollback()
         refreshed = False

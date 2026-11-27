@@ -29,11 +29,13 @@ from backend.services.check_frequency import joins_regular_checks, quick_check_p
 from backend.utils.helpers import slugify
 from backend.services.source_options import ytdlp_call_options
 from sources import (
-    Feature, LinkKind, QuickCheckCollection, ResolvedLink, Site, Source, UnknownSourceError, all_sources, get_source, named_sites, names_a_podcast, source_site, sources_for,
+    FREE_LEVEL, HIGHEST_LEVEL, MembershipLevel, Feature, LinkKind, QuickCheckCollection, ResolvedLink, Site, Source, UnknownSourceError, all_sources, get_source, named_sites, names_a_podcast, source_site, sources_for,
 )
 
 
 logger = logging.getLogger(__name__)
+
+_HIGHEST = MembershipLevel(HIGHEST_LEVEL, "Highest allowed", "Whatever the membership you are signed in with allows")
 
 
 class LinkNotRecognisedError(LookupError):
@@ -87,6 +89,11 @@ def lookup_show_details(access: Access, source: Source, url: str) -> CollectionD
         logger.info("Could not tell whether %s is music: %s", url, exc)
         music = None
     author = details.author_name or details.title
+    site = source_site(details.url, source.id)
+    levels = (_HIGHEST, *source.membership_levels) if source.has(Feature.MEMBERSHIP_LEVELS) else ()
+    probable = CollectionType(details.probable_type) if details.probable_type else (
+        CollectionType.PODCAST if names_a_podcast(details.title) else CollectionType.SERIES
+    )
     return CollectionDetailsAPIRead(
         source_key=source.id,
         slug=details.slug,
@@ -96,12 +103,14 @@ def lookup_show_details(access: Access, source: Source, url: str) -> CollectionD
         author_name=author,
         author_slug=slugify(author) or details.slug,
         thumbnail_landscape_path=details.image_url,
-        probable_collection_type=(
-            CollectionType.MUSIC if music else CollectionType.PODCAST if names_a_podcast(details.title) else CollectionType.SERIES
-        ),
+        author_headshot_path=details.author_image_url,
+        probable_collection_type=CollectionType.MUSIC if music else probable,
         music_reason=music,
         seasons=details.seasons,
-        audio_only=source_site(details.url, source.id).audio_only,
+        audio_only=site.audio_only,
+        show_numbers=site.show_numbers,
+        membership_level=(details.membership_level or FREE_LEVEL) if levels else FREE_LEVEL,
+        membership_levels=levels,
         kind=collection_kind(details.url, source.id),
         list_type=details.list_type,
         seasons_plans={type_.value: _seasons_plan(source, details.url, type_) for type_ in CollectionType},

@@ -92,7 +92,7 @@ def test_startup_worker_validation_reports_too_fast_cron():
         if error.field_path == ("new_episode_schedule", "find_episodes_cron")
     ]
     assert len(matching) == 1
-    assert "requires at least 120 seconds" in str(matching[0])
+    assert "at most every 120 seconds" in str(matching[0])
 
 
 def test_disabled_worker_cron_skips_minimum_interval_validation():
@@ -134,7 +134,7 @@ def test_settings_api_rejects_too_fast_worker_cron_on_the_cron_field():
     )
     values["newEpisodeSchedule"]["findEpisodesCron"] = "* * * * *"
 
-    with pytest.raises(ValidationError, match="requires at least 120 seconds") as exc_info:
+    with pytest.raises(ValidationError, match="at most every 120 seconds") as exc_info:
         SettingsAPIUpdate.model_validate({
             "values": values,
             "changedFields": ["newEpisodeSchedule.findEpisodesCron"],
@@ -181,7 +181,7 @@ def test_settings_api_rejects_invalid_worker_cron_on_the_cron_field():
     assert matching_errors[0]["type"] == "cron_expression_invalid"
 
 
-def test_settings_api_revalidates_crons_when_slow_delay_is_increased():
+def test_the_daily_wire_request_pacing_does_not_limit_how_often_tasks_run():
     from backend.api.models.settings import SettingsAPIUpdate, SettingsValues
 
     values = SettingsValues.from_app_settings(AppSettings(timezone="UTC")).model_dump(
@@ -190,11 +190,10 @@ def test_settings_api_revalidates_crons_when_slow_delay_is_increased():
     )
     values["dwTimeout"]["minSlowRequestMs"] = 15 * 60 * 1000
 
-    with pytest.raises(ValidationError, match="requires at least 900 seconds"):
-        SettingsAPIUpdate.model_validate({
-            "values": values,
-            "changedFields": ["dwTimeout.minSlowRequestMs"],
-        })
+    SettingsAPIUpdate.model_validate({
+        "values": values,
+        "changedFields": ["dwTimeout.minSlowRequestMs"],
+    })
 
 
 def test_existing_startup_cron_issue_does_not_block_unrelated_save():

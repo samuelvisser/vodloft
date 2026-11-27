@@ -13,6 +13,7 @@ from typing import Literal, Optional
 from sqlalchemy import and_, exists, false, func, or_, select
 from sqlalchemy.orm import object_session, Session, joinedload
 
+from sources import FREE_LEVEL, HIGHEST_LEVEL
 from backend.db.models import DownloadProfile, Episode, LocalMediaProfileBase
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.db.models.stream_profile import StreamProfileBase
@@ -21,7 +22,6 @@ from backend.services import users
 from backend.services.episode_filters import filters_allow_new_episode
 from backend.services.errors import NotFoundError, ServiceError
 from backend.services.sites import collection_site, with_main_type
-from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.local_media_profile_types import PREFERRED_FORMAT_HEIGHTS, PreferredFormat
@@ -662,8 +662,8 @@ def get_source_stream_url(
     """Ask the episode's Source for its current stream URL."""
     source = source or get_source(episode.source_key)
     members_only = profile.collection.membership_level not in {
-        DwMembershipLevel.FREE.value,
-        DwMembershipLevel.HIGHEST_ALLOWED.value,
+        FREE_LEVEL,
+        HIGHEST_LEVEL,
     } and _owner_may_use_members_only_media(profile)
     try:
         media = source.episode_media(slug=episode.slug, members_only=members_only, interactive=True)

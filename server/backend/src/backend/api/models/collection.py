@@ -9,7 +9,6 @@ from backend.api.models.base import RequestBase, ResponseBase, response_model_co
 from backend.api.models.custom_metadata import CustomMetadataResponseBase
 from backend.api.models.profile_bulk import BulkChangeIn, BulkChangesIn, BulkFieldSummaryRead, BulkSummaryRead
 from backend.api.models.source import NamesAPIRead, SiteAPIRead, SourcedResponse
-from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.collection_contracts import collection_contract
 from backend.types.collection_health_types import HealthIssueKind
 from backend.types.collection_types import CheckFrequency, CollectionType, CookiesMode, EpisodeIdentifier, EpisodeOrder
@@ -48,7 +47,7 @@ class CollectionAPICreate(_CollectionAPIBaseIn):
     sharing_url: str
     slug: str
     source_key: str = Field(min_length=1)
-    membership_level: DwMembershipLevel
+    membership_level: str = Field(min_length=1)
     type: CollectionType
     episode_identifier: EpisodeIdentifier
     author_slug: str
@@ -210,7 +209,7 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     id: int
     uuid: str
     slug: str
-    membership_level: Optional[Union[DwMembershipLevel, str]] = None
+    membership_level: Optional[str] = None
     type: Union[CollectionType, str]
     episode_identifier: Union[EpisodeIdentifier, str]
     episode_order: EpisodeOrder

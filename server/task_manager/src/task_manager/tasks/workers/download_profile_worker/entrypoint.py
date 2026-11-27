@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Optional
 
 from config import get_settings
+from config.settings.cron_validation import MIN_WORKER_CRON_INTERVAL_MS
 from controller.db_utils import db_session
 from backend.utils.custom_index import CustomIndexNotReadyError
 from task_manager.tasks.helpers.custom_index_readiness import request_missing_index_repair
@@ -23,7 +24,7 @@ from .service import run_download_profile_worker
 @on_cron(
     cron=get_settings().download_settings.verify_downloads_cron,
     enabled=get_settings().download_settings.verify_downloads_cron_enabled,
-    minimum_interval_ms=get_settings().dw_timeout.min_slow_request_ms,
+    minimum_interval_ms=MIN_WORKER_CRON_INTERVAL_MS,
     resource_type="download_profile",
     resource_id=0,
     coalesce=True,

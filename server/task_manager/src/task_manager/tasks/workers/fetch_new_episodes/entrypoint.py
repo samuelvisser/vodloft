@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Optional
 
 from config import get_settings
+from config.settings.cron_validation import MIN_WORKER_CRON_INTERVAL_MS
 from controller.db_utils import db_session
 from task_manager.scheduler.registry import task, on_cron, on_event
 from task_manager.scheduler.results import TaskResult
@@ -20,7 +21,7 @@ from .service import run_fetch_new_episodes
 @on_cron(
     cron=get_settings().new_episode_schedule.find_episodes_cron,
     enabled=get_settings().new_episode_schedule.find_episodes_cron_enabled,
-    minimum_interval_ms=get_settings().dw_timeout.min_slow_request_ms,
+    minimum_interval_ms=MIN_WORKER_CRON_INTERVAL_MS,
     resource_type="collection",
     resource_id=None,
     coalesce=True,

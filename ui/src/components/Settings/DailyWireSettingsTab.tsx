@@ -85,7 +85,7 @@ export default function DailyWireSettingsTab({draft, updateDraft, environmentVar
 
             <SettingsDisclosure
                 title="Request pacing"
-                description="Rate-control thresholds used when VODLoft talks to Daily Wire."
+                description="Rate-control thresholds used when VODLoft talks to The Daily Wire."
             >
                 <DurationField
                     id="settings-fast-request-delay"

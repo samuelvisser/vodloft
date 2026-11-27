@@ -261,6 +261,12 @@ class CollectionDetailsSeasonAPIRead(ResponseBase):
     name: str
 
 
+class MembershipLevelAPIRead(ResponseBase):
+    key: str
+    name: str
+    help: str
+
+
 class CollectionDetailsAPIRead(ResponseBase):
     """A collection at a Source with listed episodes, shaped like the fields of a new collection."""
 
@@ -272,6 +278,7 @@ class CollectionDetailsAPIRead(ResponseBase):
     author_name: str
     author_slug: str
     thumbnail_landscape_path: Optional[str] = None
+    author_headshot_path: Optional[str] = None
     probable_collection_type: CollectionType
     music_reason: Optional[str] = None
     """Why the collection was taken for music, when it was."""
@@ -285,6 +292,12 @@ class CollectionDetailsAPIRead(ResponseBase):
     list_type: Optional[str] = None
     """Which of its Site's types of list the link is, such as an album or a playlist on SoundCloud, where its link
     doesn't tell."""
+    show_numbers: bool = False
+    """The collection's Site numbers its episodes itself, such as The Daily Wire, so it is best numbered by them."""
+    membership_level: str
+    """The membership level to list the collection with unless the user picks another."""
+    membership_levels: list[MembershipLevelAPIRead] = Field(default_factory=list)
+    """The levels the user can pick from, for a Source with membership levels; empty for the others."""
     seasons_plans: dict[str, str] = Field(default_factory=dict)
     """What the collection's seasons will be once it is added as each type, in words, as its Site's defaults make
     them: each list a season, what goes in the channel season, or a season per upload year."""

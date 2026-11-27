@@ -59,8 +59,12 @@ class WorkerCronExpressionError(ValueError):
         super().__init__(f"{setting_name} must use a valid five-part cron expression")
 
 
+MIN_WORKER_CRON_INTERVAL_MS = 2 * 60 * 1_000
+"""How often, at most, a scheduled task runs. Each Source paces its own requests on top of this."""
+
+
 class WorkerCronIntervalError(ValueError):
-    """A worker cron can execute more often than the Daily Wire slow-request delay."""
+    """A worker cron can run more often than VODLoft runs a scheduled task."""
 
     def __init__(
         self,
@@ -76,7 +80,7 @@ class WorkerCronIntervalError(ValueError):
         self.required_seconds = required_seconds
         super().__init__(
             f"{setting_name} runs as often as every {minimum_seconds:g} seconds, "
-            f"but Daily Wire slow-request delay requires at least {required_seconds:g} seconds"
+            f"but VODLoft runs a scheduled task at most every {required_seconds:g} seconds"
         )
 
 
@@ -438,10 +442,7 @@ def worker_cron_validation_errors(
     settings: object,
 ) -> tuple[WorkerCronExpressionError | WorkerCronIntervalError, ...]:
     """Return every active worker cron problem for a settings model."""
-    min_slow_request_ms = int(
-        _setting_value(settings, ("dw_timeout", "min_slow_request_ms"))
-    )
-    required_seconds = max(0, min_slow_request_ms) / 1000.0
+    required_seconds = MIN_WORKER_CRON_INTERVAL_MS / 1000.0
     errors: list[WorkerCronExpressionError | WorkerCronIntervalError] = []
 
     for spec in worker_cron_specs(settings):
