@@ -19,10 +19,11 @@ from backend.db.models import (
     Collection, NotificationDelivery, NotificationDestination, NotificationRule, PushSubscription, PushVapidKey, User,
 )
 from backend.db.models import NotificationEvent as EventRow
+from backend.services.attention import open_state, resolve_state
 from backend.services.users import access_of, is_administrator
+from backend.types.happenings import DEFINITIONS, Happening, Tone
 
 from .destinations import ACTION_KINDS, MEDIA_SERVERS, Kind, config_of, record_attempt
-from .events import DEFINITIONS, Event, emit
 from .push import send_push, vapid_key
 from .senders import Outcome, call_webhook, refresh_media_server, run_script, send_message, tone_of, webhook_payload
 
@@ -41,7 +42,7 @@ WEBHOOK_RETRY_SECONDS = (30, 60, 120)
 """A webhook is tried again three times over a few minutes before it counts as failed."""
 _DUE_PER_PASS = 200
 _TITLES_IN_A_MESSAGE = 10
-_BATCHED_EVENTS = frozenset({Event.EPISODE_DOWNLOADED, Event.EPISODE_REPLACED, Event.NEW_EPISODES})
+_BATCHED_EVENTS = frozenset({Happening.EPISODE_DOWNLOADED, Happening.EPISODE_REPLACED, Happening.NEW_EPISODES})
 
 
 def _now() -> datetime:
@@ -59,15 +60,15 @@ def next_summary_at(summary_time: str, now: datetime) -> datetime:
 
 
 def _rule_wants(session: Session, rule: NotificationRule, event: EventRow) -> bool:
-    definition = DEFINITIONS.get(Event(event.event))
+    definition = DEFINITIONS.get(Happening(event.event))
     if definition is None:
         return False
-    if rule.event == Event.EVERYTHING:
-        if rule.delivery != "daily" or event.event == Event.QUICK_DOWNLOAD_FINISHED and not rule.personal:
+    if rule.event == Happening.EVERYTHING:
+        if rule.delivery != "daily" or event.event == Happening.QUICK_DOWNLOAD_FINISHED and not rule.personal:
             return False
     elif rule.event != event.event:
         return False
-    if event.event == Event.QUICK_DOWNLOAD_FINISHED:
+    if event.event == Happening.QUICK_DOWNLOAD_FINISHED:
         return rule.personal and event.user_id == rule.user_id
     if rule.personal and not definition.personal:
         return False
@@ -122,10 +123,10 @@ def enqueue(session: Session, event: EventRow) -> None:
     rules = session.scalars(
         select(NotificationRule).where(
             NotificationRule.enabled.is_(True),
-            or_(NotificationRule.event == event.event, NotificationRule.event == Event.EVERYTHING.value),
+            or_(NotificationRule.event == event.event, NotificationRule.event == Happening.EVERYTHING.value),
         ).order_by(NotificationRule.position, NotificationRule.id)
     )
-    definition = DEFINITIONS[Event(event.event)]
+    definition = DEFINITIONS[Happening(event.event)]
     for rule in rules:
         if not _rule_wants(session, rule, event) or _repeated(session, rule, event):
             continue
@@ -133,7 +134,7 @@ def enqueue(session: Session, event: EventRow) -> None:
             at, group = next_summary_at(rule.summary_time, now), f"daily:{rule.id}"
         elif rule.delivery == "grouped" and event.collection_id is not None:
             at, group = now + GROUPED_WINDOW, f"collection:{rule.id}:{event.collection_id}:{event.event}"
-        elif Event(event.event) in _BATCHED_EVENTS and event.collection_id is not None:
+        elif Happening(event.event) in _BATCHED_EVENTS and event.collection_id is not None:
             at, group = now + DOWNLOAD_GROUPING, f"collection:{rule.id}:{event.collection_id}:{event.event}"
         else:
             at, group = now, None
@@ -187,14 +188,14 @@ def compose(events: list[EventRow], *, daily: bool) -> Message:
     if daily:
         counts: dict[str, int] = defaultdict(int)
         for event in events:
-            counts[DEFINITIONS[Event(event.event)].when] += 1
+            counts[DEFINITIONS[Happening(event.event)].when] += 1
         summary = "; ".join(f"{count}× {when}" for when, count in counts.items())
         return Message("VODLoft daily summary", f"{summary}\n" + "\n".join(lines), "/", "info", None)
     collection = (first.data or {}).get("collection")
     noun = {
-        Event.EPISODE_DOWNLOADED: "new downloads", Event.EPISODE_REPLACED: "downloads replaced by a better version",
-        Event.NEW_EPISODES: "new episodes found",
-    }.get(Event(first.event), "events")
+        Happening.EPISODE_DOWNLOADED: "new downloads", Happening.EPISODE_REPLACED: "downloads replaced by a better version",
+        Happening.NEW_EPISODES: "new episodes found",
+    }.get(Happening(first.event), "events")
     title = f"{len(events)} {noun}" + (f" in {collection}" if collection else "")
     return Message(title, "\n".join(lines), first.url, tone, f"group-{first.id}")
 
@@ -259,8 +260,6 @@ def _send(session: Session, batch: _Batch) -> Outcome | str:
         return Outcome(False, "VODLoft cannot read this destination's settings. Enter them again")
     kind = Kind(destination.kind)
     if kind == Kind.APPRISE:
-        from .events import Tone
-
         return send_message(config, title=message.title, body=message.body, tone=Tone(message.tone))
     if kind in MEDIA_SERVERS:
         folders = sorted({str((event.data or {}).get("folder")) for event in batch.events if (event.data or {}).get("folder")})
@@ -299,15 +298,17 @@ def _record(session: Session, batch: _Batch, outcome: Outcome | str, now: dateti
             delivery.next_attempt_at = now + timedelta(seconds=min(600, 15 * 2 ** (delivery.attempts - 1)))
         else:
             delivery.status = "FAILED"
-    if (
-        destination is not None and Kind(destination.kind) in ACTION_KINDS and not outcome.delivered
-        and any(delivery.status == "FAILED" for delivery in deliveries)
-    ):
-        # A failing action is a problem, so the default "a task keeps failing" rule tells administrators.
-        emit(
-            session, Event.TASK_FAILING, title=f"{destination.name} failed",
-            body=outcome.error or "The action failed", url="/settings?tab=notifications",
-            dedupe_key=f"action:{destination.id}",
+    if destination is None:
+        return
+    subject = f"destination:{destination.id}"
+    if outcome.delivered:
+        resolve_state(session, Happening.DESTINATION_FAILING, subject, now=now)
+    elif any(delivery.status == "FAILED" for delivery in deliveries):
+        # A failing destination stays a problem until its next call succeeds. While it is open, failing again sends
+        # nothing, so a broken Apprise service does not try to tell about itself through itself.
+        open_state(
+            session, Happening.DESTINATION_FAILING, subject, title=f"{destination.name} keeps failing",
+            body=outcome.error or "The action failed", url="/settings?tab=notifications", now=now,
         )
 
 

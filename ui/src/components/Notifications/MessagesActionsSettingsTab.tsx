@@ -53,7 +53,7 @@ export default function MessagesActionsSettingsTab() {
             </SettingsSection>
             <SettingsSection
                 title="Rules"
-                description="Each rule says what happens, in which Collections, and where it goes. The same problem is sent again only after a day."
+                description="Each rule says what happens, in which Collections, and where it goes. The same problem is sent at most once a day, and one that stays, such as a full disk, only once until it is fixed."
                 bodyClassName="notif-panel-body"
             >
                 <Rules rules={rules.data} events={events.data} destinations={destinations.data} personal={false}/>

@@ -17,7 +17,7 @@ from backend.db.models import NotificationEvent as EventRow
 
 from .apprise_services import InvalidDestination, parse_destination
 from .destinations import Kind, script_path
-from .events import DEFINITIONS, Event, Tone
+from backend.types.happenings import DEFINITIONS, Happening, Tone
 from .paths import holds, mapped_path
 
 logger = logging.getLogger(__name__)
@@ -214,7 +214,7 @@ def test_destination(destination_kind: Kind, config: dict[str, Any], sample: Eve
     if destination_kind in (Kind.JELLYFIN, Kind.EMBY):
         return _request("GET", f"{config['address']}/System/Info", headers={"X-Emby-Token": config["api_key"]})
     event = sample or EventRow(
-        event=Event.EPISODE_DOWNLOADED.value, title="VODLoft test", body="A test from VODLoft", data={},
+        event=Happening.EPISODE_DOWNLOADED.value, title="VODLoft test", body="A test from VODLoft", data={},
     )
     if destination_kind == Kind.WEBHOOK:
         return call_webhook(config, {**webhook_payload(event), "test": True})
@@ -222,7 +222,7 @@ def test_destination(destination_kind: Kind, config: dict[str, Any], sample: Eve
 
 
 def tone_of(event: str) -> Tone:
-    definition = DEFINITIONS.get(Event(event)) if event in Event._value2member_map_ else None
+    definition = DEFINITIONS.get(Happening(event)) if event in Happening._value2member_map_ else None
     return definition.tone if definition else Tone.INFO
 
 

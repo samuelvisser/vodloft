@@ -8,7 +8,7 @@ from pydantic import Field, StringConstraints, model_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.services.notifications.destinations import Kind
-from backend.services.notifications.events import Event
+from backend.types.happenings import Happening, Severity, Tone
 
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]
 SummaryTime = Annotated[str, StringConstraints(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")]
@@ -90,7 +90,7 @@ class DestinationTest(RequestBase):
 
 class RuleInput(RequestBase):
     enabled: bool = True
-    event: Event
+    event: Happening
     collection_scope: Literal["any", "chosen", "added"] = "any"
     collection_ids: list[int] = Field(default_factory=list, max_length=500)
     push: bool = False
@@ -100,7 +100,7 @@ class RuleInput(RequestBase):
 
     @model_validator(mode="after")
     def _sensible(self):
-        if self.event == Event.EVERYTHING and self.delivery != "daily":
+        if self.event == Happening.EVERYTHING and self.delivery != "daily":
             raise ValueError("Everything that happens only goes out in a daily summary")
         if self.collection_scope == "chosen" and not self.collection_ids:
             raise ValueError("Choose at least one Collection")
@@ -124,9 +124,12 @@ class PushEndpointInput(RequestBase):
 
 # ---------- Responses ----------
 class EventRead(ResponseBase):
-    event: str
+    """A kind a rule can choose, from the happenings registry."""
+
+    event: Happening = Field(validation_alias="happening")
     when: str
-    tone: str
+    severity: Severity
+    tone: Tone
     collections: bool
     actions: bool
     personal: bool

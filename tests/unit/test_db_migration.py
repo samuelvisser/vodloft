@@ -33,7 +33,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "c41e7d09b2a8"
+HEAD_REVISION = "bcec37451c0d"
 EACH_SOURCE_ITS_OWN_CHOICE_REVISION = "a79d0f6c0f17"
 
 
@@ -426,6 +426,8 @@ def test_0_7_0_migration_keeps_what_existing_profiles_and_episodes_did(migration
             "download_failed", "sign_in_needed", "disk_almost_full", "task_failing", "update_available", "daily_summary",
             # Added for creators in 0.10.0.
             "new_lists_found",
+            # Added when failing destinations became a problem of their own.
+            "destination_failing",
         ]
 
 
@@ -1514,7 +1516,7 @@ def test_0_10_0_installations_with_notification_rules_get_the_new_lists_rule(mig
     with engine.connect() as connection:
         before = connection.execute(text("SELECT default_key FROM notification_rules ORDER BY position")).scalars().all()
 
-    command.upgrade(config, HEAD_REVISION)
+    command.upgrade(config, "4c7e19a2b6d0")
 
     with engine.connect() as connection:
         rules = connection.execute(text(
@@ -1928,3 +1930,33 @@ def test_existing_tables_keep_their_rows_and_never_give_a_deleted_id_again(migra
             "SELECT name, sql FROM sqlite_master WHERE type = 'index' ORDER BY name"
         ).all() == indexes_before
         assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+
+
+def test_events_get_their_severity_and_failing_destinations_their_default_rule(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "c41e7d09b2a8")
+    with engine.begin() as connection:
+        for event in ("disk_almost_full", "new_lists_found", "episode_downloaded"):
+            connection.execute(text(
+                "INSERT INTO notification_events (event, occurred_at, title, body, data) "
+                "VALUES (:event, '2026-11-27 10:00:00', 'x', '', '{}')"
+            ), {"event": event})
+        connection.execute(text(
+            "INSERT INTO notification_rules (position, personal, default_key, enabled, event, collection_scope, "
+            "collection_ids, push, destination_ids, delivery, summary_time) "
+            "VALUES (4, 0, 'task_failing', 1, 'task_failing', 'any', '[]', 1, '[]', 'now', '08:00')"
+        ))
+
+    command.upgrade(config, "bcec37451c0d")
+
+    with engine.connect() as connection:
+        assert dict(connection.execute(text("SELECT event, severity FROM notification_events")).all()) == {
+            "disk_almost_full": "problem", "new_lists_found": "needs_you", "episode_downloaded": "news",
+        }
+        assert connection.execute(text(
+            "SELECT event, push, position = (SELECT max(position) FROM notification_rules) FROM notification_rules "
+            "WHERE default_key = 'destination_failing'"
+        )).one() == ("destination_failing", 1, 1)

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import NotificationRule
 
-from .events import Event
+from backend.types.happenings import Happening
 
 
 class RuleNotFound(LookupError):
@@ -18,7 +18,7 @@ class RuleNotFound(LookupError):
 @dataclass(frozen=True)
 class DefaultRule:
     key: str
-    event: Event
+    event: Happening
     enabled: bool = True
     delivery: str = "now"
 
@@ -26,19 +26,20 @@ class DefaultRule:
 # Out of the box: problems, and choices a collection asks for, pushed to administrators, and the daily summary one
 # switch away.
 DEFAULT_RULES: tuple[DefaultRule, ...] = (
-    DefaultRule("download_failed", Event.DOWNLOAD_FAILED),
-    DefaultRule("sign_in_needed", Event.SIGN_IN_NEEDED),
-    DefaultRule("disk_almost_full", Event.DISK_ALMOST_FULL),
-    DefaultRule("task_failing", Event.TASK_FAILING),
-    DefaultRule("update_available", Event.UPDATE_AVAILABLE),
-    DefaultRule("new_lists_found", Event.NEW_LISTS_FOUND),
-    DefaultRule("daily_summary", Event.EVERYTHING, enabled=False, delivery="daily"),
+    DefaultRule("download_failed", Happening.DOWNLOAD_FAILED),
+    DefaultRule("sign_in_needed", Happening.SIGN_IN_NEEDED),
+    DefaultRule("disk_almost_full", Happening.DISK_ALMOST_FULL),
+    DefaultRule("task_failing", Happening.TASK_FAILING),
+    DefaultRule("destination_failing", Happening.DESTINATION_FAILING),
+    DefaultRule("update_available", Happening.UPDATE_AVAILABLE),
+    DefaultRule("new_lists_found", Happening.NEW_LISTS_FOUND),
+    DefaultRule("daily_summary", Happening.EVERYTHING, enabled=False, delivery="daily"),
 )
 
 # A person's own page starts with their Quick downloads on, and the Collections they added off.
-PERSONAL_DEFAULTS: tuple[tuple[str, Event, bool, str], ...] = (
-    ("my_quick_downloads", Event.QUICK_DOWNLOAD_FINISHED, True, "any"),
-    ("my_collections", Event.EPISODE_DOWNLOADED, False, "added"),
+PERSONAL_DEFAULTS: tuple[tuple[str, Happening, bool, str], ...] = (
+    ("my_quick_downloads", Happening.QUICK_DOWNLOAD_FINISHED, True, "any"),
+    ("my_collections", Happening.EPISODE_DOWNLOADED, False, "added"),
 )
 
 
@@ -104,7 +105,7 @@ def shared_rules(session: Session) -> list[NotificationRule]:
 @dataclass
 class RuleValues:
     enabled: bool
-    event: Event
+    event: Happening
     collection_scope: str
     collection_ids: list[int] = field(default_factory=list)
     push: bool = False

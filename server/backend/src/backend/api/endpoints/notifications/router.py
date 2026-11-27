@@ -27,7 +27,7 @@ from backend.app import db_session
 from backend.db.core import run_write_transaction
 from backend.security.access import Access, Area, Level
 from backend.security.deps import SignedIn, requires
-from backend.services.notifications import EVENTS
+from backend.types.happenings import HAPPENINGS
 from backend.services.notifications.destinations import available_scripts, scripts_folder
 from backend.services.notifications.senders import SCRIPT_VARIABLES
 
@@ -44,7 +44,7 @@ signed_in = SignedIn()
 # ---------- Settings › Messages and actions ----------
 @router.get("/events", response_model=list[EventRead])
 def notification_events():
-    return EVENTS
+    return HAPPENINGS
 
 
 @router.get("/services", response_model=list[AppriseServiceRead])
@@ -150,7 +150,7 @@ def account_notifications(access: Access = Depends(signed_in)):
 
 @account_router.get("/events", response_model=list[EventRead])
 def account_notification_events(access: Access = Depends(signed_in)):
-    return [definition for definition in EVENTS if definition.personal]
+    return [definition for definition in HAPPENINGS if definition.personal]
 
 
 @account_router.post("/rules", response_model=RuleRead, status_code=status.HTTP_201_CREATED)

@@ -27,6 +27,7 @@ import {lookupSteps} from './progressPlan'
 import {PlanSchema} from '../types/schemas/progress_plan'
 import type {ProgressStep} from '../types/progress'
 import {SitesSettingsReadSchema, type SitesSettingsRead} from '../types/schemas/siteSettings'
+import {AttentionReadSchema, type AttentionRead} from '../types/schemas/attention'
 import {
     CreatorEpisodePageReadSchema, CreatorOfferingsSchema, CreatorPageReadSchema, CreatorReadSchema, type CreatorPageRead, type CreatorRead,
     CollectionCreatorMatchSchema, type CollectionCreatorMatch,
@@ -779,6 +780,15 @@ export async function putOffApiKeyNotes(action: 'later' | 'never'): Promise<void
         body: JSON.stringify({action}),
     })
     if (!response.ok) throw await responseError(response)
+}
+
+/** What needs attention on Home that VODLoft stores until it is fixed, such as a destination that keeps failing. */
+export function useAttention() {
+    return useQuery<AttentionRead[], Error, AttentionRead[], readonly ['attention']>({
+        queryKey: ['attention'] as const,
+        queryFn: ({signal}) => fetchParsed(`${apiUrl()}/attention`, AttentionReadSchema.array(), signal),
+        refetchInterval: 60_000,
+    })
 }
 
 export function useSourceProblems() {

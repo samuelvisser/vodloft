@@ -24,7 +24,7 @@ from backend.db.models import (
     NotificationRule,
     PushSubscription,
 )
-from backend.services.notifications import DEFINITIONS, Event
+from backend.types.happenings import DEFINITIONS, Happening
 from backend.services.notifications.apprise_services import InvalidDestination, build_url, service_catalog
 from backend.services.notifications.destinations import (
     DestinationNotFound,
@@ -184,7 +184,7 @@ def remove_destination(s: Session, destination_id: int) -> None:
 def _sample(s: Session) -> NotificationEvent | None:
     """The newest download, so a script or webhook test gets real values."""
     return s.scalar(
-        select(NotificationEvent).where(NotificationEvent.event == Event.EPISODE_DOWNLOADED.value)
+        select(NotificationEvent).where(NotificationEvent.event == Happening.EPISODE_DOWNLOADED.value)
         .order_by(NotificationEvent.id.desc()).limit(1)
     )
 
@@ -229,7 +229,7 @@ def services() -> list:
 
 def webhook_example(s: Session) -> dict[str, Any]:
     sample = _sample(s) or NotificationEvent(
-        event=Event.EPISODE_DOWNLOADED.value, title="Episode downloaded: An example episode",
+        event=Happening.EPISODE_DOWNLOADED.value, title="Episode downloaded: An example episode",
         body="The Example Show", occurred_at=datetime.now(timezone.utc), url="/collection/example/episode/example",
         data={"collection": "The Example Show", "episode": "An example episode",
               "filePath": "/downloads/The Example Show/An example episode.mp4", "folder": "/downloads/The Example Show"},
@@ -239,7 +239,7 @@ def webhook_example(s: Session) -> dict[str, Any]:
 
 # ---------- Rules ----------
 def _values(s: Session, body: RuleInput, *, personal: bool) -> RuleValues:
-    definition = DEFINITIONS[Event(body.event)]
+    definition = DEFINITIONS[Happening(body.event)]
     if personal and not definition.personal:
         raise ServiceError("You cannot choose this on your own page", field="event")
     if body.collection_scope == "added" and not personal:
@@ -258,7 +258,7 @@ def _values(s: Session, body: RuleInput, *, personal: bool) -> RuleValues:
     if not body.push and not destination_ids and body.enabled:
         raise ServiceError("Choose where it goes", field="destinationIds" if not personal else "push")
     return RuleValues(
-        enabled=body.enabled, event=Event(body.event), collection_scope=body.collection_scope,
+        enabled=body.enabled, event=Happening(body.event), collection_scope=body.collection_scope,
         collection_ids=body.collection_ids, push=body.push if not personal else True, destination_ids=destination_ids,
         delivery=body.delivery, summary_time=body.summary_time,
     )

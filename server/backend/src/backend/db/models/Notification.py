@@ -69,6 +69,9 @@ class NotificationEvent(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     event: Mapped[str] = mapped_column(String(32), index=True)
+    severity: Mapped[str] = mapped_column(
+        String(16), comment="problem, needs_you or news: its kind's severity when it happened",
+    )
     occurred_at: Mapped[datetime] = mapped_column(UTCDateTime())
     collection_id: Mapped[Optional[int]] = mapped_column(ForeignKey("collections.id", ondelete="SET NULL"))
     user_id: Mapped[Optional[int]] = mapped_column(

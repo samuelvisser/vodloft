@@ -32,6 +32,7 @@ from .users import user_router
 from .imports import import_router
 from .assets import assets_router
 from .health import health_router
+from .attention import attention_router
 from .regex import regex_router
 from .notifications import account_router as account_notification_router, notification_router, push_router
 

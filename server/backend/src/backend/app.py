@@ -333,6 +333,7 @@ def create_app() -> FastAPI:
         import_router,
         assets_router,
         health_router,
+        attention_router,
         regex_router,
         notification_router,
         account_notification_router,
@@ -348,6 +349,7 @@ def create_app() -> FastAPI:
     app.include_router(iptv_router)
     app.include_router(webdav_router)
     app.include_router(health_router, prefix="/api")
+    app.include_router(attention_router, prefix="/api")
 
     # Protected API endpoints (shielded by middleware above)
     app.include_router(dailywire_router, prefix="/api")
