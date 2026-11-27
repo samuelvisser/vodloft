@@ -34,7 +34,7 @@ VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
 VODLOFT_0_10_0_REVISION = "4c7e19a2b6d0"
-HEAD_REVISION = "927c19d4a79c"
+HEAD_REVISION = "069fcefa4bc4"
 EACH_SOURCE_ITS_OWN_CHOICE_REVISION = "a79d0f6c0f17"
 
 
@@ -1585,7 +1585,7 @@ def test_dw_episode_number_becomes_source_number_in_episodes_and_saved_templates
             "VALUES (5, 'p', 'P', :template, 'format_1080p', '[]', 'collection')"
         ), {"template": template})
 
-    command.upgrade(config, HEAD_REVISION)
+    command.upgrade(config, VODLOFT_0_10_0_REVISION)
 
     with engine.connect() as connection:
         assert connection.execute(text("SELECT output_template FROM local_media_profiles")).scalar_one() == (
@@ -1929,6 +1929,31 @@ def test_existing_tables_keep_their_rows_and_never_give_a_deleted_id_again(migra
             "SELECT name, sql FROM sqlite_master WHERE type = 'index' ORDER BY name"
         ).all() == indexes_before
         assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+
+
+def test_source_number_is_called_site_number_in_saved_templates(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "927c19d4a79c")
+    template = "/downloads/{{ source_number }} {{ title | default('source_number') }} source_number.ext"
+    with engine.begin() as connection:
+        connection.execute(text(
+            "INSERT INTO local_media_profiles (id, slug, name, output_template, preferred_format, video_codecs, type) "
+            "VALUES (5, 'p', 'P', :template, 'format_1080p', '[]', 'collection')"
+        ), {"template": template})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT output_template FROM local_media_profiles")).scalar_one() == (
+            "/downloads/{{ site_number }} {{ title | default('source_number') }} source_number.ext"
+        )
+
+    command.downgrade(config, "927c19d4a79c")
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT output_template FROM local_media_profiles")).scalar_one() == template
 
 
 def test_collections_no_longer_keep_episode_number_counters(migration_database):

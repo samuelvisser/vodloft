@@ -748,6 +748,14 @@ class VideoDetails:
     """The video's chapters, for a Source with ``Feature.CHAPTERS``: empty when it has none, and None when the
     listing did not say, so ``video_details`` has to be asked."""
 
+    @property
+    def site_number(self) -> str | None:
+        """The episode's number as its Site writes it, on every Site that numbers its episodes: ``number_text`` where
+        the Source has one, such as 2460.10 at The Daily Wire, and otherwise ``episode_number``."""
+        if self.number_text:
+            return self.number_text
+        return str(self.episode_number) if self.episode_number is not None else None
+
 
 @dataclass(frozen=True)
 class ItemRef:

@@ -320,7 +320,7 @@ For example, to keep only the part of a title before ` | `, and leave the title 
 | `episode_site_id` | The id the site gives the episode, such as a YouTube video id |
 | `episode_uploader` | Who uploaded the episode, when the site says; empty otherwise |
 | `duration_seconds` | Episode duration in whole seconds |
-| `source_number` | The episode number as its site writes it, such as `2460.10` on The Daily Wire; empty on most sites |
+| `site_number` | The episode's number as its site writes it, such as `2460.10` on The Daily Wire or `12` on NPO Start; empty on sites that do not number their episodes |
 | `episode_type` | `ep` for a normal episode on every site; other types depend on the site: `ep-extra`, `aux` and `trailer` on The Daily Wire, `short` and `livestream` on YouTube |
 | `episode_extra_type` | `other` or `trailer` for attached episode extras; empty otherwise |
 | `episode_number` | The episode's number; an episode extra has its episode's number, and other types count on their own |

@@ -392,7 +392,7 @@ def _new_episode(
         thumbnail_portrait_path=details.portrait_image_url,
         thumbnail_square_path=details.square_image_url,
         background_image_path=details.background_url or details.image_url,
-        source_number=details.number_text if chapter is None else None,
+        source_number=details.site_number if chapter is None else None,
         drm_protected=details.drm_protected,
         part_of=None if chapter is None else details.slug,
         part_start=None if chapter is None else chapter.start,

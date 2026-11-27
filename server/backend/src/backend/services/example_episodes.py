@@ -180,7 +180,7 @@ def _add(s: Session, form: ExampleCollection, videos: list[VideoDetails]) -> tup
             pending.add("extra_index")
         episode = Episode(
             uuid=generate_uuid(), type=MediaType.EPISODE.value, source_key=form.source_key, collection=collection, season=season,
-            index=position, episode_identifier=identifier, source_number=video.number_text,
+            index=position, episode_identifier=identifier, source_number=video.site_number,
             slug=video.slug, source_slug=video.slug,
             publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value, sharing_url=video.url,
             published_date=video.published_at, title=site.episode_title(video.title, video.description), description=video.description,
