@@ -59,3 +59,25 @@
     font-weight: 700;
     letter-spacing: 0.08em;
 }
+
+/* Cookies pasted as the text of a cookies.txt file, under the Site's cookies file. */
+.site-cookies-paste {
+    display: grid;
+    gap: 10px;
+    max-width: 640px;
+    margin-top: 10px;
+}
+
+.site-cookies-paste__text {
+    width: 100%;
+    min-height: 120px;
+    resize: vertical;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    white-space: pre;
+}
+
+/* The steps for sending cookies with the browser extension, set apart from the cookies file's explanation. */
+.site-cookies-extension {
+    margin-top: 12px;
+}
