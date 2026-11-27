@@ -2,7 +2,7 @@ import {FormEvent, useEffect, useMemo, useState} from 'react'
 import {useQuery} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {faIcon} from '../../icons/faIcon'
-import {can, loadAccess} from '../../lib/access'
+import {allows, can, loadAccess, type AuthMe} from '../../lib/access'
 import {apiJson} from '../../lib/api'
 import type {QuickDownloadSettingsForUser} from '../../lib/quickDownloads'
 import {
@@ -18,7 +18,10 @@ type Tab = {id: number; url?: string; title?: string; favIconUrl?: string; cooki
 /** How VODLoft answers: signed in, signed out, or not at all. */
 type Connection = 'checking' | 'signed-in' | 'sign-in' | 'vodloft'
 
-const SETTINGS_KEY = 'quickSettings'
+/** What the user's account could do, and its Quick download settings, the last time VODLoft answered: for when it
+ *  does not. Kept with the address they came from, so another VODLoft starts without them. */
+const LAST_KNOWN_KEY = 'lastKnown'
+type LastKnown = {address: string; access?: AuthMe; settings?: QuickDownloadSettingsForUser}
 
 async function currentTab(): Promise<Tab | undefined> {
     const [tab] = await ext.tabs.query({active: true, currentWindow: true})
@@ -73,9 +76,13 @@ function Setup({current, tab, onSaved, onCancel}: {
 }
 
 /** The page while VODLoft does not answer, or wants the user to sign in: a download can still be chosen and waits. */
-function Unanswered({address, tab, reason, settings}: {
+function Unanswered({address, tab, reason, settings, access}: {
     address: string; tab: Tab; reason: 'vodloft' | 'sign-in'; settings: QuickDownloadSettingsForUser | undefined
+    /** What the account could do the last time VODLoft answered; none when it never did. VODLoft checks again when it
+     *  gets the download, as rights can change meanwhile. */
+    access: AuthMe | undefined
 }) {
+    const mayQuickDownload = !access || allows(access, 'quick_downloads')
     const [quickOpen, setQuickOpen] = useState(false)
     const options = useMemo(choicesWithoutVodloft, [])
     const title = tab.title || new URL(tab.url!).hostname
@@ -95,16 +102,20 @@ function Unanswered({address, tab, reason, settings}: {
                 <div className="add-media-preview-copy">
                     <p>{new URL(tab.url!).hostname.replace(/^www\./, '')}</p>
                     <h2>{title}</h2>
-                    <div className="add-media-preview-actions">
-                        <button className={`btn${quickOpen ? ' is-active' : ''}`} type="button" aria-expanded={quickOpen}
-                                onClick={() => setQuickOpen((open) => !open)} title="Download the file without adding it to your library">
-                            <FontAwesomeIcon icon={faIcon('fass', 'bolt')}/>
-                            Quick download
-                        </button>
-                    </div>
+                    {mayQuickDownload ? (
+                        <div className="add-media-preview-actions">
+                            <button className={`btn${quickOpen ? ' is-active' : ''}`} type="button" aria-expanded={quickOpen}
+                                    onClick={() => setQuickOpen((open) => !open)} title="Download the file without adding it to your library">
+                                <FontAwesomeIcon icon={faIcon('fass', 'bolt')}/>
+                                Quick download
+                            </button>
+                        </div>
+                    ) : (
+                        <p>Your VODLoft account could not quick download the last time the extension reached VODLoft.</p>
+                    )}
                 </div>
             </article>
-            {quickOpen && (
+            {quickOpen && mayQuickDownload && (
                 <QuickDownloadForm url={tab.url!} sourceKey={null} title={title} imageUrl={null} options={options}
                                    settings={settings} waiting={reason} onQueued={() => setQuickOpen(false)}/>
             )}
@@ -144,15 +155,24 @@ export default function Popup() {
     const [tab, setTab] = useState<Tab | undefined>(undefined)
     const [changing, setChanging] = useState(false)
     const [connection, setConnection] = useState<Connection>('checking')
-    const [cachedSettings, setCachedSettings] = useState<QuickDownloadSettingsForUser | undefined>(undefined)
+    const [lastKnown, setLastKnown] = useState<LastKnown | undefined>(undefined)
 
     useEffect(() => {
-        void Promise.all([storedAddress(), currentTab(), ext.storage.local.get(SETTINGS_KEY)]).then(([stored, current, cached]) => {
+        void Promise.all([storedAddress(), currentTab(), ext.storage.local.get(LAST_KNOWN_KEY)]).then(([stored, current, cached]) => {
             setTab(current)
-            setCachedSettings(cached?.[SETTINGS_KEY])
+            setLastKnown(cached?.[LAST_KNOWN_KEY])
             setAddress(stored)
         })
     }, [])
+
+    const remember = (values: Omit<LastKnown, 'address'>) => {
+        if (!address) return
+        setLastKnown((known) => {
+            const next = {...(known?.address === address ? known : {}), ...values, address}
+            void ext.storage.local.set({[LAST_KNOWN_KEY]: next})
+            return next
+        })
+    }
 
     useEffect(() => {
         if (!address || changing) return
@@ -166,7 +186,9 @@ export default function Popup() {
             }
             try {
                 const access = await loadAccess()
-                if (!stale) setConnection(access ? 'signed-in' : 'sign-in')
+                if (stale) return
+                if (access) remember({access})
+                setConnection(access ? 'signed-in' : 'sign-in')
             } catch (exc) {
                 if (!stale) setConnection(unreachable(exc) ? 'vodloft' : 'sign-in')
             }
@@ -182,9 +204,11 @@ export default function Popup() {
         staleTime: 60_000,
     })
     useEffect(() => {
-        if (liveSettings) void ext.storage.local.set({[SETTINGS_KEY]: liveSettings})
+        if (liveSettings) remember({settings: liveSettings})
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [liveSettings])
-    const settings = liveSettings ?? cachedSettings
+    const known = lastKnown?.address === address ? lastKnown : undefined
+    const settings = liveSettings ?? known?.settings
     const page = isWebPage(tab?.url) ? tab : undefined
     const cookies = useCookieSending(page)
 
@@ -230,7 +254,7 @@ export default function Popup() {
             ) : connection === 'signed-in' ? (
                 <PageMedia address={address} pageUrl={page.url!} settings={settings} onLost={setConnection}/>
             ) : (
-                <Unanswered address={address} tab={page} reason={connection} settings={settings}/>
+                <Unanswered address={address} tab={page} reason={connection} settings={settings} access={known?.access}/>
             )}
             <QueueList/>
         </Shell>

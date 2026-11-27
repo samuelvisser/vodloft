@@ -42,6 +42,8 @@ ready. Turn off **Save files to your downloads as soon as they are ready** to sa
 **When VODLoft is down**, you can still choose Quick download. The extension keeps the download and sends it to VODLoft
 as soon as VODLoft answers again, also after your browser restarted. It does the same when you are signed out, until
 you sign in. Without VODLoft to ask, it offers every quality and format; VODLoft takes the closest one the video has.
+It goes by what your account could do the last time it reached VODLoft, and VODLoft checks again when it gets the
+download: if your account may no longer quick download, the extension shows why the download failed.
 
 VODLoft deletes a ready file after a while, as set in **Settings › Quick download**. Save it before then.
 
