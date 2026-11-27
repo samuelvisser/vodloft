@@ -2,7 +2,7 @@
 
 /** The backend address followed by ``path``, such as ``apiUrl('/videos')``. */
 export function apiUrl(path = ''): string {
-    const base = ((window as any).appConfig?.API_URL || '/api').replace(/\/+$/, '')
+    const base = ((globalThis as any).appConfig?.API_URL || '/api').replace(/\/+$/, '')
     return `${base}${path}`
 }
 

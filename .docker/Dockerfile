@@ -100,8 +100,8 @@ RUN if [ -n "$VODLOFT_BUILD_LABEL" ]; then \
 # Default config seed, copied into the /config volume on first run if missing.
 COPY config/config.yml.default ./config/config.yml.default
 
-# VODLoft's browser extension, which VODLoft offers as a download under Settings › Sources › Authentication
-COPY browser-extension ./browser-extension
+# VODLoft's browser extension, built with the UI, which VODLoft offers as a download (/api/browser-extension)
+COPY --from=ui-build /ui/dist-extension ./ui/dist-extension
 
 # Built UI static assets, and the id of the build they are.
 COPY --from=ui-build /ui/dist /usr/share/nginx/html

@@ -88,7 +88,7 @@ export async function fetchQuickDownloadPreview(url: string, signal?: AbortSigna
     }
 }
 
-export async function startQuickDownload(url: string, sourceKey: string, choice: QuickChoice) {
+export async function startQuickDownload(url: string, sourceKey: string | undefined, choice: QuickChoice) {
     const response = await fetch(`${apiUrl()}/quick-downloads`, {
         method: 'POST',
         credentials: 'include',

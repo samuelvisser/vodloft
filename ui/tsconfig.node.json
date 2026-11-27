@@ -5,6 +5,7 @@
   },
   "include": [
     "vite.config.ts",
+    "vite.extension.config.ts",
     "tests/**/*.ts",
     "tests/**/*.tsx"
   ]

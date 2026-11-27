@@ -14,6 +14,10 @@ Use it for a single video you want to keep on a laptop or phone, or for the audi
 
 A link that is protected by DRM, or that needs a subscription VODLoft is not signed in to, is not downloaded. The page says why.
 
+**From the page you are on**: [[VODLoft's browser extension|Browser-Extension]] offers the same choices in your
+browser's toolbar, and saves the file into your browser's downloads when it is ready. It even keeps a download while
+VODLoft is down, and sends it once VODLoft is back.
+
 ## Formats and codecs
 
 The chips on each row choose the format: **MP4** or **MKV** for video, **M4A** or **MP3** for audio. **Format and codec** opens the full set of choices:
