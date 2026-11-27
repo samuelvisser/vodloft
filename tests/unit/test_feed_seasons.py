@@ -199,3 +199,58 @@ def test_the_library_bulk_edit_skips_a_collection_its_seasons_change_would_leave
     session.expire_all()
     stored = session.get(Collection, collection.id)
     assert (stored.feeds, stored.genre) == (None, None)
+
+
+def test_saving_lists_the_collection_again_only_when_it_takes_something_new(feeds_source, session, monkeypatch):
+    from backend.api.endpoints.collections.seasons import service
+
+    source = feeds_source
+    source.videos = [_video("a", 2024), _video("b", 2024, 2)]
+    source.lists = [_list("PLtour", "The Tour")]
+    source.items = {"PLtour": ("b",)}
+    collection = _collection(session, loose="one_season")
+    _index(session, collection, source)
+    relisted = []
+    monkeypatch.setattr(service, "reindex_collection", lambda s, c, by_user: relisted.append(c.slug))
+    tour = next(playlist for playlist in seasons_view_of(session).playlists if playlist.ref == "PLtour")
+
+    def lists(enabled):
+        return [{"id": tour.id, "enabled": enabled, "as_season": True}]
+
+    assert tour.enabled
+    # Switching a list or a feed off only leaves the collection with less of what it has.
+    _update(session, playlists=lists(False))
+    _update(session, playlists=lists(False), feeds=["videos"])
+    assert relisted == []
+    # Switching them on again lists what they have now.
+    _update(session, playlists=lists(True), feeds=["videos"])
+    assert relisted == ["creator"]
+    _update(session, feeds=["videos", "shorts"])
+    assert relisted == ["creator", "creator"]
+
+
+def test_listing_a_collection_reports_its_steps(feeds_source, session):
+    from progress_plan import PlanTracker
+    from task_manager.tasks.helpers.listed_collections import index_listed_collection, listing_steps
+
+    source = feeds_source
+    source.videos = [_video("a", 2024)]
+    source.lists = [_list("PLtour", "The Tour"), _list("PLbest", "Best Of")]
+    source.items = {"PLtour": ("b",), "PLbest": ("a",)}
+    collection = _collection(session, loose="one_season")
+    _index(session, collection, source)
+    source.videos = [*source.videos, _video("b", 2024, 2), _video("c", 2024, 3)]
+
+    snapshots = []
+    steps = listing_steps(session, collection)
+    session.rollback()
+    plan = PlanTracker(steps, sink=snapshots.append)
+    index_listed_collection(session, collection_id=collection.id, source=source, plan=plan)
+
+    stages = {stage.id: stage for stage in plan.snapshot().stages}
+    assert [stage.id for stage in steps] == ["videos", "lists", "save"]
+    assert {stage.state for stage in stages.values()} == {"completed"}
+    # The new videos it found, and each list as it is listed.
+    assert stages["videos"].done == 2 and stages["videos"].total is None
+    assert (stages["lists"].done, stages["lists"].total) == (2, 2)
+    assert stages["videos"].label == "Listing the videos of The Creator"

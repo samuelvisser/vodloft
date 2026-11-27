@@ -10,5 +10,7 @@ REWRITE_FILE = 18.0
 """Writing one file's metadata again: the file is written anew, so it takes far longer than moving it."""
 LIST_VIDEO = 0.2
 """Listing one video of a new collection, when it is first indexed."""
+LIST_LIST = 5.0
+"""Listing what one playlist or other list holds when a collection is listed again: a lookup of a second or more."""
 DEFAULT = 1.0
 """Work whose size is not known in advance."""

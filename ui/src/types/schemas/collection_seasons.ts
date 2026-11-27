@@ -199,6 +199,8 @@ const ReviewVideosSchema = z.object({count: z.number().default(0), examples: z.a
 export const SeasonsReviewReadSchema = z.object({
     /** What the review waits for, such as a list VODLoft is still listing. */
     busy: z.string().nullable().default(null),
+    /** The task the review waits for, when it waits for one. */
+    busyOperation: z.string().nullable().default(null),
     seasons: z.array(CollectionSeasonReadSchema).default([]),
     waiting: z.array(z.object({listId: z.number(), title: z.string()})).default([]),
     /** The settings saving changes that decide where videos go, each as it was and as it becomes. */

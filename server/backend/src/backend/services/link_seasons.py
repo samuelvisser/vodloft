@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import contextvars
 import logging
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
@@ -350,10 +351,14 @@ def known_video_slugs(s: Session, collection: Collection, also: frozenset[str] =
     return frozenset(s.scalars(select(Episode.video_slug).where(Episode.collection_id == collection.id))) | also
 
 
-def list_lists(s: Session, collection: Collection, source: Source, also: frozenset[str] = frozenset()) -> LinkListing:
+def list_lists(
+    s: Session, collection: Collection, source: Source, also: frozenset[str] = frozenset(),
+    listed: Callable[[int, int], None] | None = None,
+) -> LinkListing:
     """Ask the collection's Source for its channel's playlists, and each list's Source for the videos of the lists
     that are seasons; for a collection that adds them, look up the videos it has not got that are neither in
-    ``also``, the ones its own link just listed. Slow, so no transaction stays open."""
+    ``also``, the ones its own link just listed. ``listed`` hears how many of how many lists are listed, as each one
+    is. Slow, so no transaction stays open."""
     url = collection.sharing_url if lists_playlists(collection) else None
     action_of = _new_list_actions(collection)
     first = not collection.lists
@@ -381,19 +386,30 @@ def list_lists(s: Session, collection: Collection, source: Source, also: frozens
     items: dict[str, tuple[ItemRef, ...]] = {}
     outside: list[VideoDetails] = []
     sources: dict[str, str] = {}
+    total = sum(len(urls) for urls in wanted.values())
+    done = 0
+
+    def one_more() -> None:
+        nonlocal done
+        done += 1
+        if listed is not None:
+            listed(done, total)
+
     for source_key, urls in wanted.items():
         reader = source if source_key == source.id else get_source(source_key)
-        listed = list_each(reader, urls)
-        items.update(listed)
-        for details in _look_up_outside(reader, adds_outside, known_slugs, listed):
+        found = list_each(reader, urls, each=one_more)
+        items.update(found)
+        for details in _look_up_outside(reader, adds_outside, known_slugs, found):
             outside.append(details)
             sources[details.slug] = source_key
     return LinkListing(playlists, items, outside, sources)
 
 
-def list_each(source: Source, urls: dict[str, str]) -> dict[str, tuple[ItemRef, ...]]:
+def list_each(
+    source: Source, urls: dict[str, str], each: Callable[[], None] | None = None,
+) -> dict[str, tuple[ItemRef, ...]]:
     """The videos of each list, in its order, by the key it has in ``urls``. A list that could not be listed is left
-    out. Slow, so no transaction stays open."""
+    out. ``each`` hears of every list as it is done. Slow, so no transaction stays open."""
 
     def list_one(url: str) -> tuple[ItemRef, ...] | None:
         try:
@@ -410,6 +426,8 @@ def list_each(source: Source, urls: dict[str, str]) -> dict[str, tuple[ItemRef, 
         for key, future in listed.items():
             if (found := future.result()) is not None:
                 items[key] = found
+            if each is not None:
+                each()
     return items
 
 

@@ -10,6 +10,9 @@ import {type CauseRow, seasonsRows} from '../ReconcileDialog/MoveCauses'
 import type {Words} from './seasonsSettings'
 import ProgressSteps from '../common/ProgressSteps'
 import type {ProgressStep} from '../../types/progress'
+import {useOperations} from '../OperationNotifier/OperationNotifier'
+import {presentOperationProgress} from '../../lib/operationProgress'
+import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 
 /** The second step of the Seasons dialog: what saving does, as the Move dialog shows a move, with the cards only the
  * Seasons dialog needs besides: the seasons it makes, the videos that get downloaded, the ones that leave, and the
@@ -64,6 +67,7 @@ export default function SeasonsReview({view, review, failed, changes, words, lis
             </div>
         )
     }
+    if (review.busy && review.busyOperation) return <WaitingFor operationId={review.busyOperation} text={review.busy}/>
     if (review.busy) {
         return (
             <p className="change-identification-loading" role="status">
@@ -192,6 +196,29 @@ export function GoBack({onBack}: {onBack: () => void}) {
 }
 
 /** What a save of seasons settings does now, step by step, while the user waits for it. */
+/** The task the review waits for, with the steps of its plan as it goes, and why the review waits for it. */
+function WaitingFor({operationId, text}: {operationId: string, text: string}) {
+    const {operations} = useOperations()
+    const operation = operations.find((candidate) => candidate.id === operationId)
+    const progress = presentOperationProgress(operation)
+    const steps = progress?.steps ?? []
+    const definition = operation && (frontendOperationDefinitions as Record<string, {label: string} | undefined>)[operation.kind]
+    return (
+        <div className="seasons-review-busy">
+            <section className="seasons-saving" aria-live="polite">
+                <p className="change-identification-loading" role="status">
+                    <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/>
+                    <b>{definition?.label ?? 'Working on it'}</b>
+                </p>
+                {steps.length > 0
+                    ? <ProgressSteps steps={steps} className="is-plain" label="What VODLoft is doing"/>
+                    : progress?.detail && <p className="help">{progress.detail}</p>}
+            </section>
+            <p className="help">{text}</p>
+        </div>
+    )
+}
+
 export function SavingProgress({steps}: {steps: ProgressStep[]}) {
     const now = steps.find((step) => step.state === 'running')
     return (

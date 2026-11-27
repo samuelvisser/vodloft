@@ -298,6 +298,8 @@ class CollectionWork:
     downloads: bool
     """Its episodes are downloading or waiting to download, rather than VODLoft working on its episodes or files,
     such as listing it again after a change."""
+    operation_id: str | None = None
+    """The task that works on it, when that is not downloading, so a preview that waits can show how far it is."""
 
     def refusal(self, doing: str) -> str:
         """Why ``doing`` it can't start now."""
@@ -316,8 +318,8 @@ class CollectionWork:
                 "show here once they are done, or once you cancel them."
             )
         return (
-            f"VODLoft is still working on {name_in_text(self.title)}, such as listing it again after your change. "
-            "The changes show here once that is done."
+            f"VODLoft is still working on {name_in_text(self.title)}. The changes show here once that is done, as what "
+            "it finds can change them."
         )
 
 
@@ -337,14 +339,14 @@ def collection_work(s: Session, collection: Collection) -> CollectionWork | None
     if downloads is not None:
         return CollectionWork(collection.title, downloads=True)
     work = s.scalar(
-        select(TaskOperation.kind).where(
+        select(TaskOperation.id).where(
             TaskOperation.resource_type == "collection",
             TaskOperation.resource_id == collection.id,
             TaskOperation.kind.in_(_BUSY_KINDS),
             TaskOperation.status.in_(_ACTIVE),
         ).limit(1)
     )
-    return CollectionWork(collection.title, downloads=False) if work is not None else None
+    return CollectionWork(collection.title, downloads=False, operation_id=work) if work is not None else None
 
 
 def collection_busy(s: Session, collection: Collection, doing: str) -> str | None:

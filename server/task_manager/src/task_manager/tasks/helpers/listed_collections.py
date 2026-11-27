@@ -51,7 +51,8 @@ downloaded files and is not downloaded again until it is back.
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+import time
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 
@@ -84,6 +85,9 @@ from .episodes.events import queue_episode_status_events
 from .episodes.identifier import next_identifier
 from .general import datetime_to_string
 from .progress import update_progress
+from progress_plan import PlanTracker, StageSpec
+from backend.types import work_weights
+from backend.types.collection_contracts import collection_contract
 from task_manager.tasks.media_download_operations import dispatch_queued_media_download_operations
 from .locked_media import open_up
 from .refreshed_metadata import apply_refreshed_details, check_upgrades_after_refresh
@@ -157,7 +161,46 @@ def with_chapters(source: Source, details: VideoDetails) -> VideoDetails:
     return replace(details, chapters=found.chapters or ())
 
 
-def _list_new_episodes(s: Session, collection: Collection, source: Source, progress) -> list[VideoDetails]:
+def listing_steps(s: Session, collection: Collection) -> list[StageSpec]:
+    """The steps of listing the collection again and saving what is new, which its index reports as its plan. Reading
+    only."""
+    steps = []
+    if collection.sharing_url is not None and lists_own_link(collection):
+        known = s.scalar(select(func.count(Episode.id)).where(Episode.collection_id == collection.id)) or 0
+        media = collection_contract(collection.type).media_names_on(collection_site(collection))
+        steps.append(StageSpec(
+            id="videos", code="list_videos", weight=max(work_weights.DEFAULT, known * work_weights.LIST_VIDEO),
+            label=f"Listing the {media.plural} of {collection.title}", unit=f"new {media.plural}",
+        ))
+    if link_seasons_on(collection):
+        lists = section_list_names(collection).plural
+        on = sum(1 for playlist in collection.lists if playlist.enabled)
+        steps.append(StageSpec(
+            id="lists", code="list_lists", weight=max(work_weights.DEFAULT, on * work_weights.LIST_LIST),
+            label=f"Listing the {lists}", unit=lists,
+        ))
+    steps.append(StageSpec(id="save", code="save_episodes", label="Saving what is new"))
+    return steps
+
+
+def _now_and_then(report: Callable[[int, int | None], None]) -> Callable[[int, int | None], None]:
+    """``report``, at most about once a second, and always at the end: each report is a write."""
+    last = 0.0
+
+    def throttled(done: int, total: int | None) -> None:
+        nonlocal last
+        now = time.monotonic()
+        if now - last < 1 and done != total:
+            return
+        last = now
+        report(done, total)
+
+    return throttled
+
+
+def _list_new_episodes(
+    s: Session, collection: Collection, source: Source, progress, plan: PlanTracker | None = None,
+) -> list[VideoDetails]:
     title, url = collection.title, collection.sharing_url
     if url is None or not lists_own_link(collection):
         # Its link seasons say what it holds, so its own link is not listed.
@@ -167,41 +210,59 @@ def _list_new_episodes(s: Session, collection: Collection, source: Source, progr
     known = known_episode_slugs(s, collection)
     # No transaction stays open while the Source looks videos up.
     s.rollback()
-    update_progress(progress, _LISTING_PROGRESS, f"Listing the episodes of '{title}' at {source.name}")
+    if plan is not None:
+        plan.start("videos")
+        # A Source can't say how many videos there are, so the step counts the new ones it found.
+        found_so_far = _now_and_then(lambda done, _total: plan.progress("videos", None, done=done))
+    else:
+        update_progress(progress, _LISTING_PROGRESS, f"Listing the episodes of '{title}' at {source.name}")
     found: list[VideoDetails] = []
     for details in source.list_episodes(url, known=known, feeds=feeds):
         found.append(with_chapters(source, details) if split else details)
+        if plan is not None:
+            found_so_far(len(found), None)
+            continue
         message = f"Found {len(found)} new {'episode' if len(found) == 1 else 'episodes'} of '{title}' at {source.name}"
         if progress:
             # A Source can't say how many episodes there are, so the count is shown instead of a percentage.
             progress.set(_LISTING_PROGRESS, message, meta={"found": len(found)})
         else:
             update_progress(progress, _LISTING_PROGRESS, message)
+    if plan is not None:
+        plan.progress("videos", None, done=len(found))
+        plan.complete("videos")
     return found
 
 
 def index_listed_collection(
     s: Session, *, collection_id: int, source: Source, progress=None, dry_run: bool = False, by_user: bool = False,
+    plan: PlanTracker | None = None,
 ) -> int:
     """Add the collection's new episodes, and put its videos in the seasons of the playlists that are seasons.
     Returns how many episodes were added, or would be added in a dry run. ``by_user`` says the user's own change
     asked for this listing, so the downloaded videos that leave the collection go with their files, as the user
-    was told, rather than waiting for the Home page."""
+    was told, rather than waiting for the Home page. ``plan``, with the steps of ``listing_steps``, follows how far
+    it is, in place of ``progress``."""
     collection = s.get(Collection, collection_id)
     if collection is None:
         return 0
     with ytdlp_call_options(source, *collection.ytdlp_option_texts, session=s):
         return _index_listed_collection(
             s, collection_id=collection_id, source=source, progress=progress, dry_run=dry_run, by_user=by_user,
+            plan=plan,
         )
 
 
-def _index_listed_collection(s: Session, *, collection_id: int, source: Source, progress, dry_run: bool, by_user: bool) -> int:
+def _index_listed_collection(
+    s: Session, *, collection_id: int, source: Source, progress, dry_run: bool, by_user: bool,
+    plan: PlanTracker | None,
+) -> int:
     collection = s.get(Collection, collection_id)
     if collection is None:
         return 0
     title, site, url = collection.title, collection_site(collection), collection.sharing_url
-    found = _list_new_episodes(s, collection, source, progress)
+    planned = {stage.id for stage in plan.snapshot().stages} if plan is not None else set()
+    found = _list_new_episodes(s, collection, source, progress, plan if "videos" in planned else None)
     s.rollback()
     if dry_run:
         for details in found:
@@ -212,14 +273,22 @@ def _index_listed_collection(s: Session, *, collection_id: int, source: Source, 
     if collection is not None and link_seasons_on(collection):
         # The Site's own word for its lists, such as playlists on YouTube or albums on Bandcamp.
         lists = section_list_names(collection).plural
-        update_progress(progress, _PLAYLISTS_PROGRESS, f"Listing the {lists} of '{title}' at {source.name}")
-        listing = list_lists(s, collection, source, also=frozenset(details.slug for details in found))
+        listed = None
+        if "lists" in planned:
+            plan.start("lists")
+            listed = _now_and_then(lambda done, total: plan.progress("lists", done / max(1, total), done=done, total=total))
+        else:
+            update_progress(progress, _PLAYLISTS_PROGRESS, f"Listing the {lists} of '{title}' at {source.name}")
+        listing = list_lists(s, collection, source, also=frozenset(details.slug for details in found), listed=listed)
+    if "lists" in planned:
+        plan.complete("lists")
     s.rollback()
-    if found:
-        update_progress(progress, _SAVING_PROGRESS, f"Saving {len(found)} new episodes of '{title}'")
-
     outside = listing.outside if listing is not None else []
-    if outside:
+    if plan is not None:
+        plan.start("save")
+    elif found:
+        update_progress(progress, _SAVING_PROGRESS, f"Saving {len(found)} new episodes of '{title}'")
+    if outside and plan is None:
         update_progress(progress, _SAVING_PROGRESS, f"Saving {len(outside)} videos of the {lists} of '{title}'")
 
     # What the creator calls their tiers now, which name the tiers the new episodes need.
@@ -247,7 +316,10 @@ def _index_listed_collection(s: Session, *, collection_id: int, source: Source, 
         place_in_link_seasons(w, collection, by_user=by_user)
         return added
 
-    return run_write_transaction(save)
+    added = run_write_transaction(save)
+    if plan is not None:
+        plan.complete("save")
+    return added
 
 
 class _Placer(SeasonFinder):

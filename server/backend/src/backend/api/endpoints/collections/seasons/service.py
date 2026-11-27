@@ -591,10 +591,13 @@ def plan_seasons_dialog(state: SeasonsState, body: CollectionSeasonsAPIUpdate) -
     was_seasons = {link.season_id for link in playlists.values() if link.season_id is not None} | set(feed_seasons.values())
     was_only = holds_only_link_seasons(collection)
     was_named = loose_season_name(collection)
+    # Listing the collection again only finds something new when it takes something it did not: switching a feed,
+    # a list or the lists off leaves it with less of what it already has, which saving sorts out by itself.
+    feeds_in = lambda refs: set(feed_refs if refs is None else refs)  # noqa: E731
     relist = (
-        collection.feeds != feeds
-        or collection.link_seasons != body.link_seasons
-        or any(playlists[change.id].enabled != change.enabled for change in body.playlists)
+        bool(feeds_in(feeds) - feeds_in(collection.feeds))
+        or (collection.link_seasons == LinkSeasons.OFF and body.link_seasons != LinkSeasons.OFF)
+        or any(change.enabled and not playlists[change.id].enabled for change in body.playlists)
         or (collection.outside_videos != body.outside_videos and body.outside_videos in (OutsideVideos.ADD, OutsideVideos.ONLY))
     )
     # Once a collection holds only what its playlists have, every video it has came from them and leaves with them;
@@ -786,7 +789,7 @@ def review_seasons(
     collection = _collection(s, collection_slug)
     work = collection_work(s, collection)
     if work is not None and not work.downloads:
-        return SeasonsReviewAPIRead(busy=work.waiting())
+        return SeasonsReviewAPIRead(busy=work.waiting(), busy_operation=work.operation_id)
     on = {change.id for change in body.playlists if change.enabled}
     titles = {playlist.id: playlist.title for playlist in collection.lists}
     asked = {link.url: link.title or link.url for link in body.added_links}

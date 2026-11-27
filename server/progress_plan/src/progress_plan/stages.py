@@ -190,8 +190,8 @@ class PlanTracker:
 
     def progress(self, step: str, fraction: float | None, *, done: int | None = None, total: int | None = None) -> None:
         """How far the running step is, from 0 to 1, or None when it cannot tell, and for a step that counts, how many
-        of how many it did."""
-        counted = {"done": done, "total": total} if total is not None else {}
+        of how many it did, or only how many when it cannot know how many there are."""
+        counted = {"done": done, "total": total} if done is not None or total is not None else {}
         with self._lock:
             self._stages[step] = measured(
                 self._stages[step], None if fraction is None else max(0.0, min(1.0, fraction)), time(), **counted,

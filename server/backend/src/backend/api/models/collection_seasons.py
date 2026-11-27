@@ -298,6 +298,8 @@ class SeasonsReviewAPIRead(ResponseBase):
 
     busy: Optional[str] = None
     """What the review waits for, such as a list VODLoft is still listing; the rest is empty meanwhile."""
+    busy_operation: Optional[str] = None
+    """The id of the task the review waits for, when it waits for one, so the dialog can show its steps."""
     seasons: list[CollectionSeasonAPIRead] = Field(default_factory=list)
     waiting: list[WaitingSeasonAPIRead] = Field(default_factory=list)
     causes: list[MoveCauseAPIRead] = Field(default_factory=list)
