@@ -1,0 +1,12 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: VODLoft
+Upstream-Contact: https://github.com/samuelvisser/vodloft/issues
+Source: https://github.com/samuelvisser/vodloft
+
+Files: *
+Copyright: Samuël Visser
+License: other
+ See https://github.com/samuelvisser/vodloft. The package also contains a
+ build of CPython (Python Software Foundation License) in /opt/vodloft/python
+ and VODLoft's Python dependencies in /opt/vodloft/app/.venv, each under its
+ own license, which its files in that folder name.

@@ -94,6 +94,9 @@ class AppSettings(SettingsBase):
     # A full SQLAlchemy URL such as postgresql+psycopg://user:password@host/vodloft.
     # Excluded from dumps so its password never reaches the API or config.yml.
     database_url: str | None = Field(default=None, exclude=True, repr=False)
+    # The built UI the backend serves itself, as the Debian package does (VL_UI_DIRECTORY). Unset, it serves only
+    # the API, and something in front of it, such as nginx in the Docker image, serves the UI.
+    ui_directory: Path | None = Field(default=None, exclude=True)
 
     @property
     def resolved_database_url(self) -> str:

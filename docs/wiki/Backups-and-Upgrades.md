@@ -16,6 +16,8 @@ Back up the entire `/config` directory. It contains the state needed to restore 
 
 Backing up the complete directory is safer than maintaining a hand-picked file list as VODLoft evolves.
 
+Installed VODLoft with apt on Debian or Ubuntu? Then this folder is `/var/lib/vodloft`. Stop VODLoft (`sudo systemctl stop vodloft`) while you copy it.
+
 ### `/downloads` — optional, depending on your storage policy
 
 `/downloads` contains the media VODLoft downloaded.
@@ -111,6 +113,16 @@ These steps are for the standard Docker Compose setup from [[Installation]], who
    ```
 
 Keep the `config-before-0.7.0` folder until you are sure everything works. After that you can delete it with `sudo rm -rf config-before-0.7.0`.
+
+### Installed with apt
+
+On Debian or Ubuntu, VODLoft upgrades with the rest of your system:
+
+```bash
+sudo apt update && sudo apt upgrade
+```
+
+apt stops VODLoft, installs the new version and starts it again; the first start can take a minute while VODLoft upgrades its database. To back up first, stop VODLoft and copy its folder: `sudo systemctl stop vodloft && sudo cp -a /var/lib/vodloft /var/lib/vodloft-before-upgrade`. apt only offers the newest published version.
 
 ### If a command does not work
 
