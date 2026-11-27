@@ -24,6 +24,7 @@ from .Metadata import Metadata
 from .CustomIndexState import CustomIndexState
 from .ExistingFileScan import ExistingFileScan
 from .ImportRun import ImportLink, ImportRun, ImportStep
+from .AttentionState import AttentionState
 from .Notification import (
     NotificationDelivery, NotificationDestination, NotificationEvent, NotificationRule, PushSubscription, PushVapidKey,
 )

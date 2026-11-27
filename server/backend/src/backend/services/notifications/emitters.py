@@ -12,8 +12,9 @@ from sqlalchemy.orm import Session
 
 from backend.types.collection_contracts import collection_contract
 from backend.db.models import Collection, CollectionList, DownloadProfile, Episode, User
+from backend.types.happenings import Happening
 
-from .events import Event, emit
+from .events import emit
 
 
 def _episode_url(episode: Episode) -> str:
@@ -31,7 +32,7 @@ def episode_downloaded(session: Session, episode: Episode, *, path: str, replace
     """A download finished: a new one, or a better version that replaced the old file."""
     collection = episode.collection
     emit(
-        session, Event.EPISODE_REPLACED if replaced else Event.EPISODE_DOWNLOADED,
+        session, Happening.EPISODE_REPLACED if replaced else Happening.EPISODE_DOWNLOADED,
         title=f"{'Replaced' if replaced else 'Downloaded'}: {episode.title}", body=collection.title,
         collection_id=collection.id, url=_episode_url(episode), data=_file_data(episode, path),
     )
@@ -41,7 +42,7 @@ def episode_deleted(session: Session, episode: Episode, *, path: str | None, rea
     """A download's file was removed, by hand or because it fell outside its profile's limit."""
     collection = episode.collection
     emit(
-        session, Event.EPISODE_DELETED, title=f"Deleted: {episode.title}", body=f"{collection.title}. {reason}",
+        session, Happening.EPISODE_DELETED, title=f"Deleted: {episode.title}", body=f"{collection.title}. {reason}",
         collection_id=collection.id, url=_episode_url(episode), data=_file_data(episode, path),
     )
 
@@ -62,7 +63,7 @@ def new_episodes_found(session: Session, collection: Collection, count: int) -> 
     if episodes <= count:
         return
     emit(
-        session, Event.NEW_EPISODES,
+        session, Happening.NEW_EPISODES,
         title=f"{count} new episode{'s' if count != 1 else ''} in {name_in_text(collection.title)}",
         body="Nothing downloads them automatically.", collection_id=collection.id,
         url=f"/collection/{collection.slug}", data={"collection": collection.title},
@@ -73,7 +74,7 @@ def quick_download_finished(session: Session, *, owner: str | None, title: str) 
     """A Quick download is ready to save. It belongs to whoever asked for it."""
     user_id = session.scalar(select(User.id).where(User.username == owner)) if owner else None
     emit(
-        session, Event.QUICK_DOWNLOAD_FINISHED, title=f"Ready to save: {title}",
+        session, Happening.QUICK_DOWNLOAD_FINISHED, title=f"Ready to save: {title}",
         body="Your Quick download finished.", user_id=user_id, url="/quick-download",
     )
 
@@ -89,7 +90,7 @@ def link_seasons_found(session: Session, collection: Collection, playlists: list
     from backend.services.link_seasons import section_list_names
     lists = section_list_names(collection)
     emit(
-        session, Event.NEW_LISTS_FOUND,
+        session, Happening.NEW_LISTS_FOUND,
         title=f"New {lists.singular} for {name_in_text(collection.title)}" if one else f"{len(playlists)} new {lists.plural} for {name_in_text(collection.title)}",
         body=f"{names}. Choose in the collection's {season.plural} whether {f'it becomes {season.a}' if one else f'they become {season.plural}'}.",
         url=f"/edit-collection/{collection.id}?seasons=1",

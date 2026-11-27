@@ -1,11 +1,13 @@
 import {z} from 'zod'
 
+import {SeveritySchema} from './attention'
 import {ApiDateTimeSchema} from './datetime'
 
 // ---------- Read models ----------
 export const NotificationEventReadSchema = z.object({
     event: z.string(),
     when: z.string(),
+    severity: SeveritySchema,
     tone: z.enum(['success', 'failure', 'info']),
     collections: z.boolean(),
     actions: z.boolean(),

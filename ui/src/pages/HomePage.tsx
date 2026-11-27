@@ -17,6 +17,7 @@ import {
     useKeepQuestions,
     useSourceProblems,
     useCollectionHealth,
+    useAttention,
 } from '../lib/queries'
 import {
     DEFAULT_DOWNLOAD_STATUS_FILTER,
@@ -26,7 +27,7 @@ import {EpisodeIndexedActivityRead} from '../types/schemas/episode'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {movieExtraTypeLabel} from '../utils/movieExtras'
 import {formatBytes} from '../utils/formatting'
-import {CreatorSuggestionCard, HealthIssueAlert, alertClass} from '../components/HealthMessages/HealthMessages'
+import {AttentionAlert, CreatorSuggestionCard, HealthIssueAlert, alertClass} from '../components/HealthMessages/HealthMessages'
 
 const IN_PROGRESS = ['preparing', 'waiting', 'canceling', 'downloading', 'local_processing'] as const
 const QUEUED = ['pending'] as const
@@ -90,6 +91,11 @@ export default function HomePage() {
     const problems = problemsQuery.data
     const metadataProblems = movies?.filter((movie) => movie.releaseDateLookupStatus === 'error') || []
     const sourceProblems = sourceProblemsQuery.data ?? []
+    // What VODLoft stores until it is fixed, problems first, such as a destination that keeps failing.
+    const attentionQuery = useAttention()
+    const attentionStates = attentionQuery.data ?? []
+    const attentionProblems = attentionStates.filter((state) => state.severity === 'problem')
+    const attentionOther = attentionStates.filter((state) => state.severity !== 'problem')
     // What collections need the user for, such as downloads that wait for their Move action, as each stored its health.
     const mayViewLibrary = can('library', 'view')
     const healthQuery = useCollectionHealth(mayViewLibrary)
@@ -104,7 +110,8 @@ export default function HomePage() {
     // Errors and warnings need the user; info, such as a suggestion, only tells them something.
     const hasProblems = problemsQuery.total > 0 || metadataProblems.length > 0 || profiles?.length === 0
         || sourceProblems.length > 0 || healthWarnings.length > 0 || healthQuery.isError
-    const infoCount = healthInfo.length + creatorSuggestions.length
+        || attentionStates.some((state) => state.severity === 'problem' || state.severity === 'needs_you')
+    const infoCount = healthInfo.length + creatorSuggestions.length + attentionStates.filter((state) => state.severity === 'tip').length
     const hasAttention = hasProblems || infoCount > 0
     // The keep question has its own card above, so it does not fill Needs attention.
     const needsAnAnswer = hasProblems || keepQuestionEpisodes > 0
@@ -124,6 +131,7 @@ export default function HomePage() {
         metadataProblems.length ? `${metadataProblems.length} movie metadata problem${metadataProblems.length === 1 ? '' : 's'}` : null,
         profiles?.length === 0 ? 'No Local Media Profiles' : null,
         ...sourceProblems.map((problem) => problem.title),
+        ...attentionStates.filter((state) => state.severity !== 'tip').map((state) => state.title),
         episodesWaiting ? `${episodesWaiting} download${episodesWaiting === 1 ? '' : 's'} to move` : null,
         keepQuestionEpisodes ? `${keepQuestionEpisodes} download${keepQuestionEpisodes === 1 ? '' : 's'} removed from the Source` : null,
         healthInfo.length ? `${healthInfo.length} collection${healthInfo.length === 1 ? '' : 's'} with news` : null,
@@ -218,6 +226,7 @@ export default function HomePage() {
                     aria-labelledby="attention-title"
                 >
                     <div className="operation-section-header"><h2 id="attention-title">Needs attention</h2></div>
+                    {attentionProblems.map((state) => <AttentionAlert key={`attention-${state.id}`} state={state}/>)}
                     {sourceProblems.map((problem) => (
                         <Link className={alertClass('error')} key={`source-${problem.sourceKey}-${problem.title}`} to="/settings?tab=sources">
                             <FontAwesomeIcon icon={faIcon('fass', 'triangle-exclamation')}/><span><strong>{problem.title}</strong><small>{problem.detail}</small></span><span>Fix</span>
@@ -250,6 +259,7 @@ export default function HomePage() {
                     {healthInfo.slice(0, HOME_SECTION_LIMIT).map(({collection, issue}) => (
                         <HealthIssueAlert key={`health-${collection.slug}-${issue.kind}`} collection={collection} issue={issue}/>
                     ))}
+                    {attentionOther.map((state) => <AttentionAlert key={`attention-${state.id}`} state={state}/>)}
                     {creatorSuggestions.slice(0, HOME_SECTION_LIMIT).map((suggestion) => (
                         <CreatorSuggestionCard key={`creator-${suggestion.siteKey}-${suggestion.ref}`} suggestion={suggestion}/>
                     ))}

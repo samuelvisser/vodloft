@@ -14,6 +14,7 @@ from backend.db.core import write_when_changed
 from backend.db.models import Episode
 from backend.db.models import NotificationEvent as EventRow
 from backend.db.models.media_download import MediaDownloadBase
+from backend.services.attention import is_open, open_state, resolve_others, resolve_state
 from backend.services.health import disk_space
 from backend.services.media_access import media_locked
 from config import get_settings
@@ -21,8 +22,9 @@ from sources import all_sources
 from task_manager.scheduler.db.TaskDefinition import TaskDefinition
 from task_manager.scheduler.db.TaskRun import TaskRun
 from task_manager.scheduler.types import TaskStatus
+from backend.types.happenings import Happening
 
-from .events import Event, emit
+from .events import emit
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +39,7 @@ def episode_url(episode: Episode) -> str:
     return f"/collection/{episode.collection.slug}/episode/{episode.slug}"
 
 
-def _already(session: Session, event: Event, marker: str) -> bool:
+def _already(session: Session, event: Happening, marker: str) -> bool:
     return session.scalar(select(EventRow.id).where(
         EventRow.event == event.value, EventRow.data["marker"].as_string() == marker,
     ).limit(1)) is not None
@@ -57,7 +59,7 @@ def failed_downloads(session: Session, now: datetime) -> int:
     for run in runs:
         marker = f"run:{run.id}"
         download = session.get(MediaDownloadBase, run.resource_id) if run.resource_id is not None else None
-        if download is None or _already(session, Event.DOWNLOAD_FAILED, marker):
+        if download is None or _already(session, Happening.DOWNLOAD_FAILED, marker):
             continue
         media = download.media
         if media_locked(media):
@@ -66,7 +68,7 @@ def failed_downloads(session: Session, now: datetime) -> int:
         episode = media if isinstance(media, Episode) else None
         reason = (run.last_error or "").strip().splitlines()[0][:160] if run.last_error else "It failed"
         emit(
-            session, Event.DOWNLOAD_FAILED, title=f"Download failed: {media.title}", body=reason,
+            session, Happening.DOWNLOAD_FAILED, title=f"Download failed: {media.title}", body=reason,
             collection_id=episode.collection_id if episode else None,
             url=episode_url(episode) if episode else "/downloads",
             data={"marker": marker, "collection": episode.collection.title if episode else None, "episode": media.title},
@@ -78,8 +80,8 @@ def failed_downloads(session: Session, now: datetime) -> int:
 
 
 def failing_tasks(session: Session, now: datetime) -> int:
-    """A task whose last few runs all failed."""
-    emitted = 0
+    """A task whose last few runs all failed stays a problem until it runs fine again."""
+    failing: set[str] = set()
     for definition in session.scalars(select(TaskDefinition).where(TaskDefinition.key.notin_(_DOWNLOAD_TASKS))):
         runs = session.scalars(
             select(TaskRun)
@@ -87,28 +89,37 @@ def failing_tasks(session: Session, now: datetime) -> int:
             .order_by(TaskRun.finished_at.desc())
             .limit(_FAILURES_IN_A_ROW)
         ).all()
+        if not runs or runs[0].status != TaskStatus.FAILED:
+            continue
+        subject = f"task:{definition.key}"
+        if is_open(session, Happening.TASK_FAILING, subject):
+            # It keeps failing until a run succeeds, however long ago its last run was.
+            failing.add(subject)
+            continue
         if (
             len(runs) < _FAILURES_IN_A_ROW or any(run.status != TaskStatus.FAILED for run in runs)
             or runs[0].finished_at is None or runs[0].finished_at < now - _LOOK_BACK
         ):
             continue
-        emit(
-            session, Event.TASK_FAILING, title=f"{definition.title} keeps failing",
-            body=(runs[0].last_error or "").strip()[:200], url="/tasks", dedupe_key=f"task:{definition.key}",
+        failing.add(subject)
+        open_state(
+            session, Happening.TASK_FAILING, subject, title=f"{definition.title} keeps failing",
+            body=(runs[0].last_error or "").strip()[:200], url="/tasks", now=now,
         )
-        emitted += 1
-    return emitted
+    return resolve_others(session, Happening.TASK_FAILING, failing, now=now) + len(failing)
 
 
 def disk_check(session: Session, disk) -> bool:
-    """``disk`` is the download folder's ``disk_space()``."""
-    minimum = get_settings().health.min_free_disk_mb * 1024 * 1024
-    if disk is None or disk.free_bytes >= minimum:
+    """``disk`` is the download folder's ``disk_space()``. Almost full stays a problem until there is room again."""
+    if disk is None:
         return False
-    emit(
-        session, Event.DISK_ALMOST_FULL, title="The disk is almost full",
+    minimum = get_settings().health.min_free_disk_mb * 1024 * 1024
+    if disk.free_bytes >= minimum:
+        return resolve_state(session, Happening.DISK_ALMOST_FULL, "disk")
+    open_state(
+        session, Happening.DISK_ALMOST_FULL, "disk", title="The disk is almost full",
         body=f"Only {disk.free_bytes / 1024 ** 3:.1f} GB is free in the download folder. Downloads will soon fail.",
-        url="/settings?tab=downloads", dedupe_key="disk",
+        url="/settings?tab=downloads",
     )
     return True
 
@@ -133,7 +144,7 @@ def source_problems(session: Session, found: list[tuple[object, list]]) -> int:
     for source, problems in found:
         for problem in problems:
             emit(
-                session, Event.SIGN_IN_NEEDED, title=f"{source.name}: {problem.title}", body=problem.detail,
+                session, Happening.SIGN_IN_NEEDED, title=f"{source.name}: {problem.title}", body=problem.detail,
                 url="/settings?tab=sources", dedupe_key=f"source:{source.id}:{problem.title}",
             )
             emitted += 1
@@ -165,10 +176,10 @@ def update_check(session: Session, release: dict | None) -> bool:
         return False
     tag = str(release.get("tag_name") or "")
     latest = _version_tuple(tag)
-    if current is None or latest is None or latest <= current or _already(session, Event.UPDATE_AVAILABLE, tag):
+    if current is None or latest is None or latest <= current or _already(session, Happening.UPDATE_AVAILABLE, tag):
         return False
     emit(
-        session, Event.UPDATE_AVAILABLE, title=f"VODLoft {'.'.join(map(str, latest))} is out",
+        session, Happening.UPDATE_AVAILABLE, title=f"VODLoft {'.'.join(map(str, latest))} is out",
         body=str(release.get("name") or tag), url=str(release.get("html_url") or "") or None, data={"marker": tag},
     )
     return True

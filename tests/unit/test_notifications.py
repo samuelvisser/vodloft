@@ -103,26 +103,26 @@ def test_default_rules_come_back_without_doubling(db):
 
 
 def test_a_problem_is_pushed_to_administrator_devices_once_a_day(db):
-    from backend.services.notifications import Event
+    from backend.types.happenings import Happening
 
     _rule(db, "download_failed")
     _device(db)
-    _emit(db, Event.DOWNLOAD_FAILED, dedupe_key="same")
-    _emit(db, Event.DOWNLOAD_FAILED, dedupe_key="same", occurred_at=NOW + timedelta(hours=2))
+    _emit(db, Happening.DOWNLOAD_FAILED, dedupe_key="same")
+    _emit(db, Happening.DOWNLOAD_FAILED, dedupe_key="same", occurred_at=NOW + timedelta(hours=2))
     assert len(_deliveries(db)) == 1
-    _emit(db, Event.DOWNLOAD_FAILED, dedupe_key="same", occurred_at=NOW + timedelta(days=1, minutes=1))
+    _emit(db, Happening.DOWNLOAD_FAILED, dedupe_key="same", occurred_at=NOW + timedelta(days=1, minutes=1))
     assert len(_deliveries(db)) == 2
 
 
 def test_new_downloads_of_one_collection_go_out_as_one_message(db):
-    from backend.services.notifications import Event
+    from backend.types.happenings import Happening
     from backend.services.notifications.delivery import _batches, compose
 
     collection = _collection(db)
     _rule(db, "episode_downloaded")
     _device(db)
     for number in range(3):
-        _emit(db, Event.EPISODE_DOWNLOADED, title=f"Downloaded: {number}", collection_id=collection.id,
+        _emit(db, Happening.EPISODE_DOWNLOADED, title=f"Downloaded: {number}", collection_id=collection.id,
               data={"collection": "Show"}, occurred_at=NOW + timedelta(seconds=number))
     assert not _batches(db, NOW + timedelta(seconds=30))
     batches = _batches(db, NOW + timedelta(minutes=2))
@@ -133,20 +133,20 @@ def test_new_downloads_of_one_collection_go_out_as_one_message(db):
 
 
 def test_a_rule_for_chosen_collections_skips_the_rest(db):
-    from backend.services.notifications import Event
+    from backend.types.happenings import Happening
 
     chosen, other = _collection(db, "chosen"), _collection(db, "other")
     _rule(db, "episode_downloaded", collection_scope="chosen", collection_ids=[chosen.id])
     _device(db)
-    _emit(db, Event.EPISODE_DOWNLOADED, collection_id=other.id)
+    _emit(db, Happening.EPISODE_DOWNLOADED, collection_id=other.id)
     assert not _deliveries(db)
-    _emit(db, Event.EPISODE_DOWNLOADED, collection_id=chosen.id)
+    _emit(db, Happening.EPISODE_DOWNLOADED, collection_id=chosen.id)
     assert len(_deliveries(db)) == 1
 
 
 def test_a_quick_download_only_reaches_whoever_asked(db):
     from backend.db.models import User
-    from backend.services.notifications import Event
+    from backend.types.happenings import Happening
 
     alice, bob = User(username="alice", password_hash="x"), User(username="bob", password_hash="x")
     db.add_all([alice, bob])
@@ -154,13 +154,13 @@ def test_a_quick_download_only_reaches_whoever_asked(db):
     _rule(db, "quick_download_finished", personal=True, user_id=alice.id)
     _rule(db, "quick_download_finished", personal=True, user_id=bob.id)
     alice_phone, _ = _device(db, alice.id, "Alice"), _device(db, bob.id, "Bob")
-    _emit(db, Event.QUICK_DOWNLOAD_FINISHED, user_id=alice.id)
+    _emit(db, Happening.QUICK_DOWNLOAD_FINISHED, user_id=alice.id)
     assert [delivery.subscription_id for delivery in _deliveries(db)] == [alice_phone.id]
 
 
 def test_collections_i_added_only_counts_my_own(db):
     from backend.db.models import User
-    from backend.services.notifications import Event
+    from backend.types.happenings import Happening
 
     alice = User(username="alice", password_hash="x")
     db.add(alice)
@@ -168,19 +168,19 @@ def test_collections_i_added_only_counts_my_own(db):
     mine, theirs = _collection(db, "mine", added_by_id=alice.id), _collection(db, "theirs")
     _rule(db, "episode_downloaded", personal=True, user_id=alice.id, collection_scope="added")
     _device(db, alice.id)
-    _emit(db, Event.EPISODE_DOWNLOADED, collection_id=theirs.id)
+    _emit(db, Happening.EPISODE_DOWNLOADED, collection_id=theirs.id)
     assert not _deliveries(db)
-    _emit(db, Event.EPISODE_DOWNLOADED, collection_id=mine.id)
+    _emit(db, Happening.EPISODE_DOWNLOADED, collection_id=mine.id)
     assert len(_deliveries(db)) == 1
 
 
 def test_the_daily_summary_waits_for_its_time(db):
-    from backend.services.notifications import Event
+    from backend.types.happenings import Happening
     from backend.services.notifications.delivery import next_summary_at
 
     _rule(db, "everything", delivery="daily", summary_time="08:00")
     _device(db)
-    _emit(db, Event.UPDATE_AVAILABLE)
+    _emit(db, Happening.UPDATE_AVAILABLE)
     (delivery,) = _deliveries(db)
     assert delivery.group_key.startswith("daily:")
     assert delivery.next_attempt_at.replace(tzinfo=timezone.utc) == next_summary_at("08:00", NOW)
@@ -194,13 +194,13 @@ def _destination(db, kind, config, name="Somewhere"):
 
 
 def test_media_server_refreshes_are_batched_into_one_call(db, monkeypatch):
-    from backend.services.notifications import Event
+    from backend.types.happenings import Happening
 
     collection = _collection(db)
     jellyfin = _destination(db, "jellyfin", {"address": "http://jellyfin:8096/", "api_key": "secret"})
     _rule(db, "episode_downloaded", push=False, destination_ids=[jellyfin.id])
     for number in range(2):
-        _emit(db, Event.EPISODE_DOWNLOADED, collection_id=collection.id,
+        _emit(db, Happening.EPISODE_DOWNLOADED, collection_id=collection.id,
               data={"folder": f"/downloads/Show/S{number}"})
     calls = []
     monkeypatch.setattr(
@@ -232,14 +232,14 @@ def test_path_mapping_writes_the_path_as_the_media_server_does(path_from, path_t
 
 
 def test_plex_on_windows_refreshes_the_library_that_holds_the_folder(db, monkeypatch):
-    from backend.services.notifications import Event
+    from backend.types.happenings import Happening
 
     collection = _collection(db)
     plex = _destination(db, "plex", {
         "address": "http://192.168.178.5:32400", "api_key": "token", "path_from": "/downloads/", "path_to": "W:\\",
     })
     _rule(db, "episode_downloaded", push=False, destination_ids=[plex.id])
-    _emit(db, Event.EPISODE_DOWNLOADED, collection_id=collection.id, data={"folder": "/downloads/Video/Bentkey/Season 1"})
+    _emit(db, Happening.EPISODE_DOWNLOADED, collection_id=collection.id, data={"folder": "/downloads/Video/Bentkey/Season 1"})
     sections = {"MediaContainer": {"Directory": [
         {"key": "1", "Location": [{"path": "W:\\Videos"}]},
         {"key": "2", "Location": [{"path": "w:\\video\\bentkey\\"}]},
@@ -302,13 +302,13 @@ def test_the_preview_shows_a_folder_as_the_media_server_sees_it(db):
 
 
 def test_a_failing_webhook_is_tried_again_then_reported(db, monkeypatch):
-    from backend.db.models import NotificationEvent
-    from backend.services.notifications import Event
+    from backend.db.models import AttentionState, NotificationEvent
+    from backend.types.happenings import Happening
 
     collection = _collection(db)
     hook = _destination(db, "webhook", {"url": "https://example.com/hook", "method": "POST"})
     _rule(db, "episode_downloaded", push=False, destination_ids=[hook.id])
-    _emit(db, Event.EPISODE_DOWNLOADED, collection_id=collection.id, data={"collection": "Show", "episode": "One"})
+    _emit(db, Happening.EPISODE_DOWNLOADED, collection_id=collection.id, data={"collection": "Show", "episode": "One"})
     bodies = []
     monkeypatch.setattr(
         "backend.services.notifications.senders.requests.request",
@@ -321,7 +321,24 @@ def test_a_failing_webhook_is_tried_again_then_reported(db, monkeypatch):
     (row,) = [row for row in _deliveries(db) if row.destination_id == hook.id]
     assert (row.status, row.attempts, row.error) == ("FAILED", 4, "It answered with HTTP 500")
     assert bodies[0]["event"] == "episode_downloaded" and bodies[0]["collection"] == "Show"
-    assert db.scalar(select(NotificationEvent).where(NotificationEvent.event == Event.TASK_FAILING.value)) is not None
+    # It stays one problem on Home, and is told once, until the webhook answers again.
+    (state,) = db.scalars(select(AttentionState).where(AttentionState.resolved_at.is_(None))).all()
+    assert (state.kind, state.subject_key, state.severity) == ("destination_failing", f"destination:{hook.id}", "problem")
+    told = db.scalars(select(NotificationEvent).where(NotificationEvent.event == Happening.DESTINATION_FAILING.value)).all()
+    assert [event.severity for event in told] == ["problem"]
+
+    _emit(db, Happening.EPISODE_DOWNLOADED, collection_id=collection.id, data={"collection": "Show", "episode": "Two"})
+    for _ in range(4):
+        _deliver(db, now=at)
+        at += timedelta(minutes=5)
+    assert len(db.scalars(select(NotificationEvent).where(NotificationEvent.event == Happening.DESTINATION_FAILING.value)).all()) == 1
+
+    monkeypatch.setattr(
+        "backend.services.notifications.senders.requests.request", lambda method, url, **kwargs: Mock(status_code=200),
+    )
+    _emit(db, Happening.EPISODE_DOWNLOADED, collection_id=collection.id, data={"collection": "Show", "episode": "Three"})
+    _deliver(db, now=at)
+    assert db.scalars(select(AttentionState).where(AttentionState.resolved_at.is_(None))).all() == []
 
 
 def test_destination_settings_are_checked_and_stored_secretly(db, tmp_path, monkeypatch):
@@ -473,12 +490,13 @@ def test_a_refused_push_shows_the_push_service_reason(monkeypatch):
 def test_a_crash_fails_at_once_and_a_retry_shows_when_it_is_tried_again(db, monkeypatch):
     """History must not show "Waiting" for a message that already failed."""
     from backend.api.endpoints.notifications.service import history
-    from backend.services.notifications import Event, delivery
+    from backend.services.notifications import delivery
+    from backend.types.happenings import Happening
     from backend.services.notifications.senders import Outcome
 
     _rule(db, "download_failed")
     _device(db, name="Phone")
-    _emit(db, Event.DOWNLOAD_FAILED, dedupe_key="one")
+    _emit(db, Happening.DOWNLOAD_FAILED, dedupe_key="one")
     monkeypatch.setattr(delivery, "vapid_key", lambda session: None)
 
     def broken(*_args):
@@ -489,7 +507,7 @@ def test_a_crash_fails_at_once_and_a_retry_shows_when_it_is_tried_again(db, monk
     (row,) = history(db)
     assert (row.status, row.error, row.retry_at) == ("FAILED", "Sending failed (ValueError)", None)
 
-    _emit(db, Event.DOWNLOAD_FAILED, dedupe_key="two")
+    _emit(db, Happening.DOWNLOAD_FAILED, dedupe_key="two")
     monkeypatch.setattr(delivery, "send_push", lambda *_args: Outcome(False, "The push service answered 503"))
     _deliver(db, now=NOW + timedelta(minutes=1))
     retried = history(db)[0]

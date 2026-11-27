@@ -9,10 +9,26 @@ import {wordsOf} from '../../lib/collectionWords'
 import {answerCreatorSuggestion, groupCreatorSuggestion, setHealthCheck} from '../../lib/queries'
 import {toast} from '../../lib/toast'
 import type {CreatorSuggestion, HealthIssue, HealthLevel, UnhealthyCollection} from '../../types/schemas/collection_health'
+import type {AttentionRead, Severity} from '../../types/schemas/attention'
 
 /** The class of a message on Home of the level: an error, a warning, or info. */
 export function alertClass(level: HealthLevel) {
     return `operation-alert operation-alert--${level}`
+}
+
+const SEVERITY_LEVELS: Record<Severity, HealthLevel> = {problem: 'error', needs_you: 'warning', tip: 'info', news: 'info'}
+
+/** One open state on Home, such as a destination that keeps failing, styled by how much it asks of the user. */
+export function AttentionAlert({state}: {state: AttentionRead}) {
+    const level = SEVERITY_LEVELS[state.severity]
+    const content = (
+        <>
+            <FontAwesomeIcon icon={faIcon('fass', state.severity === 'problem' ? 'triangle-exclamation' : 'circle-info')}/>
+            <span><strong>{state.title}</strong>{state.body && <small>{state.body}</small>}</span>
+        </>
+    )
+    if (!state.url) return <div className={alertClass(level)}>{content}</div>
+    return <Link className={alertClass(level)} to={state.url}>{content}<span>{state.severity === 'problem' ? 'Fix' : 'View'}</span></Link>
 }
 
 /** What one health issue of a collection needs from the user, as a message on Home. */
