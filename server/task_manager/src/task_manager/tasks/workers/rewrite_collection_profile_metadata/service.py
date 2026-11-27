@@ -51,6 +51,7 @@ def run_rewrite_collection_profile_metadata(
             continue
         counts.files_retagged += rewrite.tags is not None
         counts.nfos_written += rewrite.nfo is not None
+        counts.nfos_removed += rewrite.removed_nfo is not None
     summary = counts.summary()
     update_progress(progress, 100, summary, done=len(rewrites), total=len(rewrites))
     return TaskResult(summary=summary, data=counts.as_data())

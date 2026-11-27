@@ -325,14 +325,31 @@ def test_rewriting_metadata_only_writes_the_files_whose_metadata_changes(session
     third = plan()
     assert [rewrite.download_id for rewrite in third.rewrites] == [downloads[1].id] and third.unchanged == 1
 
-    # A file VODLoft embedded no tags in is left alone when the profile embeds them, and only its NFO is written.
-    session.get(EpisodeMediaDownload, downloads[1].id).tags_fingerprint = NO_METADATA
+    rewrite_metadata(third.rewrites[0])
+    record_metadata_rewrite(third.rewrites[0])
+
+    # Downloaded with no tags, as the profile embedded none: that matches while the profile still embeds none.
+    for download in downloads:
+        session.get(EpisodeMediaDownload, download.id).tags_fingerprint = NO_METADATA
+    session.commit()
+    assert plan().rewrites == []
+    # Once the profile embeds tags, the files have none of what it wants: their tags are written, the NFOs stay.
     profile.local_media_profile.metadata_mode = "embed_and_nfo"
     session.commit()
-    fourth = plan()
-    assert [(rewrite.download_id, rewrite.tags is None, rewrite.nfo is not None) for rewrite in fourth.rewrites] == [
-        (downloads[0].id, False, False), (downloads[1].id, True, True),
-    ]
+    assert [(rewrite.tags is not None, rewrite.nfo is None) for rewrite in plan().rewrites] == [(True, True)] * 2
+
+    # A profile that writes no metadata any more has the NFOs VODLoft wrote removed, and leaves the files alone.
+    profile.local_media_profile.metadata_mode = "no_metadata"
+    session.commit()
+    removals = plan().rewrites
+    assert [(rewrite.tags, rewrite.nfo, rewrite.removed_nfo is not None) for rewrite in removals] == [(None, None, True)] * 2
+    for rewrite in removals:
+        rewrite_metadata(rewrite)
+        record_metadata_rewrite(rewrite)
+        assert not rewrite.removed_nfo.exists()
+    assert plan().rewrites == []
+    session.expire_all()
+    assert session.get(EpisodeMediaDownload, downloads[0].id).nfo_path is None
 
 
 def test_asking_the_api_for_another_identification_starts_an_operation(session):

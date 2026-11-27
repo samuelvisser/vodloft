@@ -7,10 +7,12 @@ date: the tags are rewritten by copying every stream of the file as it is (ffmpe
 and the NFO is written again.
 
 Each download remembers fingerprints of the metadata VODLoft last wrote to it completely: of the tags in the file and
-of its NFO. A rewrite works out what each file's metadata would be now and only writes what differs: the tags when
-they changed, the NFO when it changed, and nothing for a file that is already right. A file VODLoft embedded no tags in
-when it downloaded it is never copied: it has no tags to update. Likewise a file it wrote no NFO for gets none. The fingerprints are stored only once everything
-of the rewrite is written, so a file whose rewrite stopped halfway still counts as not up to date.
+of its NFO, or that it wrote none (``NO_METADATA``), or nothing when VODLoft does not know. A rewrite works out what
+the file's profile asks for now and compares it with that: tags the profile wants that the file does not have, or has
+otherwise, are written; tags it no longer wants are cleared; the same for the NFO, which is removed when the profile
+no longer writes one. What matches is left alone, so a file the profile wants no tags in that has none is never
+copied. The fingerprints are stored only once everything of the rewrite is written, so a file whose rewrite stopped
+halfway still counts as not up to date.
 """
 from __future__ import annotations
 
@@ -35,7 +37,7 @@ from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.local_media_profile_types import keeps_tracks
 from config.settings.submodels import MetadataMode
 from downloader.ffmpeg import embed_metadata
-from downloader.metadata import NO_METADATA, nfo_fingerprint, render_nfo, tags_fingerprint
+from downloader.metadata import NO_METADATA, REWRITTEN_FFMPEG_TAGS, nfo_fingerprint, render_nfo, tags_fingerprint
 from downloader.plan import EMBEDS_METADATA
 from downloader.storage.identity import inspect_artifact
 from task_manager.scheduler.operation_factory import create_operation
@@ -54,12 +56,13 @@ class MetadataRewrite:
     download_id: int
     media_path: Path
     tags: dict[str, str] | None
-    """None when the file's tags stay as they are: they are already right, the profile does not embed tags, or the
-    file cannot take them."""
+    """None when the file's tags stay as they are. Empty when they are cleared, as the profile embeds none now."""
     cleared_tags: tuple[str, ...]
     nfo: bytes | None
     nfo_path: Path | None
-    """``nfo`` is None when the NFO stays as it is: it is already right, or the profile writes none."""
+    """``nfo`` is None when the NFO stays as it is, or is removed."""
+    removed_nfo: Path | None = None
+    """The NFO to remove, as the profile writes none now."""
 
 
 @dataclass(frozen=True)
@@ -77,6 +80,8 @@ class MetadataRewriteCounts:
     files_considered: int = 0
     files_retagged: int = 0
     nfos_written: int = 0
+    nfos_removed: int = 0
+    """NFOs removed, as their profile writes none now."""
     files_unchanged: int = 0
     """Files whose metadata was already right."""
     files_skipped: int = 0
@@ -89,6 +94,8 @@ class MetadataRewriteCounts:
             parts.append(f"updated the tags of {self.files_retagged} file(s)")
         if self.nfos_written:
             parts.append(f"wrote {self.nfos_written} NFO file(s)")
+        if self.nfos_removed:
+            parts.append(f"removed {self.nfos_removed} NFO file(s)")
         if not parts:
             parts.append("nothing to rewrite")
         summary = "Metadata rewrite: " + " and ".join(parts)
@@ -103,7 +110,7 @@ class MetadataRewriteCounts:
     def as_data(self) -> dict[str, int]:
         return {
             "files_considered": self.files_considered, "files_retagged": self.files_retagged,
-            "nfos_written": self.nfos_written, "files_unchanged": self.files_unchanged, "files_skipped": self.files_skipped, "files_failed": self.files_failed,
+            "nfos_written": self.nfos_written, "nfos_removed": self.nfos_removed, "files_unchanged": self.files_unchanged, "files_skipped": self.files_skipped, "files_failed": self.files_failed,
         }
 
 
@@ -155,8 +162,6 @@ def plan_metadata_rewrites(
     if profile is None:
         return MetadataRewritePlan([])
     mode = effective_metadata_mode(profile)
-    if mode is MetadataMode.NO_METADATA:
-        return MetadataRewritePlan([])
     build = build_track_metadata if keeps_tracks(profile) else build_episode_metadata
     downloads = s.scalars(
         select(EpisodeMediaDownload)
@@ -177,30 +182,35 @@ def plan_metadata_rewrites(
         episode = download.media
         metadata = build(episode, episode.collection, profile)
         media_path = Path(download.file_path)
-        tags = cleared = None
-        # A file VODLoft embedded no tags in, such as one downloaded in a format that takes none, has none to update.
-        if mode in _EMBEDS and download.tags_fingerprint != NO_METADATA:
+        # What the profile asks for now: the tags, when it embeds them and the file can take them, and the NFO.
+        wanted_tags = None
+        if mode in _EMBEDS:
             if media_path.suffix.lower().removeprefix(".") in EMBEDS_METADATA:
-                tags, cleared = metadata.ffmpeg_tags(), metadata.cleared_ffmpeg_tags()
+                wanted_tags = metadata.ffmpeg_tags()
             else:
                 untaggable += 1
-        nfo = nfo_path = None
-        # Nor does a file VODLoft wrote no NFO for have one to update.
-        if mode in _NFOS and download.nfo_fingerprint != NO_METADATA:
-            nfo = render_nfo(metadata, kodi_safe=profile.kodi_safe_nfo)
-            nfo_path = Path(download.nfo_path) if download.nfo_path else media_path.with_name(media_path.stem + ".nfo")
-        if tags is None and nfo is None:
-            continue
-        if tags is not None and tags_fingerprint(tags) == download.tags_fingerprint:
-            tags = cleared = None
-        if nfo is not None and nfo_fingerprint(nfo) == download.nfo_fingerprint and download.nfo_path:
-            nfo = nfo_path = None
-        if tags is None and nfo is None:
+        wanted_nfo = render_nfo(metadata, kodi_safe=profile.kodi_safe_nfo) if mode in _NFOS else None
+        tags = cleared = None
+        if wanted_tags is not None:
+            if tags_fingerprint(wanted_tags) != download.tags_fingerprint:
+                tags, cleared = wanted_tags, metadata.cleared_ffmpeg_tags()
+        elif download.tags_fingerprint not in (None, NO_METADATA):
+            # VODLoft embedded tags the profile no longer wants: clear them.
+            tags, cleared = {}, REWRITTEN_FFMPEG_TAGS
+        nfo = nfo_path = removed_nfo = None
+        if wanted_nfo is not None:
+            if nfo_fingerprint(wanted_nfo) != download.nfo_fingerprint or not download.nfo_path:
+                nfo = wanted_nfo
+                nfo_path = Path(download.nfo_path) if download.nfo_path else media_path.with_name(media_path.stem + ".nfo")
+        elif download.nfo_path and download.nfo_fingerprint not in (None, NO_METADATA):
+            # VODLoft wrote an NFO the profile no longer wants: remove it.
+            removed_nfo = Path(download.nfo_path)
+        if tags is None and nfo is None and removed_nfo is None:
             unchanged += 1
             continue
         rewrites.append(MetadataRewrite(
             download_id=download.id, media_path=media_path, tags=tags, cleared_tags=cleared or (),
-            nfo=nfo, nfo_path=nfo_path,
+            nfo=nfo, nfo_path=nfo_path, removed_nfo=removed_nfo,
         ))
     return MetadataRewritePlan(rewrites, untaggable=untaggable, unchanged=unchanged)
 
@@ -213,6 +223,8 @@ def rewrite_metadata(rewrite: MetadataRewrite, *, should_cancel=None) -> None:
         )
     if rewrite.nfo is not None and rewrite.nfo_path is not None:
         _replace_file(rewrite.nfo_path, rewrite.nfo)
+    if rewrite.removed_nfo is not None:
+        rewrite.removed_nfo.unlink(missing_ok=True)
 
 
 def record_metadata_rewrite(rewrite: MetadataRewrite) -> None:
@@ -228,7 +240,7 @@ def record_metadata_rewrite(rewrite: MetadataRewrite) -> None:
         if media is not None:
             download.artifact_stat_dev, download.artifact_stat_ino = media.stat_dev, media.stat_ino
             download.artifact_size_bytes, download.artifact_fingerprint = media.size_bytes, media.fingerprint
-            download.tags_fingerprint = tags_fingerprint(rewrite.tags)
+            download.tags_fingerprint = tags_fingerprint(rewrite.tags) if rewrite.tags else NO_METADATA
         if nfo is not None:
             asset = next((asset for asset in download.assets if asset.asset_key == "nfo"), None)
             if asset is None:
@@ -239,6 +251,10 @@ def record_metadata_rewrite(rewrite: MetadataRewrite) -> None:
                 download.assets.append(asset)
             asset.size_bytes, asset.fingerprint = nfo.size_bytes, nfo.fingerprint
             download.nfo_fingerprint = nfo_fingerprint(rewrite.nfo)
+        if rewrite.removed_nfo is not None:
+            for asset in [asset for asset in download.assets if asset.kind == "nfo"]:
+                download.assets.remove(asset)
+            download.nfo_fingerprint = NO_METADATA
 
     run_write_transaction(record)
 
