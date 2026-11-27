@@ -58,6 +58,8 @@ const COLLECTION_FIELDS: BulkFieldSpec[] = [
 const SeasonsSummarySchema = z.object({
     feeds: z.object({key: z.string(), names: NamesSchema, site: z.string(), summary: BulkFieldSummarySchema}).array().default([]),
     listNames: NamesSchema.nullable().default(null),
+    looseVideos: BulkFieldSummarySchema.nullable().default(null),
+    seasonNames: NamesSchema.nullable().default(null),
 })
 
 const ROLE_OPTIONS = [
@@ -70,8 +72,9 @@ const ROLE_WORDS: Record<string, string> = {season: 'own season', part: 'part of
 /** The Seasons dialog's settings the bulk edit changes: the lists switch and each feed of the chosen collections'
  * channels, which only changes the collections whose channel has it. */
 function seasonsFields(summary: BulkSummary): BulkFieldSpec[] {
-    const {feeds, listNames} = SeasonsSummarySchema.parse(summary)
+    const {feeds, listNames, looseVideos, seasonNames} = SeasonsSummarySchema.parse(summary)
     const sites = new Set(feeds.map((feed) => feed.site))
+    const grouping = seasonNames && {one_season: `One ${seasonNames.singular}`, by_year: `${capitalized(seasonNames.a)} per year`}
     return [
         ...(listNames ? [{
             key: 'linkSeasons', label: `${capitalized(listNames.plural)} and links`, kind: 'switch' as const, defaultValue: true,
@@ -86,12 +89,19 @@ function seasonsFields(summary: BulkSummary): BulkFieldSpec[] {
             valueLabel: (value: unknown) => ROLE_WORDS[String(value)] ?? String(value),
             help: 'You see what moves before saving.',
         })),
+        ...(looseVideos && grouping ? [{
+            key: 'looseVideos', label: 'What is part of the collection goes in', kind: 'choice' as const, defaultValue: '',
+            summary: looseVideos,
+            options: Object.entries(grouping).map(([value, label]) => ({value, label})),
+            valueLabel: (value: unknown) => grouping[String(value) as keyof typeof grouping]?.toLowerCase() ?? String(value),
+            help: 'You see what moves before saving.',
+        }] : []),
     ]
 }
 
 /** Changes to the seasons move downloads, so they are reviewed before they are saved. */
 const SEASONS_REVIEW: Omit<BulkReview, 'render'> = {
-    wanted: (changes) => 'linkSeasons' in changes || 'feeds' in changes,
+    wanted: (changes) => 'linkSeasons' in changes || 'feeds' in changes || 'looseVideos' in changes,
     saveLabel: 'Save and move',
 }
 

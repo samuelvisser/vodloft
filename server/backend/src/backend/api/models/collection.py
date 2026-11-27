@@ -13,7 +13,7 @@ from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.collection_contracts import collection_contract
 from backend.types.collection_health_types import HealthIssueKind
 from backend.types.collection_types import CheckFrequency, CollectionType, CookiesMode, EpisodeIdentifier, EpisodeOrder
-from backend.types.link_season_types import CollectionKind, LinkSeasons, OutsideVideos, SourceRole
+from backend.types.link_season_types import CollectionKind, LinkSeasons, LooseVideos, OutsideVideos, SourceRole
 from backend.types.resource_names import CUSTOM_COLLECTION_NAMES
 from config.settings.cron_validation import CronExpressionError, validate_cron_expression
 from backend.types.download_profile_types import EpisodeTagKey
@@ -431,7 +431,19 @@ class CollectionBulkChangesIn(BulkChangesIn):
     """What some feeds of the Collections' channels become, by the key of the feed (``CollectionBulkFeedRead.key``).
     A Collection takes only the feeds its channel has; the others keep what they are."""
 
+    loose_videos: Optional[LooseVideos] = None
+    """Whether what is part of each Collection goes in one season or a season per year, as the Seasons dialog sets
+    it; only Collections whose Source lists their videos have it. Whether that one season also holds what has a season
+    of its own stays as each Collection has it."""
+
     nullable: ClassVar[frozenset[str]] = frozenset({"genre", "content_rating"})
+
+    @field_validator("loose_videos")
+    @classmethod
+    def _grouping(cls, value: Optional[LooseVideos]) -> Optional[LooseVideos]:
+        if value == LooseVideos.EVERYTHING:
+            raise ValueError("Choose one season or a season per year")
+        return value
 
     @field_validator("feeds")
     @classmethod
@@ -478,4 +490,8 @@ class CollectionBulkSummaryRead(BulkSummaryRead):
     feeds: list[CollectionBulkFeedRead] = Field(default_factory=list)
     list_names: Optional[NamesAPIRead] = None
     """What the lists of the Collections that can take them are called, joined, such as playlists."""
+    loose_videos: Optional[BulkFieldSummaryRead] = None
+    """Whether what is part of each Collection that has the setting goes in one season or a season per year now."""
+    season_names: Optional[NamesAPIRead] = None
+    """What the seasons of the Collections that have that setting are called, joined, such as seasons or albums."""
 

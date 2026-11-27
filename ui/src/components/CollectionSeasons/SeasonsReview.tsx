@@ -1,7 +1,7 @@
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 
 import {faIcon} from '../../icons/faIcon'
-import {capitalized} from '../../types/creator'
+import {capitalized, joinedNames} from '../../types/creator'
 import type {CollectionSeasonsRead, SeasonsReviewRead} from '../../types/schemas/collection_seasons'
 import {FoldSteps, names, Step, TitleList} from '../ChangeIdentificationDialog/ChangeSteps'
 import '../ChangeIdentificationDialog/ChangeIdentificationDialog.css'
@@ -141,6 +141,7 @@ export default function SeasonsReview({view, review, failed, changes, words, lis
     return (
         <div className="change-identification-dialog seasons-review">
             {alone && <SavingDoes/>}
+            <Replaces ids={review.replaces}/>
             {rows.length > 0 && (
                 <section className="seasons-review-changes" aria-labelledby="seasons-review-changed">
                     <h3 id="seasons-review-changed">What you changed</h3>
@@ -178,6 +179,24 @@ export default function SeasonsReview({view, review, failed, changes, words, lis
 }
 
 /** What saving does, said once above a review. */
+/** The work VODLoft still does on the collection that saving stops, and starts again under the new settings. */
+function Replaces({ids}: {ids: string[]}) {
+    const {operations} = useOperations()
+    const labels = [...new Set(ids.flatMap((id) => {
+        const operation = operations.find((candidate) => candidate.id === id)
+        const definition = operation && (frontendOperationDefinitions as Record<string, {label: string} | undefined>)[operation.kind]
+        return definition ? [definition.label.toLowerCase()] : []
+    }))]
+    if (ids.length === 0) return null
+    return (
+        <p className="help seasons-review-replaces">
+            <FontAwesomeIcon icon={faIcon('fass', 'arrows-rotate')} aria-hidden="true"/>{' '}
+            VODLoft is still busy with {labels.length ? <b>{joinedNames(labels.map((label) => ({singular: label, plural: label, a: label}))).plural}</b> : 'earlier work'} on
+            this collection. Saving stops it and does again what the new settings still need of it, so you don’t have to wait for it.
+        </p>
+    )
+}
+
 export function SavingDoes() {
     return (
         <p className="help">

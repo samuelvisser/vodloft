@@ -6,7 +6,7 @@ from .existing_files.router import router as existing_files_router
 from .seasons.router import router as collection_seasons_router
 from .health import router as collection_health_router
 from .sync_log import collection_scans
-from .bulk import change_collections, delete_collections, review_collections, summarize_collections, sync_collections
+from .bulk import change_collections, delete_collections, review_collections, stop_replaced, summarize_collections, sync_collections
 from backend.api.endpoints.creators.service import (
     CollectionNotFoundError, LookupPlan, add_collection_to_creator, collection_creator_match, collection_link,
     join_collection_creator, leave_collection_creator, look_up_collection_creator,
@@ -105,7 +105,9 @@ def collections_bulk_summary(body: BulkSelectionIn):
 @router.post("/bulk/change", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=BulkResultRead)
 def collections_bulk_change(body: CollectionBulkChangeIn):
     """Give the chosen Collections the same settings; a setting a Collection's Site doesn't have is left alone."""
-    return run_write_transaction(lambda s: change_collections(s, body))
+    # As the Seasons dialog's save, it stops the work it replaces on the collections whose seasons change first.
+    replaced = stop_replaced(body)
+    return run_write_transaction(lambda s: change_collections(s, body, replaced))
 
 
 @router.post("/bulk/review", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=CollectionBulkReviewRead)

@@ -254,3 +254,77 @@ def test_listing_a_collection_reports_its_steps(feeds_source, session):
     assert stages["videos"].done == 2 and stages["videos"].total is None
     assert (stages["lists"].done, stages["lists"].total) == (2, 2)
     assert stages["videos"].label == "Listing the videos of The Creator"
+
+
+def test_the_library_bulk_edit_puts_what_is_part_of_a_collection_in_a_season_per_year(feeds_source, session):
+    from backend.api.endpoints.collections.bulk import change_collections, review_collections, summarize_collections
+    from backend.api.models.profile_bulk import BulkSelectionIn
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Collection
+
+    source = feeds_source
+    source.videos = [_video("a", 2024), _video("b", 2025)]
+    collection = _collection(session, mode="off", loose="one_season")
+    _index(session, collection, source)
+
+    summary = summarize_collections(session, BulkSelectionIn(ids=[collection.id]))
+    session.rollback()
+    assert [(item.value, item.count) for item in summary.loose_videos.values] == [("one_season", 1)]
+    assert summary.season_names.plural == "seasons"
+    # One season is what it has already, so there is nothing to review.
+    assert review_collections(session, _bulk([collection.id], loose_videos="one_season")).collections == []
+    session.rollback()
+    with pytest.raises(ValueError):
+        _bulk([collection.id], loose_videos="everything")
+
+    result = run_write_transaction(lambda s: change_collections(s, _bulk([collection.id], loose_videos="by_year")))
+    assert (result.done, result.skipped) == (1, [])
+    session.expire_all()
+    assert session.get(Collection, collection.id).loose_videos == "by_year"
+    assert dict(_filled(session)) == {"2024": ["a"], "2025": ["b"]}
+
+
+def test_saving_stops_numbering_again_for_an_earlier_change_and_starts_it_again(feeds_source, session, monkeypatch):
+    from backend.api.endpoints.collections.seasons import service
+    from backend.api.endpoints.collections.seasons.service import review_seasons, seasons_view
+    from backend.api.models.collection_seasons import CollectionSeasonsAPIUpdate
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Collection
+    from backend.services.episode_identification import queue_renumber
+    from backend.services.replaced_work import ReplacedWork, stop_replaced_work
+    from task_manager.scheduler.db import TaskOperation
+
+    source = feeds_source
+    source.videos = [_video("a", 2024), _video("b", 2025)]
+    collection = _collection(session, mode="off", loose="one_season")
+    _index(session, collection, source)
+    monkeypatch.setattr(service, "reindex_collection", lambda s, c, by_user: None)
+    earlier = run_write_transaction(lambda s: queue_renumber(s, s.get(Collection, collection.id), renumber=False).id)
+
+    # The review does not wait for it, and says saving replaces it.
+    view = seasons_view(session, "creator")
+    body = CollectionSeasonsAPIUpdate(
+        seasons=[{"id": season.id, "name": season.name} for season in view.seasons],
+        custom_season_order=view.custom_season_order, link_seasons=view.link_seasons,
+        loose_videos="one_season", outside_videos=view.outside_videos,
+        feed_seasons={"shorts": None},
+    )
+    review = review_seasons(session, "creator", body)
+    session.rollback()
+    assert review.busy is None and review.replaces == [earlier]
+
+    # Saving stops it first, and starts what it was still going to do again, the way it was.
+    replaced = stop_replaced_work("creator")
+    assert replaced == ReplacedWork(renumber=False)
+    session.expire_all()
+    assert session.get(TaskOperation, earlier).status == "CANCELED"
+    run_write_transaction(lambda s: service.update_seasons(s, "creator", body, replaced=replaced))
+    session.expire_all()
+    again = session.scalars(select(TaskOperation).where(
+        TaskOperation.kind == "collection.renumber", TaskOperation.status == "QUEUED",
+    )).all()
+    assert len(again) == 1 and again[0].id != earlier and again[0].context["renumber"] is False
+    # A later save replaces the one this save started, in turn.
+    assert stop_replaced_work("creator") == ReplacedWork(renumber=False)
+    session.expire_all()
+    assert session.get(TaskOperation, again[0].id).status == "CANCELED"

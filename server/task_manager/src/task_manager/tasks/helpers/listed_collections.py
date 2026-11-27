@@ -316,6 +316,9 @@ def _index_listed_collection(
         place_in_link_seasons(w, collection, by_user=by_user)
         return added
 
+    # Work that was stopped meanwhile, such as by a save of the collection's seasons that replaces it, saves nothing.
+    if hasattr(progress, "raise_if_canceled"):
+        progress.raise_if_canceled()
     added = run_write_transaction(save)
     if plan is not None:
         plan.complete("save")

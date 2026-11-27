@@ -16,6 +16,7 @@ from backend.api.models.collection_seasons import (
 from backend.db.core import run_write_transaction
 from backend.security.access import Area, Level
 from backend.security.deps import requires
+from backend.services.replaced_work import stop_replaced_work
 from backend.services.list_previews import (
     forget_listings, kept_for_dialog, listings, newest_review, saving, saving_plan, start_listings,
 )
@@ -71,12 +72,16 @@ def collection_seasons_put(collection_slug: str, body: CollectionSeasonsAPIUpdat
         steps = _found(lambda: saving_steps(s, collection_slug, body, listed))
     # The dialog follows how far the save is by its token (``collection_seasons_saving``).
     plan = saving_plan(collection_slug, body.listing_token, steps)
+    # Work for an earlier change stops: the save plans everything from the collection as it is, and starts again
+    # what that work was still going to do.
+    with plan_step(plan, "stop"):
+        replaced = stop_replaced_work(collection_slug)
     with plan_step(plan, "look_up"):
         added = [
             replace(_look_up(collection_slug, link.url), as_season=link.as_season, items=listed.links.get(link.url, ()))
             for link in body.added_links
         ]
-    return _found(lambda: run_write_transaction(lambda s: update_seasons(s, collection_slug, body, added, listed, plan)))
+    return _found(lambda: run_write_transaction(lambda s: update_seasons(s, collection_slug, body, added, listed, plan, replaced)))
 
 
 @router.get(

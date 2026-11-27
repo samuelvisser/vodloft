@@ -323,9 +323,26 @@ class CollectionWork:
         )
 
 
-def collection_work(s: Session, collection: Collection) -> CollectionWork | None:
+def collection_work(
+    s: Session, collection: Collection, *, downloads: bool = True, besides: Sequence[str] = (),
+) -> CollectionWork | None:
     """The work on the collection that numbering its episodes again waits for: its episodes are downloading, or
-    VODLoft is working on its episodes or files. None when there is none."""
+    VODLoft is working on its episodes or files. None when there is none. Without ``downloads`` only work on its
+    episodes or files counts, and work of the kinds in ``besides`` never does."""
+    if downloads:
+        return _downloading(s, collection) or collection_work(s, collection, downloads=False, besides=besides)
+    work = s.scalar(
+        select(TaskOperation.id).where(
+            TaskOperation.resource_type == "collection",
+            TaskOperation.resource_id == collection.id,
+            TaskOperation.kind.in_([kind for kind in _BUSY_KINDS if kind not in besides]),
+            TaskOperation.status.in_(_ACTIVE),
+        ).limit(1)
+    )
+    return CollectionWork(collection.title, downloads=False, operation_id=work) if work is not None else None
+
+
+def _downloading(s: Session, collection: Collection) -> CollectionWork | None:
     downloads = s.scalar(
         select(TaskOperation.id).where(
             TaskOperation.kind == "media.download",
@@ -336,17 +353,7 @@ def collection_work(s: Session, collection: Collection) -> CollectionWork | None
             ),
         ).limit(1)
     )
-    if downloads is not None:
-        return CollectionWork(collection.title, downloads=True)
-    work = s.scalar(
-        select(TaskOperation.id).where(
-            TaskOperation.resource_type == "collection",
-            TaskOperation.resource_id == collection.id,
-            TaskOperation.kind.in_(_BUSY_KINDS),
-            TaskOperation.status.in_(_ACTIVE),
-        ).limit(1)
-    )
-    return CollectionWork(collection.title, downloads=False, operation_id=work) if work is not None else None
+    return CollectionWork(collection.title, downloads=True) if downloads is not None else None
 
 
 def collection_busy(s: Session, collection: Collection, doing: str) -> str | None:

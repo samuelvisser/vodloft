@@ -137,15 +137,23 @@ def test_the_review_waits_while_vodloft_works_on_the_collection_but_not_for_down
     from backend.services.episode_identification import CollectionWork
 
     _waiting(source, session)
+    asked = {}
 
-    # Such as a listing of the collection, which may change what moves.
-    monkeypatch.setattr(service, "collection_work", lambda s, c: CollectionWork(c.title, downloads=False))
+    def work(s, c, **kwargs):
+        asked.update(kwargs)
+        return CollectionWork(c.title, downloads=False)
+
+    # Such as deleting the collection's downloads, which changes what moves.
+    monkeypatch.setattr(service, "collection_work", work)
     waiting = _review(session, loose_videos="one_season")
     assert waiting.busy is not None and "still working on" in waiting.busy
     assert waiting.moves is None
+    # Downloads go on, as the new videos queue behind them; numbering again and listing the collection again are
+    # work saving replaces.
+    assert asked["downloads"] is False
+    assert {"collection.renumber", "collection.sync", "collection.index"} <= set(asked["besides"])
 
-    # Downloads go on: the new videos queue behind them.
-    monkeypatch.setattr(service, "collection_work", lambda s, c: CollectionWork(c.title, downloads=True))
+    monkeypatch.setattr(service, "collection_work", lambda s, c, **kwargs: None)
     ready = _review(session, loose_videos="one_season")
     assert ready.busy is None and [part.count for part in ready.moves.parts] == [2]
 

@@ -23,6 +23,7 @@ from backend.services.file_moves import files_stamp
 from backend.services.new_lists import checked_new_link_seasons
 from backend.services.collection_health import note_collection_health
 from backend.services.episode_identification import collection_work, queue_renumber
+from backend.services.replaced_work import REPLACED_KINDS, ReplacedWork, replaced_operations
 from backend.services.list_previews import Listing, ListingState, ListToList
 from backend.services.reconcile import MovesMade, list_labels, move_preview, moves_made
 from backend.services.link_seasons import (
@@ -194,18 +195,27 @@ def takes_lists(collection: Collection) -> bool:
 
 def settings_with(
     collection: Collection, roles: Mapping[str, SourceRole], link_seasons: LinkSeasons | None, renumber: bool = True,
+    loose_videos: LooseVideos | None = None,
 ) -> CollectionSeasonsAPIUpdate | None:
     """The Seasons dialog's settings as the collection has them, with ``roles`` for the feeds of its channel (by
-    ``feed_key``; a feed its channel lacks is left out) and its lists switched as ``link_seasons`` says, when it can
-    take them. None when that changes nothing. Everything else stays as it is: its seasons, their names and order, and
-    what each list is."""
+    ``feed_key``; a feed its channel lacks is left out), its lists switched as ``link_seasons`` says, when it can
+    take them, and what is part of it in one season or a season per year as ``loose_videos`` says. None when that
+    changes nothing. Everything else stays as it is: its seasons, their names and order, what each list is, and
+    whether its one season also holds what has a season of its own."""
     feeds = _feeds(collection)
     was = feed_roles(collection)
     wanted = {key: role for key, role in roles.items() if key in was}
     lists_on = collection.link_seasons != LinkSeasons.OFF.value
     if link_seasons is not None and takes_lists(collection):
         lists_on = link_seasons != LinkSeasons.OFF
-    if all(was[key] == role for key, role in wanted.items()) and lists_on == (collection.link_seasons != LinkSeasons.OFF.value):
+    grouping = LooseVideos(collection.loose_videos)
+    if loose_videos is not None and (loose_videos == LooseVideos.BY_YEAR or grouping == LooseVideos.BY_YEAR):
+        grouping = loose_videos
+    if (
+        all(was[key] == role for key, role in wanted.items())
+        and lists_on == (collection.link_seasons != LinkSeasons.OFF.value)
+        and grouping == collection.loose_videos
+    ):
         return None
     now = {**was, **wanted}
     taken = [feed.ref for feed in feeds if now[feed_key(collection, feed.ref)] != SourceRole.OFF]
@@ -236,7 +246,7 @@ def settings_with(
         custom_season_order=collection.custom_season_order,
         **feed_settings,
         link_seasons=LinkSeasons.ON if lists_on else LinkSeasons.OFF,
-        loose_videos=LooseVideos(collection.loose_videos),
+        loose_videos=grouping,
         outside_videos=outside,
         playlists=[
             CollectionListChangeAPIIn(
@@ -384,8 +394,11 @@ class Listed:
 
 def saving_steps(s: Session, collection_slug: str, body: CollectionSeasonsAPIUpdate, listed: Listed = Listed()) -> list[StageSpec]:
     """The steps of saving the Seasons dialog, which the dialog shows while it waits for the save. Reading only."""
-    words = collection_contract(_collection(s, collection_slug).type).words
+    collection = _collection(s, collection_slug)
+    words = collection_contract(collection.type).words
     return [
+        *([StageSpec(id="stop", code="stop_replaced_work", label="Stopping the earlier work this save replaces")]
+          if replaced_operations(s, collection.id) else []),
         *([StageSpec(id="look_up", code="look_up_links", label="Looking up the links you added")] if body.added_links else []),
         *([StageSpec(id="store", code="store_listed", label="Keeping what was listed")] if listed.lists or listed.links else []),
         StageSpec(id="plan", code="plan_seasons", label=f"Placing each {words.episode.singular} in its {words.season.singular}"),
@@ -412,13 +425,15 @@ def plan_step(plan: PlanTracker | None, step: str) -> Iterator[None]:
 
 def update_seasons(
     s: Session, collection_slug: str, body: CollectionSeasonsAPIUpdate, added: Sequence[AddedLink] = (),
-    listed: Listed = Listed(), plan: PlanTracker | None = None,
+    listed: Listed = Listed(), plan: PlanTracker | None = None, replaced: ReplacedWork = ReplacedWork(),
 ) -> CollectionSeasonsAPIRead:
     """Save the Seasons dialog as its review showed it (``review_seasons``): rename and order the collection's seasons,
     set which feeds of its channel it takes and how its lists are seasons, as ``plan_seasons_dialog`` plans it, and
     move the downloads that then belong in another season, which numbers its episodes again unless ``body`` says not
     to. ``added`` are the links the user adds, looked up before the transaction (see ``look_up_added_link``), and
     ``listed`` what the dialog listed for its review. ``plan`` follows the save's steps (``saving_steps``).
+    ``replaced`` is what the work the save stopped was still going to do (``stop_replaced_work``), which it starts
+    again with what the new settings need.
 
     ``s`` is a write transaction's session."""
     collection = _collection(s, collection_slug)
@@ -449,12 +464,12 @@ def update_seasons(
         apply_state(s, state)
         s.flush()
     with plan_step(plan, "after"):
-        return _after_saving(s, collection, collection_slug, body, added, planned, done, was_settings)
+        return _after_saving(s, collection, collection_slug, body, added, planned, done, was_settings, replaced)
 
 
 def _after_saving(
     s: Session, collection: Collection, collection_slug: str, body: CollectionSeasonsAPIUpdate, added: Sequence[AddedLink],
-    planned: _Planned, done: MovesMade, was_settings: dict,
+    planned: _Planned, done: MovesMade, was_settings: dict, replaced: ReplacedWork,
 ) -> CollectionSeasonsAPIRead:
     """What saving the dialog sets going once its seasons and episodes are written."""
     again = EpisodeIdentifier(collection.episode_identifier) is not EpisodeIdentifier.DATE_BASED and body.renumber
@@ -462,9 +477,15 @@ def _after_saving(
         # Numbers the episodes again, unless the user said not to, then moves each downloaded file to its season's
         # folder and its name.
         queue_renumber(s, collection, renumber=again)
+    elif replaced.renumber is not None:
+        # The save stopped numbering again for an earlier change before it was done: it starts over, the way it was.
+        queue_renumber(s, collection, renumber=replaced.renumber)
     # A link the user added lists its videos, which then get its season.
     if (planned.relisting or bool(added)) and body.link_seasons != LinkSeasons.OFF:
         reindex_collection(s, collection, by_user=True)
+    elif replaced.relist is not None:
+        # The save stopped listing the collection again: it lists it again under the new settings.
+        reindex_collection(s, collection, by_user=replaced.relist)
     s.flush()
     note_collection_health(s, collection)
     note_move_causes(collection, MoveCauseOrigin.SEASONS, was_settings, waiting=bool(moved_episodes(s, collection)))
@@ -787,9 +808,11 @@ def review_seasons(
 
     Reading only."""
     collection = _collection(s, collection_slug)
-    work = collection_work(s, collection)
-    if work is not None and not work.downloads:
+    # Saving stops the work it replaces, so the review does not wait for that; other work it waits for.
+    work = collection_work(s, collection, downloads=False, besides=REPLACED_KINDS)
+    if work is not None:
         return SeasonsReviewAPIRead(busy=work.waiting(), busy_operation=work.operation_id)
+    replaces = replaced_operations(s, collection.id)
     on = {change.id for change in body.playlists if change.enabled}
     titles = {playlist.id: playlist.title for playlist in collection.lists}
     asked = {link.url: link.title or link.url for link in body.added_links}
@@ -823,7 +846,7 @@ def review_seasons(
     else:
         joining = 0
     return SeasonsReviewAPIRead(
-        seasons=_seasons(state), waiting=_waiting_seasons(state),
+        replaces=replaces, seasons=_seasons(state), waiting=_waiting_seasons(state),
         causes=changed_settings(state.collection, MoveCauseOrigin.SEASONS, copy.was_settings),
         new_seasons=[
             *(season.name for season in state.ordered_seasons() if season.id < 0),

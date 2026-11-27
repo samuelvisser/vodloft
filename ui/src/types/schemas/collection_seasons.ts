@@ -201,6 +201,8 @@ export const SeasonsReviewReadSchema = z.object({
     busy: z.string().nullable().default(null),
     /** The task the review waits for, when it waits for one. */
     busyOperation: z.string().nullable().default(null),
+    /** The work on the collection saving stops and does again as far as the new settings still need it. */
+    replaces: z.array(z.string()).default([]),
     seasons: z.array(CollectionSeasonReadSchema).default([]),
     waiting: z.array(z.object({listId: z.number(), title: z.string()})).default([]),
     /** The settings saving changes that decide where videos go, each as it was and as it becomes. */

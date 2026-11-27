@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Mapping
 
 from fastapi import HTTPException
 from pydantic import ValidationError
@@ -18,8 +19,11 @@ from backend.db.models import Collection
 from backend.services.errors import ServiceError
 from backend.services.link_seasons import section_list_names
 from backend.services.list_previews import saving_plan
+from backend.services.replaced_work import ReplacedWork, stop_replaced_work
+from backend.db.core import get_session
 from backend.services.sites import collection_site
-from backend.types.link_season_types import SourceRole
+from backend.types.collection_contracts import collection_contract
+from backend.types.link_season_types import LooseVideos, SourceRole
 from sources import Feature, Names, get_source
 
 from .seasons.service import (
@@ -32,7 +36,7 @@ _FEATURES = {"split_chapters": Feature.CHAPTERS, "cookies_mode": Feature.OPTIONA
 """The settings only Collections of some Sources have, as their Edit page shows them."""
 
 
-_SEASONS = ("link_seasons", "feeds")
+_SEASONS = ("link_seasons", "feeds", "loose_videos")
 """The settings of the Seasons dialog the bulk edit changes, which move downloads: the review shows what they do."""
 
 
@@ -41,6 +45,8 @@ def _offers(collection: Collection, name: str) -> bool:
         return takes_lists(collection)
     if name == "feeds":
         return bool(channel_feeds(collection))
+    if name == "loose_videos":
+        return _groups_videos(collection)
     feature = _FEATURES.get(name)
     return feature is None or get_source(collection.source_key).has(feature)
 
@@ -49,7 +55,16 @@ def _seasons_changes(changes: CollectionBulkChangesIn, collection: Collection, r
     """The Seasons dialog's settings the changes give the collection, or None when they change none of them."""
     if not changes.model_fields_set & set(_SEASONS):
         return None
-    return settings_with(collection, changes.feeds or {}, changes.link_seasons, renumber=renumber)
+    return settings_with(
+        collection, changes.feeds or {}, changes.link_seasons, renumber=renumber,
+        loose_videos=changes.loose_videos if _groups_videos(collection) else None,
+    )
+
+
+def _groups_videos(collection: Collection) -> bool:
+    """The collection groups what is part of it in one season or a season per year: a collection whose Source lists
+    its videos, rather than one whose Source has seasons of its own."""
+    return get_source(collection.source_key).has(Feature.EPISODE_LISTS)
 
 
 def _site_name(collection: Collection) -> str:
@@ -82,7 +97,7 @@ def _feeds_summary(collections: list[Collection]) -> list[CollectionBulkFeedRead
 
 def summarize_collections(s: Session, body: BulkSelectionIn) -> CollectionBulkSummaryRead:
     collections = _collections(s, body.ids)
-    summary = summarize(collections, CollectionBulkChangesIn, _offers, _site_name, skip=("feeds",))
+    summary = summarize(collections, CollectionBulkChangesIn, _offers, _site_name, skip=("feeds", "loose_videos"))
     # Whether a collection takes lists depends on what its link is, not only on its Site.
     summary.fields["linkSeasons"].sites_without = []
     lists = {}
@@ -90,15 +105,56 @@ def summarize_collections(s: Session, body: BulkSelectionIn) -> CollectionBulkSu
         if takes_lists(collection):
             names = section_list_names(collection)
             lists[names.plural] = names
+    grouping = [collection for collection in collections if _groups_videos(collection)]
+    # One season that also holds what has a season of its own is one season too.
+    groupings = Counter(
+        LooseVideos.BY_YEAR.value if collection.loose_videos == LooseVideos.BY_YEAR.value else LooseVideos.ONE_SEASON.value
+        for collection in grouping
+    )
+    seasons = {}
+    for collection in grouping:
+        # VODLoft's own seasons, in the collection type's word, as the Seasons dialog names them.
+        words = collection_contract(collection.type).words.season
+        seasons[words.plural] = words
     return CollectionBulkSummaryRead(
         count=summary.count, fields=summary.fields, feeds=_feeds_summary(collections),
         list_names=Names.joined(list(lists.values())) if lists else None,
+        loose_videos=BulkFieldSummaryRead(
+            offered=len(grouping),
+            values=[BulkValueCountRead(value=value, count=count) for value, count in groupings.most_common()],
+        ) if grouping else None,
+        season_names=Names.joined(list(seasons.values())) if seasons else None,
     )
 
 
-def change_collections(s: Session, body: CollectionBulkChangeIn) -> BulkResultRead:
+def stop_replaced(body: CollectionBulkChangeIn) -> dict[int, ReplacedWork]:
+    """Stop the work saving replaces on each chosen collection whose seasons the changes change, as saving its Seasons
+    dialog does, and say what that work was still going to do, by collection. Not in a write transaction."""
+    s = get_session()
+    try:
+        changing = [
+            (collection.id, collection.slug) for collection in _collections(s, body.ids)
+            if _offers_seasons(body.changes, collection)
+        ]
+    finally:
+        s.rollback()
+        s.close()
+    return {collection_id: stop_replaced_work(slug) for collection_id, slug in changing}
+
+
+def _offers_seasons(changes: CollectionBulkChangesIn, collection: Collection) -> bool:
+    try:
+        return _seasons_changes(changes, collection) is not None
+    except (ServiceError, ValidationError):
+        return False
+
+
+def change_collections(
+    s: Session, body: CollectionBulkChangeIn, replaced: Mapping[int, ReplacedWork] | None = None,
+) -> BulkResultRead:
     """Give the chosen Collections the same settings, saved as their Edit page and Seasons dialog save them, which
-    moves their downloads as the review showed. One that cannot take them is skipped with why."""
+    moves their downloads as the review showed. One that cannot take them is skipped with why. ``replaced`` is what
+    the work ``stop_replaced`` stopped was still going to do."""
     done = 0
     left = []
     for collection in _collections(s, body.ids):
@@ -116,7 +172,7 @@ def change_collections(s: Session, body: CollectionBulkChangeIn) -> BulkResultRe
                 seasons = _seasons_changes(body.changes, collection, renumber=collection.id not in body.keep_numbers)
                 if seasons is not None:
                     plan = saving_plan(collection.slug, body.saving_token, saving_steps(s, collection.slug, seasons))
-                    update_seasons(s, collection.slug, seasons, plan=plan)
+                    update_seasons(s, collection.slug, seasons, plan=plan, replaced=(replaced or {}).get(collection.id, ReplacedWork()))
         except (HTTPException, ServiceError, ValidationError) as error:
             left.append(skipped(collection.id, collection.title, reason_of(error)))
             continue
