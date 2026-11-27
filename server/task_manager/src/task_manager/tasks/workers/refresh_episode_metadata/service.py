@@ -19,13 +19,20 @@ from sources.dailywire.api.dw_api.client import MiddlewareAPIError, MiddlewareCl
 from sources.dailywire.api.records import DwEpisodeDetailRecord
 from ...helpers.episodes.events import queue_episode_status_events
 from ...helpers.episodes.identifier_reconciliation import reconcile_episode_identifier
+from backend.services.episode_numbering import Numbering
+from sources.dailywire.source import video_of
 from ...helpers.episodes.metadata import update_episode_from_dailywire
 from ...helpers.episodes.same_episode import PENDING_EPISODE_PUBLISH_STATUSES
-from ...helpers.episodes.status import observe_episode_detail, resolve_episode_status
+from sources.dailywire.status import observe_episode_detail, resolve_episode_status
 from ...helpers.refreshed_metadata import check_upgrades_after_refresh
 
 
 logger = logging.getLogger(__name__)
+
+
+def _numbering(episode: Episode, detail) -> Numbering:
+    """What numbers the episode, from The Daily Wire's details of it now."""
+    return Numbering.of_video(video_of(detail, season_name=episode.season.name), detail.published_date)
 
 
 def refresh_dailywire_episode(s: Session, episode_id: int, *, now: Optional[datetime] = None) -> Optional[bool]:
@@ -146,7 +153,7 @@ def _refresh_episode_from_dailywire(
     reconcile_episode_identifier(
         s,
         episode,
-        detail,
+        _numbering(episode, detail),
         previous_publish_status=old_status,
     )
     check_upgrades_after_refresh(s, episode)

@@ -533,7 +533,7 @@ export default function StreamProfileForm({
                         <ReadMore summary={<span>Match downloaded episodes using strict rules.</span>}>
                             <p>
                                 When this setting is <strong>enabled</strong>, if say, you have a 720p version downloaded but your preferred format is
-                                1080p, instead of using the 720p version, VODLoft will stream from DW directly (in whatever format it happens to provide).<br/>
+                                1080p, instead of using the 720p version, VODLoft will stream from the site directly (in whatever format it happens to provide).<br/>
                                 When the setting is <strong>disabled</strong>, it tries to match your preferred format but will stream other video
                                 formats from your downloaded files if they are the only ones available locally.
                             </p>

@@ -32,7 +32,7 @@ class ListedSource(Source):
     id = "listed"
     name = "Listed"
     domains = ("listed.example",)
-    features = frozenset({Feature.COLLECTIONS, Feature.EPISODE_LISTS})
+    features = frozenset({Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.COLLECTION_DETAILS, Feature.PAGE_STREAMS})
 
     def __init__(self):
         self.videos: list[VideoDetails] = []
@@ -185,7 +185,7 @@ def test_the_same_video_in_two_collections_is_two_episodes(listed, session):
     assert listed.known_seen[-1] == frozenset({"x"})
 
 
-def test_a_scan_of_a_listed_collection_skips_the_daily_wire(listed, session, monkeypatch):
+def test_a_scan_of_a_listed_collection_adds_its_new_videos(listed, session):
     import asyncio
 
     from backend.db.models import Episode
@@ -193,15 +193,6 @@ def test_a_scan_of_a_listed_collection_skips_the_daily_wire(listed, session, mon
 
     collection = _collection(session)
     listed.videos = [_video("a", 2024)]
-
-    async def no_daily_wire(*_args, **_kwargs):
-        pytest.fail("A listed collection must not be fetched from The Daily Wire")
-
-    def no_token(_self):
-        pytest.fail("A scan of listed collections must not sign in to The Daily Wire")
-
-    monkeypatch.setattr(service, "_fetch_collection", no_daily_wire)
-    monkeypatch.setattr(service.DeviceAuthClient, "get_token", no_token)
     result = asyncio.run(service.run_fetch_new_episodes(session, collection_id=collection.id))
     assert result.collections[0].episodes_found == 1
     assert session.query(Episode).count() == 1

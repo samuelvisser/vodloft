@@ -53,10 +53,10 @@ def _settings():
 
 def test_final_episode_does_not_regress_to_inferred_countdown(monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
-    from task_manager.tasks.helpers.episodes import status
+    from sources.dailywire import status
 
     monkeypatch.setattr(status, "get_settings", _settings)
-    monkeypatch.setattr(status, "get_vod_info", lambda _url: SimpleNamespace(seconds=3600))
+    monkeypatch.setattr(status, "stream_length", lambda _url: 3600.0)
     detail = _detail(downloadable=False)
     observed = status.observe_episode_detail(detail)
 
@@ -73,7 +73,7 @@ def test_final_episode_does_not_regress_to_inferred_countdown(monkeypatch):
 
 def test_authoritative_live_can_move_final_episode_back_to_pending():
     from backend.types.episode_types import EpisodePublishStatus
-    from task_manager.tasks.helpers.episodes import status
+    from sources.dailywire import status
 
     detail = _detail(publish_status="LIVE", downloadable=False)
     observed = status.observe_episode_detail(detail)
@@ -90,7 +90,7 @@ def test_authoritative_live_can_move_final_episode_back_to_pending():
 
 def test_unusable_remote_snapshot_leaves_a_final_episode_without_status(monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
-    from task_manager.tasks.helpers.episodes import status
+    from sources.dailywire import status
 
     monkeypatch.setattr(status, "get_settings", _settings)
     detail = _detail(video_url="")

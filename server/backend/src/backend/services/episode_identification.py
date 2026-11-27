@@ -5,11 +5,10 @@ the names Local Media Profiles give its files. Changing it gives every main epis
 the collection had numbered it that way from the start, by the same rules indexing uses:
 
 - A Source that numbers its own episodes, such as The Daily Wire, keeps its numbers: "2460.10" stays episode 2460's
-  tenth extra, now as S03E2460 or 2460 instead of a date. VODLoft's own trailer and auxiliary numbers stay where they
-  still apply.
-- For a Source VODLoft counts the episodes of itself (``Feature.EPISODE_LISTS``), the episodes are counted again in the
-  order they were published, or within each season; a playlist season then follows the playlist's order. Videos of
-  other kinds (Shorts and the like) and the parts of a video split by its chapters keep their numbers.
+  tenth extra, now as S03E2460 or 2460 instead of a date. VODLoft's own trailer and auxiliary numbers stay.
+- Other episodes are counted again in the order they were published, or within each season; a playlist season then
+  follows the playlist's order. Videos of other kinds (Shorts and the like) and the parts of a video split by its
+  chapters keep their numbers.
 
 It runs as an operation (``CollectionIdentificationChangeOperation``), so the collection page shows its progress: the
 new identifiers are written in one short write transaction, then each Local Media Profile's files move to their new
@@ -18,27 +17,27 @@ names and get their new metadata.
 from __future__ import annotations
 
 from backend.utils.helpers import name_in_text
-from collections import defaultdict
 from collections.abc import Container, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import PurePath
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Collection, CollectionLocalMediaProfile, DownloadProfile, Episode, Season
+from backend.db.models import Collection, CollectionLocalMediaProfile, DownloadProfile, Episode
 from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadBase
 from backend.operations.collections import CollectionIdentificationChangeOperation, CollectionRenumberOperation
 from backend.services.download_options import effective_metadata_mode
 from backend.services.episode_filters import (
     EpisodeSelection, evaluate, filter_leaving_out, retention_downloads, retention_removes,
 )
+from backend.services.episode_numbering import CountedNumbers, Numbering, identify
 from backend.services.errors import ServiceError
 from backend.services.link_seasons import numbered_in_list_order
 from backend.services.season_order import number_lists
 from backend.services.season_state import EpisodeDraft, SeasonsState, apply_state, load_state
-from backend.services.sites import collection_words
+from backend.services.sites import collection_site, collection_words
 from backend.types import work_weights
 from backend.types.collection_types import EpisodeIdentifier, EpisodeOrder
 from backend.types.download_profile_types import EpIdType, MediaDownloadArtifactStatus
@@ -53,11 +52,7 @@ from task_manager.scheduler.db import TaskOperation
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import queue_operation_target_dispatch
 from task_manager.scheduler.types import OperationStatus
-from task_manager.tasks.helpers.episodes.identifier import (
-    EpisodeNumbering, IdentifierMaxValues, counts_own_numbers, identify_episodes_in_season,
-    keeps_generated_identifier, next_identifier,
-)
-from task_manager.tasks.helpers.general import datetime_to_string
+from sources import MAIN_TAG, get_source
 
 _FIELD = "episodeIdentifier"
 _ACTIVE = (OperationStatus.QUEUED.value, OperationStatus.RUNNING.value, OperationStatus.WAITING.value)
@@ -88,8 +83,6 @@ class IdentificationPlan:
     identification: EpisodeIdentifier
     identifiers: dict[int, str]
     """Episode id -> its new identifier, for the episodes whose identifier changes."""
-    counters: IdentifierMaxValues = field(default_factory=dict)
-    """VODLoft's own trailer, auxiliary and date counters, for a Source that numbers its episodes."""
 
 
 @dataclass(frozen=True)
@@ -158,19 +151,13 @@ def _tag(identifier: str | None) -> str:
 
 def plan_identification(state: SeasonsState, identification: EpisodeIdentifier) -> IdentificationPlan:
     """The identifiers the copy's episodes get under ``identification``. Changes nothing."""
-    collection = state.collection
-    episodes = _episodes(state)
-    if counts_own_numbers(collection):
-        identifiers, counters = _plan_counted(state, identification, in_list_order=numbered_in_list_order(collection)), {}
-    else:
-        identifiers, counters = _plan_source_numbered(state, identification)
+    identifiers = _plan(state, identification)
     return IdentificationPlan(
         identification=identification,
         identifiers={
-            episode.id: identifiers[episode.id] for episode in episodes
+            episode.id: identifiers[episode.id] for episode in _episodes(state)
             if episode.id in identifiers and identifiers[episode.id] != episode.episode_identifier
         },
-        counters=counters,
     )
 
 
@@ -189,101 +176,58 @@ def number_episodes(state: SeasonsState, identification: EpisodeIdentifier) -> I
 
 
 def save_numbers(s: Session, state: SeasonsState, plan: IdentificationPlan) -> None:
-    """Save the copy numbered by ``number_episodes``, with the counters its plan keeps.
+    """Save the copy numbered by ``number_episodes``.
 
     ``s`` is a write transaction's session."""
     apply_state(s, state)
-    for key, value in plan.counters.items():
-        state.record.set_meta(key, str(value))
     s.flush()
 
 
-def _plan_counted(state: SeasonsState, identification: EpisodeIdentifier, *, in_list_order: bool) -> dict[int, str]:
-    """Count the main episodes again, as indexing counts the videos of a Source without episode numbers. Other tags,
-    and the parts of a split video, keep theirs. ``in_list_order`` numbers them in the order they were added, which is
-    their list's order for a collection made from one list, rather than by date."""
+def _plan(state: SeasonsState, identification: EpisodeIdentifier) -> dict[int, str]:
+    """Number the episodes again, as indexing numbers them (``backend.services.episode_numbering``), from what their
+    Source said about them. A counted kind, such as a trailer or a Short, and the parts of a split video keep their
+    numbers. A collection made from one list numbers its main episodes in the order they were added, which is the
+    list's order; another one by date, or within each season."""
+    collection = state.collection
+    source = get_source(collection.source_key)
+    site = collection_site(collection)
+    in_list_order = numbered_in_list_order(collection)
     episodes = _episodes(state)
-    main = [
-        episode for episode in episodes
-        if episode.part_of is None and _tag(episode.episode_identifier) in {EpIdType.EP.value, EpIdType.AUX.value}
-    ]
-    moving = {episode.id for episode in main}
-    taken = {episode.episode_identifier for episode in episodes if episode.id not in moving}
-    identifiers: dict[int, str] = {}
-    match identification:
-        case EpisodeIdentifier.DATE_BASED:
-            for episode in sorted(main, key=lambda episode: (_published(episode), episode.index, episode.id)):
-                identifier = f"{EpIdType.EP}.{datetime_to_string(_published(episode))}"
-                # Two videos published at the same moment: the second one is auxiliary.
-                identifier = next_identifier(taken, EpIdType.AUX) if identifier in taken else identifier
-                taken.add(identifier)
-                identifiers[episode.id] = identifier
-        case EpisodeIdentifier.NUMBERED:
-            for episode in sorted(main, key=lambda episode: (
-                (episode.index, episode.id) if in_list_order else (_published(episode), episode.index, episode.id)
-            )):
-                identifier = next_identifier(taken, EpIdType.EP)
-                taken.add(identifier)
-                identifiers[episode.id] = identifier
-        case EpisodeIdentifier.SEASONAL:
-            numbers: dict[int, int] = defaultdict(int)
-            for episode in sorted(main, key=lambda episode: (_season_order(state, episode), episode.index, episode.id)):
-                season = state.season(episode.season_id)
-                if season is None:
-                    continue
-                while True:
-                    numbers[season.id] += 1
-                    identifier = f"{EpIdType.EP}.S{season.season_number:02d}E{numbers[season.id]:02d}"
-                    if identifier not in taken:
-                        break
-                taken.add(identifier)
-                identifiers[episode.id] = identifier
-    return identifiers
-
-
-def _plan_source_numbered(
-        state: SeasonsState, identification: EpisodeIdentifier,
-) -> tuple[dict[int, str], IdentifierMaxValues]:
-    """Give each episode what the Source's own numbering gives it under ``identification``, season by season in the
-    order indexing goes. A trailer or auxiliary number VODLoft counted stays where it still applies."""
-    episodes = _episodes(state)
-    numbering = {episode.id: EpisodeNumbering.of_episode(episode) for episode in episodes}
-    moving: list[EpisodeDraft] = []
+    moving: dict[int, Numbering] = {}
     taken: set[str] = set()
     for episode in episodes:
         season = state.season(episode.season_id)
-        if season is None or episode.part_of is not None or keeps_generated_identifier(
-            identification, season, numbering[episode.id], episode.episode_identifier,
+        numbering = Numbering.of_stored(source, episode.episode_identifier, episode.source_number, _published(episode))
+        if numbering.tag == EpIdType.AUX and season is not None and season.season_type != SeasonType.EXTRA.value and (
+            numbering.number is not None or not site.show_numbers
         ):
+            # Auxiliary only because its place was taken, such as a second video of the same moment.
+            numbering = replace(numbering, tag=MAIN_TAG)
+        if season is None or episode.part_of is not None or not (numbering.main or numbering.extra is not None):
             taken.add(episode.episode_identifier)
         else:
-            moving.append(episode)
-    by_season: dict[int, list[EpisodeDraft]] = defaultdict(list)
-    for episode in moving:
-        by_season[episode.season_id].append(episode)
-    identifiers: dict[int, str] = {}
-    values: IdentifierMaxValues = {}
-    for season_episodes in sorted(by_season.values(), key=lambda items: _season_order(state, items[0])):
-        season = state.season(season_episodes[0].season_id)
-        if (
-            identification is EpisodeIdentifier.SEASONAL and season.season_type != SeasonType.EXTRA.value
-            and season.season_number < 1
-        ):
-            raise ServiceError(
-                f"Season {season.name} has no season number, so its episodes can't be numbered by season",
-                field=_FIELD,
-            )
-        ordered = sorted(season_episodes, key=lambda episode: (
-            numbering[episode.id].published_date, numbering[episode.id].ep_number or 0,
-            numbering[episode.id].ep_segment, episode.index,
-        ))
-        mapped, values = identify_episodes_in_season(
-            identification, [numbering[episode.id] for episode in ordered], values,
-            season=season, occupied_identifiers=taken,
-        )
-        for episode, (identifier, _numbering) in zip(ordered, mapped, strict=True):
-            identifiers[episode.id] = identifier
-    return identifiers, values
+            moving[episode.id] = numbering
+    if identification is EpisodeIdentifier.SEASONAL:
+        for episode in episodes:
+            season = state.season(episode.season_id)
+            if episode.id in moving and season.season_type != SeasonType.EXTRA.value and season.season_number < 1:
+                raise ServiceError(
+                    f"Season {season.name} has no season number, so its episodes can't be numbered by season",
+                    field=_FIELD,
+                )
+
+    def order(episode: EpisodeDraft):
+        if identification is EpisodeIdentifier.SEASONAL:
+            return _season_order(state, episode), episode.index, episode.id
+        if in_list_order:
+            return (0, 0), episode.index, episode.id
+        return (0, 0), moving[episode.id].published, episode.index, episode.id
+
+    numbers = CountedNumbers(taken)
+    return {
+        episode.id: identify(identification, site, state.season(episode.season_id), moving[episode.id], taken, numbers)
+        for episode in sorted((episode for episode in episodes if episode.id in moving), key=order)
+    }
 
 
 def _busy(s: Session, collection: Collection) -> str | None:

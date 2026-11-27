@@ -16,7 +16,8 @@ from backend.services.removed_downloads import back_at_source, left_source
 from ...helpers.episodes.trusted_publication_timing import track_monitor_publication_timing
 from ...helpers.episodes.events import queue_episode_status_events
 from ...helpers.episodes.identifier_reconciliation import reconcile_episode_identifier
-from ...helpers.episodes.mapper import fetch_all_episodes_paginated
+from backend.services.episode_numbering import Numbering
+from sources.dailywire.source import video_of
 from ...helpers.episodes.metadata import (
     episode_refresh_offsets,
     update_episode_from_dailywire,
@@ -25,10 +26,15 @@ from ...helpers.episodes.same_episode import (
     PENDING_EPISODE_PUBLISH_STATUSES,
     reconcile_single_pending_episode_slug,
 )
-from ...helpers.episodes.status import observe_episode_detail, resolve_episode_status
+from sources.dailywire.status import observe_episode_detail, resolve_episode_status
 
 
 logger = logging.getLogger(__name__)
+
+
+def _numbering(episode: Episode, detail) -> Numbering:
+    """What numbers the episode, from The Daily Wire's details of it now."""
+    return Numbering.of_video(video_of(detail, season_name=episode.season.name), detail.published_date)
 
 
 def _membership_plan(collection: Collection) -> tuple[str, bool]:
@@ -78,8 +84,7 @@ def _try_reconcile_slug_after_404(
     if remote_season is None:
         return None
 
-    records = fetch_all_episodes_paginated(
-        client,
+    records = client.get_all_episodes(
         collection_slug,
         ByShowSeason(
             season_dw_id=remote_season.dw_id,
@@ -232,7 +237,7 @@ def run_monitor_pending_episode(s: Session, *, episode_id: int) -> EpisodePublis
         reconcile_episode_identifier(
             s,
             episode,
-            detail,
+            _numbering(episode, detail),
             previous_publish_status=old_status,
         )
 

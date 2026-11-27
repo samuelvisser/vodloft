@@ -32,7 +32,7 @@ from config.settings.submodels import FilenameRestrictionMode
 from downloader.metadata import render_nfo
 
 if TYPE_CHECKING:
-    from sources.dailywire.api.records import DwShowRecord
+    from sources import CollectionArtwork
 
 COLLECTION_ASSETS_REQUESTED = "collection_assets.reconcile_requested"
 
@@ -374,12 +374,12 @@ def request_profile_collection_assets(session: Session, profile_id: int) -> None
         request_collection_asset_reconciliation(session, int(collection_id))
 
 
-def update_collection_artwork_metadata(collection: Collection, source: "DwShowRecord") -> None:
-    """Reuse the already fetched collection page; absent variants keep their known URL."""
-    for field in (
-        "thumbnail_portrait_path", "thumbnail_landscape_path", "thumbnail_square_path",
-        "background_image_path", "logo_image_path",
+def update_collection_artwork_metadata(collection: Collection, artwork: "CollectionArtwork") -> None:
+    """The collection's pictures as its Source has them now; one it leaves out keeps its known link."""
+    for field, value in (
+        ("thumbnail_portrait_path", artwork.portrait), ("thumbnail_landscape_path", artwork.landscape),
+        ("thumbnail_square_path", artwork.square), ("background_image_path", artwork.background),
+        ("logo_image_path", artwork.logo),
     ):
-        value = getattr(source, field, None)
         if value:
             setattr(collection, field, value)

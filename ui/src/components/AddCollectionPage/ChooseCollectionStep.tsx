@@ -77,7 +77,7 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
     const slugFromUrl: string | undefined = resolvedCollection && sourceHas(resolvedCollection.source, SourceFeature.EPISODE_LOOKUPS)
         ? resolvedCollection.slug
         : undefined
-    const listedSource = resolvedCollection && sourceHas(resolvedCollection.source, SourceFeature.EPISODE_LISTS)
+    const listedSource = resolvedCollection && sourceHas(resolvedCollection.source, SourceFeature.COLLECTION_DETAILS)
         ? resolvedCollection.source
         : undefined
     const listed = useListedCollectionDetails(listedSource?.id, listedSource ? resolved.data?.url : undefined);

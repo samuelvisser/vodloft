@@ -104,7 +104,7 @@ def test_every_site_offers_a_different_length_as_a_better_version():
 
 
 def test_the_daily_wire_measures_the_stream_it_serves(monkeypatch):
-    from sources.dailywire import source as dailywire
+    from sources.dailywire import status as dailywire
 
     playlists = {
         "https://cdn.test/master.m3u8": (
@@ -114,8 +114,8 @@ def test_the_daily_wire_measures_the_stream_it_serves(monkeypatch):
         "https://cdn.test/720/index.m3u8": "#EXTM3U\n#EXTINF:6.0,\na.ts\n#EXTINF:6.0,\nb.ts\n#EXTINF:2.5,\nc.ts\n#EXT-X-ENDLIST\n",
     }
     monkeypatch.setattr(dailywire, "_playlist", lambda url: (playlists[url], url))
-    assert dailywire._stream_length("https://cdn.test/master.m3u8") == 14.5
-    assert dailywire._stream_length("https://cdn.test/720/index.m3u8") == 14.5
+    assert dailywire.stream_length("https://cdn.test/master.m3u8") == 14.5
+    assert dailywire.stream_length("https://cdn.test/720/index.m3u8") == 14.5
 
 
 @pytest.fixture

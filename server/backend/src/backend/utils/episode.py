@@ -126,29 +126,3 @@ class EpisodeIdentifierInfo:
             sub_episode_number=sub_number,
             label=f"{episode_number}.{sub_number}",
         )
-
-    @property
-    def source_slot(self) -> str | None:
-        """Return the Daily Wire number slot for a full episode or attached extra.
-
-        The episode-extra subtype is intentionally excluded: an "other" extra and
-        a "trailer" extra with the same main/sub number represent one upstream slot.
-        """
-        if self.type == EpIdType.EP:
-            if self.episode_number is None or not _NUMBER.fullmatch(self.episode_number):
-                return None
-            if self.season_number is not None:
-                return f"S{self.season_number:02d}E{int(self.episode_number):02d}.0"
-            return f"{int(self.episode_number)}.0"
-
-        if self.type == EpIdType.EP_EXTRA:
-            if self.episode_number is None or self.sub_episode_number is None:
-                return None
-            if self.season_number is not None:
-                return (
-                    f"S{self.season_number:02d}E{int(self.episode_number):02d}."
-                    f"{int(self.sub_episode_number)}"
-                )
-            return f"{int(self.episode_number)}.{int(self.sub_episode_number)}"
-
-        return None

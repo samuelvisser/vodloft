@@ -81,7 +81,7 @@ def test_daily_wire_numbers_come_from_its_own_episode_numbers_and_seasons(newest
     (_extra_id, extra), (twelve_id, twelve) = _values(_collection("dailywire", "seasonal", seasons))
 
     assert twelve_id == "ep.S02E12"
-    assert (twelve["season_number"], twelve["season_index"], twelve["source_number"]) == ("2", "3", "12")
+    assert (twelve["season_number"], twelve["season_index"], twelve["site_number"]) == ("2", "3", "12")
     assert extra["episode_type"] == "ep-extra" and extra["episode_label"] == "[episode_label]"
 
 
@@ -205,43 +205,27 @@ def test_the_youtube_feed_gives_videos_without_a_key(monkeypatch):
 
 
 def test_daily_wire_takes_the_show_page_and_fills_up_from_the_newest_season(monkeypatch):
-    from dataclasses import dataclass
     from types import SimpleNamespace
 
     from sources.dailywire import source as dailywire
 
-    @dataclass(frozen=True)
-    class Record:
-        slug: str
-        episode_number: str
-        day: int
-        trailer: bool = False
-        title: str = "Title"
-        description: str | None = None
-        duration: float = 60.0
-        thumbnail_landscape_path: str | None = None
-        background_image_path: str | None = None
-        available_for: tuple = ()
+    from sources.dailywire.api.records import DwEpisodeRecord
 
-        @property
-        def sharing_url(self):
-            return f"https://www.dailywire.com/episode/{self.slug}"
-
-        @property
-        def published_date(self):
-            return datetime(2026, 1, self.day, tzinfo=timezone.utc)
-
-        @property
-        def ep_number(self):
-            return int(self.episode_number.split(".")[0]) if self.episode_number else None
-
-        @property
-        def ep_segment(self):
-            return int(self.episode_number.split(".")[1]) if "." in self.episode_number else 0
+    def Record(slug: str, episode_number: str, day: int, *, trailer: bool = False):
+        return DwEpisodeRecord(
+            dw_id=slug, slug=slug, title="Title", description=None, duration=60.0, episode_number=episode_number,
+            display_episode_number=episode_number, background_image_path=None,
+            sharing_url=f"https://www.dailywire.com/episode/{slug}", publish_status="PUBLISHED",
+            is_downloadable=True, is_trailer=trailer, available_for=[], thumbnail_landscape_path=None,
+            thumbnail_portrait_path=None, thumbnail_square_path=None,
+            published_date=datetime(2026, 1, day, tzinfo=timezone.utc), scheduled_date=None,
+        )
 
     newest_season = SimpleNamespace(slug="season-2", name="Season 2", dw_id="s2")
     show = SimpleNamespace(
-        slug="show", seasons=[newest_season, SimpleNamespace(slug="season-1", name="Season 1", dw_id="s1")],
+        # The show page lists its seasons oldest first.
+        slug="show", seasons=[SimpleNamespace(slug="season-1", name="Season 1", dw_id="s1"), newest_season],
+        author_name="Host",
         latest_season=newest_season,
         latest_episodes=[Record("e3", "3", 3), Record("e3-extra", "3.01", 4), Record("trailer", "", 5, trailer=True)],
     )

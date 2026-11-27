@@ -7,13 +7,15 @@ from unittest.mock import AsyncMock, Mock
 
 def _fake_episode(*, status: str, identifier: str = "ep-extra.other.2500.1"):
     metadata: dict[str, str | None] = {}
-    collection = SimpleNamespace(id=7, slug="test-collection")
+    collection = SimpleNamespace(id=7, slug="test-collection", episode_identifier="numbered")
     episode = SimpleNamespace(
         id=42,
         slug="test-episode",
         collection_id=collection.id,
         collection=collection,
         season_id=3,
+        season=SimpleNamespace(id=3, season_number=1),
+        part_of=None,
         index=2500,
         episode_identifier=identifier,
         publish_status=status,
@@ -35,20 +37,21 @@ def test_identifier_change_event_only_fires_after_initial_publication(monkeypatc
     queued = Mock()
     target_identifier = "ep.2500"
 
-    def fake_reconcile(_session, item, _dw_episode):
-        item.episode_identifier = target_identifier
-        return True
+    class FakeSession:
+        def scalars(self, _statement):
+            return iter(())
+
+        def flush(self):
+            pass
 
     monkeypatch.setattr(events, "queue_event", queued)
-    monkeypatch.setattr(
-        identifier_reconciliation,
-        "refresh_episode_identifier",
-        fake_reconcile,
-    )
+    monkeypatch.setattr(identifier_reconciliation, "collection_site", lambda _collection: None)
+    monkeypatch.setattr(identifier_reconciliation, "follows_facts", lambda *_args: True)
+    monkeypatch.setattr(identifier_reconciliation, "identify", lambda *_args: target_identifier)
 
     episode.publish_status = EpisodePublishStatus.PUBLISHED_FINAL.value
     assert identifier_reconciliation.reconcile_episode_identifier(
-        object(),
+        FakeSession(),
         episode,
         object(),
         previous_publish_status=EpisodePublishStatus.LIVE.value,
@@ -72,7 +75,7 @@ def test_identifier_change_event_only_fires_after_initial_publication(monkeypatc
 
     queued.reset_mock()
     assert identifier_reconciliation.reconcile_episode_identifier(
-        object(),
+        FakeSession(),
         episode,
         object(),
         previous_publish_status=EpisodePublishStatus.SOURCE_PROCESSING.value,

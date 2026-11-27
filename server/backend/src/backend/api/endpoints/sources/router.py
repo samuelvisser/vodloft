@@ -266,8 +266,8 @@ def save_ytdlp_options(source_id: str, body: YtdlpOptionsAPIUpdate):
 
 @router.get("/sources/{source_id}/collection", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=CollectionDetailsAPIRead)
 def collection_details(source_id: str, url: str = Query(min_length=1, max_length=2048), access: Access = signed_in()):
-    """Look up a collection to add, at a Source that lists its episodes."""
-    return lookup_show_details(access, _source(source_id, Feature.EPISODE_LISTS), url)
+    """Look up a collection to add, at a Source that looks its collections up."""
+    return lookup_show_details(access, _source(source_id, Feature.COLLECTION_DETAILS), url)
 
 
 @router.get("/sources/{source_id}/search", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=SearchResultsAPIRead)

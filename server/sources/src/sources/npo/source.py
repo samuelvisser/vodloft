@@ -146,7 +146,7 @@ class NpoSource(Source):
         ),
     ),)
     features = frozenset({
-        Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.PAGE_STREAMS, Feature.VIDEOS, Feature.SEARCH, Feature.COOKIES, Feature.OWN_SEASONS,
+        Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.COLLECTION_DETAILS, Feature.PAGE_STREAMS, Feature.VIDEOS, Feature.SEARCH, Feature.COOKIES, Feature.OWN_SEASONS,
     })
     kind_names = MappingProxyType({LinkKind.COLLECTION: Names("series", "series")})
 

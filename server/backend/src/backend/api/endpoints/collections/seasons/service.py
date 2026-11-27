@@ -1031,7 +1031,7 @@ def link_to_add(s: Session, collection_slug: str, url: str) -> _AddLookup:
         raise ServiceError(f"{name_in_text(collection.title)} can't take links you add", field="url")
     url = url.strip()
     # The Source the user asks first for the link's Site reads it, which may be another one than the collection's.
-    source = next((source for source in sources_for(url, preferred_sources(s)) if source.has(Feature.EPISODE_LISTS)), None)
+    source = next((source for source in sources_for(url, preferred_sources(s)) if source.has(Feature.COLLECTION_DETAILS)), None)
     if source is None:
         raise ServiceError("VODLoft can't read this link", field="url")
     return _AddLookup(source.id, url, collection.ytdlp_option_texts)

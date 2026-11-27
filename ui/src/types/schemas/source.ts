@@ -16,6 +16,7 @@ export const SourceFeature = {
     MEMBERSHIP_LEVELS: 'membership_levels',
     VIDEOS: 'videos',
     EPISODE_LISTS: 'episode_lists',
+    COLLECTION_DETAILS: 'collection_details',
     SEARCH: 'search',
     PROGRAM_UPDATES: 'program_updates',
     COOKIES: 'cookies',

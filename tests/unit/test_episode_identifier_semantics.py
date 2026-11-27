@@ -37,6 +37,7 @@ def _record(
 
 def _season(*, season_number: int = 1, season_type: str = "normal"):
     return SimpleNamespace(
+        id=season_number + 100,
         index=season_number,
         season_number=season_number,
         season_type=season_type,
@@ -54,7 +55,6 @@ def test_episode_identifier_info_parses_all_canonical_semantics():
     assert main.episode_number == "27"
     assert main.sub_episode_number is None
     assert main.label == "S02E27"
-    assert main.source_slot == "S02E27.0"
 
     extra = EpisodeIdentifierInfo.from_identifier("ep-extra.trailer.S02E27.5")
     assert extra.type == "ep-extra"
@@ -63,374 +63,151 @@ def test_episode_identifier_info_parses_all_canonical_semantics():
     assert extra.episode_number == "27"
     assert extra.sub_episode_number == "5"
     assert extra.label == "S02E27.5"
-    assert extra.source_slot == "S02E27.5"
 
     auxiliary = EpisodeIdentifierInfo.from_identifier("aux.12")
     assert auxiliary.type == "aux"
     assert auxiliary.episode_number == "12"
-    assert auxiliary.source_slot is None
+
+
+def _identify(identification, *records, season=None, taken=None, extras=False):
+    """The identifiers indexing gives The Daily Wire's records, one after the other, in one season."""
+    from backend.services.episode_numbering import CountedNumbers, Numbering, identify
+    from sources.dailywire.source import DailyWireSource, video_of
+
+    season = season or _season()
+    taken = set() if taken is None else taken
+    numbers = CountedNumbers(taken)
+    return [
+        identify(
+            identification, DailyWireSource.sites[0], season,
+            Numbering.of_video(video_of(record, season_name="Extras" if extras else season.name), record.published_date),
+            taken, numbers,
+        )
+        for record in records
+    ]
 
 
 def test_extra_before_main_does_not_reserve_main_number():
     from backend.types.collection_types import EpisodeIdentifier
-    from task_manager.tasks.helpers.episodes.identifier import identify_episodes_in_season
 
-    extra = _record("1645.01", slug="extra-first")
-    main = _record("1645.00", slug="main-later")
-
-    mapped, values = identify_episodes_in_season(
-        EpisodeIdentifier.NUMBERED,
-        [extra, main],
-        season=_season(),
-    )
-
-    assert [identifier for identifier, _ in mapped] == [
-        "ep-extra.other.1645.1",
-        "ep.1645",
-    ]
-    assert "ep_id.latest_ep_num" not in values
-    assert "ep_id.latest_ep_extra_num" not in values
+    assert _identify(
+        EpisodeIdentifier.NUMBERED, _record("1645.01", slug="extra-first"), _record("1645.00", slug="main-later"),
+    ) == ["ep-extra.other.1645.1", "ep.1645"]
 
 
 def test_extra_can_arrive_after_a_newer_main():
     from backend.types.collection_types import EpisodeIdentifier
-    from task_manager.tasks.helpers.episodes.identifier import identify_episodes_in_season
 
-    late_extra = _record("1843.01")
-    occupied = {"ep.1843", "ep.1844"}
-
-    mapped, _ = identify_episodes_in_season(
-        EpisodeIdentifier.NUMBERED,
-        [late_extra],
-        season=_season(),
-        occupied_identifiers=occupied,
-    )
-
-    assert mapped[0][0] == "ep-extra.other.1843.1"
+    assert _identify(EpisodeIdentifier.NUMBERED, _record("1843.01"), taken={"ep.1843", "ep.1844"}) == [
+        "ep-extra.other.1843.1",
+    ]
 
 
 def test_dailywire_segments_20_and_above_are_show_auxiliary_content():
     from backend.types.collection_types import EpisodeIdentifier
-    from task_manager.tasks.helpers.episodes.identifier import identify_episodes_in_season
 
-    mapped, values = identify_episodes_in_season(
+    assert _identify(
         EpisodeIdentifier.NUMBERED,
-        [
-            _record("2000.19", slug="attached-extra"),
-            _record("2000.20", slug="first-aux"),
-            _record("2000.30", slug="second-aux"),
-        ],
-        season=_season(),
-    )
-
-    assert [identifier for identifier, _ in mapped] == [
-        "ep-extra.other.2000.19",
-        "aux.1",
-        "aux.2",
-    ]
-    assert values["ep_id.latest_aux_num"] == 2
+        _record("2000.19", slug="attached-extra"), _record("2000.20", slug="first-aux"), _record("2000.30", slug="second-aux"),
+    ) == ["ep-extra.other.2000.19", "aux.1", "aux.2"]
 
 
 def test_dailywire_segments_20_and_above_are_auxiliary_for_seasonal_shows():
     from backend.types.collection_types import EpisodeIdentifier
-    from task_manager.tasks.helpers.episodes.identifier import identify_episodes_in_season
 
-    mapped, values = identify_episodes_in_season(
-        EpisodeIdentifier.SEASONAL,
-        [_record("42.20")],
-        season=_season(season_number=3),
-    )
-
-    assert mapped[0][0] == "aux.1"
-    assert values["ep_id.latest_aux_num"] == 1
+    assert _identify(EpisodeIdentifier.SEASONAL, _record("42.20"), season=_season(season_number=3)) == ["aux.1"]
 
 
 def test_extras_season_numbers_do_not_create_episode_relationships():
     from backend.types.collection_types import EpisodeIdentifier
-    from task_manager.tasks.helpers.episodes.identifier import identify_episodes_in_season
 
-    mapped, _ = identify_episodes_in_season(
+    assert _identify(
         EpisodeIdentifier.SEASONAL,
-        [
-            _record("27.00", slug="standalone-main-shaped"),
-            _record("27.10", slug="standalone-extra-shaped"),
-        ],
-        season=_season(season_number=0, season_type="extra"),
-    )
-
-    assert [identifier for identifier, _ in mapped] == ["aux.1", "aux.2"]
+        _record("27.00", slug="standalone-main-shaped"), _record("27.10", slug="standalone-extra-shaped"),
+        season=_season(season_number=0, season_type="extra"), extras=True,
+    ) == ["aux.1", "aux.2"]
 
 
 def test_attached_trailer_remains_episode_extra_with_trailer_subtype():
     from backend.types.collection_types import EpisodeIdentifier
-    from task_manager.tasks.helpers.episodes.identifier import identify_episodes_in_season
 
-    mapped, _ = identify_episodes_in_season(
-        EpisodeIdentifier.NUMBERED,
-        [_record("2083.05", is_trailer=True)],
-        season=_season(),
-    )
-
-    assert mapped[0][0] == "ep-extra.trailer.2083.5"
+    assert _identify(EpisodeIdentifier.NUMBERED, _record("2083.05", is_trailer=True)) == ["ep-extra.trailer.2083.5"]
 
 
-def test_standalone_trailer_uses_collection_global_trailer_counter():
+def test_standalone_trailer_counts_after_the_collections_highest_trailer():
     from backend.types.collection_types import EpisodeIdentifier
-    from task_manager.tasks.helpers.episodes.identifier import identify_episodes_in_season
 
-    mapped, values = identify_episodes_in_season(
-        EpisodeIdentifier.NUMBERED,
-        [_record("2083.00", is_trailer=True)],
-        season=_season(),
-    )
-
-    assert mapped[0][0] == "trailer.1"
-    assert values["ep_id.latest_trailer_num"] == 1
-
-
-def test_duplicate_source_slot_ignores_episode_extra_subtype():
-    from backend.types.collection_types import EpisodeIdentifier
-    from task_manager.tasks.helpers.episodes.identifier import identify_episodes_in_season
-
-    first = _record("2083.05", slug="first", is_trailer=False)
-    duplicate = _record("2083.05", slug="duplicate", is_trailer=True)
-
-    mapped, _ = identify_episodes_in_season(
-        EpisodeIdentifier.NUMBERED,
-        [first, duplicate],
-        season=_season(),
-    )
-
-    assert [identifier for identifier, _ in mapped] == [
-        "ep-extra.other.2083.5",
-        "aux.1",
-    ]
-
-
-def test_same_episode_number_is_distinct_across_seasons():
-    from backend.types.collection_types import EpisodeIdentifier
-    from task_manager.tasks.helpers.episodes.identifier import identify_episodes_in_season
-
-    occupied: set[str] = set()
-    first, _ = identify_episodes_in_season(
-        EpisodeIdentifier.SEASONAL,
-        [_record("27.00", slug="season-1-episode")],
-        season=_season(season_number=1),
-        occupied_identifiers=occupied,
-    )
-    second, _ = identify_episodes_in_season(
-        EpisodeIdentifier.SEASONAL,
-        [_record("27.00", slug="season-2-episode")],
-        season=_season(season_number=2),
-        occupied_identifiers=occupied,
-    )
-
-    assert first[0][0] == "ep.S01E27"
-    assert second[0][0] == "ep.S02E27"
-
-
-def test_mapper_uses_false_detail_flag_for_ambiguous_trailer_title():
-    from sources.dailywire.api.dw_api.client import EpisodesPaginatedResult
-    from task_manager.tasks.helpers.episodes.mapper import get_dw_episodes_by_seasons
-    from task_manager.tasks.types.general import RecordOrder
-
-    record = _record(
-        "2083.05",
-        slug="reacting-to-a-movie-trailer",
-        title="Reacting To A Movie Trailer",
-        is_trailer=False,
-    )
-    authoritative = record.model_copy(update={"is_trailer": False})
-
-    class FakeClient:
-        def get_episodes_paginated(self, collection_slug, selector):
-            return EpisodesPaginatedResult([record], None, False)
-
-        def get_episode_details(self, slug, *, require_member_exclusive):
-            assert slug == record.slug
-            assert require_member_exclusive is False
-            return authoritative
-
-    season = _season()
-    season.id = 11
-    collection = SimpleNamespace(slug="test-collection", episode_identifier="numbered")
-
-    episode_map, _ = get_dw_episodes_by_seasons(
-        FakeClient(),
-        collection=collection,
-        membership_plan="FREE",
-        seasons=[season],
-        dw_id_by_slug={season.slug: "remote-season"},
-        order=RecordOrder.ASC,
-    )
-
-    assert episode_map[season.id][0][0] == "ep-extra.other.2083.5"
-
-
-def test_mapper_accepts_true_paginated_trailer_flag_without_detail_lookup():
-    from sources.dailywire.api.dw_api.client import EpisodesPaginatedResult
-    from task_manager.tasks.helpers.episodes.mapper import get_dw_episodes_by_seasons
-    from task_manager.tasks.types.general import RecordOrder
-
-    record = _record(
-        "2083.05",
-        slug="episode-2083-preview",
-        title="Episode 2083 Preview",
-        is_trailer=True,
-    )
-
-    class FakeClient:
-        def get_episodes_paginated(self, collection_slug, selector):
-            return EpisodesPaginatedResult([record], None, False)
-
-        def get_episode_details(self, slug, *, require_member_exclusive):
-            raise AssertionError("Positive paginated isTrailer needs no detail lookup")
-
-    season = _season()
-    season.id = 11
-    collection = SimpleNamespace(slug="test-collection", episode_identifier="numbered")
-
-    episode_map, _ = get_dw_episodes_by_seasons(
-        FakeClient(),
-        collection=collection,
-        membership_plan="FREE",
-        seasons=[season],
-        dw_id_by_slug={season.slug: "remote-season"},
-        order=RecordOrder.ASC,
-    )
-
-    assert episode_map[season.id][0][0] == "ep-extra.trailer.2083.5"
-
-
-def test_mapper_checks_detail_when_paginated_trailer_flag_is_none():
-    from sources.dailywire.api.dw_api.client import EpisodesPaginatedResult
-    from task_manager.tasks.helpers.episodes.mapper import get_dw_episodes_by_seasons
-    from task_manager.tasks.types.general import RecordOrder
-
-    record = _record(
-        "2083.05",
-        slug="episode-2083-trailer-discussion-none",
-        title="Episode 2083 Trailer Discussion",
-        is_trailer=None,
-    )
-    authoritative = record.model_copy(update={"is_trailer": True})
-    detail_calls: list[str] = []
-
-    class FakeClient:
-        def get_episodes_paginated(self, collection_slug, selector):
-            return EpisodesPaginatedResult([record], None, False)
-
-        def get_episode_details(self, slug, *, require_member_exclusive):
-            detail_calls.append(slug)
-            return authoritative
-
-    season = _season()
-    season.id = 11
-    collection = SimpleNamespace(slug="test-collection", episode_identifier="numbered")
-
-    episode_map, _ = get_dw_episodes_by_seasons(
-        FakeClient(),
-        collection=collection,
-        membership_plan="FREE",
-        seasons=[season],
-        dw_id_by_slug={season.slug: "remote-season"},
-        order=RecordOrder.ASC,
-    )
-
-    assert detail_calls == [record.slug]
-    assert episode_map[season.id][0][0] == "ep-extra.trailer.2083.5"
-
-
-def test_mapper_promotes_attached_trailer_from_affirmative_detail_flag():
-    from sources.dailywire.api.dw_api.client import EpisodesPaginatedResult
-    from task_manager.tasks.helpers.episodes.mapper import get_dw_episodes_by_seasons
-    from task_manager.tasks.types.general import RecordOrder
-
-    record = _record(
-        "2083.05",
-        slug="episode-2083-trailer-discussion",
-        title="Episode 2083 Trailer Discussion",
-        is_trailer=False,
-    )
-    authoritative = record.model_copy(update={"is_trailer": True})
-
-    class FakeClient:
-        def get_episodes_paginated(self, collection_slug, selector):
-            return EpisodesPaginatedResult([record], None, False)
-
-        def get_episode_details(self, slug, *, require_member_exclusive):
-            return authoritative
-
-    season = _season()
-    season.id = 11
-    collection = SimpleNamespace(slug="test-collection", episode_identifier="numbered")
-
-    episode_map, _ = get_dw_episodes_by_seasons(
-        FakeClient(),
-        collection=collection,
-        membership_plan="FREE",
-        seasons=[season],
-        dw_id_by_slug={season.slug: "remote-season"},
-        order=RecordOrder.ASC,
-    )
-
-    assert episode_map[season.id][0][0] == "ep-extra.trailer.2083.5"
+    assert _identify(EpisodeIdentifier.NUMBERED, _record("2083.00", is_trailer=True)) == ["trailer.1"]
+    assert _identify(EpisodeIdentifier.NUMBERED, _record("2083.00", is_trailer=True), taken={"trailer.4"}) == ["trailer.5"]
 
 
 def test_official_trailer_title_overrides_false_dailywire_flag():
     from backend.types.collection_types import EpisodeIdentifier
-    from task_manager.tasks.helpers.episodes.identifier import identify_episodes_in_season
 
-    mapped, values = identify_episodes_in_season(
-        EpisodeIdentifier.SEASONAL,
-        [
-            _record(
-                "0.10",
-                slug="real-history-with-matt-walsh",
-                title="Real History with Matt Walsh | Official Trailer",
-                is_trailer=False,
-            )
-        ],
-        season=_season(season_number=0, season_type="extra"),
-    )
-
-    assert mapped[0][0] == "trailer.1"
-    assert values["ep_id.latest_trailer_num"] == 1
+    record = _record("2083.00", title="Official Trailer", is_trailer=False)
+    assert _identify(EpisodeIdentifier.NUMBERED, record) == ["trailer.1"]
 
 
-def test_mapper_skips_detail_lookup_for_explicit_official_trailer_title():
-    from sources.dailywire.api.dw_api.client import EpisodesPaginatedResult
-    from task_manager.tasks.helpers.episodes.mapper import get_dw_episodes_by_seasons
-    from task_manager.tasks.types.general import RecordOrder
+def test_a_trailer_and_another_extra_of_one_number_share_its_place():
+    from backend.types.collection_types import EpisodeIdentifier
 
-    record = _record(
-        "0.10",
-        slug="real-history-with-matt-walsh",
-        title="Real History with Matt Walsh | Official Trailer",
-        is_trailer=None,
-    )
+    assert _identify(
+        EpisodeIdentifier.NUMBERED,
+        _record("2083.05", slug="first", is_trailer=False), _record("2083.05", slug="duplicate", is_trailer=True),
+    ) == ["ep-extra.other.2083.5", "aux.1"]
 
-    class FakeClient:
-        def get_episodes_paginated(self, collection_slug, selector):
-            return EpisodesPaginatedResult([record], None, False)
 
-        def get_episode_details(self, slug, *, require_member_exclusive):
-            raise AssertionError("Explicit Official Trailer titles need no detail lookup")
+def test_same_episode_number_is_distinct_across_seasons():
+    from backend.types.collection_types import EpisodeIdentifier
 
-    season = _season(season_number=0, season_type="extra")
-    season.id = 11
-    collection = SimpleNamespace(slug="test-collection", episode_identifier="seasonal")
+    taken: set[str] = set()
+    first = _identify(EpisodeIdentifier.SEASONAL, _record("27.00"), season=_season(season_number=1), taken=taken)
+    second = _identify(EpisodeIdentifier.SEASONAL, _record("27.00"), season=_season(season_number=2), taken=taken)
+    assert (first, second) == (["ep.S01E27"], ["ep.S02E27"])
 
-    episode_map, _ = get_dw_episodes_by_seasons(
-        FakeClient(),
-        collection=collection,
-        membership_plan="FREE",
-        seasons=[season],
-        dw_id_by_slug={season.slug: "remote-season"},
-        order=RecordOrder.ASC,
-    )
 
-    assert episode_map[season.id][0][0] == "trailer.1"
+def test_by_date_an_extra_is_dated_and_a_trailer_of_an_episode_is_a_trailer():
+    from backend.types.collection_types import EpisodeIdentifier
+
+    assert _identify(
+        EpisodeIdentifier.DATE_BASED, _record("10.01", slug="extra"), _record("10.02", slug="trailer", is_trailer=True),
+    ) == ["ep.2026-01-01T00:00:00.000000", "trailer.1"]
+
+
+def test_by_date_a_second_episode_of_the_same_moment_is_auxiliary():
+    from backend.types.collection_types import EpisodeIdentifier
+
+    assert _identify(EpisodeIdentifier.DATE_BASED, _record("10.00", slug="a"), _record("11.00", slug="b")) == [
+        "ep.2026-01-01T00:00:00.000000", "aux.1",
+    ]
+
+
+def test_counted_sources_number_their_episodes_themselves():
+    """A Site without numbers of its own across a show, such as YouTube: a Numbered collection counts its episodes."""
+    from backend.services.episode_numbering import CountedNumbers, Numbering, identify
+    from backend.types.collection_types import EpisodeIdentifier
+    from sources import Site
+
+    site = Site("example", "Example", ("example.test",))
+    taken = {"ep.3"}
+    numbering = Numbering(published=datetime(2026, 1, 1, tzinfo=timezone.utc), number=40)
+    assert identify(EpisodeIdentifier.NUMBERED, site, _season(), numbering, taken, CountedNumbers(taken)) == "ep.4"
+    assert identify(EpisodeIdentifier.SEASONAL, site, _season(), numbering, taken, CountedNumbers(taken)) == "ep.S01E40"
+
+
+def test_stored_episodes_are_numbered_from_their_identifier_and_the_sources_number():
+    from backend.services.episode_numbering import Numbering
+    from sources.dailywire.source import DailyWireSource
+
+    source, published = DailyWireSource(), datetime(2026, 1, 1, tzinfo=timezone.utc)
+    # An extra a date-based collection dated like an episode is an extra again.
+    dated_extra = Numbering.of_stored(source, "ep.2026-01-01T00:00:00.000000", "2460.10", published)
+    assert (dated_extra.tag, dated_extra.number, dated_extra.extra) == ("ep-extra", 2460, 10)
+    trailer = Numbering.of_stored(source, "ep-extra.trailer.2460.3", "2460.03", published)
+    assert (trailer.tag, trailer.number, trailer.extra) == ("trailer", 2460, 3)
+    main = Numbering.of_stored(source, "ep.2460", "2460", published)
+    assert (main.main, main.number) == (True, 2460)
+    assert Numbering.of_stored(source, "aux.2", "2460.20", published).tag == "aux"
 
 
 def test_background_reindex_verifies_ambiguous_trailer_title_with_detail():
@@ -635,54 +412,6 @@ def test_background_reindex_only_updates_raw_number_when_remote_record_exists():
     assert by_id[102].identifier == "ep.2"
 
 
-def test_resolved_batch_is_reidentified_from_authoritative_detail_numbers():
-    from backend.types.episode_types import EpisodePublishStatus
-    from task_manager.tasks.helpers.episodes.save import ResolvedEpisode
-    from task_manager.tasks.workers.fetch_new_episodes.service import (
-        _canonicalize_resolved_identifiers,
-    )
-
-    season = _season()
-    season.id = 11
-    collection = SimpleNamespace(
-        episode_identifier="numbered",
-        seasons=[season],
-    )
-    paginated_extra = _record("1843.01", slug="late-extra")
-    paginated_main = _record("1844.00", slug="next-main")
-    resolved = {
-        season.id: [
-            ResolvedEpisode(
-                episode_identifier="ep-extra.other.1843.1",
-                record=paginated_extra.model_copy(update={"episode_number": "1843.10"}),
-                status=EpisodePublishStatus.PUBLISHED_FINAL,
-                detail_resolved=True,
-            ),
-            ResolvedEpisode(
-                episode_identifier="ep.1844",
-                record=paginated_main,
-                status=EpisodePublishStatus.PUBLISHED_FINAL,
-                detail_resolved=True,
-            ),
-        ]
-    }
-
-    canonical, values = _canonicalize_resolved_identifiers(
-        collection=collection,
-        resolved_by_season=resolved,
-        previous_values={},
-        occupied_identifiers={"ep.1843"},
-    )
-
-    assert [
-        episode.episode_identifier
-        for episode in canonical[season.id]
-    ] == [
-        "ep-extra.other.1843.10",
-        "ep.1844",
-    ]
-    assert "ep_id.latest_ep_extra_num" not in values
-
 
 def test_background_reindex_downgrade_restores_previous_identifier_grammar():
     from importlib import import_module
@@ -712,36 +441,6 @@ def test_background_reindex_downgrade_restores_previous_identifier_grammar():
         season_index=9,
         identifier="ep-extra.other.S06E570.10",
     ) == "ep-extra.S09E570.10"
-
-
-def test_mapper_does_not_mutate_callers_occupied_identifier_snapshot():
-    from sources.dailywire.api.dw_api.client import EpisodesPaginatedResult
-    from task_manager.tasks.helpers.episodes.mapper import get_dw_episodes_by_seasons
-    from task_manager.tasks.types.general import RecordOrder
-
-    record = _record("2500.00", slug="new-episode")
-
-    class FakeClient:
-        def get_episodes_paginated(self, collection_slug, selector):
-            return EpisodesPaginatedResult([record], None, False)
-
-    season = _season()
-    season.id = 11
-    collection = SimpleNamespace(slug="test-collection", episode_identifier="numbered")
-    occupied = {"ep.2499"}
-
-    episode_map, _ = get_dw_episodes_by_seasons(
-        FakeClient(),
-        collection=collection,
-        membership_plan="FREE",
-        seasons=[season],
-        dw_id_by_slug={season.slug: "remote-season"},
-        order=RecordOrder.ASC,
-        occupied_identifiers=occupied,
-    )
-
-    assert episode_map[season.id][0][0] == "ep.2500"
-    assert occupied == {"ep.2499"}
 
 
 

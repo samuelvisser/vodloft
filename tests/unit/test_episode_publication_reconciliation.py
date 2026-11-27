@@ -54,7 +54,7 @@ def _timing_settings():
 
 def test_final_timeout_never_overrides_authoritative_live(monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
-    from task_manager.tasks.helpers.episodes import status
+    from sources.dailywire import status
     monkeypatch.setattr(status, "get_settings", _timing_settings)
     detail = _episode_detail(
         slug="still-marked-live",
@@ -67,10 +67,9 @@ def test_final_timeout_never_overrides_authoritative_live(monkeypatch):
 
 
 def test_no_show_today_is_inferred_from_slug_not_title(monkeypatch):
-    from backend.types.episode_types import EpisodePublishStatus
-    from task_manager.tasks.helpers.episodes import status
+    from sources.dailywire import status
     monkeypatch.setattr(status, "get_settings", _timing_settings)
-    monkeypatch.setattr(status, "get_vod_info", lambda _url: SimpleNamespace(seconds=3600))
+    monkeypatch.setattr(status, "stream_length", lambda _url: 3600.0)
     detail = _episode_detail(
         slug="the-ben-shapiro-show-no-show-today",
         title="A completely ordinary title",
@@ -82,9 +81,9 @@ def test_no_show_today_is_inferred_from_slug_not_title(monkeypatch):
 
 def test_countdown_timeout_only_advances_current_countdown_snapshot(monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
-    from task_manager.tasks.helpers.episodes import status
+    from sources.dailywire import status
     monkeypatch.setattr(status, "get_settings", _timing_settings)
-    monkeypatch.setattr(status, "get_vod_info", lambda _url: SimpleNamespace(seconds=3600))
+    monkeypatch.setattr(status, "stream_length", lambda _url: 3600.0)
     detail = _episode_detail(
         slug="episode-2500",
         published_at=datetime.now(timezone.utc) - timedelta(minutes=181),
@@ -101,10 +100,10 @@ def test_countdown_timeout_only_advances_current_countdown_snapshot(monkeypatch)
 
 def test_countdown_timeout_can_use_explicit_safe_live_reference(monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
-    from task_manager.tasks.helpers.episodes import status
+    from sources.dailywire import status
 
     monkeypatch.setattr(status, "get_settings", _timing_settings)
-    monkeypatch.setattr(status, "get_vod_info", lambda _url: SimpleNamespace(seconds=3600))
+    monkeypatch.setattr(status, "stream_length", lambda _url: 3600.0)
     now = datetime(2026, 10, 2, 12, tzinfo=timezone.utc)
     detail = _episode_detail(
         slug="episode-safe-live-clock",
@@ -127,9 +126,9 @@ def test_countdown_timeout_can_use_explicit_safe_live_reference(monkeypatch):
 
 def test_dw_processing_uses_short_metadata_long_hls_and_times_out(monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
-    from task_manager.tasks.helpers.episodes import status
+    from sources.dailywire import status
     monkeypatch.setattr(status, "get_settings", _timing_settings)
-    monkeypatch.setattr(status, "get_vod_info", lambda _url: SimpleNamespace(seconds=120))
+    monkeypatch.setattr(status, "stream_length", lambda _url: 120.0)
     recent = _episode_detail(
         slug="episode-processing",
         duration=11.8,
@@ -153,10 +152,10 @@ def test_dw_processing_uses_short_metadata_long_hls_and_times_out(monkeypatch):
 
 def test_transition_policy_reuses_the_single_hls_observation(monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
-    from task_manager.tasks.helpers.episodes import status
+    from sources.dailywire import status
     monkeypatch.setattr(status, "get_settings", _timing_settings)
-    get_vod_info = Mock(return_value=SimpleNamespace(seconds=120))
-    monkeypatch.setattr(status, "get_vod_info", get_vod_info)
+    stream_length = Mock(return_value=120.0)
+    monkeypatch.setattr(status, "stream_length", stream_length)
     detail = _episode_detail(
         slug="episode-processing",
         duration=11.8,
@@ -171,13 +170,12 @@ def test_transition_policy_reuses_the_single_hls_observation(monkeypatch):
     )
 
     assert resolved.status is EpisodePublishStatus.SOURCE_PROCESSING
-    get_vod_info.assert_called_once_with(detail.video_url)
+    stream_length.assert_called_once_with(detail.video_url)
 
 
 def test_incremental_detail_404_overrides_age_fallback(monkeypatch):
-    from backend.types.episode_types import EpisodePublishStatus
     from sources.dailywire.api.dw_api.client import MiddlewareAPIError
-    from task_manager.tasks.helpers.episodes import save, status
+    from sources.dailywire import source, status
     monkeypatch.setattr(status, "get_settings", _timing_settings)
     record = _episode_record("missing-detail", published_at=datetime.now(timezone.utc) - timedelta(hours=10))
 
@@ -185,26 +183,26 @@ def test_incremental_detail_404_overrides_age_fallback(monkeypatch):
         def get_episode_details(self, slug, *, require_member_exclusive):
             raise MiddlewareAPIError("HTTP error 404: episode not found", status_code=404)
 
-    [resolved] = save.resolve_dw_episodes(
-        episodes=[("ep.2500", record)], client=FakeClient(),
-        require_member_exclusive=False, always_resolve_details=True,
-    )
-    assert resolved.status is None
-    assert resolved.detail_resolved is True
+    assert source._resolved(
+        FakeClient(), record, None, extras=False, members=False, look_up=True, author_name=None,
+    ) is None
 
 
 def test_initial_back_catalog_can_shortcut_old_final_without_detail(monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
-    from task_manager.tasks.helpers.episodes import save, status
+    from sources.dailywire import source, status
     monkeypatch.setattr(status, "get_settings", _timing_settings)
     record = _episode_record("old-back-catalog", published_at=datetime.now(timezone.utc) - timedelta(days=100))
     client = Mock()
-    [resolved] = save.resolve_dw_episodes(
-        episodes=[("ep.1", record)], client=client, require_member_exclusive=False,
-    )
-    assert resolved.status is EpisodePublishStatus.PUBLISHED_FINAL
-    assert resolved.detail_resolved is False
+    video = source._resolved(client, record, None, extras=False, members=False, look_up=False, author_name=None)
+    assert video.publish_status == EpisodePublishStatus.PUBLISHED_FINAL
     client.get_episode_details.assert_not_called()
+
+
+def _numbering(detail):
+    from backend.services.episode_numbering import Numbering
+    from sources.dailywire.source import video_of
+    return Numbering.of_video(video_of(detail, season_name="2026"), detail.published_date)
 
 
 def _make_collection_and_episode(session, *, identifier: str):
@@ -214,7 +212,7 @@ def _make_collection_and_episode(session, *, identifier: str):
     collection = Collection(
         source_key="dailywire",
         uuid="collection-uuid", slug="the-ben-shapiro-show", title="The Ben Shapiro Show",
-        description=None, sharing_url="https://example.test/collection", membership_level="FREE",
+        description=None, sharing_url="https://www.dailywire.com/show/the-ben-shapiro-show", membership_level="FREE",
         type=CollectionType.PODCAST.value, episode_identifier=EpisodeIdentifier.NUMBERED.value,
         author_name="Ben Shapiro", author_slug="ben-shapiro",
     )
@@ -258,10 +256,10 @@ def test_metadata_refresh_repairs_wrong_main_episode_identifier(monkeypatch):
             assert slug == episode.slug
             return detail
 
-    from task_manager.tasks.helpers.episodes import status
+    from sources.dailywire import status
 
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
-    monkeypatch.setattr(status, "get_vod_info", lambda _url: SimpleNamespace(seconds=3600))
+    monkeypatch.setattr(status, "stream_length", lambda _url: 3600.0)
     assert service.refresh_dailywire_episode(session, episode.id) is True
     session.expire_all()
     stored = session.get(type(episode), episode.id)
@@ -274,14 +272,14 @@ def test_metadata_refresh_repairs_wrong_main_episode_identifier(monkeypatch):
 def test_identifier_reconciliation_can_fix_extra_ordinal_after_collision_is_gone():
     import backend.db.models  # noqa: F401
     from backend.db import Base
-    from task_manager.tasks.helpers.episodes.identifier import refresh_episode_identifier
+    from task_manager.tasks.helpers.episodes.identifier_reconciliation import reconcile_episode_identifier
     engine = create_engine("sqlite+pysqlite:///:memory:", poolclass=StaticPool, connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
     use_database(engine)
     session = Session(engine)
     collection, episode = _make_collection_and_episode(session, identifier="ep-extra.other.2500.2")
     detail = _episode_detail(slug=episode.slug, episode_number="2500.01")
-    assert refresh_episode_identifier(session, episode, detail) is True
+    assert reconcile_episode_identifier(session, episode, _numbering(detail)) is True
     session.commit()
     assert episode.episode_identifier == "ep-extra.other.2500.1"
     session.close()
@@ -291,14 +289,14 @@ def test_identifier_reconciliation_can_fix_extra_ordinal_after_collision_is_gone
 def test_identifier_reconciliation_uses_dailywire_segment_10_directly():
     import backend.db.models  # noqa: F401
     from backend.db import Base
-    from task_manager.tasks.helpers.episodes.identifier import refresh_episode_identifier
+    from task_manager.tasks.helpers.episodes.identifier_reconciliation import reconcile_episode_identifier
     engine = create_engine("sqlite+pysqlite:///:memory:", poolclass=StaticPool, connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
     use_database(engine)
     session = Session(engine)
     _collection, episode = _make_collection_and_episode(session, identifier="ep-extra.other.2500.1")
     detail = _episode_detail(slug=episode.slug, episode_number="2500.10")
-    assert refresh_episode_identifier(session, episode, detail) is True
+    assert reconcile_episode_identifier(session, episode, _numbering(detail)) is True
     assert episode.episode_identifier == "ep-extra.other.2500.10"
     session.close()
     engine.dispose()

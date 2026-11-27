@@ -44,7 +44,9 @@ def _collections() -> list[tuple[int, str, str, frozenset[str], frozenset[str]]]
                 source = get_source(collection.source_key)
             except Exception:
                 continue
-            if not source.has(Feature.EPISODE_LISTS):
+            # The Daily Wire's shows, which VODLoft indexed episode by episode when this migration was written, had
+            # their details already.
+            if not source.has(Feature.EPISODE_LISTS) or source.has(Feature.EPISODE_LOOKUPS):
                 continue
             rows = session.execute(
                 select(Episode.source_slug, Episode.duration, Episode.author_name, Episode.removed_from_source)

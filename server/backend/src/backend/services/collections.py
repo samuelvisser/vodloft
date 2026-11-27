@@ -47,10 +47,8 @@ def add_collection(s: Session, collection: Collection, *, added_by_id: int | Non
         raise ServiceError(f"{source.name} has no shows")
     collection.added_by_id = added_by_id
     set_kind(collection)
-    if source.has(Feature.EPISODE_LISTS):
-        # Indexing puts the episodes in the Source's own seasons, or in a season per
-        # upload year. Seasons given here are the Source's, picked for a Download
-        # Profile; indexing matches them by slug and numbers them.
+    if not source.has(Feature.MEMBERSHIP_LEVELS):
+        # Only a Source with membership levels lists a collection for one.
         collection.membership_level = DwMembershipLevel.FREE.value
     place_collection(s, collection)
     s.add(collection)

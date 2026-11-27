@@ -26,7 +26,8 @@ def _monitor_fixture():
     from backend.db.models import Season, Collection
     from backend.types.episode_types import EpisodePublishStatus
     from backend.types.collection_types import EpisodeIdentifier, CollectionType
-    from task_manager.tasks.helpers.episodes.save import upsert_episode
+    from backend.db.models import Episode
+    from backend.utils.helpers import generate_uuid
     engine = create_engine("sqlite+pysqlite:///:memory:", poolclass=StaticPool, connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
     use_database(engine)
@@ -41,41 +42,18 @@ def _monitor_fixture():
     season = Season(collection=collection, index=1, slug="season-1", name="One")
     session.add_all([collection, season])
     session.flush()
-    episode = upsert_episode(
-        session, collection=collection, season=season,
-        ep=_episode_record("live-episode").model_copy(update={"publish_status": EpisodePublishStatus.LIVE.value}, deep=True),
-        index_value=2, ep_id="ep.101",
+    record = _episode_record("live-episode")
+    episode = Episode(
+        source_key="dailywire", uuid=generate_uuid(), type="episode", collection=collection, season=season, index=2,
+        episode_identifier="ep.101", source_number="101.00", slug=record.slug, source_slug=record.slug,
+        title=record.title, duration=record.duration, publish_status=EpisodePublishStatus.LIVE.value,
+        sharing_url=record.sharing_url, published_date=record.published_date,
     )
+    session.add(episode)
     session.commit()
     return engine, session, collection, episode
 
 
-
-def test_upsert_existing_episode_stores_raw_source_number_separately():
-    from task_manager.tasks.helpers.episodes.save import upsert_episode
-
-    engine, session, collection, episode = _monitor_fixture()
-    record = _episode_record(episode.slug).model_copy(
-        update={"episode_number": "101.10", "title": "Updated episode"},
-        deep=True,
-    )
-
-    updated = upsert_episode(
-        session,
-        collection=collection,
-        season=episode.season,
-        ep=record,
-        index_value=episode.index,
-        ep_id="ep-extra.other.101.10",
-    )
-
-    assert updated.id == episode.id
-    assert updated.source_number == "101.10"
-    assert updated.episode_number == "101"
-    assert updated.episode_sub_number == "10"
-    assert updated.title == "Updated episode"
-    session.close()
-    engine.dispose()
 
 def test_pending_monitor_marks_unreconciled_404_as_removed_from_its_source(monkeypatch):
     from sources.dailywire.api.dw_api.client import MiddlewareAPIError

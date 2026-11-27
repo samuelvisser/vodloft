@@ -37,7 +37,7 @@ def test_seasonal_episode_number_renders_as_numeric_episode_number() -> None:
     assert values["season_index"] == "4"
     assert values["season_number"] == "1"
     assert values["season_type"] == "normal"
-    assert values["source_number"] == "7.00"
+    assert values["site_number"] == "7.00"
     assert values["episode_number"] == "7"
     assert values["episode_label"] == "S01E07"
     assert values["episode_identifier"] == "ep.S01E07"
@@ -72,11 +72,11 @@ def test_episode_identifier_semantics_are_exposed_to_templates() -> None:
     assert values["episode_number"] == "12"
     assert values["episode_sub_number"] == "5"
     assert values["episode_label"] == "S03E12.5"
-    assert values["source_number"] == "12.05"
+    assert values["site_number"] == "12.05"
     assert {
         "season_type",
         "season_number",
-        "source_number",
+        "site_number",
         "episode_extra_type",
         "episode_sub_number",
     }.issubset(COLLECTION_OUTPUT_TEMPLATE_FIELDS)
@@ -198,3 +198,18 @@ def test_an_episode_of_a_creators_collection_knows_its_creator_and_section() -> 
     }
     # A collection without a creator leaves them empty.
     assert episode_output_template_values(_episode("ep.1"))["creator_title"] == ""
+
+
+def test_every_site_that_numbers_its_episodes_gives_its_site_number():
+    from dataclasses import replace
+    from datetime import datetime, timezone
+
+    from sources import VideoDetails
+
+    video = VideoDetails(
+        slug="v", url="https://example.test/v", title="V", duration=60.0, image_url=None, author_name=None,
+        published_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    assert video.site_number is None
+    assert replace(video, episode_number=12).site_number == "12"
+    assert replace(video, episode_number=2460, extra_number=10, number_text="2460.10").site_number == "2460.10"

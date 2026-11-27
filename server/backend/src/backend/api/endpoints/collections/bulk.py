@@ -63,8 +63,10 @@ def _seasons_changes(changes: CollectionBulkChangesIn, collection: Collection, r
 
 def _groups_videos(collection: Collection) -> bool:
     """The collection groups what is part of it in one season or a season per year: a collection whose Source lists
-    its videos, rather than one whose Source has seasons of its own."""
-    return get_source(collection.source_key).has(Feature.EPISODE_LISTS)
+    its videos, rather than one whose Source always has seasons of its own, as one whose episodes VODLoft looks up
+    one by one does."""
+    source = get_source(collection.source_key)
+    return source.has(Feature.EPISODE_LISTS) and not source.has(Feature.EPISODE_LOOKUPS)
 
 
 def _site_name(collection: Collection) -> str:

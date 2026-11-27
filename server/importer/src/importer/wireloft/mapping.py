@@ -35,7 +35,7 @@ from .reader import KEYRING_FILE, WireLoftData, read_wireloft
 SOURCE = "dailywire"
 
 # Output template variables VODLoft renamed: the show ones (0.6.0) and dw_episode_number (0.10.0).
-_TEMPLATE_NAMES = {"show": "collection", "show_title": "collection_title", "dw_episode_number": "source_number"}
+_TEMPLATE_NAMES = {"show": "collection", "show_title": "collection_title", "dw_episode_number": "site_number"}
 _TEMPLATE_PREFIXES = (("meta_show_", "meta_collection_"),)
 # Stored values VODLoft renamed (VODLoft's stored-names migration).
 _MEMBERSHIP_LEVELS = {"WL_ANY": "HIGHEST_ALLOWED"}
