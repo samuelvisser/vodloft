@@ -4,7 +4,7 @@ On first launch, VODLoft asks which sites you use, helps you review security, an
 
 ## 1. Sites
 
-VODLoft downloads from YouTube and over a thousand other sites. The first-run setup shows the popular ones, such as YouTube, Twitch, The Daily Wire and SoundCloud: pick the ones you use. For any other site, type its address, such as `nebula.tv`, or paste a link to a page on it. You need at least one site to continue. If you only use YouTube, pick only YouTube: VODLoft then leaves out everything that is only about other sites. You can add more sites at any time under **Settings → Sites**, and a site is also added when you add something from it.
+VODLoft downloads from YouTube and over a thousand other sites. The first-run setup shows the popular ones, such as YouTube, Twitch, The Daily Wire and SoundCloud: pick the ones you use. YouTube starts picked. For any other site, type its address, such as `nebula.tv`, or paste a link to a page on it. You need at least one site to continue. If you only use YouTube, pick only YouTube: VODLoft then leaves out everything that is only about other sites. You can add more sites at any time under **Settings → Sites**, and a site is also added when you add something from it.
 
 Next, **Set up your sites** offers signing in per site, as an optional step: The Daily Wire has a sign-in of its own, and other sites, such as YouTube or NPO Start, sign in with a cookies file. See [[Sources]] and [[Settings#authentication]].
 

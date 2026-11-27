@@ -14,7 +14,7 @@ import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {CollectionRead} from '../../types/schemas/collection'
 import OnboardingMovieProfileStep from './OnboardingMovieProfileStep'
 import OnboardingMediaStep from './OnboardingMediaStep'
-import OnboardingSitesStep from './OnboardingSitesStep'
+import OnboardingSitesStep, {type SitePicks} from './OnboardingSitesStep'
 import './Onboarding.css'
 import {faIcon} from '../../icons/faIcon'
 import {apiUrl} from '../../lib/api'
@@ -45,6 +45,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
     const queryClient = useQueryClient()
     const {data: localMovies} = useMovies()
     const [step, setStep] = useState<OnboardingStep>('welcome')
+    const [sitePicks, setSitePicks] = useState<SitePicks | null>(null)
     const [selectedCollection, setSelectedCollection] = useState<SelectedMedia | null>(null)
     const [selectedCollectionWasPresent, setSelectedCollectionWasPresent] = useState(false)
     const [selectedMovie, setSelectedMovie] = useState<SelectedMedia | null>(null)
@@ -186,7 +187,10 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
 
             {step === 'sites' && (
                 <main className="onboarding-stage onboarding-stage-narrow">
-                    <OnboardingSitesStep onBack={() => setStep('welcome')} onContinue={() => setStep('site-setup')}/>
+                    <OnboardingSitesStep
+                        picks={sitePicks} onPicks={setSitePicks}
+                        onBack={() => setStep('welcome')} onContinue={() => setStep('site-setup')}
+                    />
                 </main>
             )}
 
