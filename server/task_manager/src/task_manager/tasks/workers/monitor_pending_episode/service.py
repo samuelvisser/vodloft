@@ -3,9 +3,9 @@ from __future__ import annotations
 import logging
 from sqlalchemy.orm import Session
 
+from sources import FREE_LEVEL, HIGHEST_LEVEL
 from backend.db.models import Episode, Collection
 from backend.db.core import run_write_transaction
-from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode_publication_timing import best_effort_published_date
 from sources.dailywire.api.dw_api.client import ByShowSeason, MiddlewareAPIError, MiddlewareClient
@@ -39,9 +39,9 @@ def _numbering(episode: Episode, detail) -> Numbering:
 
 def _membership_plan(collection: Collection) -> tuple[str, bool]:
     membership_plan = collection.membership_level
-    if membership_plan == DwMembershipLevel.HIGHEST_ALLOWED.value:
-        return DwMembershipLevel.FREE.value, False
-    return membership_plan, membership_plan != DwMembershipLevel.FREE.value
+    if membership_plan == HIGHEST_LEVEL:
+        return FREE_LEVEL, False
+    return membership_plan, membership_plan != FREE_LEVEL
 
 
 def _reload_episode_and_collection(

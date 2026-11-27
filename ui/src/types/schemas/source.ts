@@ -445,6 +445,7 @@ export const CollectionDetailsReadSchema = z.object({
     authorName: z.string(),
     authorSlug: z.string(),
     thumbnailLandscapePath: z.string().nullable(),
+    authorHeadshotPath: z.string().nullable().default(null),
     /** The type VODLoft suggests from the collection's name. */
     probableCollectionType: z.string(),
     /** Why the collection was taken for music, when it was, such as an album on YouTube Music. */
@@ -457,6 +458,12 @@ export const CollectionDetailsReadSchema = z.object({
     kind: z.enum(['channel', 'list']),
     /** Which of its Site's types of list the link is, such as an album or a playlist on SoundCloud, where its link doesn't tell. */
     listType: z.string().nullable().default(null),
+    /** The collection's Site numbers its episodes itself, such as The Daily Wire, so it is best numbered by them. */
+    showNumbers: z.boolean().default(false),
+    /** The membership level to list the collection with unless the user picks another. */
+    membershipLevel: z.string(),
+    /** The levels the user can pick from, at a Source with membership levels; empty at the others. */
+    membershipLevels: z.array(z.object({key: z.string(), name: z.string(), help: z.string()})).default([]),
     /** What the collection's seasons will be once added, by collection type, as its Site's defaults make them. */
     seasonsPlans: z.record(z.string(), z.string()).default({}),
 })

@@ -1,7 +1,6 @@
 import {z} from "zod";
 import {HealthIssueKindSchema} from './collection_health'
 import {EpisodeIdentifierReg, EpisodeOrderReg, CollectionTypeReg} from "../collection";
-import {DwMembershipLevelReg} from "../dailywire_user_info";
 import {ApiDateTimeSchema} from "./datetime";
 import {NamesSchema, SiteReadSchema, SourcedFields} from "./source";
 import {OutsideVideosValues} from "./collection_seasons";
@@ -34,7 +33,8 @@ const collectionUrl = z
 /* ------------------------------------------------------------------ */
 const CollectionBaseFormSchema = z.object({
     url: collectionUrl,
-    membershipLevel: z.enum(DwMembershipLevelReg.Enum).default(DwMembershipLevelReg.Enum.HIGHEST_ALLOWED),
+    /** The membership level the collection lists with, of those its Source offers; FREE at a Source without them. */
+    membershipLevel: z.string().min(1, 'Pick a membership level').default('FREE'),
     type: z.union([z.enum(CollectionTypeReg.values), z.literal('')]).default('').pipe(z.enum(CollectionTypeReg.values)),
     episodeIdentifier: z.union([z.enum(EpisodeIdentifierReg.values), z.literal('')]).default('').pipe(z.enum(EpisodeIdentifierReg.values)),
 });
@@ -54,7 +54,6 @@ export type CollectionUpdateFormOut = z.output<typeof CollectionUpdateFormSchema
 /* ------------------------------------------------------------------ */
 const CollectionBasePayloadSchema = CollectionBaseFormSchema.extend({
     sourceKey: z.string().min(1, "sourceKey missing"),
-    dwId: z.string().min(1, "dwId missing").default(''),
     slug: z.string().min(1, "slug missing").default(''),
     title: z.string().min(1, "title missing").default(''),
     description: z.string().nullable(),
@@ -93,7 +92,7 @@ export const CollectionReadSchema = z.looseObject({
     uuid: z.string(),
     slug: z.string(),
     ...SourcedFields,
-    membershipLevel: z.union([z.enum(DwMembershipLevelReg.values), z.string()]).nullable(),
+    membershipLevel: z.string().nullable(),
     type: z.union([z.enum(CollectionTypeReg.values), z.string()]),
     episodeIdentifier: z.union([z.enum(EpisodeIdentifierReg.values), z.string()]),
     episodeOrder: z.enum(EpisodeOrderReg.values),

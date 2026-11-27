@@ -26,31 +26,40 @@ def test_catalog_ui_read_bypasses_background_pacing(monkeypatch):
     assert captured["request_priority"] == "interactive"
 
 
-def test_show_preview_ui_read_bypasses_background_pacing(monkeypatch):
-    from backend.api.endpoints.dailywire.shows import service
+def test_a_show_looked_up_to_add_lists_with_the_accounts_level_and_skips_background_pacing(monkeypatch):
+    from sources.dailywire import source
+    from sources.dailywire.api.types.user_info import DwMembershipLevel
 
     captured: dict[str, object] = {}
-    show = object()
-
-    class FakeAuth:
-        def get_token(self):
-            return SimpleNamespace(access_token="token")
 
     class FakeClient:
         def __init__(self, **kwargs):
             captured.update(kwargs)
 
-        def get_show_page(self, *, slug, membership_plan):
+        def get_show_page(self, *, slug):
             assert slug == "example-show"
-            assert membership_plan == "ALL_ACCESS"
-            return show
+            return SimpleNamespace(
+                slug="example-show", title="Example Show", description=None, thumbnail_landscape_path=None,
+                author_name="Host", author_slug="host", author_headshot_path="host.jpg", seasons=[],
+                latest_season=None, probable_collection_type=SimpleNamespace(value="podcast"),
+            )
 
-    monkeypatch.setattr(service, "DeviceAuthClient", FakeAuth)
-    monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
+    monkeypatch.setattr(source, "MiddlewareClient", FakeClient)
+    monkeypatch.setattr(source, "_access_token", lambda: "token")
+    monkeypatch.setattr(source, "_season_refs", lambda show: {})
+    monkeypatch.setattr(source, "account_level", lambda: DwMembershipLevel.INSIDER)
 
-    assert service.get_show("example-show", membership_plan="ALL_ACCESS") is show
-    assert captured["access_token"] == "token"
-    assert captured["request_priority"] == "interactive"
+    details = source.DailyWireSource().collection_details("https://www.dailywire.com/show/example-show")
+
+    assert captured == {"access_token": "token", "request_priority": "interactive"}
+    assert details.membership_level == "INSIDER"
+    assert details.author_image_url == "host.jpg"
+    assert details.probable_type == "podcast"
+
+    monkeypatch.setattr(source, "account_level", lambda: DwMembershipLevel.READER)
+    assert source.DailyWireSource().collection_details(
+        "https://www.dailywire.com/show/example-show"
+    ).membership_level == "FREE"
 
 
 def test_movie_ui_read_bypasses_background_pacing(monkeypatch):

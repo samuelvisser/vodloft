@@ -8,7 +8,7 @@ from types import MappingProxyType
 from progress_plan import PlanTracker, StageSpec
 
 from ..contract import (
-    Access, CollectionArtwork, CreatorDetails, cheapest, Names, SectionType, MAIN_TAG, MIN_NEWEST_EPISODES, SectionKind, SectionRef, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback,
+    Access, CollectionArtwork, CollectionDetails, CreatorDetails, FREE_LEVEL, HIGHEST_LEVEL, MembershipLevel, cheapest, Names, SectionType, MAIN_TAG, MIN_NEWEST_EPISODES, SectionKind, SectionRef, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback,
     DownloadOptions, PublishStatusLabel, ResolvedLink, RssEpisodeType, SeasonRef, Site, SiteSetting, SiteSettings, Source, StreamMethod,
     ReleaseDate, UpgradeChecks, UpgradeImprovement, UpgradeOffer, VideoDetails, publish_status_labels_with,
 )
@@ -20,7 +20,7 @@ from .api.types.user_info import DwMembershipLevel
 from .api.utils.validators.available_for_list import parse_tiers
 from .auth import DeviceAuthClient
 from .auth.storage import TokenStore
-from .links import HOST, _access_token, _first, collection_url, parse_link, resolve_link
+from .links import HOST, _access_token, _first, collection_url, host_url, parse_link, resolve_link
 from . import membership
 from .membership import LEVEL_ORDER, account_level, check_after_refusal
 from .playback import resolve_movie_playback
@@ -35,7 +35,6 @@ _EXTRAS_SEASON = re.compile(r"\bextras?\b", re.IGNORECASE)
 _TRAILER_TITLE = re.compile(r"\btrailer\b", re.IGNORECASE)
 _PAGE_SIZE = 50
 # A collection's membership level that is whatever the signed-in account has.
-_HIGHEST_ALLOWED = "HIGHEST_ALLOWED"
 
 
 def _numbers(number_text: str) -> tuple[int | None, int | None]:
@@ -182,7 +181,7 @@ def _membership_plan(membership: str | None) -> str:
     """The membership level a show is listed with. The highest level the account has is listed as free, as VODLoft
     has always done."""
     plan = membership or DwMembershipLevel.FREE.value
-    return DwMembershipLevel.FREE.value if plan == _HIGHEST_ALLOWED else plan
+    return DwMembershipLevel.FREE.value if plan == HIGHEST_LEVEL else plan
 
 
 _VIDEO_HEIGHTS = (480, 720, 1080)
@@ -256,6 +255,7 @@ class DailyWireSource(Source):
         Feature.MEMBERSHIP_LEVELS,
         Feature.EPISODE_LOOKUPS,
         Feature.EPISODE_LISTS,
+        Feature.COLLECTION_DETAILS,
         Feature.OWN_STUDIO,
         Feature.CREATORS,
     })
@@ -281,6 +281,31 @@ class DailyWireSource(Source):
 
     def resolve(self, url: str, plan: PlanTracker | None = None) -> ResolvedLink | None:
         return resolve_link(url, plan)
+
+    membership_levels = (
+        MembershipLevel(FREE_LEVEL, "Free", "Access to free content only"),
+        MembershipLevel(DwMembershipLevel.INSIDER.value, "Insider", "Access to free content and insider content"),
+        MembershipLevel(
+            DwMembershipLevel.INSIDER_PLUS.value, "Insider Plus", "Access to insider content and insider plus content",
+        ),
+        MembershipLevel(DwMembershipLevel.ALL_ACCESS.value, "All Access", "Access to all content"),
+    )
+
+    def collection_details(self, url: str) -> CollectionDetails:
+        """The show's page: its seasons, oldest first, and its host. It lists with the membership level of the
+        signed-in account, as far as VODLoft knows it."""
+        show = MiddlewareClient(access_token=_access_token(), request_priority="interactive").get_show_page(
+            slug=_show_slug(url),
+        )
+        level = account_level()
+        return CollectionDetails(
+            slug=show.slug, url=collection_url(show.slug), title=show.title, description=show.description,
+            image_url=show.thumbnail_landscape_path, author_name=show.author_name,
+            author_url=host_url(show.author_slug) if show.author_slug else None, author_image_url=show.author_headshot_path,
+            seasons=tuple(ref for ref, _extras in _season_refs(show).values()),
+            membership_level=level.value if level in LEVEL_ORDER and level is not DwMembershipLevel.READER else FREE_LEVEL,
+            probable_type=show.probable_collection_type.value,
+        )
 
     def newest_episodes(self, url: str) -> list[VideoDetails]:
         """The episodes on the show's page, which lists its newest season's latest ones.

@@ -8,12 +8,11 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any
 
-from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
 from backend.types.collection_types import EpisodeIdentifier, CollectionType
 from backend.utils.helpers import slugify
-from sources import DAILYWIRE
+from sources import DAILYWIRE, FREE_LEVEL
 
 
 def _published(collection_index: int, episode_index: int) -> dt.datetime:
@@ -30,7 +29,7 @@ def _collection(slug: str, title: str, author: str) -> dict[str, Any]:
         "title": title,
         "description": None,
         "sharing_url": f"https://www.dailywire.com/show/{slug}",
-        "membership_level": DwMembershipLevel.FREE.value,
+        "membership_level": FREE_LEVEL,
         "type": CollectionType.PODCAST.value,
         "episode_identifier": EpisodeIdentifier.DATE_BASED.value,
         "author_name": author,

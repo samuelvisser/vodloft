@@ -15,13 +15,12 @@ const EpisodeBaseSchema = z.object({
 export const EpisodeCreateSchema = EpisodeBaseSchema.extend({
     collectionId: z.int(),
     index: z.number(),
-    dwId: z.string().optional(),
     slug: z.string(),
 })
 export type EpisodeCreateIn = z.input<typeof EpisodeCreateSchema>
 export type EpisodeCreateOut = z.output<typeof EpisodeCreateSchema>
 
-export const EpisodeUpdateSchema = EpisodeBaseSchema.extend({dwId: z.string().optional()})
+export const EpisodeUpdateSchema = EpisodeBaseSchema
 export type EpisodeUpdateIn = z.input<typeof EpisodeUpdateSchema>
 export type EpisodeUpdateOut = z.output<typeof EpisodeUpdateSchema>
 

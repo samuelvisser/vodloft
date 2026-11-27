@@ -6,11 +6,11 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from sources import FREE_LEVEL, HIGHEST_LEVEL
 from backend.db.models import Episode
 from backend.db.core import run_write_transaction
 from backend.services.custom_indexes import request_collection_custom_index_reconciliation
 from backend.services.removed_downloads import back_at_source, left_source
-from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode_publication_timing import (
     invalidate_safe_publication_timing,
@@ -48,8 +48,8 @@ def refresh_dailywire_episode(s: Session, episode_id: int, *, now: Optional[date
         return None
     episode_slug = episode.slug
     require_member_exclusive = episode.collection.membership_level not in {
-        DwMembershipLevel.FREE.value,
-        DwMembershipLevel.HIGHEST_ALLOWED.value,
+        FREE_LEVEL,
+        HIGHEST_LEVEL,
     }
 
     # No transaction stays open while The Daily Wire is looked up.

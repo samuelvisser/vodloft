@@ -145,7 +145,7 @@ def test_tmdb_dns_outage_does_not_retry_locally(monkeypatch) -> None:
 
 def test_rss_stream_outage_is_not_downgraded_to_episode_502() -> None:
     from backend.services import stream_episodes as service
-    from backend.types.dailywire_user_info import DwMembershipLevel
+    from sources import FREE_LEVEL
     from config.network import is_no_internet_error
     from sources.dailywire.api.dw_api.client import MiddlewareAPIError
 
@@ -159,7 +159,7 @@ def test_rss_stream_outage_is_not_downgraded_to_episode_502() -> None:
             raise outage
 
     profile = SimpleNamespace(
-        collection=SimpleNamespace(membership_level=DwMembershipLevel.FREE.value),
+        collection=SimpleNamespace(membership_level=FREE_LEVEL),
         preferred_format="720p",
     )
     episode = SimpleNamespace(slug="example-episode")

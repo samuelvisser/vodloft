@@ -13,11 +13,10 @@ from backend.services.errors import ServiceError
 from backend.services.sites import collection_kind, place_collection
 from backend.types import work_weights
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
-from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.link_season_types import ChannelSeason, CollectionKind, LinkSeasons, LooseVideos, OutsideVideos, RepeatVideos
 from backend.utils.helpers import generate_uuid, slugify
-from sources import Feature, SectionKind, UnknownSourceError, all_sources, get_source, source_site
+from sources import FREE_LEVEL, HIGHEST_LEVEL, Feature, SectionKind, UnknownSourceError, all_sources, get_source, source_site
 from task_manager.events.transactional import queue_event
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import queue_operation_target_dispatch
@@ -49,7 +48,11 @@ def add_collection(s: Session, collection: Collection, *, added_by_id: int | Non
     set_kind(collection)
     if not source.has(Feature.MEMBERSHIP_LEVELS):
         # Only a Source with membership levels lists a collection for one.
-        collection.membership_level = DwMembershipLevel.FREE.value
+        collection.membership_level = FREE_LEVEL
+    elif collection.membership_level not in {HIGHEST_LEVEL, *(level.key for level in source.membership_levels)}:
+        raise ServiceError(
+            f"{source.name} has no membership level {collection.membership_level}", field="membershipLevel",
+        )
     place_collection(s, collection)
     s.add(collection)
 
@@ -129,7 +132,7 @@ def add_links_only_collection(
         slug, suffix = f"{base}-{suffix}", suffix + 1
     collection = Collection(
         uuid=generate_uuid(), slug=slug, source_key=source.id, title=title.strip(), sharing_url=None,
-        membership_level=DwMembershipLevel.FREE.value, type=collection_type.value,
+        membership_level=FREE_LEVEL, type=collection_type.value,
         episode_identifier=episode_identifier.value, author_name="", author_slug="",
         link_seasons=LinkSeasons.ON.value, outside_videos=OutsideVideos.ONLY.value,
     )

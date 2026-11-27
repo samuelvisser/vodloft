@@ -787,7 +787,7 @@ class ItemRefresh:
 
 @dataclass(frozen=True)
 class CollectionDetails:
-    """What VODLoft stores about a collection from a Source with ``Feature.EPISODE_LISTS``."""
+    """What VODLoft stores about a collection from a Source with ``Feature.COLLECTION_DETAILS``."""
 
     slug: str
     url: str
@@ -802,6 +802,14 @@ class CollectionDetails:
     list_type: str | None = None
     """The key of the Site's type of list the link is, such as an album or a playlist on SoundCloud, for a Site whose
     lists come in several types that their links don't tell apart."""
+    author_image_url: str | None = None
+    """A picture of who makes the collection, such as a Daily Wire host's headshot."""
+    membership_level: str | None = None
+    """The membership level to list the collection with unless the user picks another, such as the signed-in
+    account's own, for a Source with ``Feature.MEMBERSHIP_LEVELS``."""
+    probable_type: str | None = None
+    """The kind of collection the Source takes it for, ``podcast`` or ``series``, when it can tell better than its
+    name does, such as from its seasons."""
 
 
 @dataclass(frozen=True)
@@ -814,6 +822,23 @@ class CollectionArtwork:
     square: str | None = None
     background: str | None = None
     logo: str | None = None
+
+
+FREE_LEVEL = "FREE"
+"""The membership level of what anyone may watch. A collection from a Source without ``Feature.MEMBERSHIP_LEVELS``
+lists with it."""
+HIGHEST_LEVEL = "HIGHEST_ALLOWED"
+"""Whatever the membership of the signed-in account allows: a membership level a collection can list with on every
+Source with ``Feature.MEMBERSHIP_LEVELS``."""
+
+
+@dataclass(frozen=True)
+class MembershipLevel:
+    """One of the membership levels a collection can list with, for a Source with ``Feature.MEMBERSHIP_LEVELS``."""
+
+    key: str
+    name: str
+    help: str
 
 
 MIN_NEWEST_EPISODES = 5
@@ -1618,6 +1643,12 @@ class Source(ABC):
         """The creator a collection's link belongs to, as ``creator_details`` takes it, or None when the link is not
         one creator's. Slow: it may ask the Site. Only Sources with ``Feature.CREATORS`` implement it."""
         raise NotImplementedError(f"{self.name} has no creators")
+
+    @property
+    def membership_levels(self) -> tuple[MembershipLevel, ...]:
+        """The membership levels a collection can list with besides ``HIGHEST_LEVEL``, lowest first, for a Source with
+        ``Feature.MEMBERSHIP_LEVELS``."""
+        return ()
 
     def music_reason(self, url: str, details: CollectionDetails) -> str | None:
         """Why the collection behind a link, looked up as ``details``, is probably music, such as an album or a
