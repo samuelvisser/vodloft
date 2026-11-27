@@ -441,6 +441,9 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     // Escape does what Cancel does, also with unsaved changes, and nothing while saving, when Cancel is off too.
     useDismissOnEscape(onDismiss, !isSubmitting, open)
 
+    // What saving is doing, while it saves.
+    const savingSteps = useSavingSteps(collectionSlug, token, isSubmitting && !!reviewing)
+
     if (!open) return null
     const seasonsById = new Map((view?.seasons ?? []).map((season) => [season.id, season]))
     const moveSeason = (from: number, to: number) => {
@@ -724,7 +727,6 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
             state: listing.state === 'listing' ? 'running' as const : listing.state === 'listed' ? 'completed' as const : 'failed' as const,
         }]
     })
-    const savingSteps = useSavingSteps(collectionSlug, token, isSubmitting && !!reviewing)
 
     /** One source: its name, what it has, and what it is in the collection. */
     const sourceRow = (row: {key: string, title: string, details: (string | null)[], role: SourceRole, onRole: (role: SourceRole) => void,
