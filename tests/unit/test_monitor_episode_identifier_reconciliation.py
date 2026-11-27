@@ -32,7 +32,7 @@ def test_monitor_reconciles_identifier_while_episode_stays_pending(monkeypatch):
         slug="the-ben-shapiro-show",
         title="The Ben Shapiro Show",
         description=None,
-        sharing_url="https://example.test/collection",
+        sharing_url="https://www.dailywire.com/show/test-collection",
         membership_level="FREE",
         type=CollectionType.PODCAST.value,
         episode_identifier=EpisodeIdentifier.NUMBERED.value,

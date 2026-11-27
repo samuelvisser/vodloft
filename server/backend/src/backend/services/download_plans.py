@@ -115,7 +115,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     thumbnail = select_thumbnail(media)
     media_source = get_source(media.source_key)
     throttle_guard = refuses_throttled(session, media_download_id)
-    if (episode is not None and media_source.has(Feature.EPISODE_LISTS)) or video is not None:
+    if (episode is not None and media_source.has(Feature.PAGE_STREAMS)) or video is not None:
         # A listed episode is a video on a page, just like a single video.
         page_url = media.sharing_url
         use_cookies = None

@@ -1,22 +1,21 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+import logging
+import re
+from collections.abc import Iterator, Mapping, Sequence
 from types import MappingProxyType
-
-import requests
-
-from downloader.hls import is_master_playlist, media_playlist_segments, parse_master_playlist
 
 from progress_plan import PlanTracker, StageSpec
 
 from ..contract import (
-    Access, CreatorDetails, cheapest, Names, SectionType, MAIN_TAG, MIN_NEWEST_EPISODES, SectionKind, SectionRef, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback,
+    Access, CollectionArtwork, CreatorDetails, cheapest, Names, SectionType, MAIN_TAG, MIN_NEWEST_EPISODES, SectionKind, SectionRef, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback,
     DownloadOptions, PublishStatusLabel, ResolvedLink, RssEpisodeType, SeasonRef, Site, SiteSetting, SiteSettings, Source, StreamMethod,
     ReleaseDate, UpgradeChecks, UpgradeImprovement, UpgradeOffer, VideoDetails, publish_status_labels_with,
 )
 from .api.dw_api.client import ByShowSeason, MiddlewareClient
 from .api.dw_api.movie import MovieMiddlewareClient
-from .api.records import DwEpisodeRecord
+from .api.dw_api.client import ByNextPage, MiddlewareAPIError
+from .api.records import DwEpisodeRecord, DwShowRecord
 from .api.types.user_info import DwMembershipLevel
 from .api.utils.validators.available_for_list import parse_tiers
 from .auth import DeviceAuthClient
@@ -25,23 +24,43 @@ from .links import HOST, _access_token, _first, collection_url, parse_link, reso
 from . import membership
 from .membership import LEVEL_ORDER, account_level, check_after_refusal
 from .playback import resolve_movie_playback
+from .status import is_no_show_today_slug, is_published_final, observe_episode_detail, resolve_episode_status, stream_length
 
-_PLAYLIST_TIMEOUT_SECONDS = 15
+logger = logging.getLogger(__name__)
 
 # Episode numbers .01 to .19 belong to an episode; .20 and up are the show's own extra content.
 _SHOW_EXTRA_SEGMENT = 20
+# A show's season of extra content, such as "Extras".
+_EXTRAS_SEASON = re.compile(r"\bextras?\b", re.IGNORECASE)
+_TRAILER_TITLE = re.compile(r"\btrailer\b", re.IGNORECASE)
+_PAGE_SIZE = 50
+# A collection's membership level that is whatever the signed-in account has.
+_HIGHEST_ALLOWED = "HIGHEST_ALLOWED"
 
 
-def _tag(record: DwEpisodeRecord) -> str:
-    """The episode tag VODLoft gives the record, from its episode number and whether it is a trailer."""
-    segment = record.ep_segment
-    if record.ep_number is not None and 0 < segment < _SHOW_EXTRA_SEGMENT:
-        return "ep-extra"
+def _numbers(number_text: str) -> tuple[int | None, int | None]:
+    """The episode and extra number of The Daily Wire's own number: 2460 is episode 2460, 2460.10 its tenth extra.
+    From .20 up a number is the show's own extra content, which belongs to no episode."""
+    whole, _, fraction = number_text.strip().partition(".")
+    if not whole.isdigit():
+        return None, None
+    segment = int(fraction) if fraction.isdigit() else 0
+    if segment == 0:
+        return int(whole), None
+    if segment < _SHOW_EXTRA_SEGMENT:
+        return int(whole), segment
+    return None, None
+
+
+def _tag(record: DwEpisodeRecord, *, extras: bool = False) -> str:
+    """The episode tag VODLoft gives the record, from its episode number, whether it is a trailer, and whether it is
+    in the show's season of extras."""
+    number, extra = _numbers(record.episode_number) if not extras else (None, None)
     if record.trailer:
         return "trailer"
-    if record.ep_number is None or segment:
-        return "aux"
-    return MAIN_TAG
+    if extra is not None:
+        return "ep-extra"
+    return MAIN_TAG if number is not None else "aux"
 
 
 # The Daily Wire's paid membership levels, cheapest first. Their keys are The Daily Wire's own names, and their tiers
@@ -64,7 +83,11 @@ def episode_access(available_for: Sequence[object]) -> str | None:
     return found.key if found is not None else None
 
 
-def _video(record: DwEpisodeRecord, season: SeasonRef | None) -> VideoDetails:
+def _video(
+    record: DwEpisodeRecord, season: SeasonRef | None, *, extras: bool = False, author_name: str | None = None,
+    status: EpisodePublishStatus = EpisodePublishStatus.PUBLISHED_FINAL,
+) -> VideoDetails:
+    number, extra = _numbers(record.episode_number) if not extras else (None, None)
     return VideoDetails(
         slug=record.slug,
         url=record.sharing_url,
@@ -72,13 +95,94 @@ def _video(record: DwEpisodeRecord, season: SeasonRef | None) -> VideoDetails:
         description=record.description,
         duration=record.duration or None,
         image_url=_first(record.thumbnail_landscape_path, record.background_image_path),
+        portrait_image_url=record.thumbnail_portrait_path,
+        square_image_url=record.thumbnail_square_path,
+        background_url=record.background_image_path,
+        # The Daily Wire names no uploader per episode; the show's host uploads them all.
+        author_name=author_name,
         published_at=record.published_date,
         season=season,
-        episode_number=record.ep_number,
+        episode_number=number,
+        extra_number=extra,
         number_text=record.episode_number or None,
-        tag=_tag(record),
+        tag=_tag(record, extras=extras),
         access=episode_access(record.available_for),
+        publish_status=status,
+        scheduled_at=record.scheduled_date,
     )
+
+
+def video_of(record: DwEpisodeRecord, *, season_name: str | None) -> VideoDetails:
+    """An episode record as VODLoft knows it, in the show's season named ``season_name``."""
+    return _video(record, None, extras=bool(_EXTRAS_SEASON.search(season_name or "")))
+
+
+def _season_refs(show: DwShowRecord) -> dict[str, tuple[SeasonRef, bool]]:
+    """Each season of the show by its slug, numbered as VODLoft numbers them: its seasons from 1, oldest first, and
+    its season of extras 0; with whether it is that season."""
+    refs: dict[str, tuple[SeasonRef, bool]] = {}
+    number = 0
+    for season in show.seasons:
+        extras = bool(_EXTRAS_SEASON.search(season.name or ""))
+        if not extras:
+            number += 1
+        refs[season.slug] = (SeasonRef(slug=season.slug, number=0 if extras else number, title=season.name), extras)
+    return refs
+
+
+def _show_slug(url: str) -> str:
+    parsed = parse_link(url)
+    if parsed is None or parsed[0] is not LinkKind.COLLECTION:
+        raise ValueError("This is not a link to a show on The Daily Wire")
+    return parsed[1]
+
+
+def _ref(refs: dict[str, tuple[SeasonRef, bool]], slug: str) -> tuple[SeasonRef | None, bool]:
+    return refs.get(slug, (None, False))
+
+
+def _trailer_checked(client: MiddlewareClient, record: DwEpisodeRecord, *, members: bool) -> DwEpisodeRecord:
+    """The record, or its details where its title calls it a trailer and only the details can say whether it is: a
+    page of episodes leaves the flag out, and the flag is wrong for some trailers called Official Trailer."""
+    if record.is_trailer is True or record.trailer or not _TRAILER_TITLE.search(record.title or ""):
+        return record
+    try:
+        return client.get_episode_details(record.slug, require_member_exclusive=members)
+    except MiddlewareAPIError as exc:
+        if exc.status_code != 404:
+            raise
+        return record
+
+
+def _resolved(
+    client: MiddlewareClient, record: DwEpisodeRecord, season: SeasonRef | None, *, extras: bool, members: bool,
+    look_up: bool, author_name: str | None,
+) -> VideoDetails | None:
+    """A new episode, with where it is in its life from its details. In a whole listing one out long enough ago to be
+    final is not looked up (``look_up`` False). None when The Daily Wire has nothing usable for it."""
+    if not look_up and is_published_final(record):
+        record = _trailer_checked(client, record, members=members)
+        return _video(record, season, extras=extras, author_name=author_name)
+    try:
+        detail = client.get_episode_details(record.slug, require_member_exclusive=members)
+    except MiddlewareAPIError as exc:
+        if exc.status_code != 404:
+            raise
+        logger.info("The Daily Wire has no details of new episode %s", record.slug)
+        return None
+    status = resolve_episode_status(
+        detail, publication_timing_reference=detail.published_date, snapshot=observe_episode_detail(detail),
+    ).status
+    if status is None:
+        return None
+    return _video(detail, season, extras=extras, author_name=author_name, status=status)
+
+
+def _membership_plan(membership: str | None) -> str:
+    """The membership level a show is listed with. The highest level the account has is listed as free, as VODLoft
+    has always done."""
+    plan = membership or DwMembershipLevel.FREE.value
+    return DwMembershipLevel.FREE.value if plan == _HIGHEST_ALLOWED else plan
 
 
 _VIDEO_HEIGHTS = (480, 720, 1080)
@@ -118,6 +222,8 @@ class DailyWireSource(Source):
         # A host has no feed to fold into one show: each of their shows keeps its own seasons.
         creators=True,
         movies=True,
+        show_numbers=True,
+        renames_pending=True,
         pitch="Shows and movies, with your membership",
         creator_names=HOST,
         channel_collection_names=Names("show", "shows"),
@@ -149,6 +255,7 @@ class DailyWireSource(Source):
         Feature.LIVE_EPISODES,
         Feature.MEMBERSHIP_LEVELS,
         Feature.EPISODE_LOOKUPS,
+        Feature.EPISODE_LISTS,
         Feature.OWN_STUDIO,
         Feature.CREATORS,
     })
@@ -178,26 +285,89 @@ class DailyWireSource(Source):
     def newest_episodes(self, url: str) -> list[VideoDetails]:
         """The episodes on the show's page, which lists its newest season's latest ones.
         When that page has fewer than a handful, the newest seasons' first pages fill them up."""
-        parsed = parse_link(url)
-        if parsed is None or parsed[0] is not LinkKind.COLLECTION:
-            raise ValueError("This is not a link to a show on The Daily Wire")
         client = MiddlewareClient(access_token=_access_token(), request_priority="interactive")
-        show = client.get_show_page(slug=parsed[1])
-        # The show page lists its seasons newest first.
-        oldest_first = list(reversed(show.seasons))
-        refs = {
-            season.slug: SeasonRef(slug=season.slug, number=position, title=season.name)
-            for position, season in enumerate(oldest_first, start=1)
-        }
+        show = client.get_show_page(slug=_show_slug(url))
+        refs = _season_refs(show)
         found = [(record, show.latest_season.slug) for record in dict.fromkeys(show.latest_episodes)]
-        for season in show.seasons:
+        for season in reversed(show.seasons):
             if len(found) >= MIN_NEWEST_EPISODES:
                 break
-            page = client.get_episodes_paginated(show.slug, ByShowSeason(season_dw_id=season.dw_id, page_size=50))
+            page = client.get_episodes_paginated(show.slug, ByShowSeason(season_dw_id=season.dw_id, page_size=_PAGE_SIZE))
             known = {record.slug for record, _ in found}
             found += [(record, season.slug) for record in dict.fromkeys(page.items) if record.slug not in known]
         found.sort(key=lambda item: item[0].published_date, reverse=True)
-        return [_video(record, refs.get(season_slug)) for record, season_slug in found]
+        videos = []
+        for record, season_slug in found:
+            season, extras = _ref(refs, season_slug)
+            videos.append(_video(record, season, extras=extras, author_name=show.author_name))
+        return videos
+
+    def list_episodes(
+        self, url: str, *, known: frozenset[str], feeds: frozenset[str] | None = None,
+        membership: str | None = None,
+    ) -> Iterator[VideoDetails]:
+        """The show's episodes, season by season. Without ``known`` episodes every season is listed whole; otherwise
+        each season newest first, up to the first episode VODLoft has that is out for good, so only what is new is
+        read. Each new episode is looked up on its own for where it is in its life, except, in a whole listing, one
+        out long enough ago to be final. One with nothing usable, such as a No Show Today placeholder, is left out."""
+        slug = _show_slug(url)
+        plan = _membership_plan(membership)
+        token = _access_token()
+        if plan != DwMembershipLevel.FREE.value and token is None:
+            logger.warning("Not signed in to The Daily Wire, so %s can't be listed for its members", slug)
+            return
+        client = MiddlewareClient(access_token=token)
+        members = plan != DwMembershipLevel.FREE.value
+        show = client.get_show_page(slug, membership_plan=plan)
+        refs = _season_refs(show)
+        whole = not known
+        for season in reversed(show.seasons):
+            records = self._season_records(client, slug, season.dw_id, plan, known=known, whole=whole)
+            ref, extras = _ref(refs, season.slug)
+            for record in records:
+                if record.slug in known or is_no_show_today_slug(record.slug):
+                    continue
+                video = _resolved(client, record, ref, extras=extras, members=members, look_up=not whole, author_name=show.author_name)
+                if video is not None:
+                    yield video
+            if not whole and not extras and any(record.slug in known and is_published_final(record) for record in records):
+                # Every season before this one is older than an episode VODLoft has had for good.
+                return
+
+    @staticmethod
+    def _season_records(
+        client: MiddlewareClient, slug: str, season_id: str, plan: str, *, known: frozenset[str], whole: bool,
+    ) -> list[DwEpisodeRecord]:
+        """A season's episodes: all of them, or the newest ones up to the first one VODLoft has that is out for good."""
+        page = client.get_episodes_paginated(slug, ByShowSeason(
+            season_dw_id=season_id, membership_plan=plan, page_size=_PAGE_SIZE,
+            order_by="CreatedAt_ASC" if whole else "CreatedAt_DESC",
+        ))
+        records = list(page.items or ())
+        while page.has_next and page.next_page_url:
+            if not whole and any(record.slug in known and is_published_final(record) for record in records):
+                break
+            page = client.get_episodes_paginated(slug, ByNextPage(next_page_url=page.next_page_url))
+            records += page.items or ()
+        # A next page can repeat an episode of the one before.
+        return list({record.slug: record for record in records}.values())
+
+    def numbers_of(self, number_text: str) -> tuple[int | None, int | None]:
+        return _numbers(number_text)
+
+    def collection_artwork(self, url: str, *, first: bool = False) -> CollectionArtwork | None:
+        """The show page's pictures. Its square one, when the page has none, is on the Watch page, which a first
+        index looks at too."""
+        slug = _show_slug(url)
+        client = MiddlewareClient(access_token=_access_token())
+        show = client.get_show_page(slug)
+        square = show.thumbnail_square_path
+        if square is None and first:
+            square = client.get_square_show_thumbnails().get(slug)
+        return CollectionArtwork(
+            portrait=show.thumbnail_portrait_path, landscape=show.thumbnail_landscape_path, square=square,
+            background=show.background_image_path, logo=show.logo_image_path,
+        )
 
     def creator_of(self, url: str) -> str | None:
         """The host of a show."""
@@ -281,7 +451,7 @@ class DailyWireSource(Source):
         detail = MiddlewareClient().get_episode_details(
             parsed[1], require_member_exclusive=DeviceAuthClient().get_token() is not None,
         )
-        return UpgradeOffer(duration=_stream_length(detail.video_url) if detail.video_url else None)
+        return UpgradeOffer(duration=stream_length(detail.video_url) if detail.video_url else None)
 
     def movie_playback(
         self, *, movie_slug: str, title: str, duration: float | None,
@@ -300,22 +470,3 @@ class DailyWireSource(Source):
         for store_key, record in records.items():
             store.store_record(store_key, str(record))
         membership.look_up_level()
-
-
-def _playlist(url: str) -> tuple[str, str]:
-    response = requests.get(url, timeout=_PLAYLIST_TIMEOUT_SECONDS)
-    response.raise_for_status()
-    return response.text, response.url
-
-
-def _stream_length(url: str) -> float | None:
-    """The length of an HLS stream in seconds: its first rendition's segments added up. Every
-    rendition of a stream is equally long."""
-    text, url = _playlist(url)
-    if is_master_playlist(text):
-        renditions = parse_master_playlist(text, url)
-        if not renditions:
-            return None
-        text, url = _playlist(renditions[0].url)
-    segments = media_playlist_segments(text, url)
-    return sum(segment.duration for segment in segments) if segments else None

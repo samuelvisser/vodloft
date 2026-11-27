@@ -7,44 +7,7 @@ from types import SimpleNamespace
 import pytest
 from conftest import use_database
 from sqlalchemy import create_engine
-from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import Session
-
-
-def _make_collection(session: Session, *, slug: str = "test-collection"):
-    from backend.db.models import Collection
-    from backend.types.collection_types import EpisodeIdentifier, CollectionType
-
-    collection = Collection(
-        source_key="dailywire",
-        uuid=f"{slug}-uuid",
-        slug=slug,
-        title="Test Show",
-        description=None,
-        sharing_url=f"https://www.dailywire.com/show/{slug}",
-        membership_level="FREE",
-        type=CollectionType.PODCAST.value,
-        episode_identifier=EpisodeIdentifier.NUMBERED.value,
-        author_name="Host",
-        author_slug="host",
-    )
-    session.add(collection)
-    session.commit()
-    return collection
-
-
-@pytest.fixture
-def db_session():
-    import backend.db.models  # noqa: F401
-    from backend.db import Base
-
-    engine = create_engine("sqlite+pysqlite:///:memory:", poolclass=StaticPool, connect_args={"check_same_thread": False})
-    Base.metadata.create_all(engine)
-    use_database(engine)
-    session = Session(engine)
-    yield session
-    session.close()
-    engine.dispose()
 
 
 def test_dailywire_square_show_thumbnail_lookup_uses_square_carousel(monkeypatch):
@@ -156,56 +119,40 @@ def test_dailywire_square_show_thumbnail_lookup_allows_missing_carousel(monkeypa
     ],
 )
 def test_initial_index_queries_watch_page_only_when_normalized_square_is_missing(
-    db_session,
     monkeypatch,
     api_square,
     remote_thumbnails,
     expected,
     expected_square_calls,
 ):
-    from task_manager.tasks.workers.fetch_new_episodes import service
-
-    collection = _make_collection(db_session)
+    from sources.dailywire import source
 
     class FakeClient:
-        def __init__(self):
-            self.square_calls = 0
+        square_calls = 0
 
-        def get_square_show_thumbnails(self, *, membership_plan=None):
-            self.square_calls += 1
-            assert membership_plan == "FREE"
+        def __init__(self, **_kwargs):
+            pass
+
+        def get_square_show_thumbnails(self):
+            FakeClient.square_calls += 1
             return remote_thumbnails
 
-        def get_show_page(self, _slug, *, membership_plan=None):
-            assert membership_plan == "FREE"
+        def get_show_page(self, slug):
+            assert slug == "test-collection"
             return SimpleNamespace(
-                seasons=[],
-                thumbnail_square_path=api_square,
+                thumbnail_square_path=api_square, thumbnail_portrait_path=None, thumbnail_landscape_path=None,
+                background_image_path=None, logo_image_path=None,
             )
 
-    client = FakeClient()
-    monkeypatch.setattr(
-        service,
-        "get_dw_episodes_since_ep",
-        lambda *_args, **_kwargs: ({}, {}),
-    )
-    monkeypatch.setattr(service, "_queue_collection_indexed", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(source, "MiddlewareClient", FakeClient)
+    monkeypatch.setattr(source, "_access_token", lambda: None)
 
-    result = asyncio.run(
-        service._fetch_collection(
-            db_session,
-            collection=collection,
-            client=client,
-            access_token=None,
-            dry_run=False,
-            initial_index=True,
-        )
+    artwork = source.DailyWireSource().collection_artwork(
+        "https://www.dailywire.com/show/test-collection", first=True,
     )
 
-    assert result == 0
-    assert client.square_calls == expected_square_calls
-    db_session.expire_all()
-    assert db_session.get(type(collection), collection.id).thumbnail_square_path == expected
+    assert artwork.square == expected
+    assert FakeClient.square_calls == expected_square_calls
 
 
 def test_collection_added_marks_episode_scan_as_initial_index():

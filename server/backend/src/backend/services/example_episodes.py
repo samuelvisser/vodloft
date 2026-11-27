@@ -31,13 +31,13 @@ from backend.types.download_profile_types import EpIdType
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
 from backend.types.season_types import SeasonOrigin, SeasonType
+from backend.services.episode_numbering import CountedNumbers, Numbering, follows_facts, identify
 from backend.services.extra_indexes import is_extra
 from backend.utils.helpers import generate_uuid
 from backend.utils.output_template import episode_output_template_values
 from backend.utils.season_ordering import number_initial_seasons
 from backend.services.source_options import ytdlp_call_options
-from sources import MAIN_TAG, Feature, VideoDetails, get_source, site_for
-from task_manager.tasks.helpers.general import datetime_to_string
+from sources import VideoDetails, get_source, site_for
 
 EXAMPLE_SOURCE_PREFIX = "new-episode:"
 """Starts the id of an example in the output template preview, which sends all of its values along."""
@@ -141,7 +141,6 @@ def example_template_values(example: Example) -> dict[str, str]:
 
 
 def _add(s: Session, form: ExampleCollection, videos: list[VideoDetails]) -> tuple[Collection, list[Example]]:
-    listed = get_source(form.source_key).has(Feature.EPISODE_LISTS)
     collection = Collection(
         uuid=generate_uuid(), source_key=form.source_key, slug=form.slug, title=form.title, sharing_url=form.url,
         membership_level="FREE", type=form.type, episode_identifier=form.episode_identifier.value,
@@ -157,6 +156,8 @@ def _add(s: Session, form: ExampleCollection, videos: list[VideoDetails]) -> tup
     site = site_for(form.url, form.source_key)
     now = datetime.now(timezone.utc)
     counters: dict[str, int] = {}
+    taken: set[str] = set()
+    numbers = CountedNumbers(taken)
     examples: list[Example] = []
     # Oldest first, so the scratch indices run the way indexing would number these episodes.
     unique = list({video.slug: video for video in reversed(videos)}.values())
@@ -166,7 +167,11 @@ def _add(s: Session, form: ExampleCollection, videos: list[VideoDetails]) -> tup
         if season is None:
             season = _year_season(collection, seasons, video, now)
             pending |= _SEASON_INDEX_VALUES
-        identifier = _identifier(form.episode_identifier, listed, season, video)
+        numbering = Numbering.of_video(video, now, sources_season=video.season is not None)
+        identifier = (
+            identify(form.episode_identifier, site, season, numbering, taken, numbers)
+            if follows_facts(form.episode_identifier, site, numbering) else None
+        )
         if identifier is None:
             counters[video.tag] = counters.get(video.tag, 0) + 1
             identifier = _provisional_identifier(video.tag, counters[video.tag])
@@ -199,30 +204,6 @@ def _year_season(collection: Collection, seasons: dict[str, Season], video: Vide
             season_type=SeasonType.NORMAL.value, season_number=int(year), origin=SeasonOrigin.VODLOFT.value,
         )
     return seasons[year]
-
-
-def _identifier(numbering: EpisodeIdentifier, listed: bool, season: Season, video: VideoDetails) -> str | None:
-    """The identifier indexing will give the episode, or None when it counts it from the oldest episode."""
-    if listed:
-        # A listed collection numbers only its main episodes by the chosen scheme.
-        main = video.tag == MAIN_TAG
-    else:
-        # The Daily Wire: extras of an episode are dated like episodes, and an Extras season has none.
-        main = season.season_type != SeasonType.EXTRA.value and (
-            video.tag == MAIN_TAG or (numbering is EpisodeIdentifier.DATE_BASED and video.tag == EpIdType.EP_EXTRA)
-        )
-    if not main:
-        return None
-    if numbering is EpisodeIdentifier.DATE_BASED:
-        return f"{EpIdType.EP}.{datetime_to_string(video.published_at)}" if video.published_at else None
-    number = video.episode_number
-    if number is None:
-        return None
-    if numbering is EpisodeIdentifier.SEASONAL and (not listed or video.season is not None):
-        return f"{EpIdType.EP}.S{season.season_number:02d}E{number:02d}"
-    if numbering is EpisodeIdentifier.NUMBERED and not listed:
-        return f"{EpIdType.EP}.{number}"
-    return None
 
 
 def _provisional_identifier(tag: str, count: int) -> str:

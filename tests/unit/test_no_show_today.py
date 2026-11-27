@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 # ---------- detection ----------
 
 def test_no_show_today_detection_uses_slug_only():
-    from backend.utils.episode_slug import is_no_show_today_slug
+    from sources.dailywire.status import is_no_show_today_slug
 
     assert is_no_show_today_slug("matt-walsh-1809-no-show-today") is True
     assert is_no_show_today_slug("MATT-WALSH-1809-NO-SHOW-TODAY") is True
@@ -117,79 +117,6 @@ def db_session():
     yield session
     session.close()
     engine.dispose()
-
-
-def _dw_episode_record(slug: str, title: str):
-    from sources.dailywire.api.records import DwEpisodeRecord
-
-    return DwEpisodeRecord(
-        dw_id=f"remote-{slug}",
-        slug=slug,
-        title=title,
-        description=None,
-        duration=100,
-        episode_number="1.00",
-        display_episode_number="1",
-        background_image_path=None,
-        sharing_url=f"https://example.test/{slug}",
-        publish_status="PUBLISHED",
-        is_downloadable=True,
-        available_for=[],
-        thumbnail_landscape_path=None,
-        thumbnail_portrait_path=None,
-        thumbnail_square_path=None,
-        published_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        scheduled_date=None,
-    )
-
-
-# ---------- no-show state normalization ----------
-
-def test_title_alone_does_not_make_episode_no_show_today(db_session):
-    from backend.utils.episode_slug import is_no_show_today_slug
-    from task_manager.tasks.helpers.episodes.save import upsert_episode
-
-    collection = _make_collection(db_session)
-    season = _make_season(db_session, collection)
-    episode = upsert_episode(
-        db_session,
-        collection=collection,
-        season=season,
-        ep=_dw_episode_record("matt-walsh-1809", "The Matt Walsh Show - No Show Today"),
-        index_value=1,
-        ep_id="ep.1809",
-    )
-
-    assert is_no_show_today_slug(episode.slug) is False
-
-
-def test_no_show_today_placeholder_is_not_added(db_session):
-    from backend.db.models import Episode
-    from task_manager.tasks.helpers.episodes.save import (
-        resolve_dw_episodes,
-        save_resolved_episodes_per_season_asc,
-    )
-
-    collection = _make_collection(db_session)
-    season = _make_season(db_session, collection)
-    record = _dw_episode_record("matt-walsh-1809-no-show-today", "Ordinary title")
-    [resolved] = resolve_dw_episodes(
-        episodes=[("ep.1809", record)],
-        client=object(),
-        require_member_exclusive=False,
-    )
-
-    assert resolved.status is None
-
-    _, saved = save_resolved_episodes_per_season_asc(
-        db_session,
-        collection=collection,
-        season=season,
-        episodes=[resolved],
-        start_index=1,
-    )
-    assert saved == []
-    assert db_session.query(Episode).count() == 0
 
 
 # ---------- profile eligibility remains generic ----------

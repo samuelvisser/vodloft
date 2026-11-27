@@ -4,6 +4,7 @@ import pytest
 
 from backend.services import collection_assets as assets
 from backend.utils.collection_media_directory import CollectionMediaDirectory
+from sources import CollectionArtwork
 
 
 @pytest.mark.parametrize('system,override,expected', [
@@ -73,7 +74,7 @@ def test_each_season_a_playlist_fills_gets_the_playlists_picture_as_its_poster()
 
 def test_artwork_metadata_refresh_preserves_absent_variants():
     collection = SimpleNamespace(thumbnail_portrait_path='old', thumbnail_square_path='known-square')
-    assets.update_collection_artwork_metadata(collection, SimpleNamespace(thumbnail_portrait_path='new'))
+    assets.update_collection_artwork_metadata(collection, CollectionArtwork(portrait='new'))
     assert collection.thumbnail_portrait_path == 'new'
     assert collection.thumbnail_square_path == 'known-square'
 

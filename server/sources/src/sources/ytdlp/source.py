@@ -527,7 +527,7 @@ class YtDlpSource(Source):
     name = "yt-dlp"
     domains = (ANY_DOMAIN,)
     features = frozenset({
-        Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.PAGE_STREAMS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES, Feature.OPTIONAL_COOKIES, Feature.API_KEY, Feature.SITE_API, Feature.ACCOUNT_SIGN_IN,
+        Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.COLLECTION_DETAILS, Feature.PAGE_STREAMS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES, Feature.OPTIONAL_COOKIES, Feature.API_KEY, Feature.SITE_API, Feature.ACCOUNT_SIGN_IN,
         Feature.QUICK_CHECK, Feature.CATALOGUE_REFRESH, Feature.SEARCH,
         Feature.FORMAT_CHOICES, Feature.YTDLP_OPTIONS, Feature.METADATA_REFRESH,
         Feature.PENDING_CHECKS, Feature.CREATORS, Feature.CHAPTERS, Feature.LINK_COLLECTIONS,

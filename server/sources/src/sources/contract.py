@@ -34,8 +34,11 @@ class Feature(StrEnum):
     MEMBERSHIP_LEVELS = "membership_levels"
     VIDEOS = "videos"
     EPISODE_LISTS = "episode_lists"
-    """Collections whose episodes the Source lists with ``list_episodes``. VODLoft
+    """Collections whose episodes the Source lists with ``list_episodes``, which is how VODLoft indexes them. VODLoft
     keeps the Source's own seasons, or makes one season per upload year."""
+    COLLECTION_DETAILS = "collection_details"
+    """Looking a collection up before it is added, with ``collection_details``: its title, picture and seasons, and
+    the link a user adds to a collection's seasons."""
     SEARCH = "search"
     """Finding collections and videos by name on each of the Source's ``search_sites``, with ``search``."""
     PROGRAM_UPDATES = "program_updates"
@@ -70,9 +73,9 @@ class Feature(StrEnum):
     """Refreshing the titles, descriptions and thumbnails of a listed collection's
     episodes, and telling which ones the Source no longer has, with ``refresh_items``."""
     EPISODE_LOOKUPS = "episode_lookups"
-    """VODLoft walks the Source's shows itself and looks each episode up on its own: to index a show,
-    to follow an upcoming or live episode until it is out, and to refresh its details after
-    publication. Sources with ``EPISODE_LISTS`` list and check their episodes in batches instead."""
+    """VODLoft looks each of the Source's episodes up on its own: to follow an upcoming or live episode until it is
+    out, and to refresh its details after publication, and it adds the Source's shows from its own pages of them.
+    Its shows always have seasons of their own. Other Sources check their episodes in batches instead."""
     PAGE_STREAMS = "page_streams"
     """A feed streams an episode from the streams of its video page (``media_stream``,
     ``media_tracks``, ``live_stream``), which VODLoft can pass on, and MP4 video comes straight from
@@ -706,6 +709,10 @@ class VideoDetails:
     description: str | None = None
     duration: float | None = None
     image_url: str | None = None
+    portrait_image_url: str | None = None
+    square_image_url: str | None = None
+    background_url: str | None = None
+    """Pictures besides ``image_url``, the landscape one, for a Source that has them."""
     author_name: str | None = None
     author_url: str | None = None
     published_at: datetime | None = None
@@ -722,7 +729,11 @@ class VideoDetails:
     """The collection season a listed episode belongs to, for a Source with real seasons.
     Without one, VODLoft puts the episode in a season per upload year."""
     episode_number: int | None = None
-    """The episode's number in its season, when the Source has one."""
+    """The episode's number in its season, when the Source has one, or across the show on a Site with
+    ``show_numbers``."""
+    extra_number: int | None = None
+    """For an extra that belongs to episode ``episode_number``, its own number there, such as the 10 of The Daily
+    Wire's 2460.10. A trailer of the episode has the tag ``trailer``."""
     tag: str = MAIN_TAG
     """The key of one of the Source's episode tags."""
     number_text: str | None = None
@@ -783,6 +794,18 @@ class CollectionDetails:
     list_type: str | None = None
     """The key of the Site's type of list the link is, such as an album or a playlist on SoundCloud, for a Site whose
     lists come in several types that their links don't tell apart."""
+
+
+@dataclass(frozen=True)
+class CollectionArtwork:
+    """The pictures of a collection at its Source, for a Source that has them besides ``CollectionDetails.image_url``.
+    A picture it leaves out keeps the one VODLoft has."""
+
+    portrait: str | None = None
+    landscape: str | None = None
+    square: str | None = None
+    background: str | None = None
+    logo: str | None = None
 
 
 MIN_NEWEST_EPISODES = 5
@@ -1260,6 +1283,12 @@ class Site:
     pictures_expire: bool = False
     """The Site's links to its videos' pictures stop working after a while, such as Patreon's signed ones, so VODLoft
     keeps a copy of each picture itself."""
+    show_numbers: bool = False
+    """The Site numbers a show's episodes across all its seasons, such as The Daily Wire's 2460, so a Numbered
+    collection takes the Site's number as its own rather than counting its episodes."""
+    renames_pending: bool = False
+    """The Site gives an upcoming or live episode another slug once it is out, as The Daily Wire does. When a collection
+    follows one such episode, a new episode that has its number, or comes out when it was due, is that one."""
     list_order: ListOrder = ListOrder.NONE
     """In what order the Site lists what a collection made from one of its lists holds, such as a playlist, an album
     or, on a Site without creators, any link. A collection made from one list numbers and shows its videos in that
@@ -1610,16 +1639,30 @@ class Source(ABC):
 
     def list_episodes(
         self, url: str, *, known: frozenset[str], feeds: frozenset[str] | None = None,
+        membership: str | None = None,
     ) -> Iterator[VideoDetails]:
         """The collection's episodes whose slugs are not in ``known``.
 
         ``feeds`` are the refs of the creator's feeds, as ``creator_details`` names them, that a creator's own
         collection takes, such as only a YouTube channel's Videos; None lists all that the link lists.
+        ``membership`` is the membership level the collection lists with, for a Source with
+        ``Feature.MEMBERSHIP_LEVELS``; it is only given to such a Source.
 
         An episode that cannot be looked up right now is left out, so a later
         scan tries it again.
         """
         raise NotImplementedError(f"{self.name} does not list episodes")
+
+    def numbers_of(self, number_text: str) -> tuple[int | None, int | None]:
+        """The episode number and extra number (``VideoDetails.episode_number`` and ``extra_number``) of a number as
+        the Source writes it (``VideoDetails.number_text``)."""
+        text = number_text.strip()
+        return (int(text) if text.isdigit() else None), None
+
+    def collection_artwork(self, url: str, *, first: bool = False) -> CollectionArtwork | None:
+        """The collection's pictures, looked up each time it is indexed, for a Source that has more than one; None
+        for the others. ``first`` is its first index, which may look further for a picture."""
+        return None
 
     def newest_episodes(self, url: str) -> list[VideoDetails]:
         """The newest episodes of the collection at this link, from whatever lookup costs the Source least,

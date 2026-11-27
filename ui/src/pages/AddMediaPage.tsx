@@ -61,7 +61,7 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
     const getCollectionReady = (resolved: ResolvedLinkRead) => {
         if (resolved.kind !== 'collection' || !sourceHas(resolved.source, SourceFeature.COLLECTIONS)) return
         queryClient.setQueryData(['resolvedLink', resolved.url], resolved)
-        if (sourceHas(resolved.source, SourceFeature.EPISODE_LISTS)) {
+        if (sourceHas(resolved.source, SourceFeature.COLLECTION_DETAILS)) {
             void queryClient.prefetchQuery(listedCollectionQuery(resolved.source.id, resolved.url))
         }
     }

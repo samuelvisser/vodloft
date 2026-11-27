@@ -1,14 +1,31 @@
+"""Where an episode of The Daily Wire is in its life, from what The Daily Wire says about it."""
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from backend.types.episode_types import EpisodePublishStatus
+import requests
+
 from config import get_settings
-from controller.m3u8 import get_vod_info
-from sources.dailywire.api.records import DwEpisodeDetailRecord, DwEpisodeRecord
-from .metadata import ensure_utc
-from .no_show import is_no_show_today_slug
+from downloader.hls import is_master_playlist, media_playlist_segments, parse_master_playlist
+
+from ..contract import EpisodePublishStatus
+from .api.records import DwEpisodeDetailRecord, DwEpisodeRecord
+
+_PLAYLIST_TIMEOUT_SECONDS = 15
+NO_SHOW_TODAY_SLUG_FRAGMENT = "no-show-today"
+
+
+def is_no_show_today_slug(slug: str | None) -> bool:
+    """Whether a Daily Wire slug is a No Show Today placeholder."""
+    return bool(slug) and NO_SHOW_TODAY_SLUG_FRAGMENT in slug.casefold()
+
+
+def ensure_utc(value: datetime) -> datetime:
+    """One timezone-aware instant in UTC; a naive value is refused, never guessed."""
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("Episode times must include a timezone")
+    return value.astimezone(timezone.utc)
 
 
 _AUTHORITATIVE_REMOTE_STATUSES = {
@@ -64,7 +81,7 @@ def _minutes_since(value: datetime | None, *, now: datetime | None = None) -> fl
 def _hls_duration(detail: DwEpisodeDetailRecord) -> float | None:
     if not detail.video_url:
         return None
-    return float(get_vod_info(detail.video_url).seconds)
+    return stream_length(detail.video_url)
 
 
 def has_usable_media(
@@ -226,3 +243,22 @@ def get_publish_status_from_dw_detail(detail: DwEpisodeDetailRecord) -> EpisodeP
         detail,
         publication_timing_reference=detail.published_date,
     ).status
+
+
+def _playlist(url: str) -> tuple[str, str]:
+    response = requests.get(url, timeout=_PLAYLIST_TIMEOUT_SECONDS)
+    response.raise_for_status()
+    return response.text, response.url
+
+
+def stream_length(url: str) -> float | None:
+    """The length of an HLS stream in seconds: its first rendition's segments added up. Every
+    rendition of a stream is equally long."""
+    text, url = _playlist(url)
+    if is_master_playlist(text):
+        renditions = parse_master_playlist(text, url)
+        if not renditions:
+            return None
+        text, url = _playlist(renditions[0].url)
+    segments = media_playlist_segments(text, url)
+    return sum(segment.duration for segment in segments) if segments else None

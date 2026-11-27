@@ -270,7 +270,7 @@ def quick_file_name(title: str, extension: str) -> str:
 
 def _video_details(source: Source, request: QuickDownloadRequest):
     """A listed video's date, duration and channel, for its tags; the preview has the rest."""
-    if not (source.has(Feature.VIDEOS) or source.has(Feature.EPISODE_LISTS)):
+    if not (source.has(Feature.VIDEOS) or source.has(Feature.PAGE_STREAMS)):
         return None
     try:
         with ytdlp_call_options(source):
@@ -330,7 +330,7 @@ def _streams(source: Source, request: QuickDownloadRequest, tracker) -> _Streams
         playback = source.movie_playback(movie_slug=request.slug, title=request.title, duration=None)
         tracker.ensure_active()
         return _Streams(video_url=playback.url)
-    if request.kind is LinkKind.VIDEO or source.has(Feature.EPISODE_LISTS):
+    if request.kind is LinkKind.VIDEO or source.has(Feature.PAGE_STREAMS):
         playback = resolve_playback(source, slug=request.slug, url=request.url, title=request.title, tracker=tracker)
         if playback.kind is PlaybackKind.YTDLP:
             return _Streams(ytdlp=playback)

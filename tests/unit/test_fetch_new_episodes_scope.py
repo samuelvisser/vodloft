@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from importlib import import_module
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import Mock
 
 import pytest
 from sqlalchemy.orm import Session
@@ -79,12 +79,8 @@ def test_global_scan_processes_every_collection(monkeypatch, collections):
     by_id = {collection.id: collection for collection in collections}
     session.get.side_effect = lambda _model, identity: by_id.get(identity)
 
-    auth = Mock()
-    auth.get_token.return_value = None
-    monkeypatch.setattr(service, "DeviceAuthClient", Mock(return_value=auth))
-    monkeypatch.setattr(service, "MiddlewareClient", Mock())
-    fetch_collection = AsyncMock(side_effect=[2, 1])
-    monkeypatch.setattr(service, "_fetch_collection", fetch_collection)
+    index = Mock(side_effect=[2, 1])
+    monkeypatch.setattr(service, "index_listed_collection", index)
     finished = Mock()
     monkeypatch.setattr(service, "finish_index", finished)
     monkeypatch.setattr(service, "newest_media_item_id", lambda _session: 0)
@@ -96,10 +92,10 @@ def test_global_scan_processes_every_collection(monkeypatch, collections):
     assert result.collections_scanned == 2
     assert result.episodes_found == 3
     assert [collection.collection_id for collection in result.collections] == [1, 17]
-    assert fetch_collection.await_count == 2
+    assert index.call_count == 2
     # Every collection is finished the same way, whichever Source found its episodes.
     assert [call.kwargs["found"] for call in finished.call_args_list] == [2, 1]
-    assert [call.kwargs["collection"].id for call in fetch_collection.await_args_list] == [1, 17]
+    assert [call.kwargs["collection_id"] for call in index.call_args_list] == [1, 17]
     assert result.as_data()["collections"] == [
         {"collection_id": 1, "collection_slug": "first-collection", "collection_title": "First Show", "episodes_found": 2},
         {"collection_id": 17, "collection_slug": "second-collection", "collection_title": "Second Show", "episodes_found": 1},

@@ -404,6 +404,15 @@ class MiddlewareClient:
             has_next=bool(next_url)
         )
 
+    def get_all_episodes(self, collection_slug: str, by: ByShowSeason) -> list[DwEpisodeRecord]:
+        """Every page of a season's episodes, following its next page until there is none."""
+        page = self.get_episodes_paginated(collection_slug, by)
+        records = list(page.items or ())
+        while page.has_next and page.next_page_url:
+            page = self.get_episodes_paginated(collection_slug, ByNextPage(next_page_url=page.next_page_url))
+            records += page.items or ()
+        return records
+
     def get_episode_details(self, episode_slug: str, *, require_member_exclusive: bool = False) -> DwEpisodeDetailRecord:
         endpoint = 'v4/getEpisode'
         params: Dict[str, Any] = {

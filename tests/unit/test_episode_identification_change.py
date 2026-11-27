@@ -36,12 +36,15 @@ def session(tmp_path, monkeypatch):
     engine.dispose()
 
 
+_LINKS = {"dailywire": "https://www.dailywire.com/show/show"}
+
+
 def _collection(s, *, source_key, identification, season_number=1):
     from backend.db.models import Collection, Season
 
     collection = Collection(
         source_key=source_key, uuid=f"{source_key}-show", slug="show", title="Show", description="",
-        sharing_url="https://example.test/show", membership_level="FREE", type="series",
+        sharing_url=_LINKS.get(source_key, "https://example.test/show"), membership_level="FREE", type="series",
         episode_identifier=identification, author_name="Host", author_slug="host",
     )
     s.add(collection)
@@ -125,11 +128,9 @@ def test_a_daily_wire_episode_without_a_number_is_auxiliary_when_numbered(sessio
     _episode(session, collection, 1, _date(1), number="7")
     _episode(session, collection, 2, _date(2), number=None)
 
-    plan = _change(session, collection, "numbered")
+    _change(session, collection, "numbered")
 
     assert _identifiers(session, collection) == {"ep-1": "ep.7", "ep-2": "aux.1"}
-    assert plan.counters["ep_id.latest_aux_num"] == 1
-    assert collection.get_meta("ep_id.latest_aux_num") == "1"
 
 
 def test_a_counted_collection_counts_its_videos_again_and_leaves_shorts_alone(session):

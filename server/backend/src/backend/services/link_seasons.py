@@ -1052,7 +1052,7 @@ def _identifier_in(collection, season: SeasonDraft, identifier: str, identifiers
     """The identifier of a video's episode in another season: the next number in that season, or for a collection
     that numbers its episodes across seasons, the next one there. One by date shares its video's date, so it is
     auxiliary, as a second video of the same moment is."""
-    from task_manager.tasks.helpers.episodes.identifier import next_identifier
+    from backend.services.episode_numbering import next_identifier
 
     tag = (identifier or "ep").partition(".")[0]
     if tag == "ep" and collection.episode_identifier == EpisodeIdentifier.SEASONAL.value:
