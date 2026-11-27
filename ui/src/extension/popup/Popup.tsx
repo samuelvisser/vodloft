@@ -9,6 +9,7 @@ import {
     ext, isWebPage, messageOf, normalAddress, storeAddress, storedAddress, unreachable, connectTo, vodloftOrigins,
 } from '../browser'
 import {ALL_SITES, sendCookies} from '../cookies'
+import ActionMenu, {type ActionMenuItem} from '../../components/ActionMenu/ActionMenu'
 import PageMedia from './PageMedia'
 import QueueList from './QueueList'
 import QuickDownloadForm, {choicesWithoutVodloft} from './QuickDownloadForm'
@@ -111,11 +112,14 @@ function Unanswered({address, tab, reason, settings}: {
     )
 }
 
+type CookieResult = {tone: 'ok' | 'problem'; text: string}
+
 /** The extension's other tool: the cookies of the page's site, for VODLoft to sign in there with. */
-function CookiesTool({tab}: {tab: Tab}) {
+function useCookieSending(tab: Tab | undefined) {
     const [sending, setSending] = useState(false)
-    const [result, setResult] = useState<{tone: 'ok' | 'problem'; text: string} | null>(null)
+    const [result, setResult] = useState<CookieResult | null>(null)
     const send = async () => {
+        if (!tab) return
         // Asked right on the click, before anything is awaited, as browsers require.
         const asking = ext.permissions.request(ALL_SITES)
         setSending(true)
@@ -132,17 +136,7 @@ function CookiesTool({tab}: {tab: Tab}) {
             setSending(false)
         }
     }
-    return (
-        <section className="extension-tool" aria-label="Cookies">
-            <div className="extension-tool-line">
-                <span>Signed in on <strong>{new URL(tab.url!).hostname.replace(/^www\./, '')}</strong>?</span>
-                <button type="button" className="btn" disabled={sending} onClick={() => void send()}>
-                    {sending ? 'Sending…' : 'Send cookies to VODLoft'}
-                </button>
-            </div>
-            {result && <p className={result.tone === 'ok' ? 'quick-ok' : 'form-error'} role="status">{result.text}</p>}
-        </section>
-    )
+    return {send, sending, result}
 }
 
 export default function Popup() {
@@ -191,6 +185,8 @@ export default function Popup() {
         if (liveSettings) void ext.storage.local.set({[SETTINGS_KEY]: liveSettings})
     }, [liveSettings])
     const settings = liveSettings ?? cachedSettings
+    const page = isWebPage(tab?.url) ? tab : undefined
+    const cookies = useCookieSending(page)
 
     if (address === undefined) return null
     if (!address || changing) {
@@ -202,9 +198,26 @@ export default function Popup() {
         )
     }
 
-    const page = isWebPage(tab?.url) ? tab : undefined
+    // VODLoft's Actions menu, as on its own pages: open VODLoft, and send the page's cookies for those who may.
+    const actions: ActionMenuItem[] = [
+        {label: 'Open VODLoft', icon: faIcon('fass', 'arrow-up-right-from-square'), onSelect: () => openVodloft(address)},
+    ]
+    if (page && connection === 'signed-in' && can('sources', 'manage')) {
+        actions.push({
+            label: cookies.sending ? 'Sending cookies…' : 'Send cookies to VODLoft',
+            description: `For ${new URL(page.url!).hostname.replace(/^www\./, '')}, to download what your account there can see`,
+            icon: faIcon('fass', 'cookie-bite'),
+            disabled: cookies.sending,
+            onSelect: () => void cookies.send(),
+        })
+    }
     return (
-        <Shell address={address} onChange={() => setChanging(true)}>
+        <Shell address={address} actions={actions} onChange={() => setChanging(true)}>
+            {cookies.result && (
+                <p className={cookies.result.tone === 'ok' ? 'extension-result quick-ok' : 'form-error-card extension-problem'} role="status">
+                    {cookies.result.text}
+                </p>
+            )}
             {!page ? (
                 <p className="extension-note">
                     Open the page of a video, a movie or a collection, such as a YouTube video or channel, and click the
@@ -220,18 +233,24 @@ export default function Popup() {
                 <Unanswered address={address} tab={page} reason={connection} settings={settings}/>
             )}
             <QueueList/>
-            {page && connection === 'signed-in' && can('sources', 'manage') && <CookiesTool tab={page}/>}
         </Shell>
     )
 }
 
-function Shell({address, onChange, children}: {address: string | null; onChange?: () => void; children: React.ReactNode}) {
+function openVodloft(address: string) {
+    void ext.tabs.create({url: address})
+    window.close()
+}
+
+function Shell({address, actions, onChange, children}: {
+    address: string | null; actions?: ActionMenuItem[]; onChange?: () => void; children: React.ReactNode
+}) {
     return (
         <main className="extension-popup">
             <header className="extension-header">
                 <img src="icons/icon-32.png" alt="" width="24" height="24"/>
                 <h1>VODLoft</h1>
-                {address && <a className="extension-open" href={address} target="_blank" rel="noreferrer">Open VODLoft</a>}
+                {actions && <ActionMenu items={actions} className="extension-actions"/>}
             </header>
             {children}
             {address && (

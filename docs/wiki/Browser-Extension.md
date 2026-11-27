@@ -51,7 +51,7 @@ Some videos are only there for a signed-in viewer, such as members-only or age-r
 signs in on a site with that site's cookies: the small pieces of data a browser keeps to stay signed in.
 
 1. Open a page of the site, such as a video, while you are signed in there.
-2. Click the VODLoft icon and choose **Send cookies to VODLoft**. The first time, your browser asks you to let the
+2. Click the VODLoft icon, open **Actions** and choose **Send cookies to VODLoft**. The first time, your browser asks you to let the
    extension read sites' cookies. It reads a site's cookies only when you choose Send, and only sends them to VODLoft.
 
 VODLoft finds the site of the page, and the extension sends only the cookies of that site. They replace the site's

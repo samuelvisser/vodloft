@@ -6,8 +6,8 @@ body { width: 380px; }
 .extension-popup { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px 12px; }
 .extension-header { display: flex; align-items: center; gap: 8px; }
 .extension-header h1 { margin: 0; font-size: 16px; }
-.extension-open { margin-left: auto; color: var(--link-color); text-decoration: none; font-size: 13px; }
-.extension-open:hover { text-decoration: underline; }
+.extension-actions { margin-left: auto; }
+.extension-result { margin: 0; }
 
 .extension-popup .add-media-preview { margin-top: 0; padding: 12px; }
 .extension-popup .add-media-preview-copy h2 { font-size: 16px; }
@@ -30,11 +30,6 @@ body { width: 380px; }
 .extension-queue .quick-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .extension-auto-save { margin: 0 0 8px; font-size: 12px; }
 
-.extension-tool { padding-top: 10px; border-top: 1px solid rgba(100, 116, 139, 0.24); }
-.extension-tool-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.extension-tool-line > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
-.extension-tool-line strong { color: var(--text); }
-.extension-tool p { margin: 8px 0 0; }
 
 .extension-footer {
     display: flex; justify-content: space-between; gap: 8px; padding-top: 10px;
@@ -47,3 +42,13 @@ body { width: 380px; }
 .extension-popup .add-media-preview-art img { width: 100%; height: auto; max-width: 100%; aspect-ratio: 16 / 9; }
 /* Quick download's footer stays in reach while the popup scrolls, but in the popup's flow, under the choices. */
 .extension-popup .quick-download-footer { position: sticky; margin: 0 -16px; }
+/* The Actions menu drops down from its button as on a desktop: a sheet from the bottom would cover a short popup. */
+.extension-popup .extension-actions { position: relative; }
+.extension-popup .extension-actions .action-menu-backdrop { display: none; }
+.extension-popup .extension-actions .action-menu-popover {
+    position: absolute; left: auto; right: 0; top: calc(100% + 8px); bottom: auto;
+    width: max-content; min-width: 230px; max-width: calc(100vw - 32px);
+    padding: 6px; border-radius: 12px; animation: none;
+}
+.extension-popup .extension-actions .action-menu-item { min-height: 0; padding: 8px 10px; font-size: 13.3333px; }
+.extension-popup .extension-actions .action-menu-trigger { min-height: 34px; }

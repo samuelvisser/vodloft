@@ -51,8 +51,8 @@ function CookieExtensionSteps({site}: {site: SiteAuthenticationRead}) {
         <BrowserExtensionSteps summary="Optional: Send cookies from your browser" className="site-cookies-extension">
             <li>
                 <span>
-                    Open a page of {site.name} while you are signed in there, click the VODLoft icon and choose Send
-                    cookies to VODLoft. Your browser asks you once to let the extension read sites&apos; cookies.
+                    Open a page of {site.name} while you are signed in there, click the VODLoft icon, open Actions and
+                    choose Send cookies to VODLoft. Your browser asks you once to let the extension read sites&apos; cookies.
                 </span>
             </li>
         </BrowserExtensionSteps>
