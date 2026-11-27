@@ -6,14 +6,13 @@ browser extension sends them from your browser to VODLoft in one click, so you d
 
 ## Installing it
 
-The extension works in Chrome, Edge, Brave and other Chromium browsers, and in Firefox 128 or later.
+The extension works in Chrome, Edge, Brave and other Chromium browsers, and in Firefox 128 or later. VODLoft offers it
+itself: under **Settings › Sources › Authentication**, open a site, and open **Send cookies from your browser** under
+its cookies file.
 
-Until it is in the browsers' extension stores, you can load it from VODLoft's repository:
-
-1. Download VODLoft's source code from [GitHub](https://github.com/samuelvisser/vodloft) and unpack it. The extension is
-   in the `browser-extension` folder.
+1. Choose **Download** and unzip the file.
 2. **Chrome, Edge or Brave**: open `chrome://extensions`, turn on **Developer mode**, choose **Load unpacked** and pick
-   the `browser-extension` folder.
+   the unzipped folder.
    **Firefox**: open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on** and pick the
    `manifest.json` file in the folder. Firefox forgets an extension loaded this way when it closes.
 3. Pin the VODLoft icon to your toolbar, so it is one click away.

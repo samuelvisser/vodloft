@@ -10,4 +10,5 @@ serves Chrome (and other Chromium browsers) and Firefox 128 or later, with Manif
 
 Try it with **Load unpacked** in `chrome://extensions`, or **Load Temporary Add-on** in Firefox's `about:debugging`.
 For the stores, zip the folder's contents (`cd browser-extension && zip -r ../vodloft-extension.zip .`). Firefox's store
-reviews the same zip under the add-on id in `manifest.json`. Users find the steps in the wiki page Browser-Extension.
+reviews the same zip under the add-on id in `manifest.json`. VODLoft offers the folder as a zip under Settings › Sources › Authentication
+(`GET /api/sources/authentication/browser-extension`), with the steps; the wiki page Browser-Extension has them too.

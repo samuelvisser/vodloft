@@ -1,6 +1,6 @@
 import threading
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 
 from backend.api.models.source import (
     DownloadOptionsAPIRead, DownloadProfileDefaultsAPIRead, SiteOptionsAPIRead, YtdlpOptionLineAPIRead, YtdlpOptionsAPIRead, YtdlpOptionsAPIUpdate, YtdlpOptionsCheckAPIRequest,
@@ -21,6 +21,7 @@ from backend.services.site_cookies import (
     start_code_sign_in,
 )
 from backend.services.errors import ServiceError
+from backend.services.browser_extension import ZIP_NAME, extension_zip
 from backend.services.sites import SiteLinkError, add_site, episode_tags_named, media_links, site_choices, site_of_link
 from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import CollectionType
@@ -314,6 +315,16 @@ def save_site_cookie_file(site_key: str, body: CookiesAPIUpdate):
             raise _field_refused("content", exc) from exc
     _sign_in_changed(listing)
     return SiteAuthenticationAPIRead.model_validate(listing)
+
+
+@router.get("/sources/authentication/browser-extension", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_class=Response)
+def browser_extension():
+    """VODLoft's browser extension as a zip, to unzip and load into a browser."""
+    try:
+        content = extension_zip()
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(content, media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="{ZIP_NAME}"'})
 
 
 @router.get("/sources/authentication/site-of-page", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=LinkedSiteAPIRead)
