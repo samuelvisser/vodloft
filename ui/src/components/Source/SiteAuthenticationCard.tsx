@@ -52,8 +52,8 @@ function vodloftAddress() {
 /** How to install VODLoft's browser extension, which sends a site's cookies to VODLoft, and send them with it. */
 function BrowserExtensionSteps({site}: {site: SiteAuthenticationRead}) {
     return (
-        <details className="youtube-api-guide">
-            <summary>Send cookies from your browser</summary>
+        <details className="youtube-api-guide site-cookies-extension">
+            <summary>Optional: Send cookies from your browser</summary>
             <ol>
                 <li>
                     <span>Download VODLoft&apos;s browser extension and unzip it.</span>

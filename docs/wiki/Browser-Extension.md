@@ -7,7 +7,7 @@ browser extension sends them from your browser to VODLoft in one click, so you d
 ## Installing it
 
 The extension works in Chrome, Edge, Brave and other Chromium browsers, and in Firefox 128 or later. VODLoft offers it
-itself: under **Settings › Sources › Authentication**, open a site, and open **Send cookies from your browser** under
+itself: under **Settings › Sources › Authentication**, open a site, and open **Optional: Send cookies from your browser** under
 its cookies file.
 
 1. Choose **Download** and unzip the file.
