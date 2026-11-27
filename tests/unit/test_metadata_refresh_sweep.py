@@ -327,7 +327,7 @@ def client(session, monkeypatch):  # noqa: F811
 
     monkeypatch.setattr(settings_router_module, "db_session", db_session)
     app = FastAPI()
-    app.include_router(settings_router_module.router, prefix="/api")
+    app.include_router(settings_router_module.router, prefix="/api/v1")
     with TestClient(app) as test_client:
         yield test_client
 
@@ -339,7 +339,7 @@ def test_the_settings_list_each_site_with_the_settings_it_shows_and_starts_with(
     session.add(Site(key="generic:vimeo.com", name="vimeo.com", domains=["vimeo.com"]))
     session.commit()
 
-    body = client.get("/api/settings/sites").json()
+    body = client.get("/api/v1/settings/sites").json()
     specs = {spec["key"]: spec for spec in body["specs"]}
     assert specs["metadataRefresh"] == {"key": "metadataRefresh", "group": "scheduling", "hasSystemDefault": True}
     assert specs["sponsorblock"]["hasSystemDefault"] is False

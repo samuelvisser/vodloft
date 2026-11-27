@@ -70,7 +70,7 @@ test('one request carries selected source and edits and supplies both paths', as
     assert.equal(h.render(body).loading, true)
     const job = h.start()
     assert.equal(h.requests.length, 1)
-    assert.equal(h.requests[0].url, '/api/local-media-profiles/preview')
+    assert.equal(h.requests[0].url, '/api/v1/local-media-profiles/preview')
     assert.deepEqual(JSON.parse(h.requests[0].options.body), body)
     respond(h.requests[0], payload('Edited')); await job
     const state = h.render(body)

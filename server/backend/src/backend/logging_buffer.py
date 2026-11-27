@@ -5,6 +5,7 @@ import threading
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from backend.api.versions import CURRENT_API_PREFIX
 
 _MAX_LOG_ENTRIES = 20_000
 _lock = threading.Lock()
@@ -33,7 +34,7 @@ def is_logs_endpoint_access(record: logging.LogRecord) -> bool:
         return False
 
     path = args[2]
-    return isinstance(path, str) and path.partition("?")[0] == "/api/logs"
+    return isinstance(path, str) and path.partition("?")[0] == f"{CURRENT_API_PREFIX}/logs"
 
 
 class _ApplicationLogHandler(logging.Handler):

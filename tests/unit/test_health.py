@@ -1,4 +1,4 @@
-"""/api/health for Docker's health check, and the optional Prometheus metrics."""
+"""/api/v1/health for Docker's health check, and the optional Prometheus metrics."""
 from __future__ import annotations
 
 from collections import namedtuple
@@ -25,7 +25,7 @@ def client(monkeypatch, tmp_path):
     monkeypatch.setattr(health, "scheduler_running", lambda: True)
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
     app = FastAPI()
-    app.include_router(health_router_module.router, prefix="/api")
+    app.include_router(health_router_module.router, prefix="/api/v1")
     yield TestClient(app)
     engine.dispose()
 
@@ -39,7 +39,7 @@ def test_healthy_with_a_database_a_scheduler_and_room_to_download(client, monkey
 
     monkeypatch.setattr(health.shutil, "disk_usage", _usage(50 * 1024**3))
 
-    response = client.get("/api/health")
+    response = client.get("/api/v1/health")
 
     assert response.status_code == 200
     body = response.json()
@@ -55,7 +55,7 @@ def test_little_free_space_is_a_warning_and_still_healthy(client, monkeypatch):
 
     monkeypatch.setattr(health.shutil, "disk_usage", _usage(10 * 1024**2))
 
-    response = client.get("/api/health")
+    response = client.get("/api/v1/health")
 
     assert response.status_code == 200
     assert response.json()["status"] == "warning"
@@ -66,14 +66,14 @@ def test_a_stopped_scheduler_is_unhealthy(client, monkeypatch):
 
     monkeypatch.setattr(health, "scheduler_running", lambda: False)
 
-    response = client.get("/api/health")
+    response = client.get("/api/v1/health")
 
     assert response.status_code == 503
     assert response.json()["status"] == "error"
 
 
 def test_metrics_are_off_by_default(client):
-    assert client.get("/api/metrics").status_code == 404
+    assert client.get("/api/v1/metrics").status_code == 404
 
 
 def test_metrics_report_health_and_counts_when_turned_on(client, monkeypatch):
@@ -81,7 +81,7 @@ def test_metrics_report_health_and_counts_when_turned_on(client, monkeypatch):
 
     monkeypatch.setattr(get_settings().health, "metrics_enabled", True)
 
-    response = client.get("/api/metrics")
+    response = client.get("/api/v1/metrics")
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/plain; version=0.0.4")

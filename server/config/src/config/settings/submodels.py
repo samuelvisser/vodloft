@@ -225,11 +225,11 @@ class AdminAuthSettings(SubmodelBase):
 
 
 class HealthSettings(SubmodelBase):
-    """The health check at /api/health and the optional Prometheus metrics at /api/metrics."""
+    """The health check at /api/v1/health and the optional Prometheus metrics at /api/v1/metrics."""
 
     metrics_enabled: bool = Field(
         default=False,
-        description="Serve Prometheus metrics at /api/metrics, without signing in",
+        description="Serve Prometheus metrics at /api/v1/metrics, without signing in",
     )
     min_free_disk_mb: int = Field(
         default=1024,

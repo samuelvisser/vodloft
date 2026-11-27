@@ -9,6 +9,7 @@ from typing import Literal
 from config import get_settings
 from fastapi import APIRouter, Query
 
+from backend.api.versions import CURRENT_API_PREFIX
 from backend.api.models.logs import ApplicationLogEntryRead, ApplicationLogPageRead
 from backend.logging_buffer import ApplicationLogEntry, get_application_logs, max_application_log_entries
 from backend.security.access import Area, Level
@@ -20,7 +21,7 @@ router = APIRouter(prefix="/logs", tags=["Logs"])
 # The UI reads the log a page at a time: the newest records first, older ones while the user scrolls up,
 # and new ones as they come in. It cuts very long messages (a dumped API response, say).
 _MAX_TEXT_LENGTH = 10_000
-_PULL_REQUEST = re.compile(r'"\w+ /api/pull[?\s]')
+_PULL_REQUEST = re.compile(r'"\w+ ' + re.escape(CURRENT_API_PREFIX) + r'/pull[?\s]')
 
 
 def _is_pull_request(entry: ApplicationLogEntry) -> bool:

@@ -1,9 +1,16 @@
 /** How the UI reaches the VODLoft backend. */
 
-/** The backend address followed by ``path``, such as ``apiUrl('/videos')``. */
+/** The API version this UI speaks. The UI ships with the backend, so it always speaks the backend's newest. */
+export const API_VERSION = 'v1'
+
+/** Where the backend's API is, before any version: ``API_URL`` from the app config, ``/api`` by default. */
+function apiRoot(): string {
+    return ((window as any).appConfig?.API_URL || '/api').replace(/\/+$/, '')
+}
+
+/** The address of ``path`` in the API version this UI speaks, such as ``apiUrl('/videos')``. */
 export function apiUrl(path = ''): string {
-    const base = ((window as any).appConfig?.API_URL || '/api').replace(/\/+$/, '')
-    return `${base}${path}`
+    return `${apiRoot()}/${API_VERSION}${path}`
 }
 
 /** A refused request, with the backend's explanation as its message. */
@@ -53,6 +60,6 @@ export async function apiJson<T>(
 
 /** The full address of one of VODLoft's public paths, such as an IPTV playlist, on the address VODLoft is reached on. */
 export function publicAddress(path: string): string {
-    const base = apiUrl().replace(/\/api$/, '')
+    const base = apiRoot().replace(/\/api$/, '')
     return new URL(`${base}${path}`, window.location.href).href
 }

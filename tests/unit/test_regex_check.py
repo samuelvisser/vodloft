@@ -97,13 +97,13 @@ def client(monkeypatch):
         session.commit()
     monkeypatch.setattr(regex_router_module, "get_session", factory)
     app = FastAPI()
-    app.include_router(regex_router_module.router, prefix="/api")
+    app.include_router(regex_router_module.router, prefix="/api/v1")
     yield TestClient(app)
     engine.dispose()
 
 
 def test_the_check_tests_your_own_titles_and_the_collection_newest_first(client):
-    response = client.post("/api/regex/check", json={
+    response = client.post("/api/v1/regex/check", json={
         "pattern": r"\bhighlights\b", "ignoreCase": True, "samples": ["My highlights", "  "], "collectionId": 1,
         "field": "title",
     })
@@ -122,7 +122,7 @@ def test_the_check_tests_your_own_titles_and_the_collection_newest_first(client)
 
 
 def test_the_check_can_test_descriptions(client):
-    body = client.post("/api/regex/check", json={
+    body = client.post("/api/v1/regex/check", json={
         "pattern": "Description 2", "samples": [], "collectionId": 1, "field": "description",
     }).json()
 
@@ -130,4 +130,4 @@ def test_the_check_can_test_descriptions(client):
 
 
 def test_an_unknown_collection_is_not_found(client):
-    assert client.post("/api/regex/check", json={"pattern": "x", "collectionId": 99}).status_code == 404
+    assert client.post("/api/v1/regex/check", json={"pattern": "x", "collectionId": 99}).status_code == 404
