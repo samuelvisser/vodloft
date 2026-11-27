@@ -76,3 +76,8 @@
     font-size: 12px;
     white-space: pre;
 }
+
+/* The steps for sending cookies with the browser extension, set apart from the cookies file's explanation. */
+.site-cookies-extension {
+    margin-top: 12px;
+}

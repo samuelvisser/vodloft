@@ -26,6 +26,7 @@
 
 **Administration**
 - [[Settings]]
+- [[Browser-Extension]]
 - [[User-Accounts]]
 - [[Security-and-Remote-Access]]
 - [[Backups-and-Upgrades]]
