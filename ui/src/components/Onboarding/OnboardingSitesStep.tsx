@@ -58,7 +58,8 @@ export default function OnboardingSitesStep({picks, onPicks, onBack, onContinue}
         if (choices && picks === null) onPicks({picked: choices.filter((site) => site.picked).map((site) => site.key), others: []})
     }, [choices, picks, onPicks])
 
-    const chosen = new Set(picks?.picked ?? [])
+    // Until the flow keeps the picks, show the first ones straight away instead of a moment without.
+    const chosen = new Set(picks?.picked ?? (choices ?? []).filter((site) => site.picked).map((site) => site.key))
     const others = picks?.others ?? []
     const shown = (choices ?? []).filter((site) => site.suggested || others.includes(site.key))
     const toggle = (key: string) => {

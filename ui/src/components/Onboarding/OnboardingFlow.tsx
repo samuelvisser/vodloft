@@ -8,7 +8,7 @@ import type {MediaLinkTarget} from '../../lib/sourceControls'
 import BrowsePage from '../../pages/BrowsePage'
 import SourceSearchPage from '../../pages/SourceSearchPage'
 import MoviePage from '../../pages/movie/MoviePage'
-import {useMovies} from '../../lib/queries'
+import {useMovies, useSiteChoices} from '../../lib/queries'
 import {SiteAuthentication} from '../Source/SiteAuthenticationCard'
 import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {CollectionRead} from '../../types/schemas/collection'
@@ -44,6 +44,8 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
     const navigate = useNavigate()
     const queryClient = useQueryClient()
     const {data: localMovies} = useMovies()
+    // Loaded while the welcome page shows, so the Sites step opens with its Sites.
+    useSiteChoices()
     const [step, setStep] = useState<OnboardingStep>('welcome')
     const [sitePicks, setSitePicks] = useState<SitePicks | null>(null)
     const [selectedCollection, setSelectedCollection] = useState<SelectedMedia | null>(null)
