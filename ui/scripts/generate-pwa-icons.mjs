@@ -96,18 +96,26 @@ function resizePng({width, height, pixels}, size) {
   return output
 }
 
-function maskableIcon(source) {
-  const size = 512
-  // The whole logo fits inside the central 80%-diameter maskable safe circle.
-  const logoSize = 288
-  const inset = (size - logoSize) / 2
+// The logo is a white house with nothing behind it, which disappears on a light browser tab bar or home screen.
+// Every icon therefore puts it on VODLoft's dark navy (#0f172a, the manifest's theme colour).
+const NAVY = [15, 23, 42]
+
+// One icon: the logo at logoScale of the icon's width, centred on a navy square whose corners are rounded by
+// radius (a fraction of the width; 0 fills the whole square).
+function tileIcon(source, size, logoScale, radius) {
+  const logoSize = Math.round(size * logoScale)
+  const inset = Math.floor((size - logoSize) / 2)
   const logo = resizePng(source, logoSize)
+  const corner = radius * size
   const pixels = Buffer.alloc(size * size * 4)
-  for (let index = 0; index < pixels.length; index += 4) {
-    pixels[index] = 15
-    pixels[index + 1] = 23
-    pixels[index + 2] = 42
-    pixels[index + 3] = 255
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const index = (y * size + x) * 4
+      pixels[index] = NAVY[0]
+      pixels[index + 1] = NAVY[1]
+      pixels[index + 2] = NAVY[2]
+      pixels[index + 3] = Math.round(255 * cornerCoverage(x + 0.5, y + 0.5, size, corner))
+    }
   }
   for (let y = 0; y < logoSize; y++) {
     for (let x = 0; x < logoSize; x++) {
@@ -120,6 +128,15 @@ function maskableIcon(source) {
     }
   }
   return pixels
+}
+
+// How much of the pixel centred on (x, y) lies inside a square of the given size with rounded corners.
+function cornerCoverage(x, y, size, corner) {
+  if (!corner) return 1
+  const cx = Math.min(Math.max(x, corner), size - corner)
+  const cy = Math.min(Math.max(y, corner), size - corner)
+  const distance = Math.hypot(x - cx, y - cy)
+  return Math.min(1, Math.max(0, corner - distance + 0.5))
 }
 
 const crcTable = Array.from({length: 256}, (_, n) => {
@@ -161,8 +178,36 @@ function encodePng(size, pixels) {
   ])
 }
 
-const source = decodePng(readFileSync(new URL('../public/logo-square-house.png', import.meta.url)))
-for (const size of [180, 192, 512]) {
-  writeFileSync(new URL(`../public/pwa-icon-${size}.png`, import.meta.url), encodePng(size, resizePng(source, size)))
+// A Windows icon file that holds each size as a PNG, which every current browser reads.
+function encodeIco(images) {
+  const header = Buffer.alloc(6 + images.length * 16)
+  header.writeUInt16LE(1, 2)  // type: icon
+  header.writeUInt16LE(images.length, 4)
+  let offset = header.length
+  images.forEach(([size, png], index) => {
+    const entry = 6 + index * 16
+    header[entry] = size >= 256 ? 0 : size
+    header[entry + 1] = size >= 256 ? 0 : size
+    header.writeUInt16LE(1, entry + 4)  // colour planes
+    header.writeUInt16LE(32, entry + 6)  // bits per pixel
+    header.writeUInt32LE(png.length, entry + 8)
+    header.writeUInt32LE(offset, entry + 12)
+    offset += png.length
+  })
+  return Buffer.concat([header, ...images.map(([, png]) => png)])
 }
-writeFileSync(new URL('../public/pwa-maskable-512.png', import.meta.url), encodePng(512, maskableIcon(source)))
+
+const publicFile = (name) => new URL(`../public/${name}`, import.meta.url)
+const source = decodePng(readFileSync(publicFile('logo-square-house.png')))
+// Browser tabs: a rounded tile filled almost edge to edge by the house, so it still reads at 16 pixels.
+writeFileSync(publicFile('favicon.ico'), encodeIco(
+  [16, 32, 48, 64, 128, 256].map((size) => [size, encodePng(size, tileIcon(source, size, 0.92, 0.2))]),
+))
+// iOS rounds the home screen icon itself and turns transparency black, so it gets the full square.
+writeFileSync(publicFile('pwa-icon-180.png'), encodePng(180, tileIcon(source, 180, 0.8, 0)))
+// Installed app icons on other systems: the same rounded tile with more room around the house.
+for (const size of [192, 512]) {
+  writeFileSync(publicFile(`pwa-icon-${size}.png`), encodePng(size, tileIcon(source, size, 0.8, 0.2)))
+}
+// The whole logo fits inside the central 80%-diameter maskable safe circle.
+writeFileSync(publicFile('pwa-maskable-512.png'), encodePng(512, tileIcon(source, 512, 288 / 512, 0)))
