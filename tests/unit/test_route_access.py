@@ -55,7 +55,7 @@ def test_public_api_paths_are_only_signing_in_public_config_and_health():
     from backend.app import PUBLIC_API_PATHS
 
     assert PUBLIC_API_PATHS == {
-        "/auth/status", "/auth/login", "/auth/logout", "/config/public", "/health", "/metrics",
+        "/auth/status", "/auth/login", "/auth/logout", "/config/public", "/metrics",
     }
 
 

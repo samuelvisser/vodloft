@@ -16,6 +16,9 @@ CURRENT_API_PREFIX = f"{API_ROOT}/{CURRENT_API_VERSION}"
 # What a client calls to learn the versions above. It is outside every version, so any client can read it.
 VERSIONS_PATH = f"{API_ROOT}/versions"
 
+# Docker's health check, also outside every version: what calls it only reads its status code.
+HEALTH_PATH = f"{API_ROOT}/health"
+
 
 def is_api_path(path: str) -> bool:
     """Whether ``path`` is one of the API's, of any version."""

@@ -56,7 +56,7 @@ def test_every_api_route_is_under_a_version():
         path for path in _walk(create_app().routes)
         if path.startswith("/api") and not path.startswith("/api/v1/")
     ]
-    assert sorted(outside) == ["/api/versions", "/api/{path:path}"]
+    assert sorted(outside) == ["/api/health", "/api/versions", "/api/{path:path}"]
 
 
 def test_anyone_can_ask_which_versions_the_server_answers(client):
@@ -102,3 +102,12 @@ def test_the_old_unversioned_paths_are_gone(client):
 
     assert client.get("/api/collections").status_code == 404
     assert client.post("/api/auth/login", json={}).status_code == 404
+
+
+def test_the_health_check_stays_outside_every_version(client):
+    """Docker and uptime monitors keep one address for it, whatever the API's version is."""
+    _sign_in(client)
+    signed_out = TestClient(client.app)
+
+    assert signed_out.get("/api/health").status_code in (200, 503)
+    assert client.get("/api/v1/health").status_code == 404

@@ -225,7 +225,7 @@ class AdminAuthSettings(SubmodelBase):
 
 
 class HealthSettings(SubmodelBase):
-    """The health check at /api/v1/health and the optional Prometheus metrics at /api/v1/metrics."""
+    """The health check at /api/health and the optional Prometheus metrics at /api/v1/metrics."""
 
     metrics_enabled: bool = Field(
         default=False,

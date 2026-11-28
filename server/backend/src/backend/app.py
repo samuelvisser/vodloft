@@ -43,8 +43,7 @@ PUBLIC_API_PATHS = frozenset({
     "/auth/login",
     "/auth/logout",
     "/config/public",
-    # For Docker's health check and Prometheus; they only report health and counts.
-    "/health",
+    # For Prometheus; it only reports counts.
     "/metrics",
 })
 
@@ -244,8 +243,8 @@ def create_app() -> FastAPI:
             if request.method == "OPTIONS":
                 return await call_next(request)
 
-            # Only paths within an API version lead anywhere. Outside every version are the list of versions
-            # and the answer that tells a client its version is not one of them, which anyone may read.
+            # Outside every API version are only the health check, the list of versions and the answer that
+            # tells a client its version is not one of them, which anyone may read.
             version, path = api_version_of(request.url.path)
             if version is not None and path not in PUBLIC_API_PATHS:
                 access = await run_in_threadpool(resolve_access, request)
@@ -320,7 +319,6 @@ def create_app() -> FastAPI:
         local_media_profile_router,
         collection_local_media_profile_router,
         video_local_media_profile_router,
-        meta_router,
         config_router,
         rss_stream_profile_router,
         iptv_stream_profile_router,
@@ -336,6 +334,7 @@ def create_app() -> FastAPI:
         import_router,
         assets_router,
         health_router,
+        health_check_router,
         regex_router,
         notification_router,
         account_notification_router,
@@ -351,6 +350,7 @@ def create_app() -> FastAPI:
     app.include_router(feeds_router)
     app.include_router(iptv_router)
     app.include_router(webdav_router)
+    app.include_router(health_check_router)
     app.include_router(health_router, prefix=CURRENT_API_PREFIX)
 
     # Protected API endpoints (shielded by middleware above)
@@ -376,7 +376,6 @@ def create_app() -> FastAPI:
     app.include_router(collection_local_media_profile_router, prefix=CURRENT_API_PREFIX)
     app.include_router(video_local_media_profile_router, prefix=CURRENT_API_PREFIX)
     app.include_router(custom_metadata_router, prefix=CURRENT_API_PREFIX)
-    app.include_router(meta_router, prefix=CURRENT_API_PREFIX)
     app.include_router(config_router, prefix=CURRENT_API_PREFIX)
     app.include_router(rss_stream_profile_router, prefix=CURRENT_API_PREFIX)
     app.include_router(iptv_stream_profile_router, prefix=CURRENT_API_PREFIX)
