@@ -7,10 +7,6 @@ FROM node:26-alpine AS ui-build
 
 WORKDIR /ui
 
-# The image's npm is the one its Node release ships with. npm's own notice that a newer npm exists
-# is no use in a build, so it is turned off.
-ENV NPM_CONFIG_UPDATE_NOTIFIER=false
-
 ARG VODLOFT_PRO_ICONS=false
 
 COPY ui/package.json ui/package-lock.json ./
