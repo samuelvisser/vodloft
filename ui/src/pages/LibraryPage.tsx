@@ -12,15 +12,10 @@ import {DrmBadge} from '../components/common/DrmProtected'
 import {AccessBadge} from '../components/common/AccessLocked'
 import FilterBar, {ChipFilter} from '../components/common/FilterBar'
 import DownloadStatusBadge from '../components/DownloadProgress/DownloadStatusBadge'
-import CollectionSort, {
-    type CollectionSortOrder,
-    type LibrarySortable,
-    compareCollections,
-    DEFAULT_COLLECTION_SORT,
-    isCollectionSortOrder,
-} from '../components/CollectionSort/CollectionSort'
+import CollectionSort, {type LibrarySortable, compareCollections} from '../components/CollectionSort/CollectionSort'
+import {useCollectionSortOrder} from '../components/CollectionSort/useCollectionSortOrder'
 import {
-    useCreators, useLibraryCounts, useLibraryDownloads, useLibraryPreferences, useMovies, useCollectionsView, useSaveLibraryPreferences, useVideos,
+    useCreators, useLibraryCounts, useLibraryDownloads, useMovies, useCollectionsView, useVideos,
 } from '../lib/queries'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {CollectionTypeReg} from '../types/collection'
@@ -59,19 +54,6 @@ const MEDIA_TYPE_NOUNS: Record<MediaType, Noun> = {
     movies: {singular: 'movie', plural: 'movies'},
     videos: {singular: 'video', plural: 'videos'},
 }
-const LIBRARY_COLLECTION_SORT_STORAGE_KEY = 'libraryCollectionSort'
-
-/** The order this browser remembers, for installs without user accounts. */
-function loadBrowserCollectionSort(): CollectionSortOrder {
-    try {
-        const raw = localStorage.getItem(LIBRARY_COLLECTION_SORT_STORAGE_KEY)
-        const parsed: unknown = raw === null ? null : JSON.parse(raw)
-        return isCollectionSortOrder(parsed) ? parsed : DEFAULT_COLLECTION_SORT
-    } catch {
-        return DEFAULT_COLLECTION_SORT
-    }
-}
-
 /** A remembered chip filter: the chosen values, or empty for all of them when nothing usable is stored. */
 function loadLibraryChipFilter(storageKey: string): string[] {
     try {
@@ -179,26 +161,7 @@ export default function LibraryPage() {
     const {data: videos, isLoading: videosLoading, error: videosError} = useVideos()
     const {data: downloads} = useLibraryDownloads()
     const {data: libraryCounts, error: libraryCountsError} = useLibraryCounts()
-    const {data: libraryPreferences, error: libraryPreferencesError} = useLibraryPreferences()
-    const saveLibraryPreferences = useSaveLibraryPreferences()
-    const [browserCollectionSort, setBrowserCollectionSort] = useState(loadBrowserCollectionSort)
-    // With user accounts VODLoft remembers each user's order; without them, the browser does.
-    const collectionSort = useMemo<CollectionSortOrder>(() => (libraryPreferences?.saved
-        ? {by: libraryPreferences.collectionSort, reversed: libraryPreferences.collectionSortReversed}
-        : browserCollectionSort), [libraryPreferences, browserCollectionSort])
-    const collectionSortKnown = libraryPreferences !== undefined || !!libraryPreferencesError
-    const chooseCollectionSort = (order: CollectionSortOrder) => {
-        if (libraryPreferences?.saved) {
-            saveLibraryPreferences.mutate({collectionSort: order.by, collectionSortReversed: order.reversed})
-            return
-        }
-        setBrowserCollectionSort(order)
-        try {
-            localStorage.setItem(LIBRARY_COLLECTION_SORT_STORAGE_KEY, JSON.stringify(order))
-        } catch {
-            // Without storage the order is only kept while the page is open.
-        }
-    }
+    const {order: collectionSort, known: collectionSortKnown, choose: chooseCollectionSort} = useCollectionSortOrder('library')
     // Every Site the library has media from, by name.
     const siteOptions = useMemo(() => {
         const names = new Map<string, string>()
@@ -491,8 +454,6 @@ export default function LibraryPage() {
                                 return (
                                     <CollectionTile
                                         key={collection.slug} collection={collection}
-                                        // What it is on its Site, as a creator's card says. The card leaves its author out.
-                                        subtitle={collection.kindName ?? null}
                                         selection={selection.active ? {
                                             chosen: selection.selected.has(bulkKey('collection', collection.id)),
                                             onToggle: () => selection.toggle(bulkKey('collection', collection.id)),

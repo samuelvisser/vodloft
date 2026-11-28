@@ -1,3 +1,4 @@
+import {CollectionReadViewSchema} from './collection'
 import {CollectionWordsSchema} from './collection_contract'
 import {z} from 'zod'
 import {ApiDateTimeSchema} from './datetime'
@@ -47,29 +48,16 @@ export const CreatorReadSchema = z.object({
     words: CollectionWordsSchema,
     genre: z.string().nullable(),
     contentRating: z.string().nullable(),
+    /** Your own yt-dlp options for the creator's collections, after the yt-dlp Source's and before each collection's own. */
+    ytdlpOptions: z.string().default(''),
+    /** One of the creator's accounts or collections comes from a Source that takes yt-dlp options. */
+    takesYtdlpOptions: z.boolean().default(false),
 })
 export type CreatorRead = z.infer<typeof CreatorReadSchema>
 
 export const CreatorPageReadSchema = CreatorReadSchema.extend({
-    collections: z.array(z.object({
-        id: z.number(),
-        slug: z.string(),
-        title: z.string(),
-        type: z.string(),
-        sourceKey: z.string(),
-        thumbnailLandscapePath: z.string().nullable(),
-        thumbnailPortraitPath: z.string().nullable(),
-        thumbnailSquarePath: z.string().nullable(),
-        logoImagePath: z.string().nullable(),
-        authorHeadshotPath: z.string().nullable(),
-        episodeCount: z.number(),
-        years: z.string(),
-        firstPublishedDate: ApiDateTimeSchema.nullable(),
-        /** The one season the videos in none of its lists share, such as Singles; null when they get one per year. */
-        looseSeason: z.string().nullable().optional(),
-        /** The Site the collection is on, which tells whether its music is tracks or music videos. */
-        site: SiteReadSchema.nullable().default(null),
-    })),
+    /** Its collections, as the Library reads them, so their cards are the Library's own. */
+    collections: z.array(CollectionReadViewSchema),
     /** The creator's movies in the Library. */
     movies: z.array(z.object({
         slug: z.string(),
@@ -125,6 +113,7 @@ export const CreatorEpisodePageReadSchema = z.object({
     items: z.array(EpisodeReadViewSchema.extend({
         collectionSlug: z.string(),
         collectionTitle: z.string(),
+        unplayableFormatsAllowed: z.boolean().default(false),
     })),
     nextCursor: z.string().nullable().optional(),
     hasMore: z.boolean(),
@@ -135,6 +124,7 @@ export const CreatorUpdateSchema = z.object({
     title: z.string().trim().min(1, 'Give them a name').max(255).default(''),
     genre: z.string().trim().max(200).default(''),
     contentRating: z.string().trim().max(50).default(''),
+    ytdlpOptions: z.string().max(8000).default(''),
 })
 export type CreatorUpdateIn = z.input<typeof CreatorUpdateSchema>
 export type CreatorUpdateOut = z.output<typeof CreatorUpdateSchema>

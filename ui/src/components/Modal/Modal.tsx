@@ -1,5 +1,4 @@
 import type {CSSProperties, FormEventHandler, ReactNode} from 'react'
-import {InScrollingDialog} from './dialogMenus'
 import {useDismissOnEscape} from './useDismissOnEscape'
 
 type ModalProps = {
@@ -51,11 +50,9 @@ export default function Modal({
 
     return (
         <div className="modal-overlay" role="presentation" onClick={dismissOnOverlayClick ? onDismiss : undefined}>
-            <InScrollingDialog.Provider value={scrollable}>
-                {onSubmit
-                    ? <form {...dialogProps} onSubmit={onSubmit} noValidate>{children}</form>
-                    : <div {...dialogProps}>{children}</div>}
-            </InScrollingDialog.Provider>
+            {onSubmit
+                ? <form {...dialogProps} onSubmit={onSubmit} noValidate>{children}</form>
+                : <div {...dialogProps}>{children}</div>}
         </div>
     )
 }

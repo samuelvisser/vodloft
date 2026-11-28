@@ -215,6 +215,92 @@ def test_media_server_refreshes_are_batched_into_one_call(db, monkeypatch):
     assert {row.status for row in _deliveries(db)} == {"SENT"}
 
 
+@pytest.mark.parametrize(("path_from", "path_to", "folder", "seen"), [
+    ("/downloads/", "W:\\", "/downloads/Video/Bentkey", "W:\\Video\\Bentkey"),
+    ("/downloads", "W:", "/downloads/Video/Bentkey", "W:\\Video\\Bentkey"),
+    ("/downloads", "W:\\Media\\", "/downloads", "W:\\Media"),
+    ("/downloads/", "W:\\", "/downloads", "W:\\"),
+    ("/downloads", "\\\\nas\\media", "/downloads/Show", "\\\\nas\\media\\Show"),
+    ("/downloads/", "/media/", "/downloads/Show/S1", "/media/Show/S1"),
+    ("/downloads", "/media", "/downloads2/Show", "/downloads2/Show"),
+    ("/downloads", "/", "/downloads/Show", "/Show"),
+])
+def test_path_mapping_writes_the_path_as_the_media_server_does(path_from, path_to, folder, seen):
+    from backend.services.notifications.paths import mapped_path
+
+    assert mapped_path(folder, {"path_from": path_from, "path_to": path_to}) == seen
+
+
+def test_plex_on_windows_refreshes_the_library_that_holds_the_folder(db, monkeypatch):
+    from backend.services.notifications import Event
+
+    collection = _collection(db)
+    plex = _destination(db, "plex", {
+        "address": "http://192.168.178.5:32400", "api_key": "token", "path_from": "/downloads/", "path_to": "W:\\",
+    })
+    _rule(db, "episode_downloaded", push=False, destination_ids=[plex.id])
+    _emit(db, Event.EPISODE_DOWNLOADED, collection_id=collection.id, data={"folder": "/downloads/Video/Bentkey/Season 1"})
+    sections = {"MediaContainer": {"Directory": [
+        {"key": "1", "Location": [{"path": "W:\\Videos"}]},
+        {"key": "2", "Location": [{"path": "w:\\video\\bentkey\\"}]},
+    ]}}
+    monkeypatch.setattr(
+        "backend.services.notifications.senders.requests.get",
+        lambda url, **kwargs: Mock(status_code=200, json=lambda: sections, raise_for_status=lambda: None),
+    )
+    calls = []
+    monkeypatch.setattr(
+        "backend.services.notifications.senders.requests.request",
+        lambda method, url, **kwargs: calls.append((method, url)) or Mock(status_code=200),
+    )
+    assert _deliver(db, now=NOW + timedelta(minutes=2)) == 1
+    assert calls == [(
+        "GET", "http://192.168.178.5:32400/library/sections/2/refresh?path=W%3A%5CVideo%5CBentkey%5CSeason%201",
+    )]
+
+
+def test_the_plex_test_finds_a_wrong_path_mapping(db, monkeypatch):
+    from backend.db.models import NotificationEvent
+    from backend.services.notifications.destinations import Kind
+    from backend.services.notifications.senders import test_destination
+
+    sections = {"MediaContainer": {"Directory": [{"key": "1", "Location": [{"path": "W:\\Video"}]}]}}
+    monkeypatch.setattr(
+        "backend.services.notifications.senders.requests.get",
+        lambda url, **kwargs: Mock(status_code=200, json=lambda: sections, raise_for_status=lambda: None),
+    )
+    monkeypatch.setattr(
+        "backend.services.notifications.senders.requests.request", lambda method, url, **kwargs: Mock(status_code=200),
+    )
+    sample = NotificationEvent(event="episode_downloaded", title="t", body="b", data={"folder": "/downloads/Video/Show"})
+    config = {"address": "http://plex:32400", "api_key": "token", "scope": "folder", "path_from": "/downloads"}
+    assert test_destination(Kind.PLEX, {**config, "path_to": "W:\\"}, sample).delivered
+    outcome = test_destination(Kind.PLEX, {**config, "path_to": "X:\\"}, sample)
+    assert outcome.error == "No Plex library holds X:\\Video\\Show. Check the path mapping"
+
+
+def test_the_preview_shows_a_folder_as_the_media_server_sees_it(db):
+    from backend.api.endpoints.notifications.service import preview
+    from backend.api.models.notifications import DestinationInput
+    from backend.services.errors import ServiceError
+
+    def shown(**paths):
+        return preview(db, DestinationInput.model_validate({"kind": "plex", "mediaServer": {
+            "address": " http://192.168.178.5:32400", "apiKey": "token", **paths,
+        }}))
+
+    result = shown(pathFrom="/downloads/", pathTo="W:\\")
+    assert result["masked"] == "http://192.168.178.5:32400"
+    assert result["path_example"] == {"vodloft": "/downloads/", "server": "W:\\"}
+    assert shown()["path_example"] is None
+    with pytest.raises(ServiceError) as refused:
+        shown(pathFrom="/downloads")
+    assert refused.value.field == "pathTo"
+    with pytest.raises(ServiceError) as refused:
+        shown(pathFrom="downloads", pathTo="W:\\")
+    assert refused.value.field == "pathFrom"
+
+
 def test_a_failing_webhook_is_tried_again_then_reported(db, monkeypatch):
     from backend.db.models import NotificationEvent
     from backend.services.notifications import Event

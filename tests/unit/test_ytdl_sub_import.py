@@ -469,7 +469,7 @@ def installation(tmp_path, monkeypatch):
         domains = ("youtube.com",)
         features = frozenset({Feature.COLLECTIONS, Feature.EPISODE_LISTS})
 
-        def resolve(self, url):
+        def resolve(self, url, plan=None):
             return None
 
         def episode_media(self, **_kwargs):
@@ -553,9 +553,9 @@ def test_an_imported_tv_show_collection_has_its_playlists_as_seasons_in_ytdl_sub
         ("https://www.youtube.com/playlist?list=PLE62gWlWZk5NWVAVuf0Lm9jdv_-_KXs0W", 2, "Music Videos"),
     ]
     # Its files are named by ytdl-sub's numbers, so those stay.
-    assert (guitar.link_seasons, guitar.custom_season_order) == ("selected", True)
+    assert (guitar.link_seasons, guitar.custom_season_order) == ("on", True)
     # As in ytdl-sub, the channel's season holds what is in no playlist, and a video is in one season.
-    assert (guitar.channel_season, guitar.repeat_videos) == ("unlisted", "one_season")
+    assert (guitar.loose_videos, guitar.repeat_videos) == ("one_season", "one_season")
 
 
 def _artist_import(monkeypatch):
@@ -606,9 +606,9 @@ def test_an_imported_discography_is_one_collection_of_the_artists_page(installat
     assert session.scalar(select(Creator)) is None
     collection = session.scalar(select(Collection))
     assert (collection.title, collection.type, collection.genre, collection.creator_id) == ("Emily Hopkins", "music", "Lofi", None)
-    # Every album is a season, the ones to come too, as the Site's defaults for a channel say.
+    # Its albums are on, the ones to come too, as the Site's defaults for a channel say.
     assert (collection.sharing_url, collection.kind, collection.link_seasons) == (
-        "https://emilyharpist.bandcamp.com/", "channel", "all",
+        "https://emilyharpist.bandcamp.com/", "channel", "on",
     )
     assert session.scalar(select(CollectionLocalMediaProfile.collection_scope).where(CollectionLocalMediaProfile.name == "Bandcamp")) == "music"
 

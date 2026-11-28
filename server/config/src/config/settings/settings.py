@@ -155,6 +155,7 @@ class AppSettings(SettingsBase):
     quick_download: QuickDownloadSettings = Field(default_factory=QuickDownloadSettings)
     youtube_api: YouTubeApiSettings = Field(default_factory=YouTubeApiSettings)
     health: HealthSettings = Field(default_factory=HealthSettings)
+    collection_health: CollectionHealthSettings = Field(default_factory=CollectionHealthSettings)
     file_watcher: FileWatcherSettings = Field(default=FileWatcherSettings(
         enabled=True,
         scan_cron_enabled=True,

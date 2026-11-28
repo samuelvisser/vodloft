@@ -35,7 +35,7 @@ These limits apply to looking up links, Browse and Search, adding collections, m
 
 ### Members-only media
 
-The **Members-only media** switch decides whether the user may use the memberships signed in under **Settings → Sources**, such as your Daily Wire membership. Without it, they only get what a free account gets: free episodes, and no members-only movies. Administrators always have it.
+The **Members-only media** switch decides whether the user may use the memberships signed in under **Settings → Sites**, such as your Daily Wire membership. Without it, they only get what a free account gets: free episodes, and no members-only movies. Administrators always have it.
 
 ### Deleting files
 

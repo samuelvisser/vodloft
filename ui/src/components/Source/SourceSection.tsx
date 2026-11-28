@@ -2,7 +2,7 @@ import type {ReactNode} from 'react'
 
 import {SettingsSection} from '../Settings/SettingsControls'
 
-/** A Source's part of Settings › Sources: a settings section whose parts stack in one column. */
+/** A Source's part of Settings › Sites: a settings section whose parts stack in one column. */
 export default function SourceSection({title, description, summaryExtra, children}: {
     title: string
     description?: string

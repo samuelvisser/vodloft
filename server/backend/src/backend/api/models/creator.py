@@ -5,37 +5,17 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal, Optional
 
-from pydantic import AliasChoices, AliasPath, Field
+from pydantic import AliasChoices, AliasPath, Field, computed_field, field_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.api.models.episode import EpisodeAPIReadView
 from backend.api.models.pagination import CursorPageRead
 from backend.api.models.profile_bulk import BulkSelectionIn
+from backend.api.models.collection import CollectionAPIReadView
 from backend.api.models.collection_contract import CollectionWordsAPIRead
-from backend.api.models.source import NamesAPIRead, SiteAPIRead
-
-
-class CreatorCollectionAPIRead(ResponseBase):
-    id: int
-    slug: str
-    title: str
-    type: str
-    source_key: str
-    thumbnail_landscape_path: Optional[str] = None
-    thumbnail_portrait_path: Optional[str] = None
-    thumbnail_square_path: Optional[str] = None
-    logo_image_path: Optional[str] = None
-    author_headshot_path: Optional[str] = None
-    episode_count: int = 0
-    years: str = ""
-    """The years of its oldest and newest episode, such as 2015-2026, as the Library shows them."""
-    first_published_date: Optional[datetime] = None
-    """When its oldest episode came out."""
-    loose_season: Optional[str] = None
-    """The one season the videos in none of its lists share, such as Singles; None when they get a season per year,
-    or it has no lists as seasons."""
-    site: Optional[SiteAPIRead] = None
-    """The website the collection is on, which tells whether its music is tracks or music videos."""
+from backend.api.models.source import NamesAPIRead, SiteAPIRead, checked_ytdlp_options
+from backend.services.unplayable_formats import options_allow_unplayable_formats
+from sources.ytdlp_options import MAX_OPTIONS_LENGTH
 
 
 class CreatorAccountAPIRead(ResponseBase):
@@ -84,6 +64,10 @@ class CreatorAPIRead(ResponseBase):
     """When its page or one of its collections' pages was last opened, for the Library's Recently used order."""
     genre: Optional[str] = None
     content_rating: Optional[str] = None
+    ytdlp_options: str = ""
+    """Your own yt-dlp options for the creator's collections, after the yt-dlp Source's and before each collection's own."""
+    takes_ytdlp_options: bool = False
+    """One of the creator's accounts or collections comes from a Source that takes yt-dlp options."""
 
 
 class CreatorMovieAPIRead(ResponseBase):
@@ -105,6 +89,13 @@ class CreatorEpisodeAPIRead(EpisodeAPIReadView):
 
     collection_slug: str
     collection_title: str
+    collection_ytdlp_options: str = Field(default="", exclude=True)
+
+    @computed_field
+    @property
+    def unplayable_formats_allowed(self) -> bool:
+        """Its collection's own yt-dlp options allow unplayable formats, so media protected by DRM can still be tried."""
+        return options_allow_unplayable_formats(self.source_key, self.collection_ytdlp_options)
 
 
 class CreatorEpisodePageAPIRead(CursorPageRead[CreatorEpisodeAPIRead]):
@@ -114,7 +105,8 @@ class CreatorEpisodePageAPIRead(CursorPageRead[CreatorEpisodeAPIRead]):
 class CreatorPageAPIRead(CreatorAPIRead):
     """A creator's page: their collections and movies."""
 
-    collections: list[CreatorCollectionAPIRead]
+    collections: list[CollectionAPIReadView]
+    """Its collections, as the Library reads them, so their cards are the Library's own."""
     movies: list[CreatorMovieAPIRead] = Field(default_factory=list)
     last_published_date: Optional[datetime] = None
     """When the newest episode of all of the creator's collections came out."""
@@ -172,6 +164,13 @@ class CreatorAPIUpdate(RequestBase):
     is kept when the Site's name changes."""
     genre: Optional[str] = Field(default=None, max_length=200)
     content_rating: Optional[str] = Field(default=None, max_length=50)
+    ytdlp_options: Optional[str] = Field(default=None, max_length=MAX_OPTIONS_LENGTH)
+    """Your own yt-dlp options for the creator's collections; left out, they stay as they are."""
+
+    @field_validator("ytdlp_options")
+    @classmethod
+    def _validate_ytdlp_options(cls, value: Optional[str]) -> Optional[str]:
+        return None if value is None else checked_ytdlp_options(value)
 
 
 class CreatorCombineAPIIn(RequestBase):

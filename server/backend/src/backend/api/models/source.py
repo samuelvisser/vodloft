@@ -5,13 +5,15 @@ from collections.abc import Iterable, Mapping
 from typing import Annotated, Literal, Optional
 
 from pydantic import AliasChoices, AliasPath, Field, ValidationInfo, computed_field, field_validator, model_validator
+from pydantic_core import PydanticCustomError
 
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.services.media_access import access_granted, access_locked, site_access
 from backend.types.collection_types import CollectionType
 from backend.types.link_season_types import CollectionKind
 from config.settings.site_settings import UpgradeRepeat
-from sources import Feature, ProfileSeasons, ReleaseDate, SiteSetting, StreamMethod, UnknownSourceError, UpgradeImprovement, get_source, site_of
+from sources import CreatorTier as SiteTier
+from sources import Access, Feature, ProfileSeasons, SignInKind, ReleaseDate, SiteSetting, StreamMethod, UnknownSourceError, UpgradeImprovement, get_source, site_of
 from sources.ytdlp_options import MAX_OPTIONS_LENGTH, OptionsRefused, ytdlp_option_arguments
 
 
@@ -57,6 +59,25 @@ class LockableResponse(ResponseBase):
     """The Site the media is on, which names the access."""
     access: Optional[str] = None
     """The key of the access the media needs; ``access_label`` is what its Site calls it."""
+    # The creator's tier the media needs, on a Site whose creators set up tiers of their own.
+    creator_tier_site_id: Optional[str] = Field(default=None, exclude=True, validation_alias=AliasChoices(
+        "creator_tier_site_id", AliasPath("creator_tier", "site_tier_id"), AliasPath("episode", "creator_tier", "site_tier_id"),
+    ))
+    creator_tier_name: Optional[str] = Field(default=None, exclude=True, validation_alias=AliasChoices(
+        "creator_tier_name", AliasPath("creator_tier", "name"), AliasPath("episode", "creator_tier", "name"),
+    ))
+    creator_tier_amount: Optional[str] = Field(default=None, exclude=True, validation_alias=AliasChoices(
+        "creator_tier_amount", AliasPath("creator_tier", "amount"), AliasPath("episode", "creator_tier", "amount"),
+    ))
+    creator_tier_rank: Optional[int] = Field(default=None, exclude=True, validation_alias=AliasChoices(
+        "creator_tier_rank", AliasPath("creator_tier", "rank"), AliasPath("episode", "creator_tier", "rank"),
+    ))
+
+    def _access(self) -> Optional[Access]:
+        tier = SiteTier(
+            self.creator_tier_site_id, self.creator_tier_name, self.creator_tier_amount, self.creator_tier_rank,
+        ) if self.creator_tier_site_id is not None else None
+        return site_access(self.source_key, self.site_key, self.access, tier)
     access_refused_at: Optional[datetime] = None
     access_check_at: Optional[datetime] = None
     """When VODLoft next checks whether the locked media opened up."""
@@ -77,14 +98,14 @@ class LockableResponse(ResponseBase):
     @property
     def access_label(self) -> Optional[str]:
         """What the media's Site calls the access, such as Members only or NPO Plus."""
-        found = site_access(self.source_key, self.site_key, self.access)
+        found = self._access()
         return found.label if found is not None else None
 
     @computed_field
     @property
     def access_description(self) -> Optional[str]:
         """One sentence from the media's Site on who can watch it, such as "Only NPO Plus subscribers can watch this."."""
-        found = site_access(self.source_key, self.site_key, self.access)
+        found = self._access()
         return found.description if found is not None else None
 
 
@@ -160,6 +181,8 @@ class SearchSiteAPIRead(SourceSiteAddedAPIRead):
 
     costly_search: bool
     """Each search costs something, so the search page searches when asked instead of while the user types."""
+    search_note: Optional[str] = None
+    """What the Site's search cannot find, and how to add it anyway, shown above its search."""
     ready: bool = False
     """The Source can search the Site now: one whose search goes through its own API once that is set up. Told by
     the ``ready_sites`` the Sources are read with."""
@@ -214,6 +237,16 @@ class ResolvedLinkPreviewAPIRead(ResponseBase):
     description: Optional[str] = None
     image_url: Optional[str] = None
     author_name: Optional[str] = None
+
+
+class LinkFirstLookAPIRead(ResolvedLinkPreviewAPIRead):
+    """A quick first look at a link while the full lookup runs, with what the link is when the Source can already
+    tell, so the user can go on with it."""
+    title: Optional[str] = None
+    source: SourceAPIRead
+    kind: Optional[Literal["collection", "movie", "episode", "video", "creator"]] = None
+    slug: Optional[str] = None
+    url: Optional[str] = None
 
 
 class ProgramStatusAPIRead(ResponseBase):
@@ -298,6 +331,40 @@ class SiteApiValuesAPIUpdate(RequestBase):
     """The values by their field's key. A secret left empty keeps the one stored."""
 
 
+class AccountSignInAPIRead(ResponseBase):
+    """How the user signs in with their account on a Site, such as Nebula's email and password or Twitch's code."""
+
+    kind: SignInKind
+    benefits: str
+    fields: list[ApiFieldAPIRead]
+    """What the user fills in, for an email and password or a token."""
+    steps: list[GuideStepAPIRead]
+    """How to get what the fields ask for, when that is not plain."""
+    caution: Optional[str] = None
+
+
+class AccountStatusAPIRead(ResponseBase):
+    signed_in: bool
+    account: Optional[str] = None
+    """The name or email address of the account, when the Site tells it."""
+    problem: Optional[str] = None
+
+
+class AccountValuesAPIUpdate(RequestBase):
+    values: dict[str, str] = Field(max_length=8)
+    """What the user filled in, by its field's key."""
+
+
+class CodeSignInAPIRead(ResponseBase):
+    """A sign-in with a code that has started: the user enters ``user_code`` at ``verification_url``."""
+
+    id: str
+    """What the UI waits for the sign-in with."""
+    user_code: str
+    verification_url: str
+    expires_in: int
+
+
 class SiteAuthenticationAPIRead(ResponseBase):
     """A Site, and how VODLoft signs in on it or gets at its API: a Source's own sign-in, the Site's cookies
     file, or a Source's API key."""
@@ -318,6 +385,9 @@ class SiteAuthenticationAPIRead(ResponseBase):
     site_api: Optional[SiteApiAPIRead] = None
     """The Site's own API, on a Site that has one a Source uses."""
     site_api_status: Optional[SiteApiStatusAPIRead] = None
+    account_sign_in: Optional[AccountSignInAPIRead] = None
+    """How the user signs in with their account on the Site, on a Site that offers it."""
+    account_status: Optional[AccountStatusAPIRead] = None
     removable: bool
     """The user can remove the Site: VODLoft has nothing from it and no Source is made for it."""
 
@@ -331,6 +401,17 @@ class MediaLinksAPIRequest(RequestBase):
 class MediaLinksAPIRead(ResponseBase):
     urls: list[str]
     """The links of the request that are on a Site VODLoft knows, which the user can look up to add."""
+
+
+class MediaLinkCheckAPIRequest(RequestBase):
+    """A link of a description that is on a Site VODLoft knows, to check whether Add media can look it up."""
+
+    url: str = Field(min_length=1, max_length=2048)
+
+
+class MediaLinkCheckAPIRead(ResponseBase):
+    works: bool
+    """Add media finds something to add at the link."""
 
 
 class SiteAddAPIRequest(RequestBase):
@@ -352,12 +433,18 @@ class SiteAddedAPIRead(ResponseBase):
     name: str
 
 
+class SitesPickAPIRequest(RequestBase):
+    keys: list[str] = Field(max_length=200)
+    """The Sites the user uses, by key: suggested ones, or ones added by their address. At least one."""
+
+
 def checked_ytdlp_options(value: str) -> str:
     """Your own yt-dlp options, refused with the first line that can not be used."""
     try:
         ytdlp_option_arguments(value)
     except OptionsRefused as exc:
-        raise ValueError(str(exc)) from None
+        # Without "Value error, " in front, so the form shows the reason as it is.
+        raise PydanticCustomError("ytdlp_options", "{reason}", {"reason": str(exc)}) from None
     return value.strip("\n")
 
 
@@ -571,6 +658,33 @@ class ListKindAPIRead(ResponseBase):
     """What the Sites call the lists, such as album and albums."""
     albums: bool = Field(default=False, validation_alias=AliasPath("kind", "albums"))
     """The kind best describes an artist's albums."""
+
+
+class SiteChoiceAPIRead(ResponseBase):
+    """A Site the user can pick as one they use: a popular one VODLoft suggests, or one already added."""
+
+    key: str
+    name: str
+    pitch: str | None
+    """What VODLoft adds from the Site, in a few words, such as "Channels, playlists, Shorts and live streams"."""
+    added: bool
+    """VODLoft knows the Site already."""
+    suggested: bool
+    """One of the popular Sites VODLoft suggests, rather than one only added before."""
+    picked: bool
+    """The Site starts picked, such as YouTube in onboarding."""
+
+    @computed_field
+    @property
+    def icon(self) -> str | None:
+        """The Site's Font Awesome icon as ``prefix:name``, such as ``fab:youtube``."""
+        return site_of(self.key).icon
+
+    @computed_field
+    @property
+    def initials(self) -> str:
+        """The Site's name in at most two letters, such as YT, shown beside a globe where it has no icon."""
+        return site_of(self.key).initials
 
 
 class SiteAPIRead(ResponseBase):

@@ -398,7 +398,7 @@ def signed_in():
 
 
 def _sign_in():
-    """Give the NPO Start Site its cookies file, as Settings › Sources › Authentication does."""
+    """Give the NPO Start Site its cookies file, as Settings › Sites › Authentication does."""
     from sources import cookies
     from sources.npo import account
 

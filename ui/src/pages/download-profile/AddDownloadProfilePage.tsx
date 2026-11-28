@@ -8,7 +8,7 @@ import {
     DownloadProfileCreateIn, DownloadProfileCreateOut, DownloadProfileCreateSchema, defaultEpisodeFilters,
 } from '../../types/schemas/download_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
-import Select from '../../components/common/ReactSelect'
+import Select from '../../components/common/Select'
 import {safeReturnPath, useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
 import {SelectRegistry} from "../../utils/selectRegistry";
 import {buildCollectionSelectRegistry, EpisodeIdentifierReg} from "../../types/collection";
@@ -206,7 +206,6 @@ export default function AddDownloadProfilePage() {
                         render={({field}) => (
                             <Select
                                 inputId="collection-id"
-                                classNamePrefix="select"
                                 options={collectionReg.options}
                                 value={collectionReg.options.find(o => Number(o.value) === field.value) ?? null}
                                 onChange={(opt) => {
@@ -245,14 +244,13 @@ export default function AddDownloadProfilePage() {
                         render={({field}) => (
                             <Select
                                 inputId="local-media-profile"
-                                classNamePrefix="select"
                                 options={mediaProfileReg.options}
                                 value={mediaProfileReg.options.find(o => Number(o.value) === field.value) ?? null}
                                 onChange={(opt) => field.onChange(opt ? Number(opt.value) : null)}
                                 isOptionDisabled={(opt) => usedLocalMediaProfiles.has(Number(opt.value))}
                                 classNames={{
-                                    option: ({data}) => requestedFormatProfiles.has(Number(data.value)) ? 'select__option--requested-format' : '',
-                                    singleValue: ({data}) => requestedFormatProfiles.has(Number(data.value)) ? 'select__single-value--requested-format' : '',
+                                    option: (data) => requestedFormatProfiles.has(Number(data.value)) ? 'select__option--requested-format' : '',
+                                    singleValue: (data) => requestedFormatProfiles.has(Number(data.value)) ? 'select__single-value--requested-format' : '',
                                 }}
                                 formatOptionLabel={(opt) => requestedPreferredFormat && requestedFormatProfiles.has(Number(opt.value))
                                     ? (

@@ -18,6 +18,7 @@ from .pending_checks import run_pending_checks
     allowed_resource_types=("system",),
     default_max_retries=0,
     tracks_progress=False,
+    findings=("changed", "published", "gone", "recovered", "deleted", "failed"),
 )
 async def check_pending_episodes(*, resource_id: int | None = None, progress=None) -> TaskResult:
     del resource_id, progress

@@ -203,7 +203,7 @@ function AddLocalMediaProfileForm({source, onDiscardDraft}: { source?: LocalMedi
         <section className="view" aria-labelledby="add-media-profile-title">
             <div className="view-header">
                 <h1 id="add-media-profile-title">{source ? 'Duplicate local media profile' : 'Add local media profile'}</h1>
-                {mode === 'collection' && <IndexingValuesEditorButton form={form}/>}
+                {mode === 'collection' && <IndexingValuesEditorButton form={form} className="btn" label="Indexing values"/>}
             </div>
 
             <RequestedFieldsProvider mode="create" origin={requestedOrigin(searchParams)}>

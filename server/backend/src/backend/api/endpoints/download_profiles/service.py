@@ -26,6 +26,7 @@ from backend.types.episode_types import EpisodePublishStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.utils.local_media_profiles import require_local_media_profile_type
 from backend.services.sites import collection_site_key
+from backend.services.unplayable_formats import collection_allows_unplayable_formats
 from task_manager.events.transactional import queue_event
 
 
@@ -173,6 +174,7 @@ def count_which_episodes(s: Session, collection: Collection, body: WhichEpisodes
     return WhichEpisodesAPIRead(
         total=result.total, unavailable=result.unavailable, filters=result.counts,
         downloaded=len(result.wanted), episodes=page, episodes_total=listed,
+        unplayable_formats=collection_allows_unplayable_formats(collection),
     )
 
 

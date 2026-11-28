@@ -1,7 +1,7 @@
 import {useCallback, useMemo, useRef, useState} from 'react'
 import {can} from '../lib/access'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
-import {type LocalMediaProfileTableFilters, type LocalMediaProfileTableRow, useLocalMediaProfileTableSites, useLocalMediaProfilesTable} from '../lib/queries'
+import {type LocalMediaProfileTableFilters, type LocalMediaProfileTableRow, useLocalMediaProfileSites, useLocalMediaProfileTableSites, useLocalMediaProfilesTable} from '../lib/queries'
 import ProfileTableFilters, {FORMAT_OPTIONS} from '../components/common/ProfileTableFilters'
 import {ChipFilter} from '../components/common/FilterBar'
 import LoadMore from '../components/common/LoadMore'
@@ -11,6 +11,7 @@ import {
     LocalMediaProfileTypeReg,
     PreferredFormatReg,
     CollectionLocalMediaProfileScopeReg,
+    VideoLocalMediaProfileScopeReg,
 } from "../types/local_media_profile";
 import {faIcon} from '../icons/faIcon'
 import DataTable, { Column } from '../components/DataTable/DataTable';
@@ -35,6 +36,7 @@ const SIMPLIFY_OUTPUT_PATHS = true
 const USED_FOR_OPTIONS = [
     {value: 'podcast', label: 'Podcasts'},
     {value: 'series', label: 'Series'},
+    {value: 'music', label: 'Music'},
     {value: 'video', label: 'Videos and movies'},
 ]
 
@@ -94,10 +96,11 @@ const BULK_FIELDS: BulkFieldSpec[] = [
     },
 ]
 
-function getAvailableForLabel(profile: LocalMediaProfileRead) {
-    return profile.type === 'collection'
-        ? CollectionLocalMediaProfileScopeReg.getLabelLoose(profile.collectionScope)
-        : 'Movies'
+function getAvailableForLabel(profile: LocalMediaProfileRead, movieSites: boolean) {
+    if (profile.type === 'collection') return CollectionLocalMediaProfileScopeReg.getLabelLoose(profile.collectionScope)
+    // Without a Site that has movies, a profile for videos and movies keeps single videos only.
+    if (!movieSites && profile.videoScope === 'both') return VideoLocalMediaProfileScopeReg.getLabelLoose('videos')
+    return VideoLocalMediaProfileScopeReg.getLabelLoose(profile.videoScope)
 }
 
 export default function LocalMediaProfilesPage() {
@@ -106,6 +109,11 @@ export default function LocalMediaProfilesPage() {
     const deleteIcon: IconProp = faIcon('fass', 'trash')
 
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
+    const {data: profileSites} = useLocalMediaProfileSites()
+    const movieSites = profileSites?.sites.some((site) => site.movies) ?? true
+    // Without a Site that has movies, Video profiles keep single videos only.
+    const usedForOptions = movieSites ? USED_FOR_OPTIONS
+        : USED_FOR_OPTIONS.map((option) => option.value === 'video' ? {...option, label: 'Videos'} : option)
 
     const columns: Column<LocalMediaProfileTableRow>[] = [
         {
@@ -141,7 +149,7 @@ export default function LocalMediaProfilesPage() {
         },
         {
             header: 'Available for',
-            accessor: getAvailableForLabel,
+            accessor: (p) => getAvailableForLabel(p, movieSites),
             width: '1%',
             headerStyle: {whiteSpace: 'nowrap'},
             cellStyle: {whiteSpace: 'nowrap'},
@@ -199,7 +207,7 @@ export default function LocalMediaProfilesPage() {
                 leading={<SelectAll selection={selection} filtered={activeCount > 0 || !!filters.search}/>}
             >
                 <ChipFilter label="Site" options={siteOptions} selected={filters.site ?? []} onChange={(site) => setFilters((current) => ({...current, site}))}/>
-                <ChipFilter label="Used for" options={USED_FOR_OPTIONS} selected={filters.usedFor ?? []} onChange={(usedFor) => setFilters((current) => ({...current, usedFor}))}/>
+                <ChipFilter label="Used for" options={usedForOptions} selected={filters.usedFor ?? []} onChange={(usedFor) => setFilters((current) => ({...current, usedFor}))}/>
                 <ChipFilter label="Format" options={FORMAT_OPTIONS} selected={filters.format ?? []} onChange={(format) => setFilters((current) => ({...current, format}))}/>
                 <ChipFilter label="Storage" options={STORAGE_OPTIONS} selected={filters.storage ?? []} onChange={(storage) => setFilters((current) => ({...current, storage}))}/>
             </ProfileTableFilters>
@@ -221,7 +229,7 @@ export default function LocalMediaProfilesPage() {
                             <span className="mobile-summary-title">{p.name}</span>
                             <span className="mobile-summary-meta">
                                 <span>{LocalMediaProfileTypeReg.getLabelLoose(p.type)}</span>
-                                <span>{getAvailableForLabel(p)}</span>
+                                <span>{getAvailableForLabel(p, movieSites)}</span>
                                 <span>{PreferredFormatReg.getLabelLoose(p.preferredFormat)}</span>
                                 <span>{formatBytes(p.storageSizeBytes) || '0 KiB'}</span>
                             </span>

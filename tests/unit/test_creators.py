@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from progress_plan import PlanTracker, StageSpec
-from sources import CreatorDetails, Feature, Names, SectionKind, SectionRef, SectionRole, SectionType, Site, registry
+from sources import CreatorDetails, Feature, ListOrder, Names, SectionKind, SectionRef, SectionRole, SectionType, Site, registry
 from test_ytdlp_collections import ListedSource, session  # noqa: F401
 
 ROOT = "https://tube.example/@workshop"
@@ -29,7 +29,7 @@ class CreatorSource(ListedSource):
     domains = ("tube.example",)
     features = ListedSource.features | {Feature.CREATORS}
     sites = (Site(
-        "tube", "Tube", ("tube.example",), creators=True, section_types=(VIDEOS, SHORTS, PLAYLISTS), link_seasons=True,
+        "tube", "Tube", ("tube.example",), creators=True, section_types=(VIDEOS, SHORTS, PLAYLISTS), link_seasons=True, list_order=ListOrder.OLDEST_FIRST,
         channel_collection_names=Names("channel", "channels"), list_collection_names=Names("playlist", "playlists"),
     ),)
 
@@ -145,9 +145,9 @@ def test_a_collection_of_a_channel_is_a_channel_with_the_channel_defaults(tube, 
 
     collection = _collection(session, "workshop")
     assert collection.kind == "channel"
-    # Every list is a season, whole, and the channel season holds the whole channel, as a channel shows itself.
-    assert (collection.link_seasons, collection.outside_videos, collection.repeat_videos, collection.channel_season) == (
-        "all", "add", "each_season", "everything",
+    # Its lists are on, each whole, and the channel season holds the whole channel, as a channel shows itself.
+    assert (collection.link_seasons, collection.outside_videos, collection.repeat_videos, collection.loose_videos) == (
+        "on", "add", "each_season", "everything",
     )
 
 
@@ -293,13 +293,13 @@ def test_deleting_a_creator_keeps_its_collections(client, session):
     assert collection is not None and collection.creator_id is None
 
 
-def test_a_site_can_have_a_channel_collection_make_only_the_lists_picked_seasons(tube, session, monkeypatch):
+def test_a_site_can_have_a_channel_collection_put_a_video_in_the_first_of_its_lists_only(tube, session, monkeypatch):
     from dataclasses import replace
 
-    monkeypatch.setattr(CreatorSource, "sites", (replace(CreatorSource.sites[0], every_list_a_season=False, whole_lists=False),))
+    monkeypatch.setattr(CreatorSource, "sites", (replace(CreatorSource.sites[0], whole_lists=False),))
     _add("workshop", ROOT)
     collection = _collection(session, "workshop")
-    assert (collection.link_seasons, collection.repeat_videos) == ("selected", "one_season")
+    assert (collection.link_seasons, collection.repeat_videos) == ("on", "one_season")
 
 
 def test_a_channel_collection_on_a_site_without_list_seasons_keeps_its_seasons_as_they_are(tube, session, monkeypatch):
@@ -321,3 +321,41 @@ def test_a_channel_collection_says_in_words_what_its_seasons_will_be(tube, sessi
     plan = seasons_plan(_collection(session, "workshop"))
     assert plan.startswith("Every creator playlist becomes a season in VODLoft.")
     assert "also those in a playlist" in plan
+
+
+def test_a_creators_own_ytdlp_options_reach_its_collections_before_their_own(client, session, monkeypatch):
+    from backend.services.source_options import ytdlp_call_options
+    from sources import ytdlp_runner
+
+    _add("workshop", ROOT)
+    lines = [json.loads(line) for line in client.get("/api/collections/workshop/creator/match").text.splitlines()]
+    joined = client.post("/api/collections/workshop/creator", json={"lookupId": lines[-1]["match"]["lookupId"]})
+    assert joined.status_code == 200, joined.text
+
+    # A Source without your own yt-dlp options has no field for them.
+    page = client.get("/api/creators/workshop").json()
+    assert (page["takesYtdlpOptions"], page["ytdlpOptions"]) == (False, "")
+    refused = client.patch("/api/creators/workshop", json={"ytdlpOptions": "--impersonate chrome"})
+    assert refused.status_code == 422
+
+    monkeypatch.setattr(CreatorSource, "features", CreatorSource.features | {Feature.YTDLP_OPTIONS})
+    assert client.get("/api/creators/workshop").json()["takesYtdlpOptions"] is True
+    # The same lines are refused as for a collection.
+    blocked = client.patch("/api/creators/workshop", json={"ytdlpOptions": "-o out.mp4"})
+    assert blocked.status_code == 422
+    assert blocked.json()["detail"][0]["loc"][-1] == "ytdlpOptions"
+
+    saved = client.patch("/api/creators/workshop", json={"ytdlpOptions": "--impersonate chrome\n--proxy http://a:1\n"})
+    assert saved.json()["ytdlpOptions"] == "--impersonate chrome\n--proxy http://a:1"
+    # Leaving them out keeps them.
+    assert client.patch("/api/creators/workshop", json={"genre": "DIY"}).json()["ytdlpOptions"].startswith("--impersonate")
+
+    collection = _collection(session, "workshop")
+    collection.ytdlp_options = "--proxy http://b:2"
+    assert collection.ytdlp_option_texts == ("--impersonate chrome\n--proxy http://a:1", "--proxy http://b:2")
+    with ytdlp_call_options("tube", *collection.ytdlp_option_texts, session=session):
+        # yt-dlp takes the last of an option given twice: the collection's own proxy.
+        assert ytdlp_runner.command()[-6:] == (
+            "--impersonate", "chrome", "--proxy", "http://a:1", "--proxy", "http://b:2",
+        )
+    session.rollback()

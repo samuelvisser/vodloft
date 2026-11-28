@@ -261,7 +261,7 @@ _NOT_NEEDED: dict[str, str] = {
     **dict.fromkeys(
         ("overwrites", "continue_dl", "nopart", "retries", "fragment_retries", "file_access_retries",
          "extractor_retries", "concurrent_fragment_downloads", "socket_timeout", "ignoreerrors",
-         "cachedir", "updatetime", "buffersize", "http_chunk_size"),
+         "cachedir", "buffersize", "http_chunk_size"),
         "VODLoft runs the download and its retries itself",
     ),
     "clean_infojson": "VODLoft keeps the video's information itself",
@@ -272,6 +272,7 @@ _NOT_NEEDED: dict[str, str] = {
 }
 _UNSUPPORTED: dict[str, str] = {
     "trim_file_name": "VODLoft has no file name length setting yet",
+    "updatetime": "The file date is set on the Local Media Profile",
     "format": "The profile's quality setting decides the format; VODLoft has no custom format strings",
     "format_sort": "The profile's quality setting decides the format; VODLoft has no custom format sorting",
     "merge_output_format": "Existing files keep their extension; new downloads follow VODLoft's container setting",
@@ -279,10 +280,10 @@ _UNSUPPORTED: dict[str, str] = {
     "recodevideo": "Existing files keep their extension; new downloads follow VODLoft's container setting",
     "subtitleslangs": "The Local Media Profile's subtitle languages",
     "writeautomaticsub": "Auto-generated subtitles are set on each YouTube Download Profile",
-    "match_filter": "VODLoft has no download filters yet",
+    "match_filter": "Which episodes to download is set on the Download Profile",
     "sponsorblock_remove": "SponsorBlock is set on each YouTube Download Profile",
     "sponsorblock_mark": "SponsorBlock is set on each YouTube Download Profile",
-    "ratelimit": "VODLoft has no download speed limit",
+    "ratelimit": "The download speed limit in Settings › Downloads",
     "cookiefile": "Cookies are imported with the rest of the Pinchflat data, not from an option",
     "addchapters": "VODLoft does not embed chapters yet",
     "embed_infojson": "VODLoft does not embed the information file",

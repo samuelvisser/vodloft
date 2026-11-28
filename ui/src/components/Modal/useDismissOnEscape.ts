@@ -6,8 +6,7 @@ type OpenModal = {dismiss: () => void, enabled: boolean}
 // before the dialog under it.
 const openModals: OpenModal[] = []
 
-// Escapes pressed in a select whose menu was closed. react-select prevents the default of every Escape, also when it
-// had no menu open to close, so those still reach the modal.
+// Escapes pressed in a select whose menu was closed, which had no menu to close, so they still reach the modal.
 const passedOn = new WeakSet<KeyboardEvent>()
 
 function onKeyDownCapture(event: KeyboardEvent) {

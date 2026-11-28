@@ -103,6 +103,8 @@ export const SearchSiteReadSchema = z.object({
     key: z.string(),
     name: z.string(),
     costlySearch: z.boolean(),
+    /** What the Site's search cannot find, and how to add it anyway, shown above its search. */
+    searchNote: z.string().nullable().optional(),
     /** The Site is added to VODLoft, so Add Media offers its search. */
     added: z.boolean(),
     /** The Source can search the Site now: one whose search goes through its own API once that is set up. */
@@ -138,8 +140,24 @@ export function sourceHas(source: SourceRead | null | undefined, feature: Source
     return !!source?.features.includes(feature)
 }
 
+/** Whether VODLoft shows the Source: one made for some Sites, such as The Daily Wire, only while one of them is
+ *  added to VODLoft; a Source of many sites always. */
+export function sourceShown(source: SourceRead): boolean {
+    return !source.sites.length || source.sites.some((site) => site.added)
+}
+
 /** The links of a description that are on a Site VODLoft knows for media. */
 export const MediaLinksReadSchema = z.object({urls: z.array(z.string())})
+export const MediaLinkCheckReadSchema = z.object({works: z.boolean()})
+
+/** What a link shows: its title, description, picture and maker. A lookup may send one early from a quicker look. */
+export const LinkPreviewReadSchema = z.object({
+    title: z.string(),
+    description: z.string().nullable(),
+    imageUrl: z.string().nullable(),
+    authorName: z.string().nullable(),
+})
+export type LinkPreviewRead = z.infer<typeof LinkPreviewReadSchema>
 
 export const ResolvedLinkReadSchema = z.object({
     source: SourceReadSchema,
@@ -155,12 +173,7 @@ export const ResolvedLinkReadSchema = z.object({
     accessLabel: z.string().nullable().optional().default(null),
     accessDescription: z.string().nullable().optional().default(null),
     accessLocked: z.boolean().optional().default(false),
-    preview: z.object({
-        title: z.string(),
-        description: z.string().nullable(),
-        imageUrl: z.string().nullable(),
-        authorName: z.string().nullable(),
-    }),
+    preview: LinkPreviewReadSchema,
     /** For a collection: whether it is a channel or one list. */
     collectionKind: z.enum(['channel', 'list']).nullable().optional().default(null),
     /** For a collection on a Site with creators, which can be in one: what its Site calls the creator behind it, such
@@ -170,6 +183,18 @@ export const ResolvedLinkReadSchema = z.object({
     candidates: z.array(SourceReadSchema),
 })
 export type ResolvedLinkRead = z.infer<typeof ResolvedLinkReadSchema>
+
+/** A quick first look at a link while the full lookup runs, with what the link is when its Source can already tell
+ * from the link alone, so the user can go on with it. */
+export const LinkFirstLookReadSchema = LinkPreviewReadSchema.extend({
+    /** None for a link that says what it is without a quick title, such as a YouTube channel's. */
+    title: z.string().nullable(),
+    source: SourceReadSchema,
+    kind: z.enum(['collection', 'movie', 'episode', 'video', 'creator']).nullable().optional().default(null),
+    slug: z.string().nullable().optional().default(null),
+    url: z.string().nullable().optional().default(null),
+})
+export type LinkFirstLookRead = z.infer<typeof LinkFirstLookReadSchema>
 
 export const SearchResultReadSchema = z.object({
     kind: z.enum(['collection', 'movie', 'episode', 'video']),
@@ -335,6 +360,26 @@ export const SiteApiReadSchema = z.object({
 })
 export type SiteApiRead = z.infer<typeof SiteApiReadSchema>
 
+/** How the user signs in with their account on a Site: an email and password, a token, or a code on the Site's page. */
+export const AccountSignInReadSchema = z.object({
+    kind: z.enum(['password', 'token', 'device_code']),
+    benefits: z.string(),
+    fields: z.array(z.object({key: z.string(), label: z.string(), secret: z.boolean()})),
+    steps: z.array(z.object({text: z.string(), button: z.string().nullable(), url: z.string().nullable()})),
+    /** What the user should know before signing in, such as that the Site may stop allowing it. */
+    caution: z.string().nullable(),
+})
+export type AccountSignInRead = z.infer<typeof AccountSignInReadSchema>
+
+/** A sign-in with a code that has started: the user enters ``userCode`` at ``verificationUrl``. */
+export const CodeSignInReadSchema = z.object({
+    id: z.string(),
+    userCode: z.string(),
+    verificationUrl: z.string(),
+    expiresIn: z.number(),
+})
+export type CodeSignInRead = z.infer<typeof CodeSignInReadSchema>
+
 export const SiteAuthenticationReadSchema = z.object({
     key: z.string(),
     name: z.string(),
@@ -359,6 +404,14 @@ export const SiteAuthenticationReadSchema = z.object({
         problem: z.string().nullable(),
         setUp: z.boolean(),
     }).nullable().default(null),
+    /** How the user signs in with their account on the Site, on a Site that offers it. */
+    accountSignIn: AccountSignInReadSchema.nullable().default(null),
+    /** Whether the user signed in with their account, as who, and the last problem with the sign-in. */
+    accountStatus: z.object({
+        signedIn: z.boolean(),
+        account: z.string().nullable(),
+        problem: z.string().nullable(),
+    }).nullable().default(null),
     /** The user can remove the Site: VODLoft has nothing from it and no Source is made for it. */
     removable: z.boolean(),
 })
@@ -367,6 +420,23 @@ export type SiteAuthenticationRead = z.infer<typeof SiteAuthenticationReadSchema
 /** A Site added by a link to it. */
 export const SiteAddedReadSchema = z.object({key: z.string(), name: z.string()})
 export type SiteAddedRead = z.infer<typeof SiteAddedReadSchema>
+
+/** A Site the user can pick as one they use: a popular one VODLoft suggests, or one already added. */
+export const SiteChoiceReadSchema = z.object({
+    key: z.string(),
+    name: z.string(),
+    /** What VODLoft adds from the Site, in a few words. */
+    pitch: z.string().nullable(),
+    /** VODLoft knows the Site already. */
+    added: z.boolean(),
+    /** One of the popular Sites VODLoft suggests, rather than one only added before. */
+    suggested: z.boolean(),
+    /** The Site starts picked, such as YouTube in onboarding. */
+    picked: z.boolean(),
+    icon: z.string().nullable(),
+    initials: z.string(),
+})
+export type SiteChoiceRead = z.infer<typeof SiteChoiceReadSchema>
 
 
 /** A collection at a Source with listed episodes, shaped like the fields of a new collection. */

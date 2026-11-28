@@ -8,7 +8,7 @@ import logging
 import re
 from collections import Counter
 from dataclasses import replace
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import ClassVar
 from urllib.parse import urlsplit, urlunsplit
@@ -17,11 +17,13 @@ import requests
 
 from progress_plan import PlanTracker, StageSpec
 
-from ...contract import CollectionDetails, CreatorDetails, SearchResults, SectionKind, SectionRef
+from ...contract import CollectionDetails, CreatorDetails, SearchResults, SectionKind, SectionRef, SignInRejected
+from ...site_accounts import SignedIn, cookie_line
 from ... import ytdlp_runner as runner
-from .. import sites, soundcloud_search, thumbnails
-from ..site_contracts.soundcloud import ALBUM_LIST, PLAYLIST_LIST
+from .. import sites, soundcloud_account, soundcloud_search, thumbnails
+from ..site_contracts.soundcloud import ALBUM_LIST, PLAYLIST_LIST, SOUNDCLOUD_TOKEN
 from .other_sites import OtherSitesImplementation
+from sources.ytdlp_options import keep_call_options
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +94,7 @@ class ArtistImplementation(OtherSitesImplementation):
         # Named by what the Site calls its lists, such as "albums and playlists" on SoundCloud.
         lists = self.site.section_list_names.plural
         found: dict[str, dict] = {}
-        with ThreadPoolExecutor(max_workers=_LOOKUPS_AT_ONCE) as pool:
+        with ThreadPoolExecutor(max_workers=_LOOKUPS_AT_ONCE, **keep_call_options()) as pool:
             # The artist's feeds and pictures are read beside their lists. The feeds are quick, so their steps come
             # first and the lists, which take longest, last.
             listings = self.read_feeds(root, pool, plan)
@@ -215,7 +217,7 @@ class BandcampImplementation(ArtistImplementation):
         if newest_albums is not None:
             album_links = album_links[:newest_albums]
         tracks: list[dict] = []
-        with ThreadPoolExecutor(max_workers=_LOOKUPS_AT_ONCE) as pool:
+        with ThreadPoolExecutor(max_workers=_LOOKUPS_AT_ONCE, **keep_call_options()) as pool:
             for found in pool.map(lambda link: _album_tracks(link, cookies), album_links):
                 tracks += found
         # A track on no album is listed by its link alone, so it is looked up for its id.
@@ -236,6 +238,22 @@ class SoundCloudImplementation(ArtistImplementation):
 
     key = "soundcloud"
     list_keys = frozenset({ALBUM_LIST, PLAYLIST_LIST, "single"})
+
+    def sign_in(self, values: Mapping[str, str]) -> SignedIn:
+        """SoundCloud signs in with the token its website keeps in the ``oauth_token`` cookie, which yt-dlp reads."""
+        token = (values.get(SOUNDCLOUD_TOKEN) or "").strip()
+        if not token:
+            raise SignInRejected("Fill in your sign-in token", SOUNDCLOUD_TOKEN)
+        try:
+            account = soundcloud_account.account_of(token)
+        except Exception:
+            raise SignInRejected("Could not reach SoundCloud. Try again in a moment.") from None
+        if account is None:
+            raise SignInRejected(
+                "SoundCloud does not accept this token. Copy it again while you are signed in on soundcloud.com.",
+                SOUNDCLOUD_TOKEN,
+            )
+        return SignedIn(cookies=(cookie_line("soundcloud.com", "oauth_token", token),), account=account)
     music_pages = frozenset({"", "tracks"})
     # SoundCloud's own pages, which are not an artist's.
     _own_pages = frozenset({"discover", "search", "stream", "upload", "you", "charts", "pages", "people", "settings", "messages", "jobs"})

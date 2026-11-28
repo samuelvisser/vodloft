@@ -25,7 +25,7 @@ def test_event_trigger_is_idempotent_and_preserves_supported_payload(monkeypatch
     @registry_module.task(
         key="test_event_target",
         title="Test event target",
-        allowed_resource_types=("collection",),
+        allowed_resource_types=("collection",), findings=("found",),
     )
     async def target(*, resource_id=None, slug=None, collection_id=None, refresh=False, progress=None):
         return None
@@ -70,7 +70,7 @@ def test_disabled_cron_trigger_is_not_registered(monkeypatch):
     @registry_module.task(
         key="test_disabled_cron",
         title="Disabled cron",
-        allowed_resource_types=("collection",),
+        allowed_resource_types=("collection",), findings=("found",),
     )
     async def target(*, resource_id=None, progress=None):
         return None
@@ -95,7 +95,7 @@ def test_cron_minimum_interval_policy_is_opt_in(monkeypatch):
     @registry_module.task(
         key="test_paced_cron",
         title="Paced cron",
-        allowed_resource_types=("collection",),
+        allowed_resource_types=("collection",), findings=("found",),
     )
     async def paced(*, resource_id=None, progress=None):
         return None
@@ -104,7 +104,7 @@ def test_cron_minimum_interval_policy_is_opt_in(monkeypatch):
     @registry_module.task(
         key="test_unpaced_cron",
         title="Unpaced cron",
-        allowed_resource_types=("collection",),
+        allowed_resource_types=("collection",), findings=("found",),
     )
     async def unpaced(*, resource_id=None, progress=None):
         return None
@@ -145,7 +145,7 @@ def test_cron_trigger_preserves_none_and_zero_resource_scopes(monkeypatch):
     @registry_module.on_cron("0 * * * *", resource_id=None)
     @registry_module.task(
         key="test_cron_unscoped", title="Unscoped cron",
-        allowed_resource_types=("collection",),
+        allowed_resource_types=("collection",), findings=("found",),
     )
     async def unscoped(*, resource_id=None, progress=None):
         return None
@@ -153,7 +153,7 @@ def test_cron_trigger_preserves_none_and_zero_resource_scopes(monkeypatch):
     @registry_module.on_cron("0 * * * *", resource_id=0)
     @registry_module.task(
         key="test_cron_legacy_global", title="Legacy global cron",
-        allowed_resource_types=("collection",),
+        allowed_resource_types=("collection",), findings=("found",),
     )
     async def legacy(*, resource_id=None, progress=None):
         return None
@@ -170,3 +170,22 @@ def test_cron_trigger_preserves_none_and_zero_resource_scopes(monkeypatch):
         "test_cron_unscoped": None,
         "test_cron_legacy_global": 0,
     }
+
+
+def test_a_task_that_runs_on_its_own_must_name_its_findings(monkeypatch):
+    import pytest
+    import task_manager.scheduler.registry as registry_module
+
+    monkeypatch.setattr(registry_module, "_REGISTRY", {})
+
+    with pytest.raises(ValueError, match="findings"):
+        @registry_module.on_cron("* * * * *")
+        @registry_module.task(key="test_cron_without_findings", title="No findings")
+        async def target(*, resource_id=None, progress=None):
+            return None
+
+    with pytest.raises(ValueError, match="findings"):
+        @registry_module.on_event("test.entity.changed")
+        @registry_module.task(key="test_event_without_findings", title="No findings")
+        async def follower(*, resource_id=None, progress=None):
+            return None

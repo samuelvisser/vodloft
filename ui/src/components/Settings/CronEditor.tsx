@@ -2,7 +2,7 @@ import {useEffect, useMemo, useState} from 'react'
 import {toast} from '../../lib/toast'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {ReactNode} from 'react'
-import Select from '../common/ReactSelect'
+import Select from '../../components/common/Select'
 import Switch from 'react-switch'
 import {faIcon} from '../../icons/faIcon'
 
@@ -491,10 +491,9 @@ export default function CronEditor({
                         {mode === 'weekly' ? (
                             <label>
                                 <span>Days</span>
-                                <Select<WeekdayOption, true>
+                                <Select<WeekdayOption>
                                     inputId={`${id}-weekdays`}
                                     className="cron-editor__weekday-select"
-                                    classNamePrefix="select"
                                     isMulti
                                     isDisabled={disabled}
                                     closeMenuOnSelect={false}
@@ -502,9 +501,6 @@ export default function CronEditor({
                                     options={WeekdayReg.options}
                                     value={weekdayValues}
                                     placeholder="Select one or more days"
-                                    getOptionValue={(option) => option.value}
-                                    getOptionLabel={(option) => option.label}
-                                    styles={{menu: (base) => ({...base, zIndex: 20})}}
                                     onChange={(days) => updateParts({
                                         dayOfWeek: days.length
                                             ? days.map((day) => day.value).join(',')

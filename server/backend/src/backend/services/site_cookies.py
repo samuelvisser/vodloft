@@ -1,6 +1,6 @@
-"""Authentication per Site: a Site's own sign-in, such as The Daily Wire's, a cookies file per Site,
-the API key a Source uses on a Site, such as YouTube's, and a Site's own API the user registered VODLoft with, such
-as Twitch's.
+"""Authentication per Site: a Site's own sign-in, such as The Daily Wire's, a cookies file per Site, a sign-in with
+the user's account that a Source does on a Site, such as yt-dlp's on Nebula or Twitch, the API key a Source uses on a
+Site, such as YouTube's, and a Site's own API the user registered VODLoft with, such as Twitch's.
 
 Every Source that signs in with cookies uses the cookies file of the Site it fetches, so YouTube and Twitch
 each have their own file, and yt-dlp uses NPO Start's file when it fetches npo.nl. A cookies file that another
@@ -10,6 +10,9 @@ the cookies for its own domains.
 from __future__ import annotations
 
 import logging
+import secrets
+import threading
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
@@ -21,16 +24,16 @@ from sqlalchemy.orm import Session
 
 from backend.db.core import get_session, run_write_transaction
 from backend.db.models import Site as SiteRecord
-from backend.services.sites import SiteLinkError, remove_site, site_of_link, site_record, site_removable, sites_in_use
-from sources import ANY_DOMAIN, CookiesStatus, Feature, Site, SiteApi, SiteApiStatus, Source, all_sources, site_of, sources_for
+from backend.services.errors import ServiceError
+from backend.services.sites import SiteLinkError, add_suggested_sites, remove_site, site_choices, site_of_link, site_record, site_removable, sites_kept
+from sources import (
+    ANY_DOMAIN, GENERIC_PREFIX, AccountSignIn, AccountStatus, CookiesStatus, DeviceCode, Feature, SignInCodeEnded, Site, SiteApi,
+    SiteApiStatus, Source, all_sources, site_of, sources_for,
+)
 from sources import cookies as cookie_files
-from sources import site_api_keys
+from sources import site_accounts, site_api_keys
 
 logger = logging.getLogger(__name__)
-
-GENERIC_PREFIX = "generic:"
-"""The start of the key of a Site no Source knows, named after its domain."""
-
 
 class SiteNotKnownError(LookupError):
     pass
@@ -57,6 +60,11 @@ class SiteAuthentication:
     site_api: Optional[SiteApi]
     """The Site's own API that a Source uses with the user's credentials, such as Twitch's."""
     site_api_status: Optional[SiteApiStatus]
+    account_source_key: Optional[str]
+    """The Source that signs in with the user's account on the Site, such as yt-dlp on Nebula."""
+    account_sign_in: Optional[AccountSignIn]
+    """How the user signs in with their account on the Site, on a Site that offers it."""
+    account_status: Optional[AccountStatus]
     removable: bool
     """The user can remove the Site: VODLoft has nothing from it and no Source is made for it."""
 
@@ -122,7 +130,7 @@ def _status(site_key: str, sources: list[Source]) -> Optional[CookiesStatus]:
     return next((status for source in sources if (status := source.cookies_status(site_key)) is not None), None)
 
 
-def _authentication(site: Site, domains: tuple[str, ...], in_use: set[str]) -> SiteAuthentication:
+def _authentication(site: Site, domains: tuple[str, ...], kept: set[str]) -> SiteAuthentication:
     sources = _cookie_sources(site, domains)
     count = _cookie_count(site.key)
     owner = next(
@@ -135,6 +143,7 @@ def _authentication(site: Site, domains: tuple[str, ...], in_use: set[str]) -> S
         None,
     )
     api_source = _site_api_source(site, domains)
+    account_source = _account_source(site, domains)
     return SiteAuthentication(
         key=site.key, name=site.name, domains=domains, sign_in_source_key=owner.id if owner is not None else None,
         cookie_source_keys=tuple(source.id for source in sources),
@@ -143,7 +152,10 @@ def _authentication(site: Site, domains: tuple[str, ...], in_use: set[str]) -> S
         api_key_source_key=api_key.id if api_key is not None else None,
         site_api=site.site_api if api_source is not None else None,
         site_api_status=api_source.site_api_status(site) if api_source is not None else None,
-        removable=site_removable(site.key, in_use),
+        account_source_key=account_source.id if account_source is not None else None,
+        account_sign_in=site.account_sign_in if account_source is not None else None,
+        account_status=account_source.account_status(site) if account_source is not None else None,
+        removable=site_removable(site.key, kept),
     )
 
 
@@ -152,6 +164,109 @@ def _site_api_source(site: Site, domains: tuple[str, ...]) -> Optional[Source]:
     if site.site_api is None or not domains:
         return None
     return next((source for source in sources_for(f"https://{domains[0]}/") if source.has(Feature.SITE_API)), None)
+
+
+def _account_source(site: Site, domains: tuple[str, ...]) -> Optional[Source]:
+    """The Source that signs in with the user's account on the Site, on a Site that offers it."""
+    if site.account_sign_in is None or not domains:
+        return None
+    return next((source for source in sources_for(f"https://{domains[0]}/") if source.has(Feature.ACCOUNT_SIGN_IN)), None)
+
+
+def _with_account(site_key: str) -> tuple[Site, Source]:
+    with _reading() as s:
+        known = _known_sites(s).get(site_key)
+    if known is None:
+        raise SiteNotKnownError(f"VODLoft does not know the Site '{site_key}'")
+    site, domains = known
+    source = _account_source(site, domains)
+    if source is None:
+        raise SiteNotKnownError(f"VODLoft can't sign in on {site.name} with an account")
+    return site, source
+
+
+@dataclass
+class _CodeSignIn:
+    site_key: str
+    code: DeviceCode
+    ends: float
+    stop: threading.Event
+
+
+_code_sign_ins: dict[str, _CodeSignIn] = {}
+"""The sign-ins with a code that have started, by the id the UI waits on them with. The Site's own code stays here."""
+_code_lock = threading.Lock()
+
+
+@dataclass(frozen=True)
+class StartedCodeSignIn:
+    """A sign-in with a code that has started: the user enters ``user_code`` at ``verification_url``, and the UI
+    waits for it with ``id``."""
+
+    id: str
+    user_code: str
+    verification_url: str
+    expires_in: int
+
+
+def sign_in_account(site_key: str, values: dict[str, str]) -> SiteAuthentication:
+    """Sign in with the user's account on the Site with what they filled in, such as an email address and password.
+    Raises SignInRejected when the Site does not accept it."""
+    site, source = _with_account(site_key)
+    source.sign_in(site, values)
+    logger.info("Signed in on %s with an account", site.name)
+    return _listing(site_key)
+
+
+def start_code_sign_in(site_key: str) -> StartedCodeSignIn:
+    """Ask the Site for a code the user enters on its own page."""
+    site, source = _with_account(site_key)
+    code = source.start_code_sign_in(site)
+    started = _CodeSignIn(site_key, code, time.monotonic() + code.expires_in, threading.Event())
+    flow_id = secrets.token_urlsafe(16)
+    with _code_lock:
+        for known_id, known in list(_code_sign_ins.items()):
+            if known.ends < time.monotonic():
+                _code_sign_ins.pop(known_id, None)
+        _code_sign_ins[flow_id] = started
+    return StartedCodeSignIn(flow_id, code.user_code, code.verification_url, code.expires_in)
+
+
+def finish_code_sign_in(site_key: str, flow_id: str) -> SiteAuthentication:
+    """Wait until the user entered the code of a sign-in that started, then keep the sign-in. Raises SignInCodeEnded
+    when the code ran out, the user turned it down or signed out meanwhile."""
+    with _code_lock:
+        started = _code_sign_ins.get(flow_id)
+    if started is None or started.site_key != site_key:
+        raise SignInCodeEnded("This code is no longer valid. Start again for a new code.")
+    site, source = _with_account(site_key)
+    try:
+        source.finish_code_sign_in(site, started.code, started.stop.wait)
+    finally:
+        with _code_lock:
+            _code_sign_ins.pop(flow_id, None)
+    logger.info("Signed in on %s with a code", site.name)
+    return _listing(site_key)
+
+
+def cancel_code_sign_in(site_key: str, flow_id: str) -> None:
+    """Stop waiting for the code of a sign-in that started, such as when the user chose Cancel."""
+    with _code_lock:
+        started = _code_sign_ins.get(flow_id)
+    if started is not None and started.site_key == site_key:
+        started.stop.set()
+
+
+def sign_out_account(site_key: str) -> SiteAuthentication:
+    """Forget the account sign-in on the Site, and stop every sign-in with a code that is waiting there."""
+    site, source = _with_account(site_key)
+    with _code_lock:
+        for started in _code_sign_ins.values():
+            if started.site_key == site_key:
+                started.stop.set()
+    source.sign_out(site)
+    logger.info("Signed out of %s", site.name)
+    return _listing(site_key)
 
 
 def _with_site_api(site_key: str) -> tuple[Site, Source, tuple[str, ...]]:
@@ -169,7 +284,7 @@ def _with_site_api(site_key: str) -> tuple[Site, Source, tuple[str, ...]]:
 def _listing(site_key: str) -> SiteAuthentication:
     with _reading() as s:
         site, domains = _known_sites(s)[site_key]
-        return _authentication(site, domains, sites_in_use(s))
+        return _authentication(site, domains, sites_kept(s))
 
 
 def save_site_api(site_key: str, values: dict[str, str]) -> SiteAuthentication:
@@ -195,15 +310,15 @@ def remove_site_api(site_key: str) -> SiteAuthentication:
 
 def list_site_authentication(s: Session) -> list[SiteAuthentication]:
     """Every Site VODLoft knows, with how it signs in there, in the order VODLoft got them."""
-    in_use = sites_in_use(s)
-    return [_authentication(site, domains, in_use) for site, domains in _known_sites(s).values()]
+    kept = sites_kept(s)
+    return [_authentication(site, domains, kept) for site, domains in _known_sites(s).values()]
 
 
 def site_authentication(s: Session, site_key: str) -> SiteAuthentication:
     known = _known_sites(s)
     if site_key not in known:
         raise SiteNotKnownError(f"VODLoft does not know the Site '{site_key}'")
-    return _authentication(*known[site_key], sites_in_use(s))
+    return _authentication(*known[site_key], sites_kept(s))
 
 
 def _changed(site: Site, domains: tuple[str, ...]) -> None:
@@ -232,7 +347,7 @@ def save_site_cookies(s: Session, site_key: str, content: bytes) -> SiteAuthenti
     cookie_files.store_site_cookies(site_key, lines)
     _changed(site, domains)
     logger.info("Stored a cookies file for %s with %s cookies", site.name, len(lines))
-    return _authentication(site, domains, sites_in_use(s))
+    return _authentication(site, domains, sites_kept(s))
 
 
 def remove_site_cookies(s: Session, site_key: str) -> SiteAuthentication:
@@ -242,7 +357,7 @@ def remove_site_cookies(s: Session, site_key: str) -> SiteAuthentication:
     site, domains = known[site_key]
     cookie_files.remove_site_cookies(site_key)
     _changed(site, domains)
-    return _authentication(site, domains, sites_in_use(s))
+    return _authentication(site, domains, sites_kept(s))
 
 
 def remove_known_site(site_key: str) -> None:
@@ -254,10 +369,30 @@ def remove_known_site(site_key: str) -> None:
         raise SiteNotKnownError(f"VODLoft does not know the Site '{site_key}'")
     run_write_transaction(lambda s: remove_site(s, site_key))
     site_api_keys.remove(site_key)
+    site_accounts.remove(site_key)
     if cookie_files.site_cookies(site_key) is not None:
         cookie_files.remove_site_cookies(site_key)
         _changed(*known)
     logger.info("Removed the site %s", known[0].name)
+
+
+def pick_sites(keys: list[str]) -> None:
+    """Make the picked Sites the ones VODLoft knows, such as in onboarding: add the suggested ones it does not know
+    yet, then remove every other Site that has nothing in VODLoft. A Site picked must be suggested or known, and at
+    least one is picked, so VODLoft always keeps one."""
+    wanted = set(keys)
+    if not wanted:
+        raise ServiceError("Pick at least one site", status_code=422, field="keys")
+    with _reading() as s:
+        choices = {choice.key for choice in site_choices(s)}
+    unknown = sorted(wanted - choices)
+    if unknown:
+        raise ServiceError(f"VODLoft does not know the site '{unknown[0]}'. Add it by its address first", status_code=422, field="keys")
+    run_write_transaction(lambda s: add_suggested_sites(s, wanted))
+    with _reading() as s:
+        dropped = [key for key in _known_sites(s) if key not in wanted and site_removable(key, sites_kept(s))]
+    for key in dropped:
+        remove_known_site(key)
 
 
 def sites_for_cookies(s: Session, content: bytes) -> list[Site]:

@@ -12,6 +12,7 @@ from ..contract import (
     CookiesStatus, DownloadOptions, SiteSetting, SiteSettings, SourceProblem, UpgradeChecks, UpgradeImprovement, UpgradeOffer, VideoDetails,
 )
 from .. import ytdlp_runner as runner
+from progress_plan import PlanTracker
 from . import account
 from .client import ORIGIN, NpoClient, NpoError, NpoNotFoundError
 
@@ -206,24 +207,29 @@ class NpoSource(Source):
             raise NpoNotFoundError("NPO Start does not know this series")
         return series
 
-    def resolve(self, url: str) -> ResolvedLink | None:
+    def resolve(self, url: str, plan: PlanTracker | None = None) -> ResolvedLink | None:
         parsed = parse_link(url)
         if parsed is None:
             return None
+        plan = plan or PlanTracker()
         kind, slug = parsed
         try:
             if kind is LinkKind.COLLECTION:
-                collection = self._collection(self._series(slug))
+                with plan.step("npo_series", f"Reading the series at {self.name}"):
+                    collection = self._collection(self._series(slug))
                 return ResolvedLink(
                     kind=LinkKind.COLLECTION, slug=collection.slug, url=collection.url, title=collection.title,
                     description=collection.description, image_url=collection.image_url, author_name=collection.author_name,
                 )
-            program = self._client.program_detail(slug)
+            with plan.step("npo_program", f"Reading the program at {self.name}"):
+                program = self._client.program_detail(slug)
         except NpoNotFoundError:
             return None
         if not program.get("slug"):
             return None
-        return self._program_link(program, drm_protected=bool(self._protected(program)))
+        with plan.step("npo_protection", "Checking whether the program is copy protected"):
+            protected = bool(self._protected(program))
+        return self._program_link(program, drm_protected=protected)
 
     def _program_link(self, program: dict, *, drm_protected: bool = False) -> ResolvedLink:
         video = self._video(program, drm_protected=drm_protected)
@@ -366,7 +372,7 @@ class NpoSource(Source):
             return Playback(url=stream_url, drm_protected=True)
         # The stream keeps its audio in a rendition of its own, which yt-dlp joins to the video. The
         # stream's link is signed already, so yt-dlp needs no cookies for it.
-        return Playback(url=stream_url, kind=PlaybackKind.YTDLP, command=runner.command())
+        return Playback(url=stream_url, kind=PlaybackKind.YTDLP, command=runner.command(warnings=True))
 
     @property
     def download_streams(self) -> int | None:
@@ -389,7 +395,7 @@ class NpoSource(Source):
             return [SourceProblem(
                 "NPO sign-in expired",
                 "The NPO cookies file no longer signs in, so programmes that need NPO Plus wait. Sign in on npo.nl "
-                "and choose a new cookies file under Settings › Sources › Authentication. Free programmes keep downloading.",
+                "and choose a new cookies file under Settings › Sites › Authentication. Free programmes keep downloading.",
                 fix_url=f"{ORIGIN}/start",
             )]
         if not status.subscription:
@@ -403,7 +409,7 @@ class NpoSource(Source):
             return [SourceProblem(
                 "NPO sign-in expires soon",
                 f"The NPO cookies file stops working on {status.expires_at:%d %B}. Sign in on npo.nl and choose a "
-                "new cookies file under Settings › Sources › Authentication.",
+                "new cookies file under Settings › Sites › Authentication.",
                 fix_url=f"{ORIGIN}/start",
             )]
         return []

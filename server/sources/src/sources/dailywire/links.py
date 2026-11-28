@@ -5,6 +5,8 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from ..contract import LinkKind, Names, ResolvedLink
+from progress_plan import PlanTracker
+
 from .api.dw_api.client import MiddlewareClient
 from .api.dw_api.movie import MovieMiddlewareClient
 from .auth import DeviceAuthClient
@@ -55,7 +57,9 @@ def host_url(slug: str) -> str:
     return f"{SITE_URL}/hosts/{slug}"
 
 
-def resolve_link(url: str) -> ResolvedLink | None:
+def resolve_link(url: str, plan: PlanTracker | None = None) -> ResolvedLink | None:
+    """What a link to The Daily Wire points to, each request to The Daily Wire a step of ``plan``."""
+    plan = plan or PlanTracker()
     parsed = parse_link(url)
     if parsed is None:
         return None
@@ -63,7 +67,8 @@ def resolve_link(url: str) -> ResolvedLink | None:
     token = _access_token()
 
     if kind is LinkKind.COLLECTION:
-        show = MiddlewareClient(access_token=token, request_priority="interactive").get_show_page(slug=slug)
+        with plan.step("dailywire_show", "Reading the show at The Daily Wire"):
+            show = MiddlewareClient(access_token=token, request_priority="interactive").get_show_page(slug=slug)
         return ResolvedLink(
             kind=kind,
             slug=show.slug,
@@ -76,7 +81,8 @@ def resolve_link(url: str) -> ResolvedLink | None:
 
     if kind is LinkKind.CREATOR:
         # A host's page lists their shows, which the Browse page's catalogue names them by.
-        catalog = MiddlewareClient(access_token=token, request_priority="interactive").get_catalog()
+        with plan.step("dailywire_catalog", "Reading The Daily Wire's shows and movies"):
+            catalog = MiddlewareClient(access_token=token, request_priority="interactive").get_catalog()
         host = next((show for show in catalog.collections if show.author_slug == slug), None)
         movie = next((movie for movie in catalog.movies if movie.author_slug == slug), None)
         if host is None and movie is None:
@@ -91,7 +97,8 @@ def resolve_link(url: str) -> ResolvedLink | None:
         )
 
     if kind is LinkKind.MOVIE:
-        movie = MovieMiddlewareClient(access_token=token, request_priority="interactive").get_movie_page(slug)
+        with plan.step("dailywire_movie", "Reading the movie at The Daily Wire"):
+            movie = MovieMiddlewareClient(access_token=token, request_priority="interactive").get_movie_page(slug)
         return ResolvedLink(
             kind=kind,
             slug=movie.slug,
@@ -102,7 +109,8 @@ def resolve_link(url: str) -> ResolvedLink | None:
             author_name=movie.author_name,
         )
 
-    payload = MiddlewareClient(access_token=token, request_priority="interactive").get_episode_payload(slug)
+    with plan.step("dailywire_episode", "Reading the episode at The Daily Wire"):
+        payload = MiddlewareClient(access_token=token, request_priority="interactive").get_episode_payload(slug)
     show = payload.get("show") if isinstance(payload.get("show"), dict) else {}
     collection_slug = _first(show.get("slug"), payload.get("showSlug"))
     images = payload.get("images") if isinstance(payload.get("images"), dict) else {}

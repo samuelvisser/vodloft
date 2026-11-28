@@ -412,6 +412,18 @@ function invalidateFileWatcherCron(
   invalidateTaskLedgerDefinition('file_watcher', invalidations)
 }
 
+function invalidateCollectionHealthCron(
+  _operation: TaskOperationRead,
+  invalidations: InvalidationCollector,
+) {
+  invalidations.push(
+    ['collectionHealth'],
+    ['collections'],
+    ['collectionsView'],
+  )
+  invalidateTaskLedgerDefinition('check_collection_health', invalidations)
+}
+
 export const frontendOperationDefinitions = {
   'system.cron.find_episodes': {
     kind: 'system.cron.find_episodes',
@@ -442,6 +454,12 @@ export const frontendOperationDefinitions = {
     resourceType: 'system',
     label: 'File watcher',
     invalidate: invalidateFileWatcherCron,
+  },
+  'system.cron.collection_health': {
+    kind: 'system.cron.collection_health',
+    resourceType: 'system',
+    label: 'Check collection health',
+    invalidate: invalidateCollectionHealthCron,
   },
   'collection.index': {
     kind: 'collection.index',
@@ -547,6 +565,19 @@ export const frontendOperationDefinitions = {
       return operation.result?.summary
         ? `${collectionTitle}: ${operation.result.summary}`
         : `${collectionTitle} has its moved episodes in place`
+    },
+  },
+  'collection.remove_left_episodes': {
+    kind: 'collection.remove_left_episodes',
+    resourceType: 'collection',
+    label: 'Removing what left',
+    invalidate: (operation, invalidations) => {
+      invalidateCollectionStructure(operation, invalidations)
+      invalidateCollectionFiles(operation, invalidations)
+    },
+    success: (operation) => {
+      const collectionTitle = nameInText(contextString(operation, 'collection_title') || operation.title)
+      return operation.result?.summary ? `${collectionTitle}: ${operation.result.summary}` : `${collectionTitle} let go of what left it`
     },
   },
   'collection.scan_existing_files': {

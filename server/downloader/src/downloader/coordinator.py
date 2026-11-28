@@ -234,6 +234,7 @@ def execute_download_plan(
                         **({} if plan.source.hls_bundle else {
                             "throttle_guard": plan.source.ytdlp_throttle_guard, "chapters": plan.source.ytdlp_chapters,
                             "info_json_dir": workspace.workspace if info_json else None,
+                            "separate_audio_dir": workspace.workspace if any(spec.kind == "audio" for spec in ytdlp_assets) else None,
                         }),
                     )
                 else:

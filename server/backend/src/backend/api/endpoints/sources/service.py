@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import logging
+import threading
+import time
+from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import dataclass
+from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.api.models.source import (
-    ApiKeyNoteAPIRead, ApiStatusAPIRead, ProgramStatusAPIRead, SourceProblemAPIRead, ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SearchResultsAPIRead, CollectionDetailsAPIRead,
+    ApiKeyNoteAPIRead, ApiStatusAPIRead, LinkFirstLookAPIRead, ProgramStatusAPIRead, SourceProblemAPIRead, ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SearchResultsAPIRead, CollectionDetailsAPIRead,
     SourceAPIRead, SourceSiteAPIRead,
 )
 from backend.db.models import Collection, CreatorAccount, Episode, MediaItemBase, Settings, Site as SiteRecord
@@ -17,12 +22,15 @@ from backend.services.collections import set_kind
 from backend.services.creators import takes_creators
 from backend.services.link_seasons import seasons_plan
 from backend.services.media_access import access_locked, link_access
+from backend.services.local_media_profile_sites import known_site_keys
 from backend.services.sites import collection_kind, preferred_sources, site_record
 from backend.services.source_requests import asking_source
 from config.network import is_no_internet_error
+from progress_plan import PlanTracker, StageSpec
 from backend.services.users import settings_row
 from backend.services.check_frequency import joins_regular_checks, quick_check_plan
 from backend.utils.helpers import slugify
+from backend.services.source_options import ytdlp_call_options
 from sources import (
     Feature, LinkKind, QuickCheckCollection, ResolvedLink, Site, Source, UnknownSourceError, all_sources, get_source, named_sites, names_a_podcast, source_site, sources_for,
 )
@@ -72,7 +80,7 @@ def source_with(source_id: str, feature: Feature) -> Source:
 def lookup_show_details(access: Access, source: Source, url: str) -> CollectionDetailsAPIRead:
     """Look up a collection to add, shaped like the fields of a new collection."""
     access.check_link(source, url)
-    with asking_source(f"{source.name} could not look up this collection"):
+    with asking_source(f"{source.name} could not look up this collection"), ytdlp_call_options(source):
         details = source.collection_details(url)
     try:
         music = source.music_reason(url, details)
@@ -246,12 +254,22 @@ def _to_read(s: Session, source: Source, link: ResolvedLink, candidates: list[So
     )
 
 
-def resolve_link(s: Session, access: Access, url: str, source_key: str | None = None) -> ResolvedLinkAPIRead:
-    """Ask each Source that claims the link, preferred first, until one recognises it.
+@dataclass(frozen=True)
+class LinkQuestion:
+    """A link and the Sources to ask about it, preferred first, as the user may use them."""
+    url: str
+    asked: list[Source]
+    allowed: list[Source]
+    """Every Source the user may look the link up with, which the UI offers to try instead."""
+    one_source: bool
+    """Only the Source the user picked is asked."""
 
-    With ``source_key`` only that Source is asked. Only Sources and domains the
-    user may use are asked, and the link the Source resolves to must be one the
-    user may use too, so a link cannot redirect them somewhere else.
+
+def link_question(s: Session, access: Access, url: str, source_key: str | None = None) -> LinkQuestion:
+    """Which Sources to ask about a link: each that claims it, preferred first, or only ``source_key``.
+
+    Only Sources and domains the user may use are asked; the link the Source resolves to is checked too, by
+    ``resolve_link``, so a link cannot redirect them somewhere else.
     """
     url = url.strip()
     if "://" not in url:
@@ -268,16 +286,126 @@ def resolve_link(s: Session, access: Access, url: str, source_key: str | None = 
             # Name the domain when the user may use one of the Sources, otherwise the Source.
             usable = [source for source in candidates if access.allows_source(source.id)]
             access.check_link((usable or candidates)[0], url)
+        if not allowed:
+            raise LinkNotRecognisedError("No Source recognises this link")
         asked = allowed
-    for source in asked:
-        with asking_source(f"{source.name} could not look up this link"):
-            link = source.resolve(url)
+    return LinkQuestion(url, asked, allowed, source_key is not None)
+
+
+def link_preview(question: LinkQuestion) -> LinkFirstLookAPIRead | None:
+    """A first look at the link from the first Source asked, such as YouTube's title and thumbnail in well under a
+    second, to show while the full lookup runs, and what the link is when the Source can tell from the link alone. None
+    when that Source has no faster way, or it failed: the full lookup reports problems."""
+    source = question.asked[0]
+    try:
+        preview = source.preview(question.url)
+    except Exception:  # noqa: BLE001 - a preview is a nicety.
+        logger.debug("No quick preview from %s for %s", source.id, question.url, exc_info=True)
+        return None
+    if preview is None:
+        return None
+    return LinkFirstLookAPIRead.model_validate(SimpleNamespace(**vars(preview), source=source))
+
+
+def resolve_link(s: Session, access: Access, question: LinkQuestion, plan: PlanTracker | None = None) -> ResolvedLinkAPIRead:
+    """Ask each Source of the question in turn until one recognises the link. Each Source reports what it asks its
+    Site as steps of ``plan``."""
+    plan = plan or PlanTracker()
+    # The Sources were found from the link before any was asked; the plan starts with that done.
+    plan.add(StageSpec(id="find_service", code="find_service", label="Finding the service the link comes from"))
+    plan.complete("find_service")
+    found = _first_resolved(access, question, plan)
+    if found is not None:
+        source, link = found
+        with plan.step("check_library", "Checking what is in your library already"):
+            return _to_read(s, source, link, question.allowed)
+    if question.one_source:
+        raise LinkNotRecognisedError(f"{question.asked[0].name} does not recognise this link")
+    raise LinkNotRecognisedError(
+        "VODLoft finds no video, channel or playlist at this link. Check that the link is complete."
+    )
+
+
+def _first_resolved(access: Access, question: LinkQuestion, plan: PlanTracker) -> tuple[Source, ResolvedLink] | None:
+    """The first Source of the question that resolves the link, with what it found there, as the user may use it."""
+    for source in question.asked:
+        with asking_source(f"{source.name} could not look up this link"), ytdlp_call_options(source):
+            link = source.resolve(question.url, plan)
         if link is not None:
             access.check_link(source, link.url)
-            return _to_read(s, source, link, allowed)
-    if source_key is not None:
-        raise LinkNotRecognisedError(f"{asked[0].name} does not recognise this link")
-    raise LinkNotRecognisedError("No Source recognises this link")
+            return source, link
+    return None
+
+
+_LINK_CHECK_SECONDS = 6 * 3600
+"""How long the answer to whether a link looks up is kept. What a link points to seldom changes."""
+_FAILED_LINK_CHECK_SECONDS = 600
+"""How long a lookup that failed, such as when the Site did not answer, is kept before it is tried again."""
+_LINK_CHECK_WORKERS = 2
+"""How many links are looked up at once, so a description full of links never floods a Site with lookups."""
+
+
+class LinkChecks:
+    """Whether links look up in Add media, checked in the background a few at a time and kept for a while.
+
+    A check is the lookup Add media does, so a link that is opened afterwards is answered from what the Source kept
+    of it. A link being checked is checked once, however many pages ask for it.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._kept: dict[tuple[str, tuple[str, ...]], tuple[float, bool]] = {}
+        self._running: dict[tuple[str, tuple[str, ...]], Future[bool]] = {}
+        self._pool = ThreadPoolExecutor(max_workers=_LINK_CHECK_WORKERS, thread_name_prefix="link-check")
+
+    def check(self, access: Access, question: LinkQuestion) -> Future[bool]:
+        """Whether the link of the question looks up with its Sources."""
+        key = (question.url, tuple(source.id for source in question.asked))
+        now = time.monotonic()
+        with self._lock:
+            kept = self._kept.get(key)
+            if kept is not None and kept[0] > now:
+                done: Future[bool] = Future()
+                done.set_result(kept[1])
+                return done
+            running = self._running.get(key)
+            if running is None:
+                running = self._running[key] = self._pool.submit(self._look_up, key, access, question)
+            return running
+
+    def _look_up(self, key: tuple[str, tuple[str, ...]], access: Access, question: LinkQuestion) -> bool:
+        keep_for = _LINK_CHECK_SECONDS
+        try:
+            works = _finds_something(access, question)
+        except Exception as exc:  # noqa: BLE001 - a link that cannot be looked up is not linked; Add media reports why.
+            logger.debug("Could not check %s: %s", question.url, exc)
+            works = False
+            keep_for = 0 if is_no_internet_error(exc) else _FAILED_LINK_CHECK_SECONDS
+        with self._lock:
+            now = time.monotonic()
+            self._kept = {kept: value for kept, value in self._kept.items() if value[0] > now}
+            if keep_for:
+                self._kept[key] = (now + keep_for, works)
+            self._running.pop(key, None)
+        return works
+
+
+def _finds_something(access: Access, question: LinkQuestion) -> bool:
+    """Whether Add media finds something to add at the link. The quick first look Add media shows, such as YouTube's
+    title from oEmbed, already says so where the Source has one, without the full lookup that a Site may count
+    against the user, such as YouTube asking to confirm they are not a bot."""
+    source = question.asked[0]
+    try:
+        with ytdlp_call_options(source):
+            preview = source.preview(question.url)
+    except Exception:  # noqa: BLE001 - the full lookup says what is wrong.
+        preview = None
+    if preview is not None and preview.title:
+        return True
+    return _first_resolved(access, question, PlanTracker()) is not None
+
+
+link_checks = LinkChecks()
 
 
 def _site_read(site: Site, preferred: dict[str, str]) -> SourceSiteAPIRead:
@@ -293,9 +421,10 @@ def _site_read(site: Site, preferred: dict[str, str]) -> SourceSiteAPIRead:
 
 
 def list_source_sites(s: Session) -> list[SourceSiteAPIRead]:
-    """Every Site a Source is made for, with the Sources that can handle its links."""
+    """Every Site a Source is made for that is added to VODLoft, with the Sources that can handle its links."""
     preferred = preferred_sources(s)
-    return [_site_read(site, preferred) for site in named_sites()]
+    known = known_site_keys(s)
+    return [_site_read(site, preferred) for site in named_sites() if site.key in known]
 
 
 class UnknownSiteError(LookupError):

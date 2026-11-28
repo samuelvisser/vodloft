@@ -156,10 +156,18 @@ class AppriseServiceRead(ResponseBase):
     fields: list[ServiceFieldRead]
 
 
+class PathExampleRead(ResponseBase):
+    """One folder as VODLoft sees it and as the media server will be told it."""
+
+    vodloft: str
+    server: str
+
+
 class DestinationPreviewRead(ResponseBase):
     service: str
     service_name: str
     masked: str
+    path_example: PathExampleRead | None
 
 
 class DestinationRead(ResponseBase):

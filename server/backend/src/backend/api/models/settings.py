@@ -124,6 +124,8 @@ SettingFieldPath = Literal[
     "fileWatcher.scanCronEnabled",
     "fileWatcher.scanCron",
     "fileWatcher.verifyFileSize",
+    "collectionHealth.checkCronEnabled",
+    "collectionHealth.checkCron",
     "quickDownload.defaultKind",
     "quickDownload.defaultQuality",
     "quickDownload.defaultContainer",
@@ -233,6 +235,8 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "fileWatcher.scanCronEnabled",
     "fileWatcher.scanCron",
     "fileWatcher.verifyFileSize",
+    "collectionHealth.checkCronEnabled",
+    "collectionHealth.checkCron",
     "quickDownload.defaultKind",
     "quickDownload.defaultQuality",
     "quickDownload.defaultContainer",
@@ -457,6 +461,11 @@ class FileWatcherSettingsValue(_SettingsValueModel):
 
 
 
+class CollectionHealthSettingsValue(_SettingsValueModel):
+    check_cron_enabled: bool
+    check_cron: str = Field(min_length=1)
+
+
 class QuickDownloadPreferencesValue(_SettingsValueModel):
     """What the Quick download page starts from: the install's defaults, or a user's own."""
 
@@ -528,6 +537,7 @@ class SettingsValues(_SettingsValueModel):
     download_settings: DownloadSettingsValue
     youtube_api: YouTubeApiSettingsValue
     file_watcher: FileWatcherSettingsValue
+    collection_health: CollectionHealthSettingsValue
     quick_download: QuickDownloadSettingsValue
 
     @field_validator("log_level", mode="before")
@@ -574,6 +584,7 @@ class SettingsValues(_SettingsValueModel):
             download_settings=DownloadSettingsValue.model_validate(settings.download_settings),
             youtube_api=YouTubeApiSettingsValue.model_validate(settings.youtube_api),
             file_watcher=FileWatcherSettingsValue.model_validate(settings.file_watcher),
+            collection_health=CollectionHealthSettingsValue.model_validate(settings.collection_health),
             quick_download=QuickDownloadSettingsValue.model_validate(settings.quick_download),
         )
 

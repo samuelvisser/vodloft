@@ -80,3 +80,17 @@
         color: #fbbf24;
     }
 }
+
+/* A warning with an action, such as adding what the template uses that does not exist yet. */
+.template-warning {
+    display: grid;
+    gap: 6px;
+}
+
+.template-warning p {
+    margin: 0;
+}
+
+.template-warning-action {
+    justify-self: start;
+}

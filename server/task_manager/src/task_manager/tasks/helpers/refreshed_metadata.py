@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Video
+from backend.services.media_access import lock_refused, set_access
 from backend.services.sites import episode_site
 from backend.services.thumbnails import is_own_thumbnail
 from backend.services.upgrade_check import check_refreshed_changes_now
@@ -22,17 +23,21 @@ _UPGRADE_CHECK_TASK_KEY = "upgrade_check"
 
 def apply_refreshed_details(item: Episode | Video, details: VideoDetails, *, now: datetime | None = None) -> bool:
     """Take the title, description, uploader, length and picture the Source has now. Returns whether any changed.
+    An episode on a Site that names episodes from their description takes the title made from it.
 
     A field the Source left out is kept. So is a lock: a refresh that says nothing about access does not prove
     anyone may download the item, so it only stores the access the Source says the item needs now. The item
     remembers when it was looked up, also when nothing changed.
     """
     item.metadata_refreshed_at = now or datetime.now(timezone.utc)
+    title = details.title
+    if isinstance(item, Episode) and (site := episode_site(item)).titles_from_description:
+        # Named from its description: a refresh without one, such as a listing's, keeps the title.
+        title = site.episode_title(details.title, details.description) if details.description is not None else None
     changes = {
-        "title": details.title, "description": details.description, "author_name": details.author_name,
+        "title": title, "description": details.description, "author_name": details.author_name,
         # A length of zero means the Source did not say.
         "duration": details.duration or None,
-        "access": details.access,
     }
     # A frame VODLoft took stays until the Source has a picture again; refreshes do not say which.
     if details.image_url and not is_own_thumbnail(item.thumbnail_landscape_path):
@@ -42,6 +47,14 @@ def apply_refreshed_details(item: Episode | Video, details: VideoDetails, *, now
         if value is not None and getattr(item, name) != value:
             setattr(item, name, value)
             changed = True
+    if details.access is not None:
+        stored = (item.access, item.creator_tier)
+        set_access(item, details.access)
+        changed = changed or (item.access, item.creator_tier) != stored
+    if details.access_refused and details.access is not None and item.access_refused_at is None:
+        # The Source refused it for lack of the access, as a download would be.
+        lock_refused(item, details.access, now=item.metadata_refreshed_at)
+        changed = True
     return changed
 
 

@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session
 
 from backend.services.site_settings import download_profile_defaults, local_media_profile_defaults
 from backend.services.sites import CollectionAlreadyAddedError, collection_site, site_record
+from backend.services.seasons import collection_indexed
 
 import importer.pinchflat  # noqa: F401  (registers the importer)
 import importer.wireloft  # noqa: F401  (registers the importer)
@@ -56,6 +57,7 @@ from backend.services.import_filters import filters_from_plan
 from backend.services.local_media_profile_changes import (
     create_collection_local_media_profile, create_video_local_media_profile, update_collection_local_media_profile,
 )
+from backend.services.source_options import ytdlp_call_options
 from backend.services.local_media_profile_inputs import (
     CollectionLocalMediaProfileInput, VideoLocalMediaProfileInput, NewCollectionLocalMediaProfile,
 )
@@ -86,6 +88,7 @@ _PROFILE_FIELDS = (
     "collection_scope", "download_collection_assets", "indexing_values",
     "subtitle_languages", "subtitle_language_mode", "quality_goal", "video_codecs", "container", "audio_codec",
     "audio_language", "audio_format", "show_nfo", "kodi_safe_nfo", "save_info_json", "episode_nfo",
+    "file_date_from_publish_date",
     "episode_title_template", "episode_description_template",
 )
 _DOWNLOAD_PROFILE_FIELDS = ("delete_older_episodes",)
@@ -425,14 +428,20 @@ def _library_collections(session: Session) -> dict[str, Collection]:
 
 
 def _matching_profile(session: Session, plan: ProfilePlan) -> CollectionLocalMediaProfile | None:
-    """A VODLoft profile that names files the same way, to use instead of a copy."""
+    """A VODLoft profile that names files the same way and keeps them the same way, such as in the same audio
+    format, to use instead of a copy."""
     if plan.output_template is None:
         return None
-    return session.scalar(select(CollectionLocalMediaProfile).where(
+    wanted = {name: value for name, value in _profile_wanted(plan).items() if value is not None}
+    candidates = session.scalars(select(CollectionLocalMediaProfile).where(
         CollectionLocalMediaProfile.type == plan.settings.get("type", "collection"),
         CollectionLocalMediaProfile.output_template == plan.output_template,
         CollectionLocalMediaProfile.preferred_format == plan.settings.get("preferred_format"),
-    ).limit(1))
+    ).order_by(CollectionLocalMediaProfile.id))
+    return next((
+        profile for profile in candidates
+        if all(values.get(name, value) == value for values in (_profile_values(profile),) for name, value in wanted.items())
+    ), None)
 
 
 def _published(value: str | None) -> datetime | None:
@@ -1054,7 +1063,7 @@ def _create_collection(session: Session, plan: CollectionPlan, creators: dict[st
     an artist's."""
     from backend.services.collections import add_collection, index_new_collection
     from backend.types.collection_types import CollectionType, EpisodeIdentifier
-    from backend.types.link_season_types import ChannelSeason, LinkSeasons, RepeatVideos
+    from backend.types.link_season_types import LinkSeasons, LooseVideos, RepeatVideos
     from backend.utils.helpers import generate_uuid, slugify
     from sources import get_source
 
@@ -1080,7 +1089,8 @@ def _create_collection(session: Session, plan: CollectionPlan, creators: dict[st
         # season of what is in none of them, and a video in one season. A channel collection's own defaults would add
         # every playlist. An artist's page keeps those defaults: every album a season, the ones to come too.
         collection.link_seasons = LinkSeasons.OFF.value
-        collection.channel_season = ChannelSeason.UNLISTED.value
+        # Without playlists, a season per upload year; with them, the videos in none of them in one season.
+        collection.loose_videos = LooseVideos.BY_YEAR.value
         collection.repeat_videos = RepeatVideos.ONE_SEASON.value
         # A link to one tab of a channel, such as its Videos, lists only that feed, as the other program did.
         feeds = plan.settings.get("feeds")
@@ -1159,7 +1169,7 @@ def _add_link_seasons(session: Session, collection: Collection, plan: Collection
 
     from backend.db.models import CollectionList
     from backend.services.seasons import create_season_record
-    from backend.types.link_season_types import LinkSeasons, ListStatus, OutsideVideos
+    from backend.types.link_season_types import LinkSeasons, ListStatus, LooseVideos, OutsideVideos
     from backend.types.season_types import SeasonOrigin
     from backend.utils.helpers import slugify
     from sources import get_source
@@ -1210,7 +1220,9 @@ def _add_link_seasons(session: Session, collection: Collection, plan: Collection
     if added:
         collection.keep_a_default_link()
         if collection.link_seasons == LinkSeasons.OFF.value:
-            collection.link_seasons = LinkSeasons.SELECTED.value
+            collection.link_seasons = LinkSeasons.ON.value
+            if collection.loose_videos == LooseVideos.BY_YEAR.value:
+                collection.loose_videos = LooseVideos.ONE_SEASON.value
         # The other program kept every video of these links, also another channel's.
         if collection.outside_videos != OutsideVideos.ONLY.value:
             collection.outside_videos = OutsideVideos.ADD.value
@@ -1360,6 +1372,12 @@ def apply_run(run_id: int) -> dict[str, int]:
 
     The upload is read before the write transaction, which only applies what it found.
     """
+    # The collections and creators it looks up are on yt-dlp's Sites.
+    with ytdlp_call_options("ytdlp"):
+        return _apply_run(run_id)
+
+
+def _apply_run(run_id: int) -> dict[str, int]:
     with get_session() as session:
         run = session.get(ImportRun, run_id)
         if run is None:
@@ -2028,18 +2046,6 @@ def enable_run_download_profiles(session: Session, run: ImportRun) -> int:
     return enabled
 
 
-def _indexed(session: Session, collection_id: int) -> bool:
-    """Whether the Collection's first index finished, so its step only waits for its files to be adopted."""
-    from task_manager.scheduler.db import TaskOperation
-    from task_manager.scheduler.types import OperationStatus
-
-    return session.scalar(select(TaskOperation.id).where(
-        TaskOperation.kind == "collection.index", TaskOperation.resource_type == "collection",
-        TaskOperation.resource_id == collection_id,
-        TaskOperation.status.in_((OperationStatus.SUCCEEDED.value, OperationStatus.PARTIAL.value)),
-    ).limit(1)) is not None
-
-
 @dataclass(frozen=True)
 class DownloadProfilesView:
     total: int
@@ -2082,7 +2088,7 @@ def run_view(session: Session, run: ImportRun) -> RunView:
             collection_slug=collection.slug if collection else None,
             collection_title=collection.title if collection else None,
             status=step.status,
-            indexed=step.status != STEP_WAITING or _indexed(session, step.collection_id),
+            indexed=step.status != STEP_WAITING or collection_indexed(session, step.collection_id),
             files=sum(1 for file in step.files if file.get("kind") == "file"),
             counts=result.get("counts", {}),
             problems=result.get("problems", []),

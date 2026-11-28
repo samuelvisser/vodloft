@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from enum import StrEnum
@@ -92,6 +92,9 @@ class Feature(StrEnum):
     """A collection can hold only what lists the user picks have, from any of the Source's Sites, as its link seasons:
     the Source lists them with ``list_items`` and looks their videos up with ``item_details``, and such a collection
     needs no link of its own."""
+    ACCOUNT_SIGN_IN = "account_sign_in"
+    """Signing in with the user's account on a Site that offers it (``Site.account_sign_in``), with
+    ``account_status``, ``sign_in``, ``start_code_sign_in``, ``finish_code_sign_in`` and ``sign_out``."""
     CHAPTERS = "chapters"
     """A video's chapters come with its details (``VideoDetails.chapters``), and a download can keep one
     stretch of a video, so a collection can split each video into a part per chapter."""
@@ -175,6 +178,19 @@ SECTION_KIND_NAMES = {
     SectionKind.ITEM: Names("video", "videos"),
 }
 """VODLoft's own word for each kind of section, for a kind a Site names no section type for."""
+
+
+class ListOrder(StrEnum):
+    """In what order the Site lists what a collection made from one of its links holds."""
+
+    NEWEST_FIRST = "newest_first"
+    """Newest first, like a feed, such as a creator's posts on Patreon: VODLoft adds them the other way around, so
+    they are numbered oldest first without looking at their dates."""
+    OLDEST_FIRST = "oldest_first"
+    """In an order of the list's own, the first first, as a playlist, an album or a series sets it: VODLoft numbers
+    them in that order."""
+    NONE = "none"
+    """In no order VODLoft can trust: VODLoft numbers them by date."""
 
 
 class SectionRole(StrEnum):
@@ -548,12 +564,18 @@ class CreatorDetails:
 
 @dataclass(frozen=True)
 class LinkPreview:
-    """A first look at a link, from a faster lookup than ``resolve``: enough to show while the rest loads."""
+    """A first look at a link, from a faster lookup than ``resolve``: enough to show while the rest loads. ``kind``,
+    ``slug`` and ``url`` say what the link is when the Source can tell, as ``resolve`` will, so the user can go on with
+    it before the full lookup is done. A link that says what it is but has no quick title, such as a channel's,
+    has no ``title``."""
 
-    title: str
+    title: str | None
     image_url: str | None = None
     author_name: str | None = None
     site: str | None = None
+    kind: LinkKind | None = None
+    slug: str | None = None
+    url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -692,6 +714,10 @@ class VideoDetails:
     access: str | None = None
     """The key of the ``Access`` the Source only gives the video with, such as NPO Plus or a
     channel membership. VODLoft indexes it, and downloads it only while it has that access."""
+    access_refused: bool = False
+    """The Source asked for the video with everything VODLoft has, such as its cookies, and was refused for lack of
+    ``access``. VODLoft locks the video right away, as it does when a download is refused, instead of only learning
+    it from a download."""
     season: SeasonRef | None = None
     """The collection season a listed episode belongs to, for a Source with real seasons.
     Without one, VODLoft puts the episode in a season per upload year."""
@@ -860,6 +886,79 @@ class Access:
     """What the Site calls it, such as NPO Plus, as the badge on a locked item shows it."""
     description: str
     """One sentence on who can watch what needs it, such as "Only NPO Plus subscribers can watch this"."""
+    tier: int | None = None
+    """Where the access stands among the Site's paid tiers, such as a membership level, or a creator's tier by its price
+    in cents: a tier gives everything a lower one gives. None for an access that is no tier, such as a channel
+    membership."""
+
+    def gives(self, needed: Access) -> bool:
+        """Whether having this access lets one watch what needs ``needed``: it is that access, or a tier at least as
+        high."""
+        return self.key == needed.key or (self.tier is not None and needed.tier is not None and self.tier >= needed.tier)
+
+
+def cheapest(accesses: Iterable[Access | None]) -> Access | None:
+    """The lowest tier among accesses that each unlock the same thing, which is all one needs of them; an access that
+    is no tier, if there is no tier among them."""
+    found = [access for access in accesses if access is not None]
+    tiers = [access for access in found if access.tier is not None]
+    return min(tiers, key=lambda access: access.tier) if tiers else next(iter(found), None)
+
+
+@dataclass(frozen=True)
+class CreatorTier:
+    """A paid tier a creator set up on a Site whose creators make their own tiers, such as a Patreon tier."""
+
+    site_id: str
+    """The Site's own id of the tier, which stays when the creator renames it or changes its amount."""
+    name: str | None
+    """What the creator calls the tier; None when they gave it no name."""
+    amount: str | None
+    """What the tier costs, as people write it, such as "$5"."""
+    rank: int | None
+    """Where the tier stands among the creator's tiers, such as its price in cents: a tier gives what a lower one gives."""
+
+
+@dataclass(frozen=True)
+class CreatorTierAccess:
+    """What a Site calls the access to a tier its creators set up themselves, such as a Patreon tier. The Source
+    tells such an access by ``key_of`` the tier's id on the Site; VODLoft stores the access by ``key``, and the tier
+    beside it."""
+
+    key: str
+    label: str
+    """What the Site calls a tier, with ``{name}`` and ``{amount}`` where the tier's go."""
+    description: str
+    """Who can watch what needs a tier, with ``{name}`` and ``{amount}``."""
+    unnamed_label: str
+    """What the Site calls a tier its creator gave no name, with ``{amount}``."""
+    unnamed_description: str
+    unknown_label: str
+    """What VODLoft calls a tier it knows nothing of yet but its id."""
+    unknown_description: str
+
+    def key_of(self, site_tier_id: str) -> str:
+        return f"{self.key}:{site_tier_id}"
+
+    def tier_id(self, key: str | None) -> str | None:
+        """The id on the Site of the tier a key from ``key_of`` names; None for any other key."""
+        prefix = f"{self.key}:"
+        return key[len(prefix):] or None if key and key.startswith(prefix) else None
+
+    def access(self, tier: CreatorTier | None) -> Access:
+        """The access to a tier, or to a tier VODLoft knows nothing of yet."""
+        if tier is None or (not tier.name and not tier.amount):
+            return Access(self.key, self.unknown_label, self.unknown_description)
+        if not tier.name:
+            return Access(
+                self.key, self.unnamed_label.format(amount=tier.amount), self.unnamed_description.format(amount=tier.amount),
+                tier=tier.rank,
+            )
+        amount = tier.amount or ""
+        return Access(
+            self.key, self.label.format(name=tier.name, amount=amount).strip(),
+            self.description.format(name=tier.name, amount=amount).replace(" ()", ""), tier=tier.rank,
+        )
 
 
 @dataclass(frozen=True)
@@ -930,6 +1029,70 @@ class ApiKeyRejected(ValueError):
         self.field = field
 
 
+class SignInKind(StrEnum):
+    """How the user signs in with their account on a Site (``AccountSignIn``)."""
+
+    PASSWORD = "password"
+    """With the account's email and password, in VODLoft."""
+    TOKEN = "token"
+    """With a sign-in token the user copies from the Site in their browser."""
+    DEVICE_CODE = "device_code"
+    """With a code VODLoft shows, which the user enters on the Site's own page, the way a TV app signs in."""
+
+
+@dataclass(frozen=True)
+class AccountSignIn:
+    """Signing in on a Site with the user's own account there, which a Source with ``Feature.ACCOUNT_SIGN_IN`` does
+    itself, such as Twitch's sign-in with a code. It stands in for a cookies file on the Site, and works beside one."""
+
+    kind: SignInKind
+    benefits: str
+    """What signing in gives, as a sentence."""
+    fields: tuple[ApiField, ...] = ()
+    """What the user fills in, for a ``PASSWORD`` or ``TOKEN`` sign-in."""
+    steps: tuple[GuideStep, ...] = ()
+    """How to get what the ``fields`` ask for, when that is not plain, such as where a token is found."""
+    caution: str | None = None
+    """What the user should know before signing in, such as that the Site may stop allowing it."""
+
+
+@dataclass(frozen=True)
+class AccountStatus:
+    """Whether the Site's account sign-in is set up, who it signs in as, and the last problem it had."""
+
+    signed_in: bool
+    account: str | None = None
+    """The name or email address of the account, when the Site tells it."""
+    problem: str | None = None
+
+
+@dataclass(frozen=True)
+class DeviceCode:
+    """A sign-in with a code that has started: the user enters ``user_code`` at ``verification_url``."""
+
+    device_code: str
+    """What the Source asks the Site with whether the user entered the code; never shown."""
+    user_code: str
+    verification_url: str
+    expires_in: int
+    """Seconds until the code runs out."""
+    interval: int
+    """Seconds between two questions to the Site."""
+
+
+class SignInRejected(ValueError):
+    """The Site did not sign in; the message says why and what to do, and ``field`` which value it is about, when it
+    is about one."""
+
+    def __init__(self, message: str, field: str | None = None):
+        super().__init__(message)
+        self.field = field
+
+
+class SignInCodeEnded(SignInRejected):
+    """A sign-in with a code ended before the user entered it: it ran out, or the user turned it down."""
+
+
 ANY_DOMAIN = "*"
 
 
@@ -964,6 +1127,36 @@ def initials_of(name: str) -> str:
         words = words[1:]
     letters = "".join(word[0] for word in words[:2]) if len(words) > 1 else "".join(words)[:2]
     return letters.upper()
+
+
+_TITLE_LENGTH = (10, 60)
+"""The least and most characters of a title made from a description (``title_from_description``)."""
+_TITLE_STOP = re.compile(r"[#@]|https?://")
+_TITLE_TRAIL = " \t-–—|:;,"
+
+
+def title_from_description(description: str | None) -> str | None:
+    """A title made from a video's description, for a Site whose videos have none of their own: its first line,
+    up to the first hashtag, mention or link. A first line shorter than the least length goes on with the next
+    one, and one longer than the most ends at the last whole word that fits. None when the description has too
+    little for a title.
+
+    A hashtag or mention within the first characters, such as one the line opens with, is part of the title, so
+    that "@friend and I at the beach #summer" is "@friend and I at the beach"."""
+    shortest, longest = _TITLE_LENGTH
+    text = ""
+    for line in (description or "").splitlines():
+        if line.strip():
+            text = f"{text} {line.strip()}".strip()
+            if len(text) >= shortest:
+                break
+    if stop := _TITLE_STOP.search(text, shortest):
+        text = text[:stop.start()]
+    if len(text) > longest:
+        end = text.rfind(" ", shortest, longest + 1)
+        text = text[:end] if end != -1 else text[:longest]
+    text = text.rstrip(_TITLE_TRAIL)
+    return text if len(text) >= shortest else None
 
 
 @dataclass(frozen=True)
@@ -1019,9 +1212,15 @@ class Site:
     site_api: SiteApi | None = None
     """The Site's own free API that the user can register VODLoft with, through a Source with ``Feature.SITE_API``,
     such as Twitch's for its search."""
+    account_sign_in: AccountSignIn | None = None
+    """How the user can sign in with their account on the Site, through a Source with ``Feature.ACCOUNT_SIGN_IN``,
+    such as Nebula's email and password. Without it, only a cookies file signs in."""
     accesses: tuple[Access, ...] = ()
     """What the Site only gives some of its videos with, such as NPO Plus or a channel membership,
     by the keys its Sources tell."""
+    creator_tiers: CreatorTierAccess | None = None
+    """The Site's creators set up paid tiers of their own, such as Patreon's, and what the Site calls them. The tiers
+    themselves are each creator's, so VODLoft learns them from the Source and keeps them."""
     creators: bool = False
     """The Site has creators VODLoft can add, through a Source with ``Feature.CREATORS``."""
     audio_only: bool = False
@@ -1058,9 +1257,13 @@ class Site:
     link_seasons: bool = False
     """A collection made from a creator's channel can make the channel's lists, such as its playlists, its seasons:
     link seasons, through its Source's ``is_creator_page``, ``season_lists`` and ``list_items``."""
-    every_list_a_season: bool = True
-    """A new channel collection makes every one of the channel's lists a season, as a channel shows all its lists.
-    A Site whose contract says False makes only the lists the user picks seasons."""
+    pictures_expire: bool = False
+    """The Site's links to its videos' pictures stop working after a while, such as Patreon's signed ones, so VODLoft
+    keeps a copy of each picture itself."""
+    list_order: ListOrder = ListOrder.NONE
+    """In what order the Site lists what a collection made from one of its lists holds, such as a playlist, an album
+    or, on a Site without creators, any link. A collection made from one list numbers and shows its videos in that
+    order; on a Site whose contract tells no order, by date."""
     whole_lists: bool = True
     """A new channel collection puts a video in every list season that has it, so each list is whole. A Site whose
     contract says False puts a video in the first of them only, unless the collection's type says otherwise."""
@@ -1080,10 +1283,25 @@ class Site:
     costly_search: bool = False
     """Each search of the Site costs something, such as API quota or a slow lookup, so the search page searches when
     asked instead of while the user types."""
+    search_note: str | None = None
+    """What the Site's search cannot find, and how to add it anyway, for a ``searchable`` Site whose search does not
+    find all it has, such as only channels on Twitch. The search page shows it above the search."""
     retention: Retention | None = None
     """How the Site removes its media itself after a while, such as Twitch its past broadcasts. Media that leaves
     such a Site once it is older than the Retention's ``kept_for`` is removed by its retention: VODLoft expects it to
     go, so it does not ask on Home whether to keep its downloads, and says what deleting a download then means."""
+    titles_from_description: bool = False
+    """The Site gives its videos no title of their own, such as Instagram's "Video by <account>", but tells what
+    they are about in their description. The episodes of a collection on it are named from their description
+    (``title_from_description``), or keep the Site's title where it has too little; a single video always keeps
+    the Site's title."""
+    pitch: str | None = None
+    """What VODLoft adds from the Site, in a few words, such as YouTube's "Channels, playlists, Shorts and live
+    streams". Shown where the user picks the Sites they use, such as in onboarding."""
+    movies: bool = False
+    """The Site has movies VODLoft can add, such as The Daily Wire's, through a Source with ``Feature.MOVIES``.
+    VODLoft offers what is made for movies, such as a Local Media Profile for movies, only while a Site that has
+    them is added."""
     shows_locked: bool = True
     """A collection on the Site shows what VODLoft has no access to until the user hides it. On a Site
     whose collections mix locked videos among open ones, such as a YouTube channel's members-only
@@ -1109,6 +1327,13 @@ class Site:
             object.__setattr__(
                 self, "channel_season", ChannelSeason.UNLISTED if self.audio_only else ChannelSeason.EVERYTHING,
             )
+
+    def episode_title(self, title: str, description: str | None) -> str:
+        """What a collection's episode is called: the Site's title for its video, or on a Site with
+        ``titles_from_description``, a title made from the video's description where it has enough for one."""
+        if self.titles_from_description:
+            return title_from_description(description) or title
+        return title
 
     @property
     def media_names(self) -> Names:
@@ -1149,7 +1374,7 @@ class Site:
         return found
 
     def access(self, key: str | None) -> Access | None:
-        """One of ``accesses`` by its key."""
+        """One of ``accesses`` by its key. A creator's tier is named by the backend, which keeps the tiers."""
         return next((access for access in self.accesses if access.key == key), None)
 
     @property
@@ -1161,10 +1386,14 @@ def link_host(url: str) -> str:
     return (urlsplit(url).hostname or "").lower().rstrip(".")
 
 
+GENERIC_PREFIX = "generic:"
+"""The start of the key of a Site of its own domain, such as ``generic:example.com``."""
+
+
 def domain_site(url: str) -> Site:
     """The Site of a link that belongs to no known site: its own domain, without www."""
     host = link_host(url).removeprefix("www.")
-    return Site(f"generic:{host}", host, (host,))
+    return Site(f"{GENERIC_PREFIX}{host}", host, (host,))
 
 
 def names_a_podcast(name: str | None) -> bool:
@@ -1262,17 +1491,24 @@ class Source(ABC):
         return combined_tags(site.episode_tags for site in self.sites) or VIDEO_TAGS
 
     @abstractmethod
-    def resolve(self, url: str) -> ResolvedLink | None:
-        """Say what a link points to, or None when this Source does not recognise it."""
+    def resolve(self, url: str, plan: PlanTracker | None = None) -> ResolvedLink | None:
+        """Say what a link points to, or None when this Source does not recognise it. Each request to the Site goes in
+        ``plan`` as a step of its own, such as reading the show, so the lookup can show what it is doing."""
 
     def preview(self, url: str) -> LinkPreview | None:
         """A title and image for a link, faster than ``resolve``, or None when this Source has no faster way."""
         return None
 
-    def first_frame(self, url: str, image_url: str | None) -> bytes | None:
-        """A JPEG from the start of a video whose own picture, ``image_url``, is missing.
+    def creator_tiers(self, url: str) -> tuple[CreatorTier, ...]:
+        """The paid tiers of the creator a link is of, on a Site with ``creator_tiers``, such as a Patreon creator's
+        page or one of their posts. Empty when the Site has no such tiers or the Source cannot tell them."""
+        return ()
 
-        None when the picture is there, or when this Source cannot take a frame.
+    def own_picture(self, url: str, image_url: str | None, *, locked: bool = False) -> bytes | None:
+        """A JPEG VODLoft keeps as the video's picture: a copy of its picture, ``image_url``, on a Site whose pictures
+        expire, or a frame from the start of a video whose picture is missing, which a ``locked`` video has none of.
+
+        None when the video's own picture will do, or when this Source can make neither.
         """
         return None
 
@@ -1454,6 +1690,29 @@ class Source(ABC):
 
     def remove_site_api(self, site: Site) -> None:
         raise NotImplementedError(f"{self.name} uses no API of {site.name}")
+
+    def account_status(self, site: Site) -> AccountStatus:
+        """Whether the user signed in with their account on the Site. Only Sources with ``Feature.ACCOUNT_SIGN_IN``
+        implement it."""
+        raise NotImplementedError(f"{self.name} signs in on {site.name} with a cookies file only")
+
+    def sign_in(self, site: Site, values: Mapping[str, str]) -> AccountStatus:
+        """Sign in on the Site with what the user filled in for its ``PASSWORD`` or ``TOKEN`` sign-in, and keep the
+        sign-in. Raises SignInRejected when the Site does not accept it."""
+        raise NotImplementedError(f"{self.name} signs in on {site.name} with a cookies file only")
+
+    def start_code_sign_in(self, site: Site) -> DeviceCode:
+        """Ask the Site for a code the user enters on its own page, for a ``DEVICE_CODE`` sign-in."""
+        raise NotImplementedError(f"{self.name} signs in on {site.name} with a cookies file only")
+
+    def finish_code_sign_in(self, site: Site, code: DeviceCode, stop: Callable[[float], bool]) -> AccountStatus:
+        """Wait until the user entered the code, and keep the sign-in. ``stop`` waits the seconds it is given and
+        tells whether to give up. Raises SignInCodeEnded when the code ran out or the user turned it down."""
+        raise NotImplementedError(f"{self.name} signs in on {site.name} with a cookies file only")
+
+    def sign_out(self, site: Site) -> None:
+        """Forget the account sign-in on the Site."""
+        raise NotImplementedError(f"{self.name} signs in on {site.name} with a cookies file only")
 
     def program_status(self) -> ProgramStatus:
         """The program this Source runs. Only Sources with ``Feature.PROGRAM_UPDATES`` implement it."""

@@ -131,3 +131,24 @@ def test_repeated_collection_name_can_still_be_a_known_literal_season():
 def test_filename_trimming_does_not_confuse_equal_output_nodes():
     template = "/downloads/{{ collection }}/a/{% if year %}b{% else %}c{% endif %}/fixed/{{ title }}.ext"
     assert _resolve(template).path == "/downloads/my-collection/a"
+
+
+AUTHOR_FOLDER = (
+    "/downloads/Audio/{{ (meta_collection_folder) if meta_collection_folder else (collection_author or 'NA') }}"
+    "/{{ date }} - {{ title }}/{{ title }}.ext"
+)
+
+
+@pytest.mark.parametrize(("values", "expected"), [
+    ({"meta_collection_folder": "", "collection_author": "Some Channel"}, "/downloads/Audio/Some Channel"),
+    ({"meta_collection_folder": "Own Folder", "collection_author": ""}, "/downloads/Audio/Own Folder"),
+    # Every collection without an author shares the fallback's folder, so it is none of theirs.
+    ({"meta_collection_folder": "", "collection_author": ""}, None),
+])
+def test_a_folder_named_by_the_collection_author_is_the_collections_own(values, expected):
+    assert _resolve(AUTHOR_FOLDER, values=values).path == expected
+
+
+def test_a_folder_every_collection_without_values_would_share_is_not_a_collection_root():
+    assert _resolve("/downloads/{{ creator_title or 'Unknown' }}/{{ title }}.ext", values={"creator_title": ""}).path is None
+    assert _resolve("/downloads/{{ creator_title or 'Unknown' }}/{{ title }}.ext", values={"creator_title": "Host"}).path == "/downloads/Host"

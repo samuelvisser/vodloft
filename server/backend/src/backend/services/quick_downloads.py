@@ -19,6 +19,7 @@ from backend.services.playback import resolve_playback
 from backend.services.media_access import link_access
 from backend.utils.filenames import clean_value
 from backend.utils.output_template import sanitize_path_component
+from backend.services.source_options import ytdlp_call_options
 from config import get_settings
 from config.settings.submodels import FilenameRestrictionMode
 from downloader import (
@@ -42,6 +43,7 @@ from downloader.storage.quick import (
 )
 from downloader.ytdlp import resolve_ytdlp_quick_source, resolve_ytdlp_source
 from sources import Feature, LinkKind, Playback, PlaybackKind, Source, VideoFormat, VideoFormats, get_source
+from sources.ytdlp_options import keep_call_options
 
 logger = logging.getLogger(__name__)
 
@@ -271,7 +273,8 @@ def _video_details(source: Source, request: QuickDownloadRequest):
     if not (source.has(Feature.VIDEOS) or source.has(Feature.EPISODE_LISTS)):
         return None
     try:
-        return source.video_details(request.url)
+        with ytdlp_call_options(source):
+            return source.video_details(request.url)
     except Exception:
         logger.info("Could not look up details of '%s' for its tags", request.url, exc_info=True)
         return None
@@ -514,7 +517,7 @@ def _measure_streams(
 
     What fails or takes too long is left out; the caller falls back to the bitrates.
     """
-    pool = ThreadPoolExecutor(max_workers=len(renditions) + 1, thread_name_prefix="quick-measure")
+    pool = ThreadPoolExecutor(max_workers=len(renditions) + 1, thread_name_prefix="quick-measure", **keep_call_options())
     try:
         jobs = {pool.submit(measure_rendition, rendition.url): rendition for rendition in renditions}
         audio_job = pool.submit(probe, audio_url) if audio_url else None
@@ -579,7 +582,8 @@ def quick_options(source: Source, url: str, link: QuickDownloadRequest | None = 
         except Exception:  # noqa: BLE001 - the download itself reports what is wrong with the link.
             logger.info("Could not list the qualities of %s", link.url, exc_info=True)
             return _BASIC_OPTIONS
-    formats: VideoFormats = source.video_formats(url)
+    with ytdlp_call_options(source):
+        formats: VideoFormats = source.video_formats(url)
     audio_size = formats.audio_size_bytes
     by_step: dict[int, list[VideoFormat]] = {}
     for entry in formats.videos:

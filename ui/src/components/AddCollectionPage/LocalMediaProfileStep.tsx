@@ -1,11 +1,13 @@
-import {useCallback, useEffect, useRef} from 'react'
+import {useCallback, useEffect, useMemo, useRef} from 'react'
+import {RequestedFieldsProvider} from '../common/RequestedField'
+import {ProfileFitProvider} from '../LocalMediaProfile/ProfileFit'
+import {newProfileScope} from '../../lib/collectionWords'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {ChosenCollectionCard} from './CollectionPreviewCard'
 import type {CollectionCreatePayloadOut} from '../../types/schemas/collection'
 import LocalMediaProfileForm from '../LocalMediaProfile/LocalMediaProfileForm'
 import CollectionLocalMediaProfileOutputTemplate from '../LocalMediaProfile/CollectionLocalMediaProfileOutputTemplate'
-import IndexingValuesEditorButton from '../LocalMediaProfile/IndexingValuesEditorButton'
 import {useLocalMediaProfileSites, useLocalMediaProfiles} from '../../lib/queries'
 import {CollectionLocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {
@@ -84,6 +86,7 @@ export default function LocalMediaProfileStep({
     )
     const profilesError = profilesQuery.isError ? ((profilesQuery.error)?.message ?? 'Failed to load media profiles') : null
     const createDefaults = getZodDefaults(LocalMediaProfileCreateUnionSchema)
+    const newProfileFit = useMemo(() => ({type: 'collection' as const, scope: newProfileScope(collectionType)}), [collectionType])
 
     const form = useForm<LocalMediaProfileChoiceIn>({
         resolver: zodResolver(LocalMediaProfileChoiceSchema),
@@ -178,13 +181,18 @@ export default function LocalMediaProfileStep({
                             <hr className="divider" aria-hidden="true"/>
                             <div className="divider-label" aria-hidden="true">Or create a new profile</div>
 
-                            <LocalMediaProfileForm
-                                form={form}
-                                mode="collection"
-                                isCreating
-                                onCollectionRoot={onCollectionRoot}
-                                outputTemplateActions={<IndexingValuesEditorButton form={form} className="btn btn-small"/>}
-                            />
+                            {/* A new profile starts as available for the collection's type, such as Music, as one
+                                added from a collection's page does. */}
+                            <RequestedFieldsProvider mode="create">
+                                <ProfileFitProvider value={newProfileFit}>
+                                    <LocalMediaProfileForm
+                                        form={form}
+                                        mode="collection"
+                                        isCreating
+                                        onCollectionRoot={onCollectionRoot}
+                                    />
+                                </ProfileFitProvider>
+                            </RequestedFieldsProvider>
                         </>
                     )}
 

@@ -59,7 +59,7 @@ from backend.utils.output_template import (
     typed_characters_the_mode_replaces,
 )
 from backend.utils.search import search_all_terms, search_relevance_score
-from backend.services.local_media_profile_sites import movie_site_keys
+from backend.services.local_media_profile_sites import movie_site_keys, site_has_movies
 from sources import Feature, all_sources
 
 from ..custom_metadata.service import get_custom_metadata_fields
@@ -570,12 +570,14 @@ def get_example_template_sources(collection: ExampleCollection) -> list[LocalMed
 
 
 def _movie_sources_on(site_keys: list[str] | None):
-    """Movies from a Source that fetches one of the Sites; every movie when the profile has no Site filter."""
+    """Movies from a Source that fetches one of the Sites that have movies; every movie when the profile has no Site
+    filter."""
     if site_keys is None:
         return true()
+    movie_sites = [key for key in site_keys if site_has_movies(key)]
     keys = [
         source.id for source in all_sources()
-        if source.has(Feature.MOVIES) and any(source.site_of(key) is not None for key in site_keys)
+        if source.has(Feature.MOVIES) and any(source.site_of(key) is not None for key in movie_sites)
     ]
     return Movie.source_key.in_(keys)
 

@@ -67,6 +67,13 @@ class User(Base):
     library_collection_sort_reversed: Mapped[bool] = mapped_column(
         default=False, server_default=false(), comment="Whether the user turned that order around",
     )
+    creator_collection_sort: Mapped[str] = mapped_column(
+        default="recently_used", server_default="recently_used",
+        comment="How the user lists a creator page's Collections: recently_used, often_used, name, release_date or added_at",
+    )
+    creator_collection_sort_reversed: Mapped[bool] = mapped_column(
+        default=False, server_default=false(), comment="Whether the user turned that order around",
+    )
     stream_token: Mapped[str] = mapped_column(
         unique=True, default=generate_stream_profile_token,
         comment="Secret in the addresses of the user's own playlist and guide, with all their channels",

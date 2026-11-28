@@ -3,7 +3,7 @@ import {zodResolver} from '@hookform/resolvers/zod'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useQueryClient} from '@tanstack/react-query'
 import {Controller, useForm} from 'react-hook-form'
-import Select from '../common/ReactSelect'
+import Select from '../../components/common/Select'
 import Switch from 'react-switch'
 import toast from '../../lib/toast'
 
@@ -154,7 +154,7 @@ export default function Rules({rules, events, destinations, personal}: RulesProp
                     icon={faIcon('fass', 'trash')}
                     iconTone="danger"
                     onDismiss={() => setDeleting(null)}
-                    confirmButton={{label: 'Delete', className: 'btn-danger', onClick: () => remove(deleting)}}
+                    confirmButton={{label: 'Delete', className: 'btn btn-danger', onClick: () => remove(deleting)}}
                 >
                     <RuleSentence rule={deleting} events={events} destinations={destinations} collections={collections} personal={personal}/>
                     {deleting.defaultKey && !personal ? <p className="help">Restore default rules brings it back.</p> : null}
@@ -263,7 +263,6 @@ function RuleDialog({rule, events, destinations, collections, personal, onDismis
                                     aria-label="Collections"
                                     isMulti
                                     closeMenuOnSelect={false}
-                                    classNamePrefix="select"
                                     placeholder="Choose Collections"
                                     options={collectionReg.options}
                                     value={collectionReg.options.filter((option) => (field.value ?? []).includes(Number(option.value)))}
@@ -291,7 +290,6 @@ function RuleDialog({rule, events, destinations, collections, personal, onDismis
                                     aria-label="Destinations and services"
                                     isMulti
                                     closeMenuOnSelect={false}
-                                    classNamePrefix="select"
                                     placeholder={usable.length ? 'And send it to, or refresh, call or run…' : 'Add a destination first to send it elsewhere'}
                                     options={destinationReg.options}
                                     value={destinationReg.options.filter((option) => (field.value ?? []).includes(Number(option.value)))}

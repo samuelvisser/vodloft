@@ -38,6 +38,7 @@ from sqlalchemy.orm import Session, object_session
 from backend.db.datetime_types import utc_datetime
 from backend.db.core import run_write_transaction
 from backend.db.models import Collection, Episode, Site, Video
+from backend.services.creator_tiers import keep_tiers, unknown_tiers
 from backend.services.media_access import lock_refused
 from backend.services.removed_downloads import back_at_source, left_source
 from backend.services.sites import episode_site_key
@@ -49,6 +50,7 @@ from backend.services.metadata_refresh import (
 )
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode_publication_timing import best_effort_published_date
+from backend.services.source_options import ytdlp_call_options
 from sources import ItemRef, VideoDetails, all_sources, get_source
 from task_manager.tasks.media_download_operations import dispatch_queued_media_download_operations
 from ...helpers.locked_media import open_up
@@ -97,7 +99,15 @@ class SweepResult:
         return "; ".join(parts)
 
     def as_data(self) -> dict:
-        return {name: vars(counts) for name, counts in self.sites.items()}
+        sites = list(self.sites.values())
+        return {
+            # Across every Site, so a task log can tell a sweep that changed something from one that did not.
+            "checked": sum(counts.checked for counts in sites),
+            "updated": sum(counts.updated for counts in sites),
+            "removed": sum(counts.removed for counts in sites),
+            "failed": sum(counts.failed for counts in sites),
+            "sites": {name: vars(counts) for name, counts in self.sites.items()},
+        }
 
 
 @dataclass(frozen=True)
@@ -175,6 +185,12 @@ class _Answers:
 def _look_up(source_key: str, refs: list[ItemRef]) -> _Answers:
     """What the Source says about these items, asking again a couple of times for the ones it could not answer."""
     source = get_source(source_key)
+    # The items of several collections are asked about together, so only the Source's own options apply.
+    with ytdlp_call_options(source):
+        return _ask(source, refs)
+
+
+def _ask(source, refs: list[ItemRef]) -> _Answers:
     answers = _Answers()
     pending = list({ref.slug: ref for ref in refs}.values())
     for attempt in range(_ATTEMPTS):
@@ -226,6 +242,15 @@ def _refresh(s: Session, due: list[_Watched], now: datetime) -> dict[str, SiteCo
     answers: dict[str, _Answers] = {}
     for source_key in dict.fromkeys(item.source_key for item in batched):
         answers[source_key] = _look_up(source_key, [item.ref for item in batched if item.source_key == source_key])
+    # What the creators call the tiers the items need, for tiers VODLoft does not know the names of yet.
+    tiers = [
+        learned for source_key, answer in answers.items()
+        for learned in unknown_tiers(s, get_source(source_key), [
+            (item.ref.url, _told_access(answer, item.ref.slug)) for item in batched if item.source_key == source_key
+        ])
+    ]
+    if tiers:
+        run_write_transaction(lambda w: [keep_tiers(w, site_key, site_tiers) for site_key, site_tiers in tiers])
 
     sites: dict[str, SiteCounts] = {}
     for item in due:
@@ -242,6 +267,12 @@ def _refresh(s: Session, due: list[_Watched], now: datetime) -> dict[str, SiteCo
         else:
             _failed.pop(item.key, None)
     return sites
+
+
+def _told_access(answer: _Answers, slug: str) -> str | None:
+    """The access the Source said an item needs."""
+    details = answer.details.get(slug)
+    return details.access if details is not None else answer.refused.get(slug)
 
 
 def _store(w: Session, item: _Watched, answer: _Answers | None, now: datetime) -> SiteCounts:

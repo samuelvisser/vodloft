@@ -12,6 +12,16 @@ from backend.api.models.collection import (
 from backend.api.models.collection_contract import CollectionWordsAPIRead
 from backend.api.models.source import NamesAPIRead
 from backend.types.collection_types import EpisodeIdentifier
+from backend.types.move_cause_types import MoveCauseOrigin, MoveCauseValue
+
+
+class MovedFileAPIRead(ResponseBase):
+    """A downloaded file that gets another path."""
+
+    title: str
+    from_path: str
+    to_path: Optional[str] = None
+    """None when only moving it tells, such as with a custom index."""
 
 
 class MovedPartAPIRead(ResponseBase):
@@ -25,7 +35,22 @@ class MovedPartAPIRead(ResponseBase):
     examples: list[str]
     """The titles of the videos, newest first, up to a few dozen."""
     files_moved: int = 0
-    """Downloads whose files move along into their new season."""
+    """Downloaded files that get another path in their new season."""
+    files: list[MovedFileAPIRead] = Field(default_factory=list)
+    """Those files, with the path each has now and gets, newest first, up to a few hundred."""
+
+
+class MoveCauseAPIRead(ResponseBase):
+    """One setting change that made downloads wait for the Move action, as it was and is now. The UI shows it in the
+    words of its origin, such as the options of the Seasons dialog."""
+
+    origin: MoveCauseOrigin
+    setting: str
+    before: MoveCauseValue
+    after: MoveCauseValue
+    subject_id: Optional[int] = None
+    """For a setting of one thing in the collection, such as one of its lists: that thing."""
+    subject_title: Optional[str] = None
 
 
 class MovePreviewAPIRead(ResponseBase):
@@ -36,8 +61,10 @@ class MovePreviewAPIRead(ResponseBase):
     type: str
     episode_identifier: EpisodeIdentifier
     parts: list[MovedPartAPIRead]
+    causes: list[MoveCauseAPIRead]
+    """The setting changes that made them wait, in the order they were made; none when VODLoft recorded none."""
     seasons_plan: str
-    """Why they move: what the collection's settings make its seasons now, in words."""
+    """What the collection's settings make its seasons now, in words: why they move when no change was recorded."""
     renumber_offered: bool
     """Whether it can number its episodes again: not when it numbers them by date."""
     changes: list[CollectionIdentificationChangeItemAPIRead]
@@ -46,6 +73,8 @@ class MovePreviewAPIRead(ResponseBase):
     """What numbering again does to each Local Media Profile's files; the metadata is rewritten either way."""
     files_follow: bool
     """Files moved, so its files are renamed and their metadata rewritten also when it keeps its numbers."""
+    busy: Optional[str] = None
+    """What the move waits for, such as the listing a saved change started; what moves shows once it is done."""
 
 
 class ReconcileAPIIn(RequestBase):
@@ -60,14 +89,3 @@ class ReconcileAPIRead(ResponseBase):
 
     episode_slug: Optional[str] = None
     collection_slug: Optional[str] = None
-
-
-class MovesWaitingAPIRead(ResponseBase):
-    """A collection whose videos wait for its Move action."""
-
-    slug: str
-    title: str
-    moved: int
-    words: CollectionWordsAPIRead
-    seasons_plan: str
-    """Why they move: what the collection's settings make its seasons now, in words."""

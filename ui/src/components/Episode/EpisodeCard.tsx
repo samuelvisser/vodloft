@@ -113,17 +113,12 @@ type Props = {
     seasonName?: string
     /** What the collection calls its seasons and episodes, such as albums and tracks. */
     words: CollectionWords
+    /** The collection's own yt-dlp options allow unplayable formats, so its media protected by DRM can still be tried. */
+    unplayableAllowed?: boolean
 }
 
 /** The episode thumbnail card used on a show's episode list. */
-export default function EpisodeCard({ep, collectionSlug, downloads, moved = false, collectionTitle, seasonName, words}: Props) {
-    const initials = ep.title
-        .split(' ')
-        .map((w) => w[0])
-        .join('')
-        .slice(0, 3)
-        .toUpperCase()
-
+export default function EpisodeCard({ep, collectionSlug, downloads, moved = false, collectionTitle, seasonName, words, unplayableAllowed = false}: Props) {
     // Episode thumbnails are landscape by default; if missing/empty, use a placeholder with the episode index.
     const landscapePath = (ep.thumbnailLandscapePath && ep.thumbnailLandscapePath.trim() !== '') ? ep.thumbnailLandscapePath : undefined
     const imageUrl = landscapePath ? toImageUrl(landscapePath) : `https://placehold.co/640x360/png?text=${encodeURIComponent(words.episode.Singular)}+%23${ep.index}`
@@ -166,7 +161,7 @@ export default function EpisodeCard({ep, collectionSlug, downloads, moved = fals
         <div className="episode-card" role="listitem" aria-label={ep.title} tabIndex={0} onKeyDown={onKeyDown}>
             <div className="cover" style={style} {...linkAreaHandlers(episodeHref, navigate)}>
                 <DownloadStatusIcons downloads={downloads ?? []}/>
-                {ep.drmProtected ? <DrmBadge onCover/>
+                {ep.drmProtected ? <DrmBadge onCover unplayableAllowed={unplayableAllowed}/>
                     // Media the account may watch only shows its open lock on its own page.
                     : ep.access && !ep.accessGranted ? <AccessBadge label={ep.accessLabel} description={ep.accessDescription} onCover/>
                     : ep.removedFromSource && !ep.removedByRetention ? <RemovedBadge onCover/>
@@ -176,12 +171,6 @@ export default function EpisodeCard({ep, collectionSlug, downloads, moved = fals
                         <span style={LIVE_BADGE_DOT_STYLE} aria-hidden/>
                         Live
                     </span>
-                )}
-                {/* Show initials only if we are using the placeholder (i.e., no real thumbnail) */}
-                {!landscapePath && (
-                    <span className="cover-text" aria-hidden>
-            {initials}
-          </span>
                 )}
                 {(ep.duration > 0 || isUpcoming) && (
                     <span className="thumb-corner"><DurationPill seconds={ep.duration} upcoming={isUpcoming}/></span>

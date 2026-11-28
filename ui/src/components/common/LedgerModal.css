@@ -21,6 +21,15 @@
     font-size: 0.9rem;
 }
 
+.ledger-modal__filters {
+    flex: 0 0 auto;
+    padding: 14px 20px 0;
+}
+
+.ledger-modal__filters .dialog-switch {
+    margin: 0;
+}
+
 .ledger-modal__content {
     flex: 1 1 auto;
     min-height: 0;

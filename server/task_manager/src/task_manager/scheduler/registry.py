@@ -44,6 +44,7 @@ class TaskMeta:
     executor_alias: TaskLane = TaskLane.DEFAULT
     terminal_callback: Optional[TerminalCallback] = None
     recovery_dispatcher: Optional[RecoveryDispatcher] = None
+    findings: tuple[str, ...] = ()
     triggers: List[TriggerMeta] = field(default_factory=list)
 
 
@@ -69,6 +70,7 @@ def task(
     executor_alias: TaskLane = TaskLane.DEFAULT,
     terminal_callback: Optional[TerminalCallback] = None,
     recovery_dispatcher: Optional[RecoveryDispatcher] = None,
+    findings: tuple[str, ...] = (),
 ):
     """Decorator to register an async task callable.
 
@@ -99,6 +101,11 @@ def task(
     such a queue rather than immediately. Generic TaskOperation recovery leaves
     those targets QUEUED and invokes each dispatcher once after durable recovery
     state has been restored, preserving the queue's own concurrency policy.
+
+    ``findings`` names what a run of the task can find, as paths into its
+    ``TaskResult.data`` (``"refresh.updated"`` for a nested one). Each holds a
+    count, a list or a flag. A run that succeeded with every one of them 0, empty or
+    missing found nothing, and a task log can hide it.
     """
 
     def decorator(fn: TaskCallable):
@@ -114,6 +121,7 @@ def task(
             executor_alias=executor_alias,
             terminal_callback=terminal_callback,
             recovery_dispatcher=recovery_dispatcher,
+            findings=tuple(findings),
         )
         _REGISTRY[key] = (meta, fn)
 
@@ -123,6 +131,15 @@ def task(
         return fn
 
     return decorator
+
+
+def _require_findings(meta: TaskMeta) -> None:
+    """A task that runs on its own names its findings, so every log of it can leave out the runs that found nothing.
+
+    A task the user starts has done what they asked in each run, so every run of it is worth seeing.
+    """
+    if not meta.findings:
+        raise ValueError(f"Task {meta.key!r} runs on its own, so it must name its findings in @task(findings=...)")
 
 
 def on_cron(
@@ -145,6 +162,7 @@ def on_cron(
     """
     def decorator(fn: TaskCallable):
         meta = _registered_task_meta(fn, "on_cron")
+        _require_findings(meta)
 
         trigger = TriggerMeta(
             trigger_type='cron',
@@ -171,6 +189,7 @@ def on_event(event_name: str, resource_type: Optional[str] = None):
     """
     def decorator(fn: TaskCallable):
         meta = _registered_task_meta(fn, "on_event")
+        _require_findings(meta)
 
         trigger = TriggerMeta(
             trigger_type='event',

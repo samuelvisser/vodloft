@@ -79,6 +79,9 @@ def test_a_live_playlist_is_looked_up_again_when_youtube_refuses_its_link(monkey
     class FakeSource:
         name = "yt-dlp"
 
+        def has(self, feature):
+            return False
+
         def live_stream(self, url, *, use_cookies=True):
             looked_up.append(url)
             return LiveStream(

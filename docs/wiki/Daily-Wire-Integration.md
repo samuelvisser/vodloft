@@ -68,7 +68,7 @@ Ordinary installations should leave these at their defaults.
 
 Changing these values can prevent authorization or media access from working. If you changed them while troubleshooting, restore the defaults before assuming the Daily Wire account itself is broken.
 
-See [[Settings#sources]].
+See [[Settings#sites]].
 
 ## TMDB is separate
 

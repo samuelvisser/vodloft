@@ -107,6 +107,26 @@ def still_missing(url: str | None) -> bool:
     return response.status_code == 404
 
 
+def as_jpeg(url: str) -> bytes | None:
+    """A JPEG of the picture at ``url``, whatever kind of picture it is, or None when it can't be read."""
+    ffmpeg_program = shutil.which(get_settings().download_settings.ffmpeg_path)
+    if ffmpeg_program is None:
+        logger.warning("Not keeping the picture %s, because ffmpeg is not installed", url)
+        return None
+    try:
+        result = subprocess.run(
+            [ffmpeg_program, "-loglevel", "error", "-i", url, "-frames:v", "1", "-q:v", "2", "-f", "image2", "-c:v", "mjpeg", "pipe:1"],
+            capture_output=True, timeout=_FRAME_TIMEOUT_SECONDS, check=False,
+        )
+    except subprocess.TimeoutExpired:
+        logger.warning("Not keeping the picture %s, because ffmpeg took too long", url)
+        return None
+    if result.returncode != 0 or not result.stdout:
+        logger.warning("Could not keep the picture %s: %s", url, result.stderr.decode(errors="replace").strip()[-300:])
+        return None
+    return result.stdout
+
+
 def first_frame(url: str) -> bytes | None:
     """A JPEG of the start of a video, like the still YouTube makes itself.
 

@@ -96,7 +96,7 @@ function NumberControl({value, onChange, label, invalid, min, max, unit}: Contro
 function SelectControl({value, onChange, label, registry}: ControlProps & {registry: SelectRegistry}) {
     return (
         <div className="site-settings-choice">
-            <SimpleSelect aria-label={label} registry={registry} value={value} menuPlacement="auto" onChange={onChange}/>
+            <SimpleSelect aria-label={label} registry={registry} value={value} onChange={onChange}/>
         </div>
     )
 }
@@ -244,7 +244,7 @@ const DEFINITIONS: Record<SiteSettingKey, Definition> = {
                         <span title={SponsorBlockCategoryReg.getHelp(category)}>{SponsorBlockCategoryReg.getLabel(category)}</span>
                         <SimpleSelect
                             aria-label={`${SponsorBlockCategoryReg.getLabel(category)}, ${label}`}
-                            registry={sponsorBlockActionReg(category)} value={value[category]} menuPlacement="auto"
+                            registry={sponsorBlockActionReg(category)} value={value[category]}
                             onChange={(action) => onChange({...value, [category]: action})}
                         />
                     </div>
@@ -304,9 +304,11 @@ type RowProps = Pick<SettingsTabProps, 'updateDraft' | 'errorFor'> & {
     group: SiteSettingGroup
     groupKeys: ReadonlySet<string>
     draft: SettingsValues
+    /** The only Site the card lists. */
+    alone: boolean
 }
 
-function SiteSettingsRow({site, group, groupKeys, draft, updateDraft, errorFor}: RowProps) {
+function SiteSettingsRow({site, group, groupKeys, draft, updateDraft, errorFor, alone}: RowProps) {
     const values = draft.siteSettings[site.key] ?? {}
     const all = site.settings.map((offered) => resolve(offered, values, draft))
     const settings = all.filter((setting) => groupKeys.has(setting.offered.key))
@@ -323,7 +325,7 @@ function SiteSettingsRow({site, group, groupKeys, draft, updateDraft, errorFor}:
         // An error opens the Site, so a refused save shows why.
         <SiteRow
             siteKey={site.key} name={site.name} domains={site.domains} badges={badges(group, settings)}
-            removable={site.removable} forceOpen={errors.some(Boolean)}
+            removable={site.removable} forceOpen={errors.some(Boolean)} alone={alone}
         >
             {shown.map((setting, index) => (
                 <SettingRow
@@ -423,7 +425,7 @@ export default function SiteSettingsCard({groups, draft, updateDraft, errorFor, 
                     {data.sites.map((site) => (
                         <SiteSettingsRow
                             key={site.key} site={site} group={group} groupKeys={groupKeys} draft={draft}
-                            updateDraft={updateDraft} errorFor={errorFor}
+                            updateDraft={updateDraft} errorFor={errorFor} alone={data.sites.length === 1}
                         />
                     ))}
                 </SiteRows>

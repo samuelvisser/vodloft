@@ -14,7 +14,7 @@ export const AREA_LABELS: Record<Area, {label: string, group: string, help: stri
     tasks: {label: 'Tasks', group: 'VODLoft', help: 'Scheduled tasks and every operation. Without it, users see only their own operations.'},
     logs: {label: 'Log', group: 'VODLoft', help: 'The application log.'},
     settings: {label: 'Settings', group: 'VODLoft', help: 'Settings › General, Downloads, Quick download, Automation and Advanced.'},
-    sources: {label: 'Sources', group: 'VODLoft', help: 'Settings › Sources: sign-ins, cookies, API keys. Needs Settings too.'},
+    sources: {label: 'Sources', group: 'VODLoft', help: 'Settings › Sites: sign-ins, cookies, API keys. Needs Settings too.'},
     users: {label: 'Users (administrator)', group: 'VODLoft', help: 'Settings › Users. Gives every other area at its highest level.'},
 }
 

@@ -20,6 +20,8 @@ export type TaskLedgerCollectionQuery = {
   includeUnscoped?: boolean
   status?: readonly string[]
   startedAfter?: Date | string
+  /** Leave out the runs that found nothing, when the task names what its runs find. */
+  hideEmpty?: boolean
   orderBy?: 'workflow' | 'started_at' | 'finished_at' | 'created_at'
   order?: 'asc' | 'desc'
   limit?: number
@@ -133,6 +135,7 @@ export function deriveTaskLedgerCollectionPlaceholder(
     includeUnscoped = false,
     statuses,
     startedAfter,
+    hideEmpty = false,
     orderBy,
     order,
     initialCount,
@@ -143,6 +146,7 @@ export function deriveTaskLedgerCollectionPlaceholder(
     includeUnscoped?: boolean
     statuses: readonly string[] | undefined
     startedAfter: string | undefined
+    hideEmpty?: boolean
     orderBy: 'workflow' | 'started_at' | 'finished_at' | 'created_at'
     order: 'asc' | 'desc'
     initialCount: number
@@ -160,6 +164,7 @@ export function deriveTaskLedgerCollectionPlaceholder(
     orderBy,
     order,
     includeUnscoped,
+    hideEmpty,
   ]
   const candidates = queryClient.getQueryCache().findAll({
     queryKey: ['taskLedger', 'list'],
@@ -181,6 +186,8 @@ export function deriveTaskLedgerCollectionPlaceholder(
       || key[1] !== 'list'
       || key[7] !== orderBy
       || key[8] !== order
+      // Only the backend knows which runs found nothing, so a log with them never stands in for one without.
+      || (key[10] === true) !== hideEmpty
       || !optionalScalarFilterContains(key[2], definitionKey)
       || !optionalScalarFilterContains(key[3], resourceType)
       || !resourceScopeContains(key[4], key[9] === true, resourceIds, includeUnscoped)
@@ -190,7 +197,7 @@ export function deriveTaskLedgerCollectionPlaceholder(
       continue
     }
 
-    const sourceDescriptor = [...key.slice(2, 9), key[9] === true]
+    const sourceDescriptor = [...key.slice(2, 9), key[9] === true, key[10] === true]
     if (JSON.stringify(sourceDescriptor) === JSON.stringify(targetDescriptor)) continue
 
     const source = query.state.data as InfiniteData<
@@ -258,6 +265,7 @@ export function useTaskLedgerInfinite({
   includeUnscoped = false,
   status,
   startedAfter,
+  hideEmpty = false,
   orderBy = 'created_at',
   order = 'desc',
   limit = 100,
@@ -279,13 +287,15 @@ export function useTaskLedgerInfinite({
       orderBy,
       order,
       includeUnscoped,
+      hideEmpty,
     ] as const,
     initialCount: limit,
     batchSize: limit,
-    enabled: pageActive && enabled && (definitionKey === undefined || definitionKey.length > 0),
+    // A page the user is not looking at, such as in a window without focus, still loads, and waits to poll.
+    enabled: enabled && (definitionKey === undefined || definitionKey.length > 0),
     // This helps refresh backend data when filters change
     staleTime: 0,
-    pollIntervalMs: 3000,
+    pollIntervalMs: pageActive ? 3000 : undefined,
     pollWhilePageCountAtMost: 2,
     derivePlaceholderData: (queryClient) => deriveTaskLedgerCollectionPlaceholder(
       queryClient,
@@ -296,6 +306,7 @@ export function useTaskLedgerInfinite({
         includeUnscoped,
         statuses,
         startedAfter: startedAfterValue,
+        hideEmpty,
         orderBy,
         order,
         initialCount: limit,
@@ -314,6 +325,7 @@ export function useTaskLedgerInfinite({
       if (includeUnscoped) params.set('include_unscoped', 'true')
       for (const item of statuses ?? []) params.append('status', item)
       if (startedAfterValue) params.set('started_after', startedAfterValue)
+      if (hideEmpty) params.set('hide_empty', 'true')
 
       const response = await fetch(
         `${apiUrl()}/tasks/ledger?${params}`,

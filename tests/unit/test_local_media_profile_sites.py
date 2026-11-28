@@ -13,13 +13,13 @@ def _new_session() -> tuple[Session, object]:
     import backend.db.models  # noqa: F401
     from backend.db import Base
 
-    from backend.db.initial_seed import _seed_sites
+    from backend.services.sites import add_suggested_sites
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     session = Session(engine)
-    # A new VODLoft starts with the Sites a Source is made for or takes an API key for.
-    _seed_sites(session)
+    # The Sites a user picked in onboarding.
+    add_suggested_sites(session, ("youtube", "twitch", "tiktok", "soundcloud", "dailywire"))
     return session, engine
 
 
@@ -76,6 +76,43 @@ def test_only_the_daily_wire_has_movies() -> None:
     session, engine = _new_session()
     _see_site(session, "vimeo", "Vimeo")
     assert movie_site_keys(session) == ["dailywire"]
+
+    session.close()
+    engine.dispose()
+
+
+def test_a_site_has_movies_by_its_contract(monkeypatch) -> None:
+    from dataclasses import replace
+
+    from backend.services import local_media_profile_sites
+    from sources import site_of
+
+    youtube = site_of("youtube")
+    monkeypatch.setattr(local_media_profile_sites, "site_of", lambda key: replace(youtube, movies=True) if key == "youtube" else site_of(key))
+    # A Source that fetches the Site still needs movies of its own: yt-dlp has none.
+    assert not local_media_profile_sites.site_has_movies("youtube")
+    assert local_media_profile_sites.site_has_movies("dailywire")
+    assert not site_of("youtube").movies
+
+
+def test_a_profile_only_for_movies_shows_once_a_site_has_movies() -> None:
+    from backend.api.endpoints.local_media_profiles.service import get_local_media_profile_views_page
+    from backend.api.endpoints.video_local_media_profiles.service import create_video_local_media_profile
+    from backend.api.models.profile_list import LocalMediaProfileListQuery
+    from backend.api.models.video_local_media_profile import VideoLocalMediaProfileAPICreate
+    from backend.services.sites import remove_site
+
+    session, engine = _new_session()
+    for scope in ("movies", "videos"):
+        create_video_local_media_profile(session, VideoLocalMediaProfileAPICreate(
+            name=scope.title(), output_template=f"/downloads/{scope}/{{{{ title }}}}.ext", preferred_format="format_1080p",
+            video_scope=scope,
+        ))
+    names = lambda: [view.profile.name for view in get_local_media_profile_views_page(session, LocalMediaProfileListQuery()).items]
+    assert names() == ["Movies", "Videos"]
+
+    remove_site(session, "dailywire")
+    assert names() == ["Videos"]
 
     session.close()
     engine.dispose()
@@ -151,6 +188,8 @@ def test_the_sites_listing_says_which_profile_types_each_site_takes() -> None:
     assert by_key["dailywire"]["profileTypes"] == ["collection", "video"]
     assert by_key["youtube"]["profileTypes"] == ["collection", "video"]
     assert by_key["youtube"]["downloadOptions"]["hlsBundle"] is True
+    assert by_key["dailywire"]["movies"] is True
+    assert by_key["youtube"]["movies"] is False
     assert read["upcomingProfileTypes"] == ["collection", "video"]
 
     session.close()
@@ -177,3 +216,30 @@ def test_keeping_every_sponsorblock_type_saves_sponsorblock_off():
         CollectionLocalMediaProfileInput.model_validate({**body, "sponsorblock_enabled": None, "sponsorblock_segments": None})
         .fields_kept_on_update()
     )
+
+
+def test_a_profile_only_for_movies_only_takes_new_sites_with_movies() -> None:
+    from backend.db.initial_seed import _seed_local_media_profiles
+    from backend.db.models import LocalMediaProfileBase
+    from backend.services.sites import add_suggested_sites
+
+    import backend.db.models  # noqa: F401
+    from backend.db import Base
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session = Session(engine)
+    # A new VODLoft has no Sites yet when its profiles are made.
+    _seed_local_media_profiles(session)
+    session.flush()
+
+    add_suggested_sites(session, ("youtube", "dailywire"))
+    _see_site(session, "rumble", "Rumble")
+    session.flush()
+
+    profiles = {profile.slug: profile.site_keys for profile in session.query(LocalMediaProfileBase)}
+    assert profiles["vodloft-movies"] == ["dailywire"]
+    assert profiles["vodloft-videos"] == ["youtube", "dailywire", "rumble"]
+
+    session.close()
+    engine.dispose()

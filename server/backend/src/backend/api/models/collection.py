@@ -1,23 +1,25 @@
 from __future__ import annotations
 
-from typing import ClassVar, Literal, Optional, Union
+from typing import Annotated, ClassVar, Literal, Optional, Union
 from datetime import date, datetime
 
-from pydantic import AliasChoices, AliasPath, computed_field, Field, ValidationInfo, field_validator, model_validator
+from pydantic import AliasChoices, AliasPath, computed_field, Field, StringConstraints, ValidationInfo, field_validator, model_validator
 
 from backend.api.models.base import RequestBase, ResponseBase, response_model_config
 from backend.api.models.custom_metadata import CustomMetadataResponseBase
-from backend.api.models.profile_bulk import BulkChangesIn
+from backend.api.models.profile_bulk import BulkChangeIn, BulkChangesIn, BulkFieldSummaryRead, BulkSummaryRead
 from backend.api.models.source import NamesAPIRead, SiteAPIRead, SourcedResponse
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.collection_contracts import collection_contract
+from backend.types.collection_health_types import HealthIssueKind
 from backend.types.collection_types import CheckFrequency, CollectionType, CookiesMode, EpisodeIdentifier, EpisodeOrder
-from backend.types.link_season_types import CollectionKind, OutsideVideos
+from backend.types.link_season_types import CollectionKind, LinkSeasons, LooseVideos, OutsideVideos, SourceRole
 from backend.types.resource_names import CUSTOM_COLLECTION_NAMES
 from config.settings.cron_validation import CronExpressionError, validate_cron_expression
 from backend.types.download_profile_types import EpisodeTagKey
 from backend.utils.helpers import generate_uuid
 from backend.api.models.source import checked_ytdlp_options
+from backend.services.unplayable_formats import options_allow_unplayable_formats
 from sources import Site, site_of
 from sources.ytdlp_options import MAX_OPTIONS_LENGTH
 
@@ -26,7 +28,7 @@ from sources.ytdlp_options import MAX_OPTIONS_LENGTH
 class _CollectionAPIBaseIn(RequestBase):
     """Fields for requests: validate here if needed."""
 
-    title: str
+    title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
     description: Optional[str] = None
     sharing_url: Optional[str] = None
     """The collection's own link; only a collection that holds only what its link seasons have may go without."""
@@ -269,6 +271,12 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
 
     @computed_field
     @property
+    def allows_unplayable_formats(self) -> bool:
+        """Its own yt-dlp options allow unplayable formats, so its media protected by DRM can still be tried."""
+        return options_allow_unplayable_formats(self.source_key, self.ytdlp_options)
+
+    @computed_field
+    @property
     def can_join_creator(self) -> bool:
         """Whether Add to creator is offered: a collection with a link on a Site with creators, a channel or a list,
         or one without a link of its own, which joins a creator in the Library by hand."""
@@ -318,6 +326,10 @@ class CollectionAPIRead(_CollectionAPIBaseOut):
     updated_at: datetime
     added_by: Optional[str] = None
     """Who added it, with user accounts on."""
+    healthy: bool = True
+    """Whether the collection needs nothing from the user, as it stored it."""
+    health_issues: dict[HealthIssueKind, int] = Field(default_factory=dict)
+    """What it needs the user for, by kind of issue, with how many things each concerns."""
 
 
 class CollectionAPIReadView(CollectionAPIRead):
@@ -412,7 +424,33 @@ class CollectionBulkChangesIn(BulkChangesIn):
     content_rating: Optional[str] = Field(default=None, max_length=50)
     """Empty removes the content rating."""
 
+    link_seasons: Optional[LinkSeasons] = None
+    """Whether each Collection takes its channel's lists and the links added to it, as the Seasons dialog's switch
+    sets it; only Collections of a whole channel on a Site whose lists can be seasons have it."""
+    feeds: Optional[dict[str, SourceRole]] = Field(default=None, max_length=50)
+    """What some feeds of the Collections' channels become, by the key of the feed (``CollectionBulkFeedRead.key``).
+    A Collection takes only the feeds its channel has; the others keep what they are."""
+
+    loose_videos: Optional[LooseVideos] = None
+    """Whether what is part of each Collection goes in one season or a season per year, as the Seasons dialog sets
+    it; only Collections whose Source lists their videos have it. Whether that one season also holds what has a season
+    of its own stays as each Collection has it."""
+
     nullable: ClassVar[frozenset[str]] = frozenset({"genre", "content_rating"})
+
+    @field_validator("loose_videos")
+    @classmethod
+    def _grouping(cls, value: Optional[LooseVideos]) -> Optional[LooseVideos]:
+        if value == LooseVideos.EVERYTHING:
+            raise ValueError("Choose one season or a season per year")
+        return value
+
+    @field_validator("feeds")
+    @classmethod
+    def _some_feed(cls, value: Optional[dict[str, SourceRole]]) -> Optional[dict[str, SourceRole]]:
+        if value is not None and not value:
+            raise ValueError("Choose what a feed becomes")
+        return value
 
     @field_validator("check_frequency")
     @classmethod
@@ -425,3 +463,35 @@ class CollectionBulkChangesIn(BulkChangesIn):
     @classmethod
     def _strip_metadata(cls, value: Optional[str]) -> Optional[str]:
         return (value or "").strip() or None
+
+
+class CollectionBulkChangeIn(BulkChangeIn[CollectionBulkChangesIn]):
+    keep_numbers: list[int] = Field(default_factory=list, max_length=10_000)
+    """The Collections, by id, that keep their episodes' numbers when their downloads move into other seasons, as
+    the review let the user choose; the others number them again, as the Seasons dialog does by default."""
+    saving_token: Optional[str] = Field(default=None, max_length=64, pattern=r"^[A-Za-z0-9-]+$")
+    """The review's token, by which it follows how far each collection's save is, as the Seasons dialog does."""
+
+
+class CollectionBulkFeedRead(ResponseBase):
+    """One feed of the chosen Collections' channels, such as YouTube's Shorts, and what it is in each now."""
+
+    key: str
+    """The feed by its Site and its ref, as the changes name it."""
+    names: NamesAPIRead
+    """What the Site calls the feed's videos; the feed is named after them."""
+    site: str
+    """The name of its Site, such as YouTube."""
+    summary: BulkFieldSummaryRead
+    """What the feed is now in each Collection whose channel has it: season, part or off."""
+
+
+class CollectionBulkSummaryRead(BulkSummaryRead):
+    feeds: list[CollectionBulkFeedRead] = Field(default_factory=list)
+    list_names: Optional[NamesAPIRead] = None
+    """What the lists of the Collections that can take them are called, joined, such as playlists."""
+    loose_videos: Optional[BulkFieldSummaryRead] = None
+    """Whether what is part of each Collection that has the setting goes in one season or a season per year now."""
+    season_names: Optional[NamesAPIRead] = None
+    """What the seasons of the Collections that have that setting are called, joined, such as seasons or albums."""
+

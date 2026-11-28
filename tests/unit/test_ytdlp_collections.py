@@ -38,7 +38,7 @@ class ListedSource(Source):
         self.videos: list[VideoDetails] = []
         self.known_seen: list[frozenset[str]] = []
 
-    def resolve(self, url):
+    def resolve(self, url, plan=None):
         return None
 
     def episode_media(self, **_kwargs):
@@ -639,6 +639,23 @@ def test_a_youtube_download_profile_marks_sponsors_and_adds_your_own_options(lis
         "--concurrent-fragments", "4", "--extractor-args", "youtube:player_client=web", "--concurrent-fragments", "8",
     )
 
+    # The options of the collection's creator come between the Source's and the collection's own, so the collection's
+    # own win where they disagree.
+    from backend.db.models import Creator
+    collection.creator = Creator(uuid="creator", slug="northwind", title="Northwind", ytdlp_options="--concurrent-fragments 6")
+    session.commit()
+    command = download_plans.prepare_download_plan(session, download.id, DownloadTracker()).source.ytdlp_command
+    assert command[1:9] == (
+        "--concurrent-fragments", "4", "--extractor-args", "youtube:player_client=web", "--concurrent-fragments", "6",
+        "--concurrent-fragments", "8",
+    )
+    collection.creator.ytdlp_options = "-o elsewhere.mp4"
+    session.commit()
+    with pytest.raises(DownloadError, match="creator 'Northwind' can no longer be used"):
+        download_plans.prepare_download_plan(session, download.id, DownloadTracker())
+    collection.creator.ytdlp_options = ""
+    session.commit()
+
     # A new profile's default: chapters for sponsors, intros, outros and the highlight; nothing is cut out.
     _site_of.cache_clear()
     monkeypatch.setattr(ListedSource, "sites", (Site(
@@ -682,7 +699,7 @@ def test_a_music_collection_has_a_setting_for_new_albums_and_one_for_new_playlis
 
     collection = _collection(session, "PLartist", source_key="ytdlp")
     collection.sharing_url = "https://soundcloud.com/artist"
-    collection.type, collection.link_seasons = "music", "selected"
+    collection.type, collection.link_seasons = "music", "on"
     # Until the user chooses, a SoundCloud collection adds new albums as seasons and skips new playlists.
     assert [(setting.key, setting.action) for setting in collection_new_lists(collection)] == [
         ("album", "add"), ("playlist", "ignore"),

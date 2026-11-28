@@ -32,8 +32,8 @@ The first list holds everywhere VODLoft can send a message or that it can call:
   or paste an Apprise URL. The test button sends a test message.
 - **Jellyfin, Emby and Plex** get a library refresh. Enter the address and the API key (for Plex, the Plex token).
   By default only the changed folder is refreshed, and refreshes are collected for about a minute, so 40 downloads in a
-  row are one refresh. If the media server sees your files under another path (for example `/downloads` in VODLoft and
-  `/media` in Jellyfin), fill in the path mapping.
+  row are one refresh. If the media server sees your files under another path, fill in the path mapping: see
+  [Connecting a media server](#connecting-a-media-server) below.
 - **Webhook** sends the details as JSON to an address. The form shows exactly what it sends. A failed call is tried
   again three times over a few minutes.
 - **Script** runs an executable from the `scripts` folder next to your `config.yml` (`/config/scripts` in Docker).
@@ -46,6 +46,53 @@ destination does not change any rule: you add it to the rules you want.
 
 When a destination fails, its row says so with the error. A media server, webhook or script that keeps failing
 counts as a problem, so the default "a task keeps failing" rule tells administrators.
+
+## Connecting a media server
+
+VODLoft can tell Jellyfin, Emby or Plex to look at a folder as soon as something in it changes, so new episodes show
+up within a minute instead of at the next scheduled library scan.
+
+1. In **Settings › Messages and actions**, choose **Add destination or service**, then Jellyfin, Emby or Plex.
+2. Fill in the **Address** VODLoft can reach the server on, such as `http://192.168.1.10:32400` for Plex or
+   `http://jellyfin:8096` for Jellyfin in the same Docker network.
+3. Fill in the **API key** (Jellyfin and Emby: Dashboard › API Keys) or the **Plex token** (the form links to Plex's
+   guide on finding it).
+4. Fill in the **path mapping** if the server sees your downloads under another path (see below).
+5. Choose **Test the connection**, then **Add**, and add the new destination to a rule, such as the one for new
+   downloads.
+
+### The path mapping
+
+VODLoft tells the media server *which folder* changed. That only works when both use the same name for that folder.
+Often they don't: VODLoft runs in Docker and sees your downloads as `/downloads`, while the media server sees the same
+files somewhere else. The path mapping translates one into the other.
+
+- **Path in VODLoft** is your download folder as VODLoft sees it. With the standard Docker setup this is `/downloads`:
+  the part after the colon in the `volumes` line of VODLoft's `docker-compose.yml` (`./downloads:/downloads`).
+- **Path in Jellyfin, Emby or Plex** is the same folder as the media server sees it. Look at the folders of your
+  libraries: in Plex under **Settings › Manage › Libraries**, **Edit** a library, then **Add folders**; in Jellyfin
+  and Emby under **Dashboard › Libraries**.
+
+Find the folder in your media server's library that holds your VODLoft downloads, and fill in the same folder on both
+sides. Some examples:
+
+| Your setup | Path in VODLoft | Path in the media server |
+|---|---|---|
+| Both in Docker, the media server mounts the downloads as `/media` | `/downloads` | `/media` |
+| Plex on Windows, which sees the downloads folder as drive `D:` | `/downloads` | `D:\` |
+| Plex on Windows through a network share | `/downloads` | `\\nas\downloads` |
+| The media server sees the same path as VODLoft | leave both empty | |
+
+When both fields are filled in, the form shows one of your folders as VODLoft sees it and as the media server will
+be told it, such as `/downloads/Video/Show` as `D:\Video\Show`. Check that the second one is a folder you can find
+in your media server. For Plex, **Test the connection** also checks that one of your Plex libraries holds your newest
+download's folder, and tells you when the mapping is off.
+
+Library folders only count when they hold the downloads. If Plex's library folder is `D:\Video` and VODLoft saves to
+`/downloads/Video/...`, map `/downloads` to `D:\`, not to `D:\Video`.
+
+If you can't get it to match, choose **The whole library** under **What to refresh**. VODLoft then refreshes every
+library instead of only the changed folder, which needs no path mapping but makes the server scan more.
 
 ## Rules
 

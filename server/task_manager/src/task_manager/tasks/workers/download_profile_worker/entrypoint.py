@@ -8,6 +8,7 @@ from backend.utils.custom_index import CustomIndexNotReadyError
 from task_manager.tasks.helpers.custom_index_readiness import request_missing_index_repair
 from .event_adapter import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
 from task_manager.scheduler.registry import on_cron, on_event, task
+from task_manager.scheduler.results import TaskResult
 from task_manager.tasks.media_download_operations import on_media_download_task_terminal
 from .service import run_download_profile_worker
 
@@ -35,13 +36,14 @@ from .service import run_download_profile_worker
     default_max_retries=5,
     tracks_progress=True,
     terminal_callback=on_media_download_task_terminal,
+    findings=("prepared", "started"),
 )
 async def download_profile_worker(
         *,
         resource_id: Optional[int] = None,
         resource_type: Optional[str] = None,
         progress=None,
-) -> None:
+) -> TaskResult:
     """
     Ensures the episodes requested by enabled Download Profiles are downloaded.
 
@@ -58,7 +60,7 @@ async def download_profile_worker(
     """
     try:
         with db_session() as s:
-            await run_download_profile_worker(
+            return await run_download_profile_worker(
                 s,
                 resource_id=resource_id,
                 resource_type=resource_type,

@@ -41,6 +41,7 @@ from backend.services.notifications.destinations import (
     record_attempt,
     update_destination,
 )
+from backend.services.notifications.paths import holds, mapped_path
 from backend.services.notifications.push import PushRejected, find_subscription, save_subscription, vapid_public_key
 from backend.services.notifications.rules import (
     RuleNotFound,
@@ -70,7 +71,7 @@ def _config(destination: DestinationInput) -> dict[str, Any]:
         try:
             url = build_url(apprise.service, apprise.values) if apprise.mode == "fields" else apprise.url
         except InvalidDestination as error:
-            raise ServiceError(str(error), field="destination") from None
+            raise ServiceError(str(error), field=error.field or "destination") from None
         return {"url": url}
     part = {
         Kind.WEBHOOK: destination.webhook, Kind.SCRIPT: destination.script,
@@ -82,7 +83,7 @@ def _checked(call):
     try:
         return call()
     except InvalidDestination as error:
-        raise ServiceError(str(error), field="destination") from None
+        raise ServiceError(str(error), field=error.field or "destination") from None
 
 
 @dataclass(frozen=True)
@@ -127,10 +128,25 @@ def destinations(s: Session) -> list[DestinationSource]:
     return [_shown(destination) for destination in list_destinations(s)]
 
 
-def preview(body: DestinationInput) -> dict[str, str]:
+def _path_example(s: Session, config: dict[str, Any]) -> dict[str, str] | None:
+    """One folder as VODLoft and as the media server see it: the newest download's when the mapping covers it,
+    otherwise the mapped folder itself."""
+    source = config.get("path_from") or ""
+    if not source or not config.get("path_to"):
+        return None
+    sample = _sample(s)
+    folder = str((sample.data or {}).get("folder") or "") if sample is not None else ""
+    path = folder if folder and holds(source, folder) else source
+    return {"vodloft": path, "server": mapped_path(path, config)}
+
+
+def preview(s: Session, body: DestinationInput) -> dict[str, Any]:
     checked = _checked(lambda: check_config(Kind(body.kind), _config(body)))
     service_name = display_service(NotificationDestination(kind=str(body.kind), service=checked.service))
-    return {"service": checked.service, "service_name": service_name, "masked": checked.masked}
+    return {
+        "service": checked.service, "service_name": service_name, "masked": checked.masked,
+        "path_example": _path_example(s, checked.config),
+    }
 
 
 def add_destination(s: Session, body: DestinationCreate) -> DestinationSource:

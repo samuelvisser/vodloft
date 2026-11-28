@@ -25,12 +25,14 @@ function cloneIndexingValues(values: IndexingValueEntry[] | undefined): Indexing
 }
 
 
-export default function IndexingValuesEditorButton({
-                                                       form,
-                                                       className = 'btn',
-                                                   }: {
+/** Opens the editor for a collection profile's own Indexing values. By default it is the small Edit button of the
+ * template reference's Indexing tab. */
+export default function IndexingValuesEditorButton({form, className = 'template-reference__button', label = 'Edit', addKey}: {
     form: UseFormReturn<any>
     className?: string
+    label?: string
+    /** A key to start a new Indexing value with, such as one the template uses that is not defined yet. */
+    addKey?: string
 }) {
     const [open, setOpen] = useState(false)
     const titleId = `indexing-values-title-${useId()}`
@@ -47,15 +49,12 @@ export default function IndexingValuesEditorButton({
         name: 'indexingValues',
     })
     const {errors, isDirty} = useFormState({control: editorForm.control})
-    // An error the server puts on the whole list, such as two values sharing a key.
-    const {errors: profileErrors} = useFormState({control: form.control, name: 'indexingValues'})
-    const listError = (profileErrors.indexingValues as {message?: string} | undefined)?.message
-
     const openEditor = () => {
+        const current = cloneIndexingValues(form.getValues('indexingValues') as IndexingValueEntry[] | undefined)
         editorForm.reset({
-            indexingValues: cloneIndexingValues(
-                form.getValues('indexingValues') as IndexingValueEntry[] | undefined,
-            ),
+            indexingValues: addKey && !current.some(({key}) => key === addKey)
+                ? [...current, {key: addKey, name: '', keepNumbers: false}]
+                : current,
         })
         setOpen(true)
     }
@@ -214,11 +213,24 @@ export default function IndexingValuesEditorButton({
 
     return (
         <>
-            <button type="button" className={className} onClick={openEditor}>
-                Indexing values
+            <button
+                type="button"
+                className={className}
+                onClick={openEditor}
+                aria-label={label === 'Edit' ? 'Edit your Indexing values' : undefined}
+            >
+                {label}
             </button>
-            {listError && <div className="error" role="alert">{listError}</div>}
             {dialog ? createPortal(dialog, document.body) : null}
         </>
     )
+}
+
+
+/** An error the server puts on the whole list of Indexing values, such as two values sharing a key. It shows under
+ * the template, where it is seen also while the reference with the editor is closed. */
+export function IndexingValuesError({form}: {form: UseFormReturn<any>}) {
+    const {errors} = useFormState({control: form.control, name: 'indexingValues'})
+    const message = (errors.indexingValues as {message?: string} | undefined)?.message
+    return message ? <div className="error" role="alert">Indexing values: {message}</div> : null
 }

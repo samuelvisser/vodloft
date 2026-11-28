@@ -10,7 +10,7 @@ from downloader.hls import is_master_playlist, media_playlist_segments, parse_ma
 from progress_plan import PlanTracker, StageSpec
 
 from ..contract import (
-    Access, CreatorDetails, Names, SectionType, MAIN_TAG, MIN_NEWEST_EPISODES, SectionKind, SectionRef, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback,
+    Access, CreatorDetails, cheapest, Names, SectionType, MAIN_TAG, MIN_NEWEST_EPISODES, SectionKind, SectionRef, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback,
     DownloadOptions, PublishStatusLabel, ResolvedLink, RssEpisodeType, SeasonRef, Site, SiteSetting, SiteSettings, Source, StreamMethod,
     ReleaseDate, UpgradeChecks, UpgradeImprovement, UpgradeOffer, VideoDetails, publish_status_labels_with,
 )
@@ -23,7 +23,7 @@ from .auth import DeviceAuthClient
 from .auth.storage import TokenStore
 from .links import HOST, _access_token, _first, collection_url, parse_link, resolve_link
 from . import membership
-from .membership import account_level, check_after_refusal, gives
+from .membership import LEVEL_ORDER, account_level, check_after_refusal
 from .playback import resolve_movie_playback
 
 _PLAYLIST_TIMEOUT_SECONDS = 15
@@ -44,9 +44,10 @@ def _tag(record: DwEpisodeRecord) -> str:
     return MAIN_TAG
 
 
-# The Daily Wire's paid membership levels, cheapest first. Their keys are The Daily Wire's own names.
+# The Daily Wire's paid membership levels, cheapest first. Their keys are The Daily Wire's own names, and their tiers
+# their place among the levels: each level gives everything the ones before it give.
 MEMBERSHIP_ACCESSES = tuple(
-    Access(level.value, label, f"Only Daily Wire {label} members can watch this.")
+    Access(level.value, label, f"Only Daily Wire {label} members can watch this.", tier=LEVEL_ORDER.index(level))
     for level, label in (
         (DwMembershipLevel.INSIDER, "Insider"),
         (DwMembershipLevel.INSIDER_PLUS, "Insider Plus"),
@@ -59,7 +60,8 @@ def episode_access(available_for: Sequence[object]) -> str | None:
     """The cheapest membership level an episode is available for, or None when anyone can watch it."""
     if DwMembershipLevel.FREE in available_for:
         return None
-    return next((access.key for access in MEMBERSHIP_ACCESSES if DwMembershipLevel(access.key) in available_for), None)
+    found = cheapest(access for access in MEMBERSHIP_ACCESSES if DwMembershipLevel(access.key) in available_for)
+    return found.key if found is not None else None
 
 
 def _video(record: DwEpisodeRecord, season: SeasonRef | None) -> VideoDetails:
@@ -115,6 +117,8 @@ class DailyWireSource(Source):
         accesses=MEMBERSHIP_ACCESSES,
         # A host has no feed to fold into one show: each of their shows keeps its own seasons.
         creators=True,
+        movies=True,
+        pitch="Shows and movies, with your membership",
         creator_names=HOST,
         channel_collection_names=Names("show", "shows"),
         section_types=(
@@ -168,8 +172,8 @@ class DailyWireSource(Source):
         parsed = parse_link(url)
         return parsed[1] if parsed is not None and parsed[0] is LinkKind.COLLECTION else None
 
-    def resolve(self, url: str) -> ResolvedLink | None:
-        return resolve_link(url)
+    def resolve(self, url: str, plan: PlanTracker | None = None) -> ResolvedLink | None:
+        return resolve_link(url, plan)
 
     def newest_episodes(self, url: str) -> list[VideoDetails]:
         """The episodes on the show's page, which lists its newest season's latest ones.
@@ -251,7 +255,11 @@ class DailyWireSource(Source):
 
     def has_access(self, key: str) -> bool | None:
         # A lower level does not say False: VODLoft has always let a download find that out.
-        return True if gives(account_level(), key) else None
+        level = account_level()
+        needed = next((access for access in MEMBERSHIP_ACCESSES if access.key == key), None)
+        if level not in LEVEL_ORDER or needed is None:
+            return None
+        return True if Access(level.value, "", "", tier=LEVEL_ORDER.index(level)).gives(needed) else None
 
     def learn_access(self) -> None:
         membership.look_up_level()

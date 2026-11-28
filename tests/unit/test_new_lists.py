@@ -12,13 +12,19 @@ PLAYLISTS = _kind("playlist", "playlist", "playlists")
 SETS = _kind("set", "set", "sets")
 
 
-def test_a_channel_adds_the_kinds_its_site_marks_as_albums_and_skips_the_others():
+def test_an_artist_adds_the_kinds_its_site_marks_as_albums_and_skips_the_others():
     marked = _kind("set", "set", "sets", albums=True)
-    assert default_new_link_seasons([ALBUMS, marked]) == {"album": "ignore", "set": "add"}
+    assert default_new_link_seasons([ALBUMS, marked], albums_only=True) == {"album": "ignore", "set": "add"}
 
 
-def test_where_the_site_marks_none_a_kind_called_albums_is_added_and_the_others_skipped():
-    assert default_new_link_seasons([PLAYLISTS, ALBUMS]) == {"playlist": "ignore", "album": "add"}
+def test_where_the_site_marks_none_an_artist_adds_a_kind_called_albums_and_skips_the_others():
+    assert default_new_link_seasons([PLAYLISTS, ALBUMS], albums_only=True) == {"playlist": "ignore", "album": "add"}
+
+
+def test_any_other_collection_adds_every_kind_of_new_list():
+    marked = _kind("set", "set", "sets", albums=True)
+    assert default_new_link_seasons([PLAYLISTS, ALBUMS]) == {"playlist": "add", "album": "add"}
+    assert default_new_link_seasons([ALBUMS, marked]) == {"album": "add", "set": "add"}
 
 
 def test_kinds_of_other_names_or_a_single_kind_are_all_added():

@@ -19,6 +19,8 @@ import {CreatorPageReadSchema, CreatorUpdateSchema, type CreatorUpdateIn, type C
 import './CreatorPages.css'
 import Breadcrumb from '../../components/common/Breadcrumb/Breadcrumb'
 import {nameInText} from '../../lib/nameInText'
+import OptionsEditor from '../../components/common/OptionsEditor/OptionsEditor'
+import ReadMore from '../../utils/ReadMore'
 
 export default function EditCreatorPage() {
     const {slug} = useParams()
@@ -33,11 +35,13 @@ export default function EditCreatorPage() {
         resolver: zodResolver(CreatorUpdateSchema),
         defaultValues: getZodDefaults(CreatorUpdateSchema),
     })
-    const {register, reset, formState: {errors, isSubmitting, isDirty}} = form
+    const {register, reset, watch, setValue, formState: {errors, isSubmitting, isDirty}} = form
 
     useEffect(() => {
         if (!creator) return
-        reset({title: creator.title, genre: creator.genre ?? '', contentRating: creator.contentRating ?? ''})
+        reset({
+            title: creator.title, genre: creator.genre ?? '', contentRating: creator.contentRating ?? '', ytdlpOptions: creator.ytdlpOptions,
+        })
     }, [creator, reset])
 
     if (error) return <section className="view"><div className="form-error-card" role="alert">{error.message}</div></section>
@@ -48,7 +52,10 @@ export default function EditCreatorPage() {
             method: 'PATCH',
             credentials: 'include',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({title: data.title, genre: data.genre || null, contentRating: data.contentRating || null}),
+            body: JSON.stringify({
+                title: data.title, genre: data.genre || null, contentRating: data.contentRating || null,
+                ...(creator.takesYtdlpOptions ? {ytdlpOptions: data.ytdlpOptions} : {}),
+            }),
         },
     ), {
         fallbackField: 'title',
@@ -93,20 +100,17 @@ export default function EditCreatorPage() {
     }
 
     return (
-        <section className="view creator-view" aria-labelledby="edit-creator-title">
-            {/* One block, so the page's gap does not push the breadcrumb and the title apart. */}
-            <div className="creator-edit-head">
-                <Breadcrumb className="page-breadcrumb" items={[
-                    {label: 'Library', to: '/library'},
-                    {label: `${capitalized(creator.creatorNames.singular)} ${creator.title}`, to: `/creator/${creator.slug}`},
-                ]}/>
-                <PageHeader
-                    title="Edit creator" titleId="edit-creator-title"
-                    subtitle={<p className="view-description"><Link className="quiet-link" to={`/creator/${creator.slug}`}>{creator.title}</Link> · {creatorKindText(creator)}</p>}
-                />
-            </div>
-            <form className="form form-fluid creator-setup" onSubmit={onSubmit} noValidate>
-                <div className="form-row creator-membership">
+        <section className="view" aria-labelledby="edit-creator-title">
+            <Breadcrumb className="page-breadcrumb" items={[
+                {label: 'Library', to: '/library'},
+                {label: `${capitalized(creator.creatorNames.singular)} ${creator.title}`, to: `/creator/${creator.slug}`},
+            ]}/>
+            <PageHeader
+                title={`Edit ${creator.creatorNames.singular}`} titleId="edit-creator-title"
+                subtitle={<p className="view-description"><Link className="quiet-link" to={`/creator/${creator.slug}`}>{creator.title}</Link> · {creatorKindText(creator)}</p>}
+            />
+            <form className="form" onSubmit={onSubmit} noValidate>
+                <div className="form-row">
                     <label htmlFor="creator-title">Name</label>
                     <input id="creator-title" className="input" {...register('title')} aria-invalid={!!errors.title}/>
                     {errors.title && <div className="error" role="alert">{errors.title.message}</div>}
@@ -116,7 +120,7 @@ export default function EditCreatorPage() {
                     </div>
                 </div>
 
-                <div className="form-row creator-membership">
+                <div className="form-row">
                     <label htmlFor="creator-genre">Genre</label>
                     <input id="creator-genre" className="input" placeholder="Such as DIY, Woodworking" {...register('genre')}
                            aria-invalid={!!errors.genre}/>
@@ -124,12 +128,36 @@ export default function EditCreatorPage() {
                     <div className="help">Written to the NFO file of each collection of this {creator.creatorNames.singular} that has no genre of its own.</div>
                 </div>
 
-                <div className="form-row creator-membership">
+                <div className="form-row">
                     <label htmlFor="creator-rating">Content rating</label>
                     <input id="creator-rating" className="input" placeholder="Such as TV-G" {...register('contentRating')}
                            aria-invalid={!!errors.contentRating}/>
                     {errors.contentRating && <div className="error" role="alert">{errors.contentRating.message}</div>}
                 </div>
+
+                {creator.takesYtdlpOptions && (
+                    <div className="form-row">
+                        <label htmlFor="creator-ytdlp-options">Your own yt-dlp options</label>
+                        <OptionsEditor
+                            id="creator-ytdlp-options"
+                            value={watch('ytdlpOptions') ?? ''}
+                            onChange={(value) => setValue('ytdlpOptions', value, {shouldDirty: true, shouldValidate: !!errors.ytdlpOptions})}
+                            invalid={!!errors.ytdlpOptions}
+                            describedBy={errors.ytdlpOptions ? 'creator-ytdlp-options-errors' : 'creator-ytdlp-options-help'}
+                        />
+                        {errors.ytdlpOptions && (
+                            <div id="creator-ytdlp-options-errors" className="error" role="alert">{errors.ytdlpOptions.message}</div>
+                        )}
+                        <div className="help" id="creator-ytdlp-options-help">
+                            <ReadMore summary={`Options for every collection of this ${creator.creatorNames.singular}, on top of the yt-dlp Source’s options in Settings. Most leave this empty.`}>
+                                <p>These lines come after the yt-dlp options in Settings, under Sources, and before a collection’s own options.
+                                    So for an option set in more than one place, the collection’s own wins, then this {creator.creatorNames.singular}’s.
+                                    Each line is checked with yt-dlp’s own parser, and the same options are blocked as in Settings.
+                                    Collections that don’t use yt-dlp, such as those from The Daily Wire, don’t use these options.</p>
+                            </ReadMore>
+                        </div>
+                    </div>
+                )}
 
                 {errors.root && <div className="form-error-card" role="alert">{errors.root.message}</div>}
                 <div className="actions">
@@ -139,7 +167,7 @@ export default function EditCreatorPage() {
                     </button>
                     <button type="button" className="btn" onClick={() => navigate(`/creator/${creator.slug}`)}>Cancel</button>
                     <button type="submit" className="btn btn-primary" disabled={isSubmitting || !isDirty}>
-                        {isSubmitting ? 'Saving…' : 'Save'}
+                        {isSubmitting ? 'Saving…' : 'Save changes'}
                     </button>
                 </div>
             </form>

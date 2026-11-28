@@ -1,4 +1,4 @@
-import {useEffect, useId, useMemo, useRef, useState} from 'react'
+import {useEffect, useId, useMemo, useRef, useState, type ReactNode} from 'react'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useFieldArray, useForm} from 'react-hook-form'
 import {useQueryClient, type QueryKey} from '@tanstack/react-query'
@@ -24,11 +24,20 @@ type Props = {
     open: boolean
     title: string
     scope: CustomMetadataScope
-    metadata: Record<string, string>
-    endpoint: string
+    /** The saved values of what is being edited; left out, with the endpoint, while nothing is chosen yet. */
+    metadata?: Record<string, string>
+    endpoint?: string
+    /** Comes first in the dialog and chooses what to edit, such as a collection picker. The fields show below it
+     * once it has chosen. */
+    picker?: ReactNode
+    /** Fields to start with as new rows, such as ones an output template uses that do not exist yet. */
+    addFields?: readonly string[]
     invalidateQueryKeys?: QueryKey[]
     onDismiss: () => void
 }
+
+const NO_METADATA: Record<string, string> = {}
+const NO_FIELDS: readonly string[] = []
 
 type PendingRemoval = {
     fieldId: string
@@ -49,8 +58,10 @@ export default function CustomMetadataEditor({
     open,
     title,
     scope,
-    metadata,
+    metadata = NO_METADATA,
     endpoint,
+    picker,
+    addFields = NO_FIELDS,
     invalidateQueryKeys = [],
     onDismiss,
 }: Props) {
@@ -72,11 +83,14 @@ export default function CustomMetadataEditor({
             .sort((left, right) => left.localeCompare(right))
     ), [metadata, sharedFields])
     const persistedFields = useMemo(() => new Set(metadataFields), [metadataFields])
+    const startFields = useMemo(() => [
+        ...metadataFields, ...addFields.filter((field) => !persistedFields.has(field)),
+    ], [addFields, metadataFields, persistedFields])
 
     const form = useForm<CustomMetadataFormValues>({
         resolver: zodResolver(CustomMetadataFormSchema),
         defaultValues: {
-            entries: customMetadataToEntries(metadata, metadataFields),
+            entries: customMetadataToEntries(metadata, startFields),
         },
         mode: 'onBlur',
         shouldFocusError: true,
@@ -88,9 +102,13 @@ export default function CustomMetadataEditor({
     } = useFieldArray({control: form.control, name: 'entries'})
     const {errors, isDirty, isSubmitting} = form.formState
     const wasOpen = useRef(false)
+    const shownEndpoint = useRef(endpoint)
 
     useEffect(() => {
-        const justOpened = open && !wasOpen.current
+        // Choosing something else in the picker starts over on its values.
+        const switched = shownEndpoint.current !== endpoint
+        shownEndpoint.current = endpoint
+        const justOpened = (open && !wasOpen.current) || switched
         wasOpen.current = open
         if (justOpened) {
             setPendingRemovedFields(new Set())
@@ -98,13 +116,14 @@ export default function CustomMetadataEditor({
         }
         if (!open || (!justOpened && isDirty)) return
         form.reset({
-            entries: customMetadataToEntries(metadata, metadataFields),
+            entries: customMetadataToEntries(metadata, startFields),
         })
-    }, [form, isDirty, metadata, metadataFields, open])
+    }, [endpoint, form, isDirty, metadata, open, startFields])
 
     const submit = buildServerAwareSubmit<CustomMetadataFormValues>(
         form,
         async ({entries}) => {
+            if (endpoint === undefined) throw new Error('Choose what to save metadata for first')
             const activeFields = new Set(entries.map(({key}) => key))
             const removedFields = [...pendingRemovedFields]
                 .filter((key) => !activeFields.has(key))
@@ -126,6 +145,7 @@ export default function CustomMetadataEditor({
                 await Promise.all([
                     ...invalidateQueryKeys.map((queryKey) => queryClient.invalidateQueries({queryKey})),
                     queryClient.invalidateQueries({queryKey: ['customMetadataFields']}),
+                    queryClient.invalidateQueries({queryKey: ['localMediaProfileTemplateVariables']}),
                     queryClient.invalidateQueries({queryKey: ['localMediaProfileTemplateSources']}),
                 ])
                 toast.success('Metadata saved')
@@ -162,8 +182,18 @@ export default function CustomMetadataEditor({
                     <h2 id={titleId} className="modal-title">{title}</h2>
                 </div>
 
-                <form onSubmit={submit} noValidate>
+                <form
+                    onSubmit={(event) => {
+                        // A dialog opened from inside another form, such as a Local Media Profile's, is portaled out of it
+                        // in the page but not in React, so its submit would also submit that form.
+                        event.stopPropagation()
+                        void submit(event)
+                    }}
+                    noValidate
+                >
                     <div className="custom-metadata-content">
+                        {picker}
+                        {endpoint !== undefined && <>
                         <p className="custom-metadata-intro">
                             Add custom metadata fields to a {scopeLabel.singular} here.
                         </p>
@@ -258,12 +288,12 @@ export default function CustomMetadataEditor({
                         >
                             Add field
                         </button>
-
+                        </>}
                     </div>
 
                     <div className="modal-actions">
                         <button type="button" className="btn" onClick={onDismiss} disabled={isSubmitting}>Cancel</button>
-                        <button type="submit" className="btn btn-primary" disabled={isSubmitting || fieldsLoading}>
+                        <button type="submit" className="btn btn-primary" disabled={isSubmitting || fieldsLoading || endpoint === undefined}>
                             {isSubmitting ? 'Saving…' : 'Save metadata'}
                         </button>
                     </div>

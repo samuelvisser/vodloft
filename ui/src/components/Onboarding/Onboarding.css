@@ -500,17 +500,92 @@
     }
 }
 
-.onboarding-source-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 18px;
-    margin: 0 0 14px;
-    padding: 0;
-    list-style: none;
-    color: var(--muted);
-    font-size: 14px;
+.onboarding-sites {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
 }
-.onboarding-source-list strong { color: var(--text); }
+.onboarding-site {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 14px;
+    background: rgba(15, 23, 42, 0.45);
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+.onboarding-site:hover { border-color: rgba(148, 163, 184, 0.55); }
+.onboarding-site:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
+.onboarding-site.is-picked {
+    border-color: #3b82f6;
+    background: rgba(59, 130, 246, 0.14);
+}
+.onboarding-site__icon {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: rgba(148, 163, 184, 0.14);
+    font-size: 18px;
+}
+/* A Site without an icon of its own shows its initials alone in the tile's square. */
+.onboarding-site__icon .site-icon--initials > svg { display: none; }
+.onboarding-site__icon .site-icon-initials { font-size: 13px; }
+.onboarding-site__copy {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+.onboarding-site__copy small {
+    color: var(--muted);
+    font-size: 12.5px;
+    line-height: 1.35;
+}
+.onboarding-site__tick {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: none;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #3b82f6;
+    color: #fff;
+    font-size: 11px;
+}
+.onboarding-site.is-picked .onboarding-site__tick { display: grid; }
+.onboarding-sites-other {
+    border: 1px dashed rgba(148, 163, 184, 0.35);
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+}
+.onboarding-sites-count {
+    flex: 1;
+    min-width: 0;
+    color: var(--muted);
+    font-size: 13.5px;
+    text-align: right;
+}
+.onboarding-sites-count.is-needed { color: #fbbf24; }
+@media (max-width: 760px) {
+    .onboarding-sites { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .onboarding-site { padding: 12px; }
+}
+@media (max-width: 420px) {
+    .onboarding-site__copy small { display: none; }
+}
 .onboarding-authentication {
     border: 1px solid rgba(148, 163, 184, 0.28);
     border-radius: 14px;

@@ -52,25 +52,13 @@ def _add_missing_profiles(session: Session, profiles) -> None:
     )
 
 
-DEFAULT_SITES = (
-    "https://www.youtube.com", "https://www.twitch.tv", "https://www.tiktok.com", "https://soundcloud.com",
-    "https://www.dailywire.com",
-)
-"""The Sites a new VODLoft starts with, by their address, in the order every list of Sites shows them. Each is
-stored like any Site the user adds, and can be removed like one; what VODLoft offers on it comes from the address
-alone."""
-
-
 def _seed_sites(session: Session) -> None:
-    """Make the default Sites the only ones. They come before the profiles, which start with every Site VODLoft
-    knows. A new SQLite database runs every migration first, and one of those adds the Sites older versions always
-    listed, so those rows go: a new database has nothing from them."""
+    """A new VODLoft starts without Sites: onboarding asks which ones the user uses. A new SQLite database runs
+    every migration first, and one of those adds the Sites older versions always listed, so those rows go: a new
+    database has nothing from them."""
     from backend.db.models import Site
-    from backend.services.sites import add_site, site_of_link
 
     session.execute(delete(Site))
-    for address in DEFAULT_SITES:
-        add_site(session, site_of_link(session, address))
 
 
 def _seed_local_media_profiles(session: Session) -> None:
@@ -79,6 +67,7 @@ def _seed_local_media_profiles(session: Session) -> None:
 
     _add_missing_profiles(session, (
         # The movie template names files after the movie, so this profile is only for the Sites that have movies.
+        # It starts without Sites, and every Site with movies the user adds joins it.
         VideoLocalMediaProfile(
             slug="vodloft-movies",
             name="VODLoft Movies",
@@ -87,7 +76,7 @@ def _seed_local_media_profiles(session: Session) -> None:
             preferred_format="format_1080p",
             video_scope="movies",
             site_keys=movie_site_keys(session),
-            include_upcoming_sites=False,
+            include_upcoming_sites=True,
         ),
         VideoLocalMediaProfile(
             slug="vodloft-videos",

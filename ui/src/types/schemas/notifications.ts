@@ -64,10 +64,17 @@ export const TestReadSchema = z.object({
 })
 export type TestRead = z.infer<typeof TestReadSchema>
 
+export const PathExampleReadSchema = z.object({
+    vodloft: z.string(),
+    server: z.string(),
+})
+export type PathExampleRead = z.infer<typeof PathExampleReadSchema>
+
 export const DestinationPreviewReadSchema = z.object({
     service: z.string(),
     serviceName: z.string(),
     masked: z.string(),
+    pathExample: PathExampleReadSchema.nullable(),
 })
 export type DestinationPreviewRead = z.infer<typeof DestinationPreviewReadSchema>
 
@@ -127,6 +134,12 @@ export const PushDeviceStatusReadSchema = z.object({
 export const WebhookExampleReadSchema = z.object({payload: z.record(z.string(), z.unknown())})
 
 // ---------- Add / edit a destination ----------
+/** What a media server's address looks like, as the backend's check says it too. */
+export const MEDIA_SERVER_EXAMPLES = {
+    plex: 'http://<server IP>:32400',
+    jellyfin: 'http://jellyfin:8096',
+    emby: 'http://emby:8096',
+} as const
 const FieldValuesSchema = z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]))
 export type FieldValues = z.infer<typeof FieldValuesSchema>
 
@@ -167,7 +180,7 @@ export const DestinationFormSchema = z.object({
     } else if (form.kind === 'script') {
         if (!form.script) need('script', 'Choose a script')
     } else {
-        if (!/^https?:\/\//.test(form.address)) need('address', 'The address looks like http://jellyfin:8096')
+        if (!/^https?:\/\//.test(form.address)) need('address', `The address looks like ${MEDIA_SERVER_EXAMPLES[form.kind]}`)
         if (!form.apiKey) need('apiKey', form.kind === 'plex' ? 'Enter the Plex token' : 'Enter an API key')
     }
 })

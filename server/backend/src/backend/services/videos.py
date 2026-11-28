@@ -32,7 +32,7 @@ def apply_video_details(video: Video, details: VideoDetails) -> None:
     video.author_url = details.author_url
     video.published_at = details.published_at
     video.drm_protected = details.drm_protected
-    apply_source_access(video, details.access)
+    apply_source_access(video, details.access, refused=details.access_refused)
     # Video thumbnails are landscape; they double as the page background. A frame VODLoft took stays.
     if not is_own_thumbnail(video.thumbnail_landscape_path):
         video.thumbnail_landscape_path = details.image_url

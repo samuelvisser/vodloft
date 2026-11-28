@@ -261,6 +261,18 @@
     text-transform: uppercase;
 }
 
+.template-reference__group-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 12px 0 4px;
+}
+
+.template-reference__group-heading h4 {
+    margin: 0;
+}
+
 .template-reference__group:first-child h4 {
     margin-top: 0;
 }

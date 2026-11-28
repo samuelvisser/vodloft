@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type CSSProperties, type ReactNode} from 'react'
+import {useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type CSSProperties} from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import {
     autocompletion,
@@ -26,6 +26,8 @@ import OpaqueOutputTemplateCode from './OpaqueOutputTemplateCode'
 import OutputTemplateStartFields, {FilenameModeField} from './OutputTemplateStartFields'
 import CollectionRootNote from './CollectionRootNote'
 import {JINJA_FILTERS, TEMPLATE_FUNCTIONS} from './outputTemplateFunctions'
+import IndexingValuesEditorButton, {IndexingValuesError} from './IndexingValuesEditorButton'
+import MetadataValuesEditorButton from './MetadataValuesEditorButton'
 import TemplateReference, {SHEET_QUERY, type ReferenceEntry} from './TemplateReference'
 import {useSetExampleEpisode} from './ExampleEpisodeContext'
 import {useProfileFit} from './ProfileFit'
@@ -61,8 +63,6 @@ type Props = {
     isCreating?: boolean
     /** Hears the collection root once an example of the collection being added has shown it. */
     onCollectionRoot?: (path: string) => void
-    /** Buttons beside the template's heading, such as the Indexing values editor. */
-    headerActions?: ReactNode
 }
 
 type TemplateCodeEditorProps = {
@@ -634,7 +634,7 @@ function referenceEntry(variable: OutputTemplateVariable): ReferenceEntry {
     }
 }
 
-export default function OutputTemplateEditor({form, mode, placeholder, readOnly = false, isCreating = false, onCollectionRoot, headerActions}: Props) {
+export default function OutputTemplateEditor({form, mode, placeholder, readOnly = false, isCreating = false, onCollectionRoot}: Props) {
     const {control, formState: {errors}} = form
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
     const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
@@ -761,6 +761,10 @@ export default function OutputTemplateEditor({form, mode, placeholder, readOnly 
             usedVariableNames.filter((name) => name.startsWith(prefix) && !available.has(name)),
         )].sort()
     }, [customVariables, mode, usedVariableNames])
+    const missingMetadataFields = useMemo(
+        () => missingMetadataVariables.map((name) => name.slice('meta_collection_'.length)),
+        [missingMetadataVariables],
+    )
 
     const completions = useJinjaCompletions(variables, mode === 'collection')
     const editorExtensions = useMemo(() => [...templateEditorExtensions, ...completions], [completions])
@@ -899,7 +903,6 @@ export default function OutputTemplateEditor({form, mode, placeholder, readOnly 
                                 : <p id="mp-path-help">Type <code>{'{{'}</code> for variables or <code>{'{%'}</code> for Jinja statements.</p>}
                         </div>
                         <div className="template-editor-heading__actions">
-                            {!readOnly && headerActions}
                             <button
                                 type="button"
                                 className={`btn btn-small template-reference-toggle${referenceOpen ? ' is-active' : ''}`}
@@ -938,6 +941,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, readOnly 
                             {String(errors.outputTemplate.message)}
                         </div>
                     )}
+                    {mode === 'collection' && !readOnly && <IndexingValuesError form={form}/>}
                     {!readOnly && <FilenameModeField form={form}/>}
                     {variableQuery.isError && (
                         <div className="error" role="alert">
@@ -945,20 +949,32 @@ export default function OutputTemplateEditor({form, mode, placeholder, readOnly 
                         </div>
                     )}
                     {missingMetadataVariables.length > 0 && (
-                        <div className="template-metadata-warning" role="status">
-                            {missingMetadataVariables.length === 1 ? 'Custom metadata field ' : 'Custom metadata fields '}
-                            {missingMetadataVariables.map((name, index) => (
-                                <span key={name}>
-                                {index > 0 ? ', ' : ''}<code>{`{{\u00a0${name}\u00a0}}`}</code>
-                            </span>
-                            ))}
-                            {missingMetadataVariables.length === 1 ? ' does' : ' do'} not exist yet and will render as empty.
+                        <div className="template-metadata-warning template-warning" role="status">
+                            <p>
+                                {missingMetadataVariables.length === 1 ? 'Custom metadata field ' : 'Custom metadata fields '}
+                                {missingMetadataVariables.map((name, index) => (
+                                    <span key={name}>
+                                    {index > 0 ? ', ' : ''}<code>{`{{\u00a0${name}\u00a0}}`}</code>
+                                </span>
+                                ))}
+                                {missingMetadataVariables.length === 1 ? ' does' : ' do'} not exist yet and will render as empty.
+                            </p>
+                            {mode === 'collection' && !readOnly && (
+                                <MetadataValuesEditorButton
+                                    collectionScope={collectionScope}
+                                    siteKeys={siteKeys}
+                                    addFields={missingMetadataFields}
+                                    className="btn btn-secondary template-warning-action"
+                                    label={missingMetadataVariables.length === 1 ? 'Add metadata field' : 'Add metadata fields'}
+                                />
+                            )}
                         </div>
                     )}
                     {mode === 'collection' && !readOnly && (
                         <CustomIndexAdvisories
                             template={template}
                             indexingValues={indexingValues}
+                            form={form}
                             onApply={(value) => {
                                 form.clearErrors('outputTemplate')
                                 form.setValue('outputTemplate', value, {
@@ -1148,6 +1164,10 @@ export default function OutputTemplateEditor({form, mode, placeholder, readOnly 
                         customIndexes={customIndexEntries}
                         metadata={metadataEntries}
                         onInsert={readOnly ? undefined : insertIntoTemplate}
+                        indexingValuesButton={mode === 'collection' && !readOnly ? <IndexingValuesEditorButton form={form}/> : undefined}
+                        metadataValuesButton={mode === 'collection' && !readOnly
+                            ? <MetadataValuesEditorButton collectionScope={collectionScope} siteKeys={siteKeys}/>
+                            : undefined}
                         onClose={closeReference}
                     />
                 )}

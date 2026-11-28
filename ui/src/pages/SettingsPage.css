@@ -256,9 +256,6 @@
     width: 100%;
 }
 
-.settings-select .select__control {
-    min-height: 42px;
-}
 
 .settings-field__help {
     margin-top: 7px;
@@ -349,7 +346,7 @@
     overflow: hidden;
 }
 
-/* Open disclosures must not clip React Select menus that extend beyond the card. */
+/* Open disclosures must not clip what extends beyond the card, such as a field's explanation. */
 .settings-disclosure[open] {
     overflow: visible;
 }

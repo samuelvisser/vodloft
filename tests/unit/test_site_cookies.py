@@ -43,10 +43,10 @@ def _site(session, key: str, name: str, *domains: str) -> None:
 
 
 def _fresh(session) -> None:
-    """The Sites a new VODLoft starts with."""
-    from backend.db.initial_seed import _seed_sites
+    """The Sites a user picked in onboarding."""
+    from backend.services.sites import add_suggested_sites
 
-    _seed_sites(session)
+    add_suggested_sites(session, ("youtube", "twitch", "tiktok", "soundcloud", "dailywire"))
     session.commit()
 
 
@@ -100,6 +100,16 @@ def test_a_sites_cookies_file_keeps_only_its_own_cookies(session):
     assert _stored("twitch") is None
 
 
+def test_a_site_first_seen_through_a_short_link_takes_cookies_of_its_own_domain(session):
+    from backend.services import site_cookies
+
+    # YouTube added by a youtu.be link, such as one pasted in onboarding: its cookies are on youtube.com.
+    _site(session, "youtube", "YouTube", "youtu.be")
+    listing = site_cookies.save_site_cookies(session, "youtube", _file(YOUTUBE))
+    assert listing.domains[0] == "youtube.com"
+    assert _stored("youtube") == [YOUTUBE]
+
+
 def test_one_cookies_file_is_sorted_into_the_sites(session):
     from backend.services import site_cookies
     from sources import cookies
@@ -150,8 +160,11 @@ def test_a_site_without_anything_in_vodloft_can_be_removed(session):
     from sources import cookies
 
     _site(session, "twitch", "Twitch", "twitch.tv")
+    _site(session, "youtube", "YouTube", "youtube.com")
     cookies.store_site_cookies("twitch", [TWITCH])
-    assert {site.key: site.removable for site in site_cookies.list_site_authentication(session)} == {"twitch": True}
+    assert {site.key: site.removable for site in site_cookies.list_site_authentication(session)} == {
+        "twitch": True, "youtube": True,
+    }
 
     site_cookies.remove_known_site("twitch")
     session.expire_all()
@@ -163,16 +176,34 @@ def test_a_site_without_anything_in_vodloft_can_be_removed(session):
         site_cookies.remove_known_site("twitch")
 
 
+def test_the_last_site_stays(session):
+    from backend.db.models import Site
+    from backend.services import site_cookies, site_settings
+    from backend.services.errors import ServiceError
+
+    _site(session, "twitch", "Twitch", "twitch.tv")
+    _site(session, "youtube", "YouTube", "youtube.com")
+    site_cookies.remove_known_site("twitch")
+    session.expire_all()
+
+    # VODLoft always keeps one Site, also when nothing in it is from that Site.
+    assert {site.key: site.removable for site in site_cookies.list_site_authentication(session)} == {"youtube": False}
+    assert [listing.removable for listing in site_settings.list_sites_settings(session)] == [False]
+    with pytest.raises(ServiceError, match="at least one site"):
+        site_cookies.remove_known_site("youtube")
+    session.expire_all()
+    assert session.get(Site, "youtube") is not None
+
+
 @pytest.mark.parametrize(("key", "address"), [
     ("youtube", "youtube.com"), ("dailywire", "dailywire.com"), ("soundcloud", "soundcloud.com"), ("npo", "npo.nl"),
 ])
 def test_a_site_vodloft_starts_with_comes_back_whole(session, key, address):
     from backend.api.endpoints.sources import router
     from backend.api.models.source import SiteAddAPIRequest
-    from backend.db.initial_seed import _seed_sites
     from backend.services import site_cookies
 
-    _seed_sites(session)
+    _fresh(session)
     _site(session, "npo", "NPO Start", "npo.nl")
     before = {site.key: site for site in site_cookies.list_site_authentication(session)}[key]
     assert before.removable
@@ -230,7 +261,7 @@ def test_youtube_is_listed_for_its_api_key_before_anything_from_it(session):
     _fresh(session)
     # A fresh install has seen no YouTube video yet, but onboarding still offers the YouTube API key.
     youtube = {site.key: site for site in site_cookies.list_site_authentication(session)}["youtube"]
-    assert (youtube.name, youtube.domains, youtube.api_key_source_key) == ("YouTube", ("youtube.com",), "ytdlp")
+    assert (youtube.name, youtube.domains, youtube.api_key_source_key) == ("YouTube", ("youtube.com", "youtu.be"), "ytdlp")
     assert youtube.cookie_source_names == ("yt-dlp",)
 
 
@@ -285,3 +316,47 @@ def test_a_site_that_takes_no_cookies_never_gets_a_cookies_file(session):
     assert _stored("dailywire") is None
     # yt-dlp fetching a Daily Wire link signs in with nothing.
     assert cookies_for("https://www.dailywire.com/episode/an-episode") is None
+
+
+def test_onboarding_suggests_popular_sites_and_any_other_site_vodloft_knows(session):
+    from backend.services.sites import site_choices
+
+    _site(session, "nebula", "Nebula", "nebula.tv")
+    _site(session, "twitch", "Twitch", "twitch.tv")
+    choices = site_choices(session)
+
+    assert [choice.key for choice in choices] == ["youtube", "twitch", "dailywire", "soundcloud", "tiktok", "vimeo", "nebula"]
+    assert [choice.key for choice in choices if choice.added] == ["twitch", "nebula"]
+    assert [choice.key for choice in choices if choice.suggested] == ["youtube", "twitch", "dailywire", "soundcloud", "tiktok", "vimeo"]
+    assert all(choice.pitch for choice in choices[:6])
+    # Only YouTube starts picked, also where an older VODLoft added other Sites.
+    assert [choice.key for choice in choices if choice.picked] == ["youtube"]
+
+
+def test_picking_sites_keeps_only_those(session):
+    from backend.db.models import Site
+    from backend.services import site_cookies
+
+    _site(session, "nebula", "Nebula", "nebula.tv")
+    site_cookies.pick_sites(["youtube", "dailywire"])
+    session.expire_all()
+    assert {site.key for site in session.query(Site)} == {"youtube", "dailywire"}
+
+    # Going back and picking again adds and drops Sites the same way.
+    site_cookies.pick_sites(["youtube"])
+    session.expire_all()
+    assert {site.key for site in session.query(Site)} == {"youtube"}
+
+
+@pytest.mark.parametrize("keys, message", [([], "Pick at least one site"), (["nowhere"], "does not know the site")])
+def test_picking_sites_needs_at_least_one_known_site(session, keys, message):
+    from backend.db.models import Site
+    from backend.services import site_cookies
+    from backend.services.errors import ServiceError
+
+    _site(session, "nebula", "Nebula", "nebula.tv")
+    with pytest.raises(ServiceError, match=message) as error:
+        site_cookies.pick_sites(keys)
+    assert error.value.field == "keys"
+    session.expire_all()
+    assert {site.key for site in session.query(Site)} == {"nebula"}

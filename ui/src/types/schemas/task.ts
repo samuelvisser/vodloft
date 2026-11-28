@@ -73,5 +73,7 @@ export const TaskLedgerPageReadSchema = z.looseObject({
   hasMore: z.boolean(),
   hasPrevious: z.boolean().optional(),
   revision: z.string().nullable().optional(),
+  /** Whether the task names what its runs find, so the log can leave out the runs that found nothing. */
+  canHideEmpty: z.boolean(),
 });
 export type TaskLedgerPageRead = z.infer<typeof TaskLedgerPageReadSchema>;

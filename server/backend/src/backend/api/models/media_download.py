@@ -98,6 +98,8 @@ class _MediaDownloadAPIBaseOut(ResponseBase):
     sponsorblock_segments: Optional[list[SponsorSegmentAPIRead]] = None
     """None when SponsorBlock was not asked; empty when it had no segments."""
     downloaded_at: Optional[datetime]
+    first_downloaded_at: Optional[datetime]
+    """When the file was first downloaded; downloaded_at is the latest download."""
     redownload_when_final: Optional[bool] = None
     kept: Optional[bool] = None
     """Kept by hand: retention never deletes it. Only episodes have it."""

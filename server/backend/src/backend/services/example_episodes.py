@@ -35,7 +35,8 @@ from backend.services.extra_indexes import is_extra
 from backend.utils.helpers import generate_uuid
 from backend.utils.output_template import episode_output_template_values
 from backend.utils.season_ordering import number_initial_seasons
-from sources import MAIN_TAG, Feature, VideoDetails, get_source
+from backend.services.source_options import ytdlp_call_options
+from sources import MAIN_TAG, Feature, VideoDetails, get_source, site_for
 from task_manager.tasks.helpers.general import datetime_to_string
 
 EXAMPLE_SOURCE_PREFIX = "new-episode:"
@@ -90,7 +91,8 @@ def newest_episodes(source_key: str, url: str) -> list[VideoDetails]:
         if cached is not None and time.monotonic() - cached[0] < _CACHE_SECONDS:
             _cache.move_to_end(key)
             return cached[1]
-    found = get_source(source_key).newest_episodes(url)
+    with ytdlp_call_options(source_key):
+        found = get_source(source_key).newest_episodes(url)
     with _cache_lock:
         _cache[key] = (time.monotonic(), found)
         _cache.move_to_end(key)
@@ -152,6 +154,7 @@ def _add(s: Session, form: ExampleCollection, videos: list[VideoDetails]) -> tup
             collection=collection, index=index, slug=season_in.slug, name=season_in.name,
             season_type=season_type.value, season_number=number, origin=SeasonOrigin.SITE.value,
         )
+    site = site_for(form.url, form.source_key)
     now = datetime.now(timezone.utc)
     counters: dict[str, int] = {}
     examples: list[Example] = []
@@ -175,7 +178,7 @@ def _add(s: Session, form: ExampleCollection, videos: list[VideoDetails]) -> tup
             index=position, episode_identifier=identifier, source_number=video.number_text,
             slug=video.slug, source_slug=video.slug,
             publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value, sharing_url=video.url,
-            published_date=video.published_at, title=video.title, description=video.description,
+            published_date=video.published_at, title=site.episode_title(video.title, video.description), description=video.description,
             duration=video.duration or 0.0, author_name=video.author_name, thumbnail_landscape_path=video.image_url,
             drm_protected=video.drm_protected, access=video.access,
         )

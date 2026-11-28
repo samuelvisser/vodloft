@@ -1,20 +1,28 @@
+import asyncio
+import threading
+
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.concurrency import run_in_threadpool
 
 from backend.api.models.source import (
     DownloadOptionsAPIRead, DownloadProfileDefaultsAPIRead, SiteOptionsAPIRead, YtdlpOptionLineAPIRead, YtdlpOptionsAPIRead, YtdlpOptionsAPIUpdate, YtdlpOptionsCheckAPIRequest,
-    ApiKeyAPIUpdate, ApiKeyNoteAPIIn, ApiKeyNoteAPIRead, ApiStatusAPIRead, EpisodeTagAPIRead, PublishStatusLabelAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, MediaLinksAPIRequest, MediaLinksAPIRead, SearchResultsAPIRead,
+    ApiKeyAPIUpdate, ApiKeyNoteAPIIn, ApiKeyNoteAPIRead, ApiStatusAPIRead, EpisodeTagAPIRead, PublishStatusLabelAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, MediaLinksAPIRequest, MediaLinksAPIRead, MediaLinkCheckAPIRequest, MediaLinkCheckAPIRead, SearchResultsAPIRead,
     CollectionDetailsAPIRead, SourceAPIRead, SourceSiteAPIRead, SourceSiteAPIUpdate, UpgradeChecksAPIRead,
-    SiteAddAPIRequest, SiteAddedAPIRead, SiteApiValuesAPIUpdate, SiteAuthenticationAPIRead,
+    SiteAddAPIRequest, SiteAddedAPIRead, SiteChoiceAPIRead, SitesPickAPIRequest, SiteApiValuesAPIUpdate, SiteAuthenticationAPIRead,
+    AccountValuesAPIUpdate, CodeSignInAPIRead,
 )
 from backend.app import db_session
-from sources import ApiKeyRejected, Feature, Source, UnknownSourceError, get_source, source_site
+from backend.api.steps import STEPS_RESPONSE, plan_lines, stream_steps
+from progress_plan import PlanTracker
+from sources import ApiKeyRejected, Feature, SignInCodeEnded, SignInRejected, Source, UnknownSourceError, get_source, source_site
 from sources.ytdlp_options import check_ytdlp_options
 from backend.services.site_cookies import (
-    SiteAuthentication, SiteNotKnownError, list_site_authentication, remove_known_site, remove_site_api, remove_site_cookies,
-    save_site_api, save_site_cookies, test_site_api,
+    SiteAuthentication, SiteNotKnownError, list_site_authentication, pick_sites, remove_known_site, remove_site_api, remove_site_cookies,
+    save_site_api, save_site_cookies, test_site_api, cancel_code_sign_in, finish_code_sign_in, sign_in_account, sign_out_account,
+    start_code_sign_in,
 )
 from backend.services.errors import ServiceError
-from backend.services.sites import SiteLinkError, add_site, episode_tags_named, media_links, site_of_link
+from backend.services.sites import SiteLinkError, add_site, episode_tags_named, media_links, site_choices, site_of_link
 from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import CollectionType
 from backend.services.access_checks import access_changed
@@ -23,9 +31,9 @@ from backend.services.source_options import save_ytdlp_source_options, ytdlp_sou
 from config.settings.site_settings import SiteSettingGroup
 
 from .service import (
-    LinkNotRecognisedError, SourceFeatureMissingError, UnknownSiteError, api_key_notes, get_api_status, put_off_api_key_note, get_program_status,
+    LinkNotRecognisedError, LinkQuestion, SourceFeatureMissingError, UnknownSiteError, api_key_notes, get_api_status, put_off_api_key_note, get_program_status,
     list_source_problems, list_source_sites,
-    list_sources, lookup_show_details, sources_in_use, resolve_link, search_source, set_site_preference, source_with,
+    link_checks, link_preview, link_question, list_sources, lookup_show_details, sources_in_use, resolve_link, search_source, set_site_preference, source_with,
     update_source_program,
 )
 from backend.security.access import Access, Area, Level
@@ -84,6 +92,21 @@ def source_sites():
         return list_source_sites(s)
 
 
+@router.get("/sources/site-choices", dependencies=[signed_in()], response_model=list[SiteChoiceAPIRead])
+def source_site_choices():
+    """The popular Sites VODLoft suggests, then every other Site it knows, each with whether it is added: what the
+    user picks the Sites they use from, such as in onboarding."""
+    with db_session() as s:
+        return [SiteChoiceAPIRead.model_validate(choice, from_attributes=True) for choice in site_choices(s)]
+
+
+@router.put("/sources/site-choices", status_code=204, dependencies=[requires_any((Area.SOURCES, Level.MANAGE), (Area.SETTINGS, Level.MANAGE))])
+def pick_source_sites(body: SitesPickAPIRequest):
+    """Make the picked Sites the ones VODLoft knows: add the suggested ones it does not know yet, and remove every
+    other Site that has nothing in VODLoft. At least one Site is picked."""
+    pick_sites(body.keys)
+
+
 @router.post("/sources/sites", dependencies=[requires_any((Area.SOURCES, Level.MANAGE), (Area.SETTINGS, Level.MANAGE))], response_model=SiteAddedAPIRead)
 def add_site_by_link(body: SiteAddAPIRequest):
     """Add the Site of a link before VODLoft has anything from it, so it gets its own settings and authentication."""
@@ -119,15 +142,49 @@ def update_source_site(key: str, body: SourceSiteAPIUpdate):
     return run_write_transaction(work)
 
 
-@router.post("/resolve", dependencies=[requires_any((Area.ADD_MEDIA, Level.VIEW), (Area.QUICK_DOWNLOADS, Level.VIEW))], response_model=ResolvedLinkAPIRead)
+@router.post(
+    "/resolve", dependencies=[requires_any((Area.ADD_MEDIA, Level.VIEW), (Area.QUICK_DOWNLOADS, Level.VIEW))],
+    responses=STEPS_RESPONSE,
+)
 def resolve(body: ResolveAPIRequest, access: Access = signed_in()):
-    """Find the Source that recognises a link, and what the link points to."""
+    """Find the Source that recognises a link, and what the link points to.
+
+    Asking the Site takes a while, so the answer is sent as it goes, a line of JSON each: ``{"plan": ...}`` each time
+    the plan of looking the link up changes, then ``{"link": ResolvedLinkAPIRead}`` or ``{"error": "..."}``. A link
+    no Source the user may use handles is refused before anything is asked.
+    """
     with db_session() as s:
         try:
-            link = resolve_link(s, access, body.url, body.source_key)
+            question = link_question(s, access, body.url, body.source_key)
         except LinkNotRecognisedError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return link
+
+    def look_up(send) -> dict:
+        # A quick first look, such as YouTube's title and thumbnail, is sent beside the plan when it comes before the
+        # full lookup is done; never after it, which ends the answer.
+        lock = threading.Lock()
+        done = False
+
+        def first_look() -> None:
+            preview = link_preview(question)
+            with lock:
+                if preview is not None and not done:
+                    send(preview=preview.model_dump(mode="json", by_alias=True))
+
+        threading.Thread(target=first_look, name="link-preview", daemon=True).start()
+        plan = PlanTracker(sink=plan_lines(send))
+        try:
+            with db_session() as s:
+                try:
+                    link = resolve_link(s, access, question, plan)
+                except LinkNotRecognisedError as exc:
+                    return {"error": str(exc)}
+            return {"link": link.model_dump(mode="json", by_alias=True)}
+        finally:
+            with lock:
+                done = True
+
+    return stream_steps(look_up, "Could not look up this link")
 
 
 @router.post("/media-links", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=MediaLinksAPIRead)
@@ -135,6 +192,22 @@ def known_media_links(body: MediaLinksAPIRequest, access: Access = signed_in()):
     """Which links of a description are on a Site VODLoft knows for media, so the UI links only those to Add media."""
     with db_session() as s:
         return MediaLinksAPIRead(urls=media_links(s, access, body.urls))
+
+
+@router.post("/media-links/check", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=MediaLinkCheckAPIRead)
+async def check_media_link(body: MediaLinkCheckAPIRequest, access: Access = signed_in()):
+    """Whether Add media finds something to add at a link of a description, so the UI only links those. The page asks
+    after it has shown the description; the lookup runs beside other checks a few at a time, and is kept a while."""
+    def question() -> LinkQuestion | None:
+        with db_session() as s:
+            try:
+                return link_question(s, access, body.url)
+            except (LinkNotRecognisedError, PermissionError):  # Not something this user can add.
+                return None
+
+    asked = await run_in_threadpool(question)
+    works = asked is not None and await asyncio.wrap_future(link_checks.check(access, asked))
+    return MediaLinkCheckAPIRead(works=works)
 
 
 @router.get("/sources/{source_id}/episode-tags", dependencies=[requires_any((Area.LIBRARY, Level.VIEW), (Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW))], response_model=list[EpisodeTagAPIRead])
@@ -255,9 +328,13 @@ def save_site_cookie_file(site_key: str, body: CookiesAPIUpdate):
         except SiteNotKnownError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+            raise _field_refused("content", exc) from exc
     _sign_in_changed(listing)
     return SiteAuthenticationAPIRead.model_validate(listing)
+
+
+def _field_refused(field: str, exc: Exception) -> HTTPException:
+    return HTTPException(status_code=422, detail=[{"loc": ["body", field], "msg": str(exc), "type": "value_error"}])
 
 
 @router.delete("/sources/authentication/{site_key}/cookies", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SiteAuthenticationAPIRead)
@@ -307,9 +384,72 @@ def remove_site_api_values(site_key: str):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+def _sign_in_rejected(exc: SignInRejected) -> HTTPException:
+    """Under the value it is about, or under the form as a whole."""
+    loc = ["body", "values", exc.field] if exc.field else ["body"]
+    return HTTPException(status_code=422, detail=[{"loc": loc, "msg": str(exc), "type": "value_error"}])
+
+
+@router.put("/sources/authentication/{site_key}/account", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SiteAuthenticationAPIRead)
+def sign_in_with_account(site_key: str, body: AccountValuesAPIUpdate):
+    """Sign in with the user's account on the Site, with what they filled in, such as an email address and password,
+    and keep the sign-in for every lookup and download on the Site."""
+    try:
+        listing = sign_in_account(site_key, body.values)
+    except SiteNotKnownError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SignInRejected as exc:
+        raise _sign_in_rejected(exc) from exc
+    _sign_in_changed(listing)
+    return SiteAuthenticationAPIRead.model_validate(listing)
+
+
+@router.post("/sources/authentication/{site_key}/account/code", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=CodeSignInAPIRead)
+def start_sign_in_with_code(site_key: str):
+    """Ask the Site for a code the user enters on its own page, such as twitch.tv/activate."""
+    try:
+        return CodeSignInAPIRead.model_validate(start_code_sign_in(site_key))
+    except SiteNotKnownError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SignInRejected as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/sources/authentication/{site_key}/account/code/{flow_id}", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SiteAuthenticationAPIRead)
+def finish_sign_in_with_code(site_key: str, flow_id: str):
+    """Wait until the user entered the code, then keep the sign-in. Answers 410 when the code ran out, was turned
+    down, or the sign-in was cancelled."""
+    try:
+        listing = finish_code_sign_in(site_key, flow_id)
+    except SiteNotKnownError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SignInCodeEnded as exc:
+        raise HTTPException(status_code=410, detail=str(exc)) from exc
+    except SignInRejected as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    _sign_in_changed(listing)
+    return SiteAuthenticationAPIRead.model_validate(listing)
+
+
+@router.delete("/sources/authentication/{site_key}/account/code/{flow_id}", status_code=204, dependencies=[requires(Area.SOURCES, Level.MANAGE)])
+def cancel_sign_in_with_code(site_key: str, flow_id: str):
+    """Stop waiting for the code, such as when the user chose Cancel."""
+    cancel_code_sign_in(site_key, flow_id)
+
+
+@router.delete("/sources/authentication/{site_key}/account", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SiteAuthenticationAPIRead)
+def sign_out_of_account(site_key: str):
+    try:
+        listing = sign_out_account(site_key)
+    except SiteNotKnownError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _sign_in_changed(listing)
+    return SiteAuthenticationAPIRead.model_validate(listing)
+
+
 def _sign_in_changed(listing: SiteAuthentication) -> None:
     # The new sign-in may give videos VODLoft could not download before.
-    for source_key in listing.cookie_source_keys:
+    for source_key in dict.fromkeys((*listing.cookie_source_keys, *filter(None, (listing.account_source_key,)))):
         access_changed(source_key)
 
 

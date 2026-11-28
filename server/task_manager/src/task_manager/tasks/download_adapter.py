@@ -18,8 +18,10 @@ from backend.db.models.media_download import MediaDownloadAsset, MediaDownloadBa
 from backend.services.collection_cookies import note_failed_download
 from backend.services.download_plans import prepare_download_plan
 from backend.services.download_relocation import remove_folders_left_empty
+from backend.services.unplayable_formats import downloads_unplayable_formats, tries_unplayable_formats
 from backend.services.media_access import lock_refused, media_access, media_site_key, site_access
 from backend.services.sites import episode_site
+from backend.services.season_moves import follow_new_place
 from backend.services.throttle_guard import record_throttled
 from backend.services.upgrade_check import schedule_first_upgrade_check
 from backend.services.notifications.emitters import episode_downloaded
@@ -30,14 +32,18 @@ from backend.services.media_download_history import (
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from config import get_settings
+from config.network import is_no_internet_error
 from sources import UnknownSourceError, get_source
 from sources.pacing import RequestCanceled, request_context
-from downloader import AccessRequiredError, DownloadCanceled, EncryptedMediaError, ThrottledError, media_duration
+from downloader import (
+    AccessRequiredError, DownloadCanceled, EncryptedMediaError, ThrottledError, UnplayableFormatsError, media_duration,
+)
 from downloader.capacity import resources
 from downloader.coordinator import DownloadExecution, execute_download_plan
 from downloader.storage.replacement import (
     PreviousDownload, capture_previous_download, retire_superseded_files,
 )
+from downloader.metadata import NO_METADATA, nfo_fingerprint, tags_fingerprint
 from downloader.lifecycle import (
     DownloadSnapshot,
     DownloadTracker,
@@ -95,12 +101,42 @@ class DownloadProgressReporter:
             self.progress.set(percent, message, meta=metadata)
 
 
-def _mark_drm_protected(session: Session, media_download_id: int) -> bool:
+_TRY_UNPLAYABLE = "try_unplayable"
+
+
+def _stop_unplayable_retry(session: Session, media_download_id: int) -> bool:
+    """After a failed download that yt-dlp made with ``--allow-unplayable-formats``, by its Collection's own options:
+    stop retrying it, and say so. Its download stays offered."""
+    download = session.get(MediaDownloadBase, media_download_id)
+    if download is None or not downloads_unplayable_formats(download.media):
+        return False
+    download.automatic_retry_suppressed = True
+    return True
+
+
+def _mark_drm_protected(session: Session, media_download_id: int) -> bool | str:
+    """Mark the media as protected by DRM after yt-dlp or the Source refused it for that, and stop retrying it.
+
+    In a Collection whose own yt-dlp options allow unplayable formats, the download was made without them because
+    VODLoft did not know the media was protected, so it is tried again, with them (``_TRY_UNPLAYABLE``).
+    """
     download = session.get(MediaDownloadBase, media_download_id)
     if download is None:
         return False
     download.media.drm_protected = True
+    if tries_unplayable_formats(download.media):
+        return _TRY_UNPLAYABLE
     download.automatic_retry_suppressed = True
+    return True
+
+
+def _mark_unplayable(session: Session, media_download_id: int) -> bool:
+    """yt-dlp found no playable formats for the media, though it is not protected by DRM. In a Collection whose own
+    yt-dlp options allow unplayable formats, mark it, so that its retry downloads it with them."""
+    download = session.get(MediaDownloadBase, media_download_id)
+    if download is None or not tries_unplayable_formats(download.media):
+        return False
+    download.media.unplayable_formats = True
     return True
 
 
@@ -180,6 +216,17 @@ def _allow_automatic_retry(session: Session, media_download_id: int) -> None:
     current.automatic_retry_suppressed = False
 
 
+def _written_metadata(plan, execution: DownloadExecution) -> tuple[str | None, str | None]:
+    """The fingerprints of the metadata the download wrote: of the tags it embedded and of its NFO, each
+    ``NO_METADATA`` when it wrote none."""
+    kept = {asset.id for asset in execution.assets}
+    nfo = next((asset.content for asset in plan.assets if asset.kind == "nfo" and asset.id in kept), None)
+    return (
+        tags_fingerprint(dict(plan.metadata_tags)) if plan.metadata_tags else NO_METADATA,
+        nfo_fingerprint(nfo) if nfo is not None else NO_METADATA,
+    )
+
+
 def _record_download(
     session: Session, *, media_download_id: int, execution: DownloadExecution, plan, duration, publish_status,
     is_redownload: bool, lifecycle, started: datetime, attempt: dict, title: str, progress,
@@ -200,6 +247,7 @@ def _record_download(
         ))
     download.artifact_stat_dev, download.artifact_stat_ino = identity.stat_dev, identity.stat_ino
     download.artifact_size_bytes, download.artifact_fingerprint = identity.size_bytes, identity.fingerprint
+    download.tags_fingerprint, download.nfo_fingerprint = _written_metadata(plan, execution)
     download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
     download.artifact_error = None
     download.automatic_retry_suppressed = False
@@ -217,11 +265,12 @@ def _record_download(
         if plan.source.ytdlp_command else None
     )
     finished = datetime.now(timezone.utc)
-    download.downloaded_at = finished
+    download.mark_downloaded(finished)
     if isinstance(download.media, Episode):
         download.downloaded_publish_status = publish_status
         schedule_first_upgrade_check(download, episode_site(download.media), finished)
         episode_downloaded(session, download.media, path=execution.result.path, replaced=is_redownload)
+        follow_new_place(session, download)
     result_data = {
         "media_download_id": media_download_id, "is_redownload": is_redownload,
         "file_path": execution.result.path, "downloaded_bytes": execution.result.bytes_downloaded,
@@ -422,11 +471,23 @@ def run_download(
                 )
 
         run_write_transaction(record_failure)
-        if isinstance(exc, EncryptedMediaError) and run_write_transaction(
-            lambda w: _mark_drm_protected(w, media_download_id)
+        if not canceled and not refused and not is_no_internet_error(exc) and run_write_transaction(
+            lambda w: _stop_unplayable_retry(w, media_download_id)
         ):
-            # Retrying cannot help; the item now shows it cannot be downloaded.
-            return TaskResult(summary=f"{title} is protected by DRM and cannot be downloaded", outcome="failed")
+            # yt-dlp or the site still refused it with unplayable formats allowed: a failed download like any
+            # other, which retrying cannot help.
+            return TaskResult(summary=f"{title}: not downloaded with unplayable formats allowed: {exc}", outcome="failed")
+        if isinstance(exc, EncryptedMediaError):
+            outcome = run_write_transaction(lambda w: _mark_drm_protected(w, media_download_id))
+            if outcome == _TRY_UNPLAYABLE:
+                # Its retry downloads it with unplayable formats allowed.
+                raise
+            if outcome:
+                # Retrying cannot help; the item now shows it cannot be downloaded.
+                return TaskResult(summary=f"{title} is protected by DRM and cannot be downloaded", outcome="failed")
+        if isinstance(exc, UnplayableFormatsError) and run_write_transaction(lambda w: _mark_unplayable(w, media_download_id)):
+            # Its retry downloads it with unplayable formats allowed.
+            raise
         if refused is not None:
             label = run_write_transaction(lambda w: _lock_media(w, media_download_id, refused))
             if label is not None:

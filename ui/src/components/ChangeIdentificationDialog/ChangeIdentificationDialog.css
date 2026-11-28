@@ -1,15 +1,19 @@
-/* Wide enough for an old and a new number next to an episode's title. */
-.modal.change-identification-dialog {
+/* Its colours, also for a dialog that shows these steps inside its own, such as the Seasons dialog's review. */
+.change-identification-dialog {
     --change-identification-line: var(--select-menu-border);
     --change-identification-soft: rgba(100, 116, 139, 0.08);
     --change-identification-danger: #dc2626;
     --change-identification-danger-soft: rgba(220, 38, 38, 0.06);
     --change-identification-danger-line: rgba(220, 38, 38, 0.35);
+}
+
+/* Wide enough for an old and a new number next to an episode's title. */
+.modal.change-identification-dialog {
     max-width: 560px;
 }
 
 @media (prefers-color-scheme: dark) {
-    .modal.change-identification-dialog {
+    .change-identification-dialog {
         --change-identification-line: rgba(148, 163, 184, 0.22);
         --change-identification-soft: rgba(148, 163, 184, 0.1);
         --change-identification-danger: #f87171;
@@ -66,6 +70,29 @@
 .change-identification-dialog .change-identification-arrow {
     color: var(--muted);
     opacity: 0.75;
+}
+
+/* The setting changes that made the Move dialog's downloads wait: what each setting is, above its from -> to. */
+.change-identification-dialog .move-causes {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 10px;
+}
+
+.change-identification-dialog .move-causes li {
+    display: grid;
+    gap: 2px;
+}
+
+.change-identification-dialog .move-cause-setting {
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.change-identification-dialog .move-causes + .move-reason {
+    margin-top: 8px;
 }
 
 /* What the change does, one framed row each */
@@ -273,4 +300,29 @@
 .change-identification-dialog .change-identification-examples li.is-title-only .change-identification-title {
     grid-column: 1 / -1;
     padding-left: 0;
+}
+
+/* A step that folds to one line, on a phone: the whole line opens it. */
+.change-identification-dialog .change-identification-step.is-foldable {
+    padding: 0;
+}
+
+.change-identification-dialog .change-identification-step-fold {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: start;
+    padding: 10px 12px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.change-identification-dialog .change-identification-step.is-foldable .change-identification-step-more {
+    padding: 0 12px 10px 52px;
+    grid-column: 1 / -1;
 }

@@ -102,6 +102,9 @@ class TaskLedgerEntryRead(ResponseBase):
 
 class TaskLedgerPageRead(CursorPageRead[TaskLedgerEntryRead]):
     total: int
+    can_hide_empty: bool = Field(
+        description="Whether the task names what its runs find, so the log can leave out the runs that found nothing.",
+    )
 
 
 class TaskTriggerRead(ResponseBase):

@@ -602,7 +602,7 @@ class QuickDownloadSettings(SubmodelBase):
     default_codec: QuickDownloadCodec = Field(default=QuickDownloadCodec.AUTO, description="The video codec quick downloads prefer; auto leaves it to the Source")
     default_audio_format: QuickDownloadAudioFormat = Field(default=QuickDownloadAudioFormat.M4A, description="M4A or MP3 for quick download audio")
     default_mp3_bitrate: int = Field(default=192, description="MP3 bitrate in kbps: 320, 192 or 128")
-    embed_metadata: bool = Field(default=True, description="Embed title, collection or channel and date in quick download files")
+    embed_metadata: bool = Field(default=True, description="Embed title, description, author and date in quick download files")
     embed_artwork: bool = Field(default=True, description="Embed cover art in quick download files")
     keep_downloaded_minutes: int = Field(
         default=10,
@@ -660,6 +660,20 @@ class LogFileSettings(SubmodelBase):
     enabled: bool = Field(default=False, description="Write the log to logs/vodloft.log next to config.yml")
     max_megabytes: int = Field(default=10, ge=1, description="Size at which the log file starts over in a new part")
     kept_files: int = Field(default=5, ge=1, description="Earlier parts of the log file that are kept")
+
+
+class CollectionHealthSettings(SubmodelBase):
+    """The collection health check, which makes sure every collection is healthy and sets right what drifted."""
+
+    check_cron_enabled: bool = Field(
+        default=True,
+        description="Enable the cron schedule for the collection health check",
+    )
+    check_cron: str = Field(
+        default="0 4 * * *",
+        min_length=1,
+        description="Cron schedule for the collection health check",
+    )
 
 
 class FileWatcherSettings(SubmodelBase):

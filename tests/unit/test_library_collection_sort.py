@@ -103,7 +103,8 @@ def test_each_user_keeps_their_own_library_order(session):
     session.commit()
 
     assert library_preferences(_user(1)).model_dump() == {
-        "collection_sort": "recently_used", "collection_sort_reversed": False, "saved": True,
+        "collection_sort": "recently_used", "collection_sort_reversed": False,
+        "creator_collection_sort": "recently_used", "creator_collection_sort_reversed": False, "saved": True,
     }
     library_preferences_save(
         LibraryPreferences.model_validate({"collectionSort": "recently_used", "collectionSortReversed": True}), _user(1),
@@ -112,6 +113,27 @@ def test_each_user_keeps_their_own_library_order(session):
     assert library_preferences(_user(1)).model_dump()["collection_sort"] == "recently_used"
     assert library_preferences(_user(1)).collection_sort_reversed is True
     assert library_preferences(_user(2)).model_dump()["collection_sort"] == "recently_used"
+
+
+def test_creator_pages_keep_an_order_of_their_own(session):
+    from backend.api.endpoints.library.router import library_preferences, library_preferences_save
+    from backend.api.models.library import LibraryPreferences
+    from backend.db.models import User
+
+    session.add(User(id=1, username="one", password_hash="x"))
+    session.commit()
+
+    library_preferences_save(LibraryPreferences.model_validate({"collectionSort": "name"}), _user(1))
+    library_preferences_save(
+        LibraryPreferences.model_validate({"creatorCollectionSort": "release_date", "creatorCollectionSortReversed": True}),
+        _user(1),
+    )
+
+    saved = library_preferences(_user(1))
+    assert saved.collection_sort == "name"
+    assert saved.collection_sort_reversed is False
+    assert saved.creator_collection_sort == "release_date"
+    assert saved.creator_collection_sort_reversed is True
 
 
 def test_without_user_accounts_the_browser_keeps_the_library_order(session):

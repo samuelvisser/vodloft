@@ -18,6 +18,7 @@ from backend.types.collection_types import CookiesMode
 from sources import get_source
 from sources.contract import Feature
 from backend.services.sites import episode_site_key
+from sources import site_accounts
 from sources.cookies import site_cookies
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,11 @@ def uses_cookies(collection: Collection, now: Optional[datetime] = None) -> bool
     return until is not None and _aware(until) > (now or datetime.now(timezone.utc))
 
 
+def _signs_in(site_key: Optional[str]) -> bool:
+    """The Site has a cookies file or an account sign-in that a Collection's downloads can use."""
+    return site_cookies(site_key) is not None or (bool(site_key) and site_accounts.load(site_key) is not None)
+
+
 def note_failed_download(session: Session, media_download_id: int, error: str) -> bool:
     """Start using the cookies file for the episode's Collection when the failure says signing in would help.
 
@@ -52,7 +58,7 @@ def note_failed_download(session: Session, media_download_id: int, error: str) -
     if (
         collection.cookies_mode != CookiesMode.AUTOMATIC
         or not source.has(Feature.OPTIONAL_COOKIES)
-        or site_cookies(episode_site_key(media)) is None
+        or not _signs_in(episode_site_key(media))
         or not source.needs_cookies(error)
     ):
         return False
