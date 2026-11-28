@@ -103,12 +103,12 @@ def test_a_request_counts_until_its_response_starts(requests_first):
     app = FastAPI()
     app.add_middleware(requests_first.RequestsFirstMiddleware)
 
-    @app.get("/api/page")
+    @app.get("/api/v1/page")
     def page():
         seen["page"] = requests_first._answering
         return {}
 
-    @app.get("/api/stream")
+    @app.get("/api/v1/stream")
     def stream():
         def body():
             seen["streaming"] = requests_first._answering
@@ -117,8 +117,8 @@ def test_a_request_counts_until_its_response_starts(requests_first):
         return StreamingResponse(body())
 
     with TestClient(app) as client:
-        assert client.get("/api/page").status_code == 200
-        assert client.get("/api/stream").content == b"chunk"
+        assert client.get("/api/v1/page").status_code == 200
+        assert client.get("/api/v1/stream").content == b"chunk"
 
     assert seen == {"page": 1, "streaming": 0}
     assert requests_first._answering == 0

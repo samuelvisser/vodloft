@@ -25,7 +25,8 @@ def client(monkeypatch, tmp_path):
     monkeypatch.setattr(health, "scheduler_running", lambda: True)
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
     app = FastAPI()
-    app.include_router(health_router_module.router, prefix="/api")
+    app.include_router(health_router_module.router, prefix="/api/v1")
+    app.include_router(health_router_module.health_check_router)
     yield TestClient(app)
     engine.dispose()
 
@@ -73,7 +74,7 @@ def test_a_stopped_scheduler_is_unhealthy(client, monkeypatch):
 
 
 def test_metrics_are_off_by_default(client):
-    assert client.get("/api/metrics").status_code == 404
+    assert client.get("/api/v1/metrics").status_code == 404
 
 
 def test_metrics_report_health_and_counts_when_turned_on(client, monkeypatch):
@@ -81,7 +82,7 @@ def test_metrics_report_health_and_counts_when_turned_on(client, monkeypatch):
 
     monkeypatch.setattr(get_settings().health, "metrics_enabled", True)
 
-    response = client.get("/api/metrics")
+    response = client.get("/api/v1/metrics")
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/plain; version=0.0.4")

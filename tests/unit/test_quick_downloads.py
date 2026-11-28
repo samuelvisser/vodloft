@@ -528,18 +528,18 @@ def api(quick_sources, temporary_root, task_database, monkeypatch):
     monkeypatch.setattr(sources_service, "preferred_sources", lambda _s: {})
     monkeypatch.setattr(quick_download_operations, "queue_task_after_commit", lambda *_a, **_k: None)
     app = FastAPI()
-    app.include_router(router_module.router, prefix="/api")
+    app.include_router(router_module.router, prefix="/api/v1")
     with TestClient(app) as client:
         yield SimpleNamespace(client=client, session=session)
     session.close()
 
 
 def test_starting_a_quick_download_queues_one_operation(api):
-    response = api.client.post("/api/quick-downloads", json={"url": "https://clips.example/v/abc", "choice": {"kind": "audio"}})
+    response = api.client.post("/api/v1/quick-downloads", json={"url": "https://clips.example/v/abc", "choice": {"kind": "audio"}})
     assert response.status_code == 202, response.text
     body = response.json()
 
-    listed = api.client.get("/api/quick-downloads").json()
+    listed = api.client.get("/api/v1/quick-downloads").json()
     [entry] = listed["active"]
     active = entry["operation"]
     assert active["id"] == body["operationId"] and active["kind"] == "quick.download"
@@ -553,12 +553,12 @@ def test_starting_a_quick_download_queues_one_operation(api):
     ("https://clips.example/channel-1", "not a whole collection"),
 ])
 def test_links_that_cannot_be_quick_downloaded_are_refused(api, url, message):
-    response = api.client.post("/api/quick-downloads", json={"url": url})
+    response = api.client.post("/api/v1/quick-downloads", json={"url": url})
     assert response.status_code == 422 and message in response.json()["detail"]
 
 
 def test_options_list_formats_or_say_why_not(api):
-    response = api.client.post("/api/quick-downloads/options", json={"url": "https://tube.example/v/abc"})
+    response = api.client.post("/api/v1/quick-downloads/options", json={"url": "https://tube.example/v/abc"})
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["link"]["preview"]["title"] == "Clip: abc?" and body["refused"] is None
@@ -567,27 +567,27 @@ def test_options_list_formats_or_say_why_not(api):
     assert body["videos"][2]["codecs"][0] == {"codec": "h264", "sizeBytes": 360}
     assert body["audio"][1] == {"audioFormat": "mp3", "bitrate": 320, "sizeBytes": 4_000_000}
 
-    basic = api.client.post("/api/quick-downloads/options", json={"url": "https://clips.example/v/abc"}).json()
+    basic = api.client.post("/api/v1/quick-downloads/options", json={"url": "https://clips.example/v/abc"}).json()
     assert basic["formatChoices"] is False and [video["quality"] for video in basic["videos"]] == [None]
 
-    locked = api.client.post("/api/quick-downloads/options", json={"url": "https://clips.example/v/locked-1"}).json()
+    locked = api.client.post("/api/v1/quick-downloads/options", json={"url": "https://clips.example/v/locked-1"}).json()
     assert "DRM" in locked["refused"] and locked["videos"] == []
 
 
 def test_choices_a_source_does_not_offer_are_refused(api):
-    response = api.client.post("/api/quick-downloads", json={
+    response = api.client.post("/api/v1/quick-downloads", json={
         "url": "https://clips.example/v/abc", "choice": {"container": "mkv"},
     })
     assert response.status_code == 422 and "only as MP4 video or M4A audio" in response.json()["detail"]
-    response = api.client.post("/api/quick-downloads", json={
+    response = api.client.post("/api/v1/quick-downloads", json={
         "url": "https://tube.example/v/abc", "choice": {"quality": 900},
     })
     assert response.status_code == 422
-    response = api.client.post("/api/quick-downloads", json={
+    response = api.client.post("/api/v1/quick-downloads", json={
         "url": "https://tube.example/v/abc", "choice": {"kind": "audio", "audioFormat": "mp3", "audioBitrate": 192},
     })
     assert response.status_code == 202, response.text
-    [entry] = api.client.get("/api/quick-downloads").json()["active"]
+    [entry] = api.client.get("/api/v1/quick-downloads").json()["active"]
     assert entry["operation"]["context"]["choice"] == "Audio · MP3 192 kbps"
 
 
@@ -612,22 +612,22 @@ def test_a_ready_file_downloads_in_ranges_and_is_deleted_after_the_grace_period(
     from downloader.storage.quick import open_quick_folder
 
     quick_id = _ready_file(temporary_root)
-    [ready] = api.client.get("/api/quick-downloads").json()["ready"]
+    [ready] = api.client.get("/api/v1/quick-downloads").json()["ready"]
     assert ready["id"] == quick_id and ready["sourceName"] == "Clips" and ready["state"] == "ready"
 
-    head = api.client.head(f"/api/quick-downloads/{quick_id}/file")
+    head = api.client.head(f"/api/v1/quick-downloads/{quick_id}/file")
     assert head.headers["content-length"] == "10"
     assert "filename*=UTF-8''Clip%20%C3%A9.mp4" in head.headers["content-disposition"]
     assert head.headers["x-accel-buffering"] == "no"
 
-    first = api.client.get(f"/api/quick-downloads/{quick_id}/file", headers={"Range": "bytes=0-3"})
+    first = api.client.get(f"/api/v1/quick-downloads/{quick_id}/file", headers={"Range": "bytes=0-3"})
     assert first.status_code == 206 and first.content == b"0123"
     assert first.headers["content-range"] == "bytes 0-3/10"
     assert open_quick_folder(temporary_root, quick_id).manifest.state == "ready"
     from task_manager.scheduler.operations import list_operations
     assert not list_operations(kind="quick.delivered")
 
-    rest = api.client.get(f"/api/quick-downloads/{quick_id}/file", headers={"Range": "bytes=4-"})
+    rest = api.client.get(f"/api/v1/quick-downloads/{quick_id}/file", headers={"Range": "bytes=4-"})
     assert rest.content == b"456789"
     manifest = open_quick_folder(temporary_root, quick_id).manifest
     assert manifest.state == "delivered"
@@ -637,22 +637,22 @@ def test_a_ready_file_downloads_in_ranges_and_is_deleted_after_the_grace_period(
     assert delivered.context["quick_download_id"] == quick_id
     assert (manifest.expires_at - manifest.delivered_at).total_seconds() == 600
 
-    assert api.client.get(f"/api/quick-downloads/{quick_id}/file", headers={"Range": "bytes=20-"}).status_code == 416
+    assert api.client.get(f"/api/v1/quick-downloads/{quick_id}/file", headers={"Range": "bytes=20-"}).status_code == 416
 
     monkeypatch.setattr(get_settings().quick_download, "keep_downloaded_minutes", 0)
     other = _ready_file(temporary_root)
-    assert api.client.get(f"/api/quick-downloads/{other}/file").content == b"0123456789"
+    assert api.client.get(f"/api/v1/quick-downloads/{other}/file").content == b"0123456789"
     assert open_quick_folder(temporary_root, other) is None
-    assert api.client.get(f"/api/quick-downloads/{other}/file").status_code == 404
+    assert api.client.get(f"/api/v1/quick-downloads/{other}/file").status_code == 404
 
 
 def test_discarding_a_ready_file_deletes_it(api, temporary_root):
     from downloader.storage.quick import open_quick_folder
 
     quick_id = _ready_file(temporary_root)
-    assert api.client.delete(f"/api/quick-downloads/{quick_id}").status_code == 204
+    assert api.client.delete(f"/api/v1/quick-downloads/{quick_id}").status_code == 204
     assert open_quick_folder(temporary_root, quick_id) is None
-    assert api.client.delete(f"/api/quick-downloads/{quick_id}").status_code == 404
+    assert api.client.delete(f"/api/v1/quick-downloads/{quick_id}").status_code == 404
 
 
 def _rules(monkeypatch, **values):
@@ -663,7 +663,7 @@ def _rules(monkeypatch, **values):
 
 
 def _start(api, url, **choice):
-    return api.client.post("/api/quick-downloads", json={"url": url, "choice": choice})
+    return api.client.post("/api/v1/quick-downloads", json={"url": url, "choice": choice})
 
 
 def test_rules_refuse_what_settings_do_not_allow(api, monkeypatch):
@@ -697,7 +697,7 @@ def test_locked_defaults_and_a_quality_limit_shape_the_download(api, quick_sourc
 
     _rules(monkeypatch, lock_to_defaults=True, default_kind="audio", default_audio_format="mp3", default_mp3_bitrate=128)
     assert _start(api, "https://tube.example/v/abc", quality=2160).status_code == 202
-    [entry] = api.client.get("/api/quick-downloads").json()["active"]
+    [entry] = api.client.get("/api/v1/quick-downloads").json()["active"]
     operation = entry["operation"]
     assert operation["context"]["choice"] == "Audio · MP3 128 kbps"
 
@@ -723,7 +723,7 @@ def test_the_history_follows_each_quick_download_to_its_end(api, temporary_root,
     expired = _start(api, "https://clips.example/v/def", kind="audio").json()
     canceled = _start(api, "https://clips.example/v/ghi").json()
     assert _start(api, "https://clips.example/v/locked-1").status_code == 422
-    rows = {row["quickDownloadId"]: row for row in api.client.get("/api/quick-downloads/history").json()}
+    rows = {row["quickDownloadId"]: row for row in api.client.get("/api/v1/quick-downloads/history").json()}
     assert rows[downloaded["quickDownloadId"]]["outcome"] == "working"
     [refused] = [row for row in rows.values() if row["outcome"] == "refused"]
     assert refused["message"] == "Protected by DRM" and refused["title"] == "Clip: locked-1?"
@@ -733,10 +733,10 @@ def test_the_history_follows_each_quick_download_to_its_end(api, temporary_root,
         history.record_outcome(done["quickDownloadId"], history.READY, size_bytes=10)
         _ready_file(temporary_root, quick_id=done["quickDownloadId"])
     cancel_operation(canceled["operationId"], reason="Canceled by user")
-    api.client.get(f"/api/quick-downloads/{downloaded['quickDownloadId']}/file")
+    api.client.get(f"/api/v1/quick-downloads/{downloaded['quickDownloadId']}/file")
     sweep_quick_downloads(now=datetime.now(timezone.utc) + timedelta(days=2))
 
-    rows = {row["quickDownloadId"]: row for row in api.client.get("/api/quick-downloads/history").json()}
+    rows = {row["quickDownloadId"]: row for row in api.client.get("/api/v1/quick-downloads/history").json()}
     assert rows[downloaded["quickDownloadId"]]["outcome"] == "downloaded"
     assert rows[expired["quickDownloadId"]]["outcome"] == "expired"
     assert rows[expired["quickDownloadId"]]["format"] == "Audio · M4A"
@@ -746,20 +746,20 @@ def test_the_history_follows_each_quick_download_to_its_end(api, temporary_root,
     # A ready file that disappears, such as when the temporary folder is cleared, is no longer ready.
     gone = _start(api, "https://clips.example/v/gone").json()
     history.record_outcome(gone["quickDownloadId"], history.READY, size_bytes=10)
-    rows = {row["quickDownloadId"]: row for row in api.client.get("/api/quick-downloads/history").json()}
+    rows = {row["quickDownloadId"]: row for row in api.client.get("/api/v1/quick-downloads/history").json()}
     assert rows[gone["quickDownloadId"]]["outcome"] == "expired"
     assert rows[gone["quickDownloadId"]]["message"] == "The file was removed before it was downloaded"
 
     # Clearing keeps what is still going on; old entries are forgotten after the retention period.
     working = _start(api, "https://clips.example/v/jkl").json()
-    assert api.client.delete("/api/quick-downloads/history").status_code == 204
-    [left] = api.client.get("/api/quick-downloads/history").json()
+    assert api.client.delete("/api/v1/quick-downloads/history").status_code == 204
+    [left] = api.client.get("/api/v1/quick-downloads/history").json()
     assert left["quickDownloadId"] == working["quickDownloadId"]
     assert history.forget_old_history(now=datetime.now(timezone.utc) + timedelta(days=91)) == 1
 
     _rules(monkeypatch, keep_history=False)
     _start(api, "https://clips.example/v/mno")
-    assert api.client.get("/api/quick-downloads/history").json() == []
+    assert api.client.get("/api/v1/quick-downloads/history").json() == []
 
 
 def test_every_quick_download_setting_is_sent_under_its_editable_path():

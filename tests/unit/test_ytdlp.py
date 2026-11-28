@@ -499,7 +499,7 @@ def client(tool_sources, monkeypatch):
 
     monkeypatch.setattr(source_router_module, "db_session", db_session)
     app = FastAPI()
-    app.include_router(source_router_module.router, prefix="/api")
+    app.include_router(source_router_module.router, prefix="/api/v1")
     app.add_exception_handler(SourceRequestError, source_request_error_handler)
     with TestClient(app) as test_client:
         yield test_client
@@ -507,15 +507,15 @@ def client(tool_sources, monkeypatch):
 
 def test_the_program_endpoints(client, tool_sources):
     tool, _ = tool_sources
-    assert client.get("/api/sources/tool/program").json()["version"] == "v0"
-    assert client.post("/api/sources/tool/program/update").json()["version"] == "v1"
+    assert client.get("/api/v1/sources/tool/program").json()["version"] == "v0"
+    assert client.post("/api/v1/sources/tool/program/update").json()["version"] == "v1"
     tool.fails = True
-    failed = client.post("/api/sources/tool/program/update")
+    failed = client.post("/api/v1/sources/tool/program/update")
     assert failed.status_code == 502
     assert "release server said no" in failed.json()["detail"]
 
-    assert client.get("/api/sources/plain/program").status_code == 404
-    assert client.get("/api/sources/nope/program").status_code == 404
+    assert client.get("/api/v1/sources/plain/program").status_code == 404
+    assert client.get("/api/v1/sources/nope/program").status_code == 404
 
 
 def test_the_weekly_update_only_updates_sources_that_are_due(tool_sources):

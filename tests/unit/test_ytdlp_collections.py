@@ -422,13 +422,13 @@ def test_the_collection_lookup_endpoint(listed):
     from backend.api.endpoints.sources import router as source_router_module
 
     app = FastAPI()
-    app.include_router(source_router_module.router, prefix="/api")
+    app.include_router(source_router_module.router, prefix="/api/v1")
     with TestClient(app) as client:
-        body = client.get("/api/sources/listed/collection", params={"url": "https://listed.example/PL1"}).json()
+        body = client.get("/api/v1/sources/listed/collection", params={"url": "https://listed.example/PL1"}).json()
         assert body["slug"] == "PL1"
         assert (body["authorName"], body["authorSlug"], body["sourceKey"]) == ("A Channel", "a-channel", "listed")
         assert body["probableCollectionType"] == "series"
-        assert client.get("/api/sources/dailywire/show", params={"url": "https://x"}).status_code == 404
+        assert client.get("/api/v1/sources/dailywire/show", params={"url": "https://x"}).status_code == 404
 
 
 def test_the_collection_lookup_suggests_a_podcast_from_its_name(listed, monkeypatch):
@@ -439,9 +439,9 @@ def test_the_collection_lookup_suggests_a_podcast_from_its_name(listed, monkeypa
 
     monkeypatch.setattr(ListedSource, "collection_details", lambda self, url: CollectionDetails(slug="UC1", url=url, title="PBD Podcasts"))
     app = FastAPI()
-    app.include_router(source_router_module.router, prefix="/api")
+    app.include_router(source_router_module.router, prefix="/api/v1")
     with TestClient(app) as client:
-        body = client.get("/api/sources/listed/collection", params={"url": "https://listed.example/UC1"}).json()
+        body = client.get("/api/v1/sources/listed/collection", params={"url": "https://listed.example/UC1"}).json()
     assert body["probableCollectionType"] == "podcast"
 
 
@@ -453,9 +453,9 @@ def test_the_collection_lookup_suggests_music_when_the_source_takes_it_for_music
 
     monkeypatch.setattr(ListedSource, "music_reason", lambda self, url, details: "Its channel has releases", raising=False)
     app = FastAPI()
-    app.include_router(source_router_module.router, prefix="/api")
+    app.include_router(source_router_module.router, prefix="/api/v1")
     with TestClient(app) as client:
-        body = client.get("/api/sources/listed/collection", params={"url": "https://listed.example/PL1"}).json()
+        body = client.get("/api/v1/sources/listed/collection", params={"url": "https://listed.example/PL1"}).json()
     assert (body["probableCollectionType"], body["musicReason"]) == ("music", "Its channel has releases")
 
 

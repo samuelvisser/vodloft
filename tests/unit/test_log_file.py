@@ -35,8 +35,8 @@ def test_the_log_file_follows_the_log_level_and_stops_when_turned_off(log_settin
     test_logger = logging.getLogger("vodloft.test")
     test_logger.debug("hidden detail")
     test_logger.info("visible line")
-    logging.getLogger("uvicorn.access").info('%s - "%s %s HTTP/%s" %d', "127.0.0.1:1", "GET", "/api/pull", "1.1", 200)
-    logging.getLogger("uvicorn.access").info('%s - "%s %s HTTP/%s" %d', "127.0.0.1:1", "GET", "/api/logs", "1.1", 200)
+    logging.getLogger("uvicorn.access").info('%s - "%s %s HTTP/%s" %d', "127.0.0.1:1", "GET", "/api/v1/pull", "1.1", 200)
+    logging.getLogger("uvicorn.access").info('%s - "%s %s HTTP/%s" %d', "127.0.0.1:1", "GET", "/api/v1/logs", "1.1", 200)
 
     configure_log_file(log_settings(enabled=True, log_level="DEBUG"))
     test_logger.debug("debug after the change")
@@ -49,8 +49,8 @@ def test_the_log_file_follows_the_log_level_and_stops_when_turned_off(log_settin
     text = path.read_text(encoding="utf-8")
     assert "INFO     vodloft.test: visible line" in text
     assert "hidden detail" not in text
-    assert "/api/pull" in text
-    assert "/api/logs" not in text
+    assert "/api/v1/pull" in text
+    assert "/api/v1/logs" not in text
     assert "debug after the change" in text
     assert "after turning it off" not in text
     assert text.count("visible line") == 1

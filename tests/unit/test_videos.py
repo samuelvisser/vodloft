@@ -103,7 +103,7 @@ def client(video_sources, session, monkeypatch):
 
     monkeypatch.setattr(video_router_module, "db_session", db_session)
     app = FastAPI()
-    app.include_router(video_router_module.router, prefix="/api")
+    app.include_router(video_router_module.router, prefix="/api/v1")
     with TestClient(app) as test_client:
         yield test_client
 
@@ -123,7 +123,7 @@ def _video_profile(session, **overrides):
 def test_adding_a_video_stores_it_and_adding_it_again_refreshes_it(client, video_sources, session):
     from backend.db.models import Video
 
-    response = client.post("/api/videos", json={"url": "https://clips.example/v/abc", "sourceKey": "clips"})
+    response = client.post("/api/v1/videos", json={"url": "https://clips.example/v/abc", "sourceKey": "clips"})
     assert response.status_code == 201
     body = response.json()
     assert body["slug"] == "abc"
@@ -133,13 +133,13 @@ def test_adding_a_video_stores_it_and_adding_it_again_refreshes_it(client, video
     assert body["thumbnailLandscapePath"] == "https://img.clips.example/abc.jpg"
 
     video_sources.titles["abc"] = "Renamed"
-    again = client.post("/api/videos", json={"url": "clips.example/v/abc", "sourceKey": "clips"}).json()
+    again = client.post("/api/v1/videos", json={"url": "clips.example/v/abc", "sourceKey": "clips"}).json()
     assert again["id"] == body["id"]
     assert again["title"] == "Renamed"
     assert session.query(Video).count() == 1
 
-    assert [video["id"] for video in client.get("/api/videos").json()] == [body["id"]]
-    assert client.get(f"/api/videos/{body['id']}").json()["title"] == "Renamed"
+    assert [video["id"] for video in client.get("/api/v1/videos").json()] == [body["id"]]
+    assert client.get(f"/api/v1/videos/{body['id']}").json()["title"] == "Renamed"
 
 
 def test_the_same_id_at_two_sources_is_two_videos(video_sources, session):
@@ -153,21 +153,21 @@ def test_the_same_id_at_two_sources_is_two_videos(video_sources, session):
 
 
 def test_only_sources_with_videos_can_add_one(client):
-    response = client.post("/api/videos", json={"url": "https://collections.example/v/x", "sourceKey": "collections_only"})
+    response = client.post("/api/v1/videos", json={"url": "https://collections.example/v/x", "sourceKey": "collections_only"})
     assert response.status_code == 422
     assert "Shows Only has no single videos" in response.json()["detail"]
 
-    unknown = client.post("/api/videos", json={"url": "https://x.example/v/x", "sourceKey": "nope"})
+    unknown = client.post("/api/v1/videos", json={"url": "https://x.example/v/x", "sourceKey": "nope"})
     assert unknown.status_code == 422
 
 
 def test_deleting_a_video_removes_it(client, session):
     from backend.db.models import Video
 
-    video_id = client.post("/api/videos", json={"url": "https://clips.example/v/gone", "sourceKey": "clips"}).json()["id"]
-    assert client.delete(f"/api/videos/{video_id}").status_code == 200
+    video_id = client.post("/api/v1/videos", json={"url": "https://clips.example/v/gone", "sourceKey": "clips"}).json()["id"]
+    assert client.delete(f"/api/v1/videos/{video_id}").status_code == 200
     assert session.query(Video).count() == 0
-    assert client.get(f"/api/videos/{video_id}").status_code == 404
+    assert client.get(f"/api/v1/videos/{video_id}").status_code == 404
 
 
 def test_video_output_paths_use_the_channel_date_and_id(video_sources, session):

@@ -7,11 +7,13 @@
     "dev": "vite",
     "dev:pro-icons": "vite --mode pro-icons",
     "build": "npm run build:free-icons",
-    "build:free-icons": "tsc --noEmit && vite build --mode free-icons",
-    "build:pro-icons": "tsc --noEmit && vite build --mode pro-icons",
+    "build:free-icons": "tsc --noEmit && vite build --mode free-icons && vite build -c vite.extension.config.ts --mode free-icons",
+    "build:pro-icons": "tsc --noEmit && vite build --mode pro-icons && vite build -c vite.extension.config.ts --mode pro-icons",
     "preview": "vite preview",
     "format": "prettier --write .",
-    "test": "node scripts/run-tests.mjs"
+    "test": "node scripts/run-tests.mjs",
+    "build:extension": "vite build -c vite.extension.config.ts --mode free-icons",
+    "dev:extension": "vite build -c vite.extension.config.ts --mode free-icons --watch"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",

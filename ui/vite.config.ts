@@ -41,7 +41,7 @@ function readVODLoftVersion(): string {
   return version
 }
 
-function vodLoftVersionPlugin(): Plugin {
+export function vodLoftVersionPlugin(): Plugin {
   return {
     name: 'vodloft-version',
     resolveId(id) {

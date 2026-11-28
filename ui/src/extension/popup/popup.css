@@ -1,0 +1,54 @@
+/* The extension's popup: VODLoft's own styles, at the width of a phone, so Add media's card and Quick download's
+   lists take their phone layout. Only the popup's frame is its own. */
+html, body, #root { height: auto; }
+body { width: 380px; }
+
+.extension-popup { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px 12px; }
+.extension-header { display: flex; align-items: center; gap: 8px; }
+.extension-header h1 { margin: 0; font-size: 16px; }
+.extension-actions { margin-left: auto; }
+.extension-result { margin: 0; }
+
+.extension-popup .add-media-preview { margin-top: 0; padding: 12px; }
+.extension-popup .add-media-preview-copy h2 { font-size: 16px; }
+.extension-popup .add-media-preview-actions .btn { flex: 1 1 auto; justify-content: center; }
+.extension-popup .btn.is-active { box-shadow: inset 0 0 0 2px #3b82f6; }
+
+.extension-note { margin: 0; color: var(--muted); }
+.extension-problem { margin: 0; }
+.extension-problem .actions { margin-top: 10px; }
+.extension-problem--quiet { padding: 12px 14px; border: 1px solid rgba(100, 116, 139, 0.24); border-radius: 12px; }
+
+.extension-setup { display: flex; flex-direction: column; gap: 6px; }
+.extension-setup p { margin: 0 0 6px; }
+.extension-setup .input { width: 100%; }
+.extension-setup .help { color: var(--muted); font-size: 12px; }
+.extension-setup .actions { display: flex; gap: 8px; }
+
+.extension-quick { display: flex; flex-direction: column; gap: 10px; }
+.extension-queue { margin-top: 0; }
+.extension-queue .quick-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.extension-auto-save { margin: 0 0 8px; font-size: 12px; }
+
+
+.extension-footer {
+    display: flex; justify-content: space-between; gap: 8px; padding-top: 10px;
+    border-top: 1px solid rgba(100, 116, 139, 0.24); color: var(--muted); font-size: 12px;
+}
+.extension-footer > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.extension-footer .quick-link-button, .extension-queue .quick-list-heading .quick-link-button { margin: 0; padding: 0; }
+/* The thumbnail fills the card, as Add media's does on a phone. */
+.extension-popup .add-media-preview-art { max-width: 100%; }
+.extension-popup .add-media-preview-art img { width: 100%; height: auto; max-width: 100%; aspect-ratio: 16 / 9; }
+/* Quick download's footer stays in reach while the popup scrolls, but in the popup's flow, under the choices. */
+.extension-popup .quick-download-footer { position: sticky; margin: 0 -16px; }
+/* The Actions menu drops down from its button as on a desktop: a sheet from the bottom would cover a short popup. */
+.extension-popup .extension-actions { position: relative; }
+.extension-popup .extension-actions .action-menu-backdrop { display: none; }
+.extension-popup .extension-actions .action-menu-popover {
+    position: absolute; left: auto; right: 0; top: calc(100% + 8px); bottom: auto;
+    width: max-content; min-width: 230px; max-width: calc(100vw - 32px);
+    padding: 6px; border-radius: 12px; animation: none;
+}
+.extension-popup .extension-actions .action-menu-item { min-height: 0; padding: 8px 10px; font-size: 13.3333px; }
+.extension-popup .extension-actions .action-menu-trigger { min-height: 34px; }

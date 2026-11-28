@@ -16,6 +16,7 @@ import {AccessNotice} from '../components/common/AccessLocked'
 import {ClearInputButton} from '../components/common/ClearInputButton'
 import {useAutoLookup} from '../lib/useAutoLookup'
 import AddEmptyCollectionDialog from '../components/AddEmptyCollection/AddEmptyCollectionDialog'
+import BrowserExtensionSteps from '../components/BrowserExtension/BrowserExtensionSteps'
 import LookupSteps from './creator/LookupSteps'
 import type {ProgressStep} from '../types/progress'
 import type {LinkFirstLookRead} from '../types/schemas/source'
@@ -404,6 +405,23 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                             Add custom collection
                         </button>
                     </div>
+                </div>
+            )}
+            {!onboarding && !onCollection && (
+                <div className="add-media-browse">
+                    <h2>Or add from any page</h2>
+                    <p className="view-description add-media-browse-text">
+                        VODLoft&apos;s browser extension shows what VODLoft finds on the page you are on, with Add to
+                        library and Quick download right in your browser&apos;s toolbar.
+                    </p>
+                    <BrowserExtensionSteps summary="Get the browser extension">
+                        <li>
+                            <span>
+                                Open the page of a video, a movie or a collection, such as a YouTube video or channel, and
+                                click the VODLoft icon.
+                            </span>
+                        </li>
+                    </BrowserExtensionSteps>
                 </div>
             )}
             {emptyOpen && <AddEmptyCollectionDialog onDismiss={() => setEmptyOpen(false)}/>}

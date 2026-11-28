@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "VODLoft",
   "short_name": "VODLoft",
-  "version": "1.0.0",
-  "description": "Send the cookies of a site you are signed in to straight to your own VODLoft, so it can download what your account can see.",
+  "version": "1.1.0",
+  "description": "Add the video, movie or collection of the page you are on to your own VODLoft, or quick download it as a file. It can also send a site's cookies to VODLoft.",
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
@@ -11,7 +11,7 @@
     "128": "icons/icon-128.png"
   },
   "action": {
-    "default_title": "Send cookies to VODLoft",
+    "default_title": "VODLoft",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon-16.png",
@@ -19,7 +19,12 @@
       "48": "icons/icon-48.png"
     }
   },
-  "permissions": ["cookies", "storage", "activeTab"],
+  "background": {
+    "service_worker": "background.js",
+    "scripts": ["background.js"],
+    "type": "module"
+  },
+  "permissions": ["activeTab", "alarms", "cookies", "downloads", "storage"],
   "optional_host_permissions": ["<all_urls>"],
   "browser_specific_settings": {
     "gecko": {

@@ -12,7 +12,7 @@ def _slow_app(slow_requests, seconds: float) -> FastAPI:
     app = FastAPI()
     app.add_middleware(slow_requests.SlowRequestMiddleware)
 
-    @app.get("/api/slow")
+    @app.get("/api/v1/slow")
     def slow():
         time.sleep(seconds)
         return {}
@@ -32,24 +32,24 @@ def test_a_slow_request_logs_the_threads_that_were_working(monkeypatch, capsys, 
     app = FastAPI()
     app.add_middleware(slow_requests.SlowRequestMiddleware)
 
-    @app.get("/api/slow")
+    @app.get("/api/v1/slow")
     def slow():
         time.sleep(0.6)
         return {}
 
-    @app.get("/api/fast")
+    @app.get("/api/v1/fast")
     def fast():
         return {}
 
     with TestClient(app) as client:
-        assert client.get("/api/fast").status_code == 200
-        assert client.get("/api/slow").status_code == 200
+        assert client.get("/api/v1/fast").status_code == 200
+        assert client.get("/api/v1/slow").status_code == 200
 
     logged = capsys.readouterr().err
-    assert "Slow request: GET /api/slow answered after" in logged
-    assert "Still waiting for GET /api/slow" in logged
-    assert "/api/slow" in logged
-    assert "/api/fast" not in logged
+    assert "Slow request: GET /api/v1/slow answered after" in logged
+    assert "Still waiting for GET /api/v1/slow" in logged
+    assert "/api/v1/slow" in logged
+    assert "/api/v1/fast" not in logged
 
 
 def test_a_request_that_waits_long_is_still_sampled_after_the_first_seconds(monkeypatch, capsys, caplog):
@@ -63,16 +63,16 @@ def test_a_request_that_waits_long_is_still_sampled_after_the_first_seconds(monk
     app = FastAPI()
     app.add_middleware(slow_requests.SlowRequestMiddleware)
 
-    @app.get("/api/long")
+    @app.get("/api/v1/long")
     def long():
         time.sleep(0.9)
         return {}
 
     with TestClient(app) as client:
-        assert client.get("/api/long").status_code == 200
+        assert client.get("/api/v1/long").status_code == 200
 
     # A sample a second apart at first (here a tenth), then one after twice as long.
-    assert capsys.readouterr().err.count("Still waiting for GET /api/long") == 4
+    assert capsys.readouterr().err.count("Still waiting for GET /api/v1/long") == 4
 
 
 def test_a_slow_request_is_only_logged_at_debug(monkeypatch, capsys, caplog):
@@ -84,9 +84,9 @@ def test_a_slow_request_is_only_logged_at_debug(monkeypatch, capsys, caplog):
     monkeypatch.setattr(slow_requests, "_SAMPLE_EVERY_SECONDS", 0.1)
 
     with TestClient(_slow_app(slow_requests, 0.4)) as client:
-        assert client.get("/api/slow").status_code == 200
+        assert client.get("/api/v1/slow").status_code == 200
 
-    assert "/api/slow" not in capsys.readouterr().err
+    assert "/api/v1/slow" not in capsys.readouterr().err
     assert not [record for record in caplog.records if record.name == slow_requests.__name__]
 
 

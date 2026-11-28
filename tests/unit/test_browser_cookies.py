@@ -81,18 +81,3 @@ def test_cookies_of_another_site_are_refused_under_the_cookies(client):
     assert refused.status_code == 422
     assert refused.json()["detail"][0]["loc"] == ["body", "content"]
     assert "youtube.com" in refused.json()["detail"][0]["msg"]
-
-
-def test_the_browser_extension_downloads_as_a_zip_to_load_into_a_browser(client):
-    import io
-    import json
-    import zipfile
-
-    downloaded = client.get("/api/sources/authentication/browser-extension")
-    assert downloaded.status_code == 200
-    assert downloaded.headers["content-type"] == "application/zip"
-    assert 'filename="vodloft-browser-extension.zip"' in downloaded.headers["content-disposition"]
-    archive = zipfile.ZipFile(io.BytesIO(downloaded.content))
-    names = set(archive.namelist())
-    assert {"vodloft-browser-extension/manifest.json", "vodloft-browser-extension/popup.js"} <= names
-    assert json.loads(archive.read("vodloft-browser-extension/manifest.json"))["manifest_version"] == 3

@@ -5,7 +5,8 @@ import {z} from 'zod'
 import {zodResolver} from '@hookform/resolvers/zod'
 
 import {saveSiteCookies, useSiteAuthentication, useSourceApi} from '../../lib/queries'
-import {apiFetch, apiUrl} from '../../lib/api'
+import {apiFetch} from '../../lib/api'
+import BrowserExtensionSteps from '../BrowserExtension/BrowserExtensionSteps'
 import {SiteAuthenticationReadSchema, type SiteAuthenticationRead} from '../../types/schemas/source'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import SourceSection from './SourceSection'
@@ -44,43 +45,17 @@ function CookiesFileButton({label, ariaLabel, disabled, onFile}: {
     )
 }
 
-/** The address the browser extension reaches this VODLoft on: where its API is, without ``/api``. */
-function vodloftAddress() {
-    return new URL(apiUrl(), window.location.href).href.replace(/\/api\/?$/, '')
-}
-
-/** How to install VODLoft's browser extension, which sends a site's cookies to VODLoft, and send them with it. */
-function BrowserExtensionSteps({site}: {site: SiteAuthenticationRead}) {
+/** How to send a site's cookies with VODLoft's browser extension. */
+function CookieExtensionSteps({site}: {site: SiteAuthenticationRead}) {
     return (
-        <details className="youtube-api-guide site-cookies-extension">
-            <summary>Optional: Send cookies from your browser</summary>
-            <ol>
-                <li>
-                    <span>Download VODLoft&apos;s browser extension and unzip it.</span>
-                    <a className="btn" href={apiUrl('/sources/authentication/browser-extension')} download>Download</a>
-                </li>
-                <li>
-                    <span>
-                        In Chrome, Edge or Brave, open <code>chrome://extensions</code>, turn on Developer mode, choose
-                        Load unpacked and pick the unzipped folder. In Firefox, open{' '}
-                        <code>about:debugging#/runtime/this-firefox</code>, choose Load Temporary Add-on and pick the
-                        folder&apos;s <code>manifest.json</code>.
-                    </span>
-                </li>
-                <li>
-                    <span>
-                        Click the VODLoft icon in your browser&apos;s toolbar, fill in <code>{vodloftAddress()}</code>,
-                        choose Save and allow it to read cookies. Stay signed in to VODLoft in the same browser.
-                    </span>
-                </li>
-                <li>
-                    <span>
-                        Open a page of {site.name} while you are signed in there, click the VODLoft icon and choose
-                        Send cookies to VODLoft.
-                    </span>
-                </li>
-            </ol>
-        </details>
+        <BrowserExtensionSteps summary="Optional: Send cookies from your browser" className="site-cookies-extension">
+            <li>
+                <span>
+                    Open a page of {site.name} while you are signed in there, click the VODLoft icon, open Actions and
+                    choose Send cookies to VODLoft. Your browser asks you once to let the extension read sites&apos; cookies.
+                </span>
+            </li>
+        </BrowserExtensionSteps>
     )
 }
 
@@ -196,7 +171,7 @@ function SiteCookies({site, onSaved}: {site: SiteAuthenticationRead; onSaved: (s
                     <p className={site.cookiesStatus.ok ? 'youtube-api-ok' : 'source-setting-error'}>{site.cookiesStatus.detail}</p>
                 )}
                 {error && <p className="source-setting-error" role="alert">{error}</p>}
-                <BrowserExtensionSteps site={site}/>
+                <CookieExtensionSteps site={site}/>
                 {pasting && <PasteCookiesForm site={site} onSaved={onSaved} onClose={() => setPasting(false)}/>}
             </div>
             <div className="source-setting-actions">
