@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import logging
+import threading
+import time
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
@@ -311,18 +314,98 @@ def resolve_link(s: Session, access: Access, question: LinkQuestion, plan: PlanT
     # The Sources were found from the link before any was asked; the plan starts with that done.
     plan.add(StageSpec(id="find_service", code="find_service", label="Finding the service the link comes from"))
     plan.complete("find_service")
-    for source in question.asked:
-        with asking_source(f"{source.name} could not look up this link"), ytdlp_call_options(source):
-            link = source.resolve(question.url, plan)
-        if link is not None:
-            access.check_link(source, link.url)
-            with plan.step("check_library", "Checking what is in your library already"):
-                return _to_read(s, source, link, question.allowed)
+    found = _first_resolved(access, question, plan)
+    if found is not None:
+        source, link = found
+        with plan.step("check_library", "Checking what is in your library already"):
+            return _to_read(s, source, link, question.allowed)
     if question.one_source:
         raise LinkNotRecognisedError(f"{question.asked[0].name} does not recognise this link")
     raise LinkNotRecognisedError(
         "VODLoft finds no video, channel or playlist at this link. Check that the link is complete."
     )
+
+
+def _first_resolved(access: Access, question: LinkQuestion, plan: PlanTracker) -> tuple[Source, ResolvedLink] | None:
+    """The first Source of the question that resolves the link, with what it found there, as the user may use it."""
+    for source in question.asked:
+        with asking_source(f"{source.name} could not look up this link"), ytdlp_call_options(source):
+            link = source.resolve(question.url, plan)
+        if link is not None:
+            access.check_link(source, link.url)
+            return source, link
+    return None
+
+
+_LINK_CHECK_SECONDS = 6 * 3600
+"""How long the answer to whether a link looks up is kept. What a link points to seldom changes."""
+_FAILED_LINK_CHECK_SECONDS = 600
+"""How long a lookup that failed, such as when the Site did not answer, is kept before it is tried again."""
+_LINK_CHECK_WORKERS = 2
+"""How many links are looked up at once, so a description full of links never floods a Site with lookups."""
+
+
+class LinkChecks:
+    """Whether links look up in Add media, checked in the background a few at a time and kept for a while.
+
+    A check is the lookup Add media does, so a link that is opened afterwards is answered from what the Source kept
+    of it. A link being checked is checked once, however many pages ask for it.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._kept: dict[tuple[str, tuple[str, ...]], tuple[float, bool]] = {}
+        self._running: dict[tuple[str, tuple[str, ...]], Future[bool]] = {}
+        self._pool = ThreadPoolExecutor(max_workers=_LINK_CHECK_WORKERS, thread_name_prefix="link-check")
+
+    def check(self, access: Access, question: LinkQuestion) -> Future[bool]:
+        """Whether the link of the question looks up with its Sources."""
+        key = (question.url, tuple(source.id for source in question.asked))
+        now = time.monotonic()
+        with self._lock:
+            kept = self._kept.get(key)
+            if kept is not None and kept[0] > now:
+                done: Future[bool] = Future()
+                done.set_result(kept[1])
+                return done
+            running = self._running.get(key)
+            if running is None:
+                running = self._running[key] = self._pool.submit(self._look_up, key, access, question)
+            return running
+
+    def _look_up(self, key: tuple[str, tuple[str, ...]], access: Access, question: LinkQuestion) -> bool:
+        keep_for = _LINK_CHECK_SECONDS
+        try:
+            works = _finds_something(access, question)
+        except Exception as exc:  # noqa: BLE001 - a link that cannot be looked up is not linked; Add media reports why.
+            logger.debug("Could not check %s: %s", question.url, exc)
+            works = False
+            keep_for = 0 if is_no_internet_error(exc) else _FAILED_LINK_CHECK_SECONDS
+        with self._lock:
+            now = time.monotonic()
+            self._kept = {kept: value for kept, value in self._kept.items() if value[0] > now}
+            if keep_for:
+                self._kept[key] = (now + keep_for, works)
+            self._running.pop(key, None)
+        return works
+
+
+def _finds_something(access: Access, question: LinkQuestion) -> bool:
+    """Whether Add media finds something to add at the link. The quick first look Add media shows, such as YouTube's
+    title from oEmbed, already says so where the Source has one, without the full lookup that a Site may count
+    against the user, such as YouTube asking to confirm they are not a bot."""
+    source = question.asked[0]
+    try:
+        with ytdlp_call_options(source):
+            preview = source.preview(question.url)
+    except Exception:  # noqa: BLE001 - the full lookup says what is wrong.
+        preview = None
+    if preview is not None and preview.title:
+        return True
+    return _first_resolved(access, question, PlanTracker()) is not None
+
+
+link_checks = LinkChecks()
 
 
 def _site_read(site: Site, preferred: dict[str, str]) -> SourceSiteAPIRead:
