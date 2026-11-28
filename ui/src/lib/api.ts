@@ -22,6 +22,11 @@ export async function errorDetail(response: Response): Promise<string> {
     try {
         const body = await response.json()
         if (typeof body?.detail === 'string' && body.detail.trim()) return body.detail
+        // A refusal about one field, made for a form, read where no form shows it.
+        const messages = Array.isArray(body?.detail)
+            ? body.detail.map((item: {msg?: unknown}) => item?.msg).filter((msg: unknown) => typeof msg === 'string' && msg.trim())
+            : []
+        if (messages.length) return messages.join(' ')
     } catch {
         // Keep the status text when the body is not JSON.
     }

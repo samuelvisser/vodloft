@@ -429,6 +429,10 @@ export const SiteChoiceReadSchema = z.object({
     pitch: z.string().nullable(),
     /** VODLoft knows the Site already. */
     added: z.boolean(),
+    /** One of the popular Sites VODLoft suggests, rather than one only added before. */
+    suggested: z.boolean(),
+    /** The Site starts picked, such as YouTube in onboarding. */
+    picked: z.boolean(),
     icon: z.string().nullable(),
     initials: z.string(),
 })

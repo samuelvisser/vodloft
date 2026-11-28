@@ -669,6 +669,10 @@ class SiteChoiceAPIRead(ResponseBase):
     """What VODLoft adds from the Site, in a few words, such as "Channels, playlists, Shorts and live streams"."""
     added: bool
     """VODLoft knows the Site already."""
+    suggested: bool
+    """One of the popular Sites VODLoft suggests, rather than one only added before."""
+    picked: bool
+    """The Site starts picked, such as YouTube in onboarding."""
 
     @computed_field
     @property

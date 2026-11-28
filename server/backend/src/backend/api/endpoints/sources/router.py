@@ -328,9 +328,13 @@ def save_site_cookie_file(site_key: str, body: CookiesAPIUpdate):
         except SiteNotKnownError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+            raise _field_refused("content", exc) from exc
     _sign_in_changed(listing)
     return SiteAuthenticationAPIRead.model_validate(listing)
+
+
+def _field_refused(field: str, exc: Exception) -> HTTPException:
+    return HTTPException(status_code=422, detail=[{"loc": ["body", field], "msg": str(exc), "type": "value_error"}])
 
 
 @router.delete("/sources/authentication/{site_key}/cookies", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SiteAuthenticationAPIRead)

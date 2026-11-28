@@ -266,6 +266,9 @@ SUGGESTED_SITES = (
 """The popular Sites VODLoft suggests where the user picks the Sites they use, such as in onboarding, by their
 address, in the order they are shown. What VODLoft says of each comes from its contract."""
 
+FIRST_PICKED_SITE = "https://www.youtube.com"
+"""The suggested Site that starts picked, by its address: the one most people use."""
+
 
 @dataclass(frozen=True)
 class SiteChoice:
@@ -275,17 +278,23 @@ class SiteChoice:
     name: str
     pitch: str | None
     added: bool
+    suggested: bool
+    picked: bool
+    """The Site starts picked, whatever VODLoft knows already."""
 
 
 def site_choices(s: Session) -> list[SiteChoice]:
     """The suggested Sites, then every other Site VODLoft knows, such as one the user added by its address, each
     with whether it is added."""
     known = {record.key: record.name for record in s.scalars(select(Site).order_by(Site.position, Site.name))}
+    first = site_of_link(s, FIRST_PICKED_SITE).key
     suggested = [site_of_link(s, address) for address in SUGGESTED_SITES]
-    choices = [SiteChoice(site.key, site.name, site.pitch, site.key in known) for site in suggested]
+    choices = [
+        SiteChoice(site.key, site.name, site.pitch, site.key in known, True, site.key == first) for site in suggested
+    ]
     taken = {site.key for site in suggested}
     choices += [
-        SiteChoice(key, name, site_of(key).pitch, True) for key, name in known.items() if key not in taken
+        SiteChoice(key, name, site_of(key).pitch, True, False, False) for key, name in known.items() if key not in taken
     ]
     return choices
 
