@@ -1,7 +1,7 @@
 [project]
 name = "VODLoft"
 version = "0.10.0"
-requires-python = ">=3.13,<3.14"
+requires-python = ">=3.15,<3.16"
 dependencies = [
     "backend",
     "config",
@@ -30,9 +30,9 @@ task-manager = { workspace = true }
 
 [dependency-groups]
 dev = [
-    "pytest>=9,<10",
-    "pytest-socket>=0.7,<1",
-    "httpx>=0.28,<1",
+    "pytest>=9.2.0,<10",
+    "pytest-socket>=0.8.1,<1",
+    "httpx>=0.29.0,<1",
 ]
 
 [tool.pytest.ini_options]

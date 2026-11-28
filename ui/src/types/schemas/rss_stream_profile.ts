@@ -46,12 +46,19 @@ const validateVideoOutput = (
     }
 }
 
-export const RssStreamProfileCreateSchema = RssStreamProfileBaseSchema.extend({
+const RssStreamProfileCreateFieldsSchema = RssStreamProfileBaseSchema.extend({
     collectionId: z.int(),
     feedUrl: z.string().optional(),
-}).superRefine(validateVideoOutput)
+})
+
+export const RssStreamProfileCreateSchema = RssStreamProfileCreateFieldsSchema.superRefine(validateVideoOutput)
 export type RssStreamProfileCreateIn = z.input<typeof RssStreamProfileCreateSchema>
 export type RssStreamProfileCreateOut = z.output<typeof RssStreamProfileCreateSchema>
+
+// Sent together with its new collection, which has no id yet. Zod only omits keys before refining.
+export const RssStreamProfileBundleSchema = RssStreamProfileCreateFieldsSchema
+    .omit({collectionId: true})
+    .superRefine(validateVideoOutput)
 
 export const RssStreamProfileUpdateSchema = RssStreamProfileBaseSchema.extend({
     feedUrl: z.string().min(1),

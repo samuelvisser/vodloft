@@ -3,7 +3,7 @@
 ########################################
 # 1) Build the React UI (Vite + TS)
 ########################################
-FROM node:22-alpine AS ui-build
+FROM node:26-alpine AS ui-build
 
 WORKDIR /ui
 
@@ -57,7 +57,7 @@ RUN date -u +%Y%m%d%H%M%S%N > /build-id \
 ########################################
 # 2) Backend + runtime image
 ########################################
-FROM python:3.13-slim AS runtime
+FROM python:3.15-slim AS runtime
 
 # ffmpeg -> remuxing downloaded video into .mp4
 # nginx  -> serves the built UI and reverse-proxies /api/* to the backend
@@ -75,7 +75,7 @@ RUN pip install --no-cache-dir --root-user-action=ignore uv
 
 WORKDIR /app
 
-# Use the Python interpreter already supplied by python:3.13-slim.
+# Use the Python interpreter already supplied by python:3.15-slim.
 ENV UV_PYTHON_PREFERENCE=only-system \
     UV_PROJECT_ENVIRONMENT=/app/.venv \
     UV_LINK_MODE=copy
