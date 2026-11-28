@@ -2,7 +2,6 @@ import {type ReactNode, useEffect, useState} from 'react'
 import {useQuery, useQueryClient} from '@tanstack/react-query'
 import Switch from 'react-switch'
 import {Link} from 'react-router-dom'
-import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import toast from '../../lib/toast'
 
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
@@ -15,6 +14,7 @@ import {collectionWords} from '../../lib/collectionWords'
 import {capitalized} from '../../types/creator'
 import {ChangeList, names, Step, TitleList} from '../ChangeIdentificationDialog/ChangeSteps'
 import type {MovePreview, MovedPart, ReconcileResult} from '../../types/schemas/reconcile'
+import LoadingNote from '../common/LoadingNote'
 
 type Props = {
     open: boolean
@@ -82,10 +82,9 @@ export default function ReconcileDialog({open, path, what, onDismiss, onDone}: P
                 downloads it again there when that place downloads it with another Local Media Profile.
             </p>
             {isLoading && (
-                <p className="change-identification-loading" role="status">
-                    <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/>
+                <LoadingNote>
                     Looking at what changes…
-                </p>
+                </LoadingNote>
             )}
             {isError && (
                 <p className="error" role="alert">
@@ -94,10 +93,9 @@ export default function ReconcileDialog({open, path, what, onDismiss, onDone}: P
                 </p>
             )}
             {preview?.busy && (
-                <p className="change-identification-loading" role="status">
-                    <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/>
+                <LoadingNote>
                     {preview.busy}
-                </p>
+                </LoadingNote>
             )}
             {nothing && <p role="status">Everything is where it belongs now: there is nothing to move.</p>}
             {ready && !nothing && <CollectionMoves preview={preview} renumber={renumber} onRenumber={setRenumber}/>}

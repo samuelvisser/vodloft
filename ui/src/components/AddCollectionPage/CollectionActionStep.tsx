@@ -1,4 +1,5 @@
 import './CollectionActionStep.css'
+import LoadingNote from '../common/LoadingNote'
 
 export type CollectionAction = 'index' | 'stream' | 'download' | 'download-stream'
 
@@ -11,6 +12,8 @@ type Props = {
     isSubmitting?: boolean
     /** False for a Source that cannot stream episodes it has not downloaded. */
     canStreamFromSource?: boolean
+    /** True while what the Site offers is still being looked up: the choices wait for it instead of flashing. */
+    loading?: boolean
 }
 
 const OPTIONS: Array<{
@@ -45,7 +48,7 @@ const OPTIONS: Array<{
     },
 ]
 
-export default function CollectionActionStep({value, onChange, onBack, onContinue, onCancel, isSubmitting, canStreamFromSource = true}: Props) {
+export default function CollectionActionStep({value, onChange, onBack, onContinue, onCancel, isSubmitting, canStreamFromSource = true, loading = false}: Props) {
     const options = canStreamFromSource ? OPTIONS : OPTIONS.filter((option) => option.value !== 'stream')
     return (
         <div className="collection-action-step">
@@ -54,6 +57,7 @@ export default function CollectionActionStep({value, onChange, onBack, onContinu
                 <p>Choose how VODLoft should handle new episodes. You can add or change profiles later.</p>
             </div>
 
+            {loading ? <LoadingNote className="collection-action-loading">Looking up what this site offers…</LoadingNote> : (
             <div className="collection-action-options" role="radiogroup" aria-label="Collection setup mode">
                 {options.map((option, index) => {
                     const selected = value === option.value
@@ -77,10 +81,11 @@ export default function CollectionActionStep({value, onChange, onBack, onContinu
                     )
                 })}
             </div>
+            )}
 
             <div className="actions">
                 <button type="button" className="btn" onClick={onBack}>Back</button>
-                <button type="button" className="btn btn-primary" disabled={!value || isSubmitting} onClick={onContinue}>
+                <button type="button" className="btn btn-primary" disabled={!value || isSubmitting || loading} onClick={onContinue}>
                     {value === 'index' ? (isSubmitting ? 'Saving…' : 'Save collection') : 'Continue'}
                 </button>
                 <button type="button" className="btn" onClick={onCancel}>Cancel</button>

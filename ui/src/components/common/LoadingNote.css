@@ -1,0 +1,6 @@
+.loading-note {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 0;
+}

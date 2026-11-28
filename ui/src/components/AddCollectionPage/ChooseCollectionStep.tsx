@@ -2,7 +2,7 @@ import {useEffect, useMemo, useRef} from "react";
 import {useSearchParams} from "react-router-dom";
 import DailywireShowCard from "./DailywireShowCard";
 import CollectionPreviewCard from "./CollectionPreviewCard";
-import {useDailywireShow, useDailywireUserInfo, useListedCollectionDetails, useResolvedLink} from "../../lib/queries";
+import {episodeTagsQuery, siteOptionsQuery, useDailywireShow, useDailywireUserInfo, useListedCollectionDetails, useResolvedLink} from "../../lib/queries";
 import {DAILYWIRE_SOURCE_KEY, SourceFeature, sourceHas} from "../../types/schemas/source";
 import ReadMore from "../../utils/ReadMore";
 import {collectionWords, creatorNamesFor} from "../../lib/collectionWords";
@@ -19,7 +19,7 @@ import {
 } from "../../types/schemas/collection";
 import {CollectionTypeReg, episodeIdentifierRegFor, musicIdentificationAdvice} from "../../types/collection";
 import Select from '../../components/common/Select'
-import {UseQueryResult} from "@tanstack/react-query";
+import {UseQueryResult, useQueryClient} from "@tanstack/react-query";
 import {SeasonDetachedOut, SeasonDetachedSchema} from "../../types/schemas/season";
 import {DwMembershipLevelReg} from "../../types/dailywire_user_info";
 import {DailywireShowRead, DailywireShowReadSchema} from "../../types/schemas/dailywire_show";
@@ -103,6 +103,18 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
         value.type && value.episodeIdentifier ? value.url : undefined,
     );
     const dw: UseQueryResult<any> = useDailywireShow(slugFromUrl);
+
+    // --- What the collection's Site offers decides the choices on the next steps, so fetch it while this step is
+    // open: by the time the user continues, the next step shows only the choices the Site has. A prefetch, so that
+    // leaving this step does not cancel it while it is still on its way.
+    const qc = useQueryClient()
+    const siteSourceKey = listed.data?.sourceKey ?? (slugFromUrl && dw.data ? resolvedCollection?.source.id ?? DAILYWIRE_SOURCE_KEY : undefined)
+    const siteUrl = listed.data?.sharingUrl ?? (slugFromUrl && dw.data ? (dw.data as DailywireShowRead).sharingUrl : undefined)
+    useEffect(() => {
+        if (!siteSourceKey || !siteUrl) return
+        void qc.prefetchQuery(siteOptionsQuery({sourceKey: siteSourceKey, url: siteUrl}))
+        void qc.prefetchQuery(episodeTagsQuery(siteSourceKey, siteUrl))
+    }, [qc, siteSourceKey, siteUrl])
 
     // --- Fetch current DailyWire membership level
     const dwUserInfo = useDailywireUserInfo();

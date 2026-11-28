@@ -33,13 +33,6 @@
     }
 }
 
-.change-identification-dialog .change-identification-loading {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px 0;
-}
-
 /* From -> to */
 .change-identification-dialog .change-identification-change {
     display: flex;

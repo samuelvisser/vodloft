@@ -530,4 +530,4 @@ button.bulk-seasons-review-head { cursor: pointer; }
     display: grid; gap: 8px; padding: 10px 12px; margin-bottom: 12px; border-radius: 10px;
     border: 1px solid rgba(37, 99, 235, 0.35); background: rgba(37, 99, 235, 0.06); font-size: .875rem;
 }
-.seasons-saving .change-identification-loading { margin: 0; }
+.seasons-saving .loading-note { margin: 0; }

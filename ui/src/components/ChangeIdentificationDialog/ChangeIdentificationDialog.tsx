@@ -1,7 +1,6 @@
 import {useEffect, useState} from 'react'
 import {useQuery} from '@tanstack/react-query'
 import Switch from 'react-switch'
-import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {toast} from '../../lib/toast'
 
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
@@ -15,6 +14,7 @@ import {collectionWords, CollectionWords} from '../../lib/collectionWords'
 
 import type {IdentificationChange} from './ChangeSteps'
 import {nameInText} from '../../lib/nameInText'
+import LoadingNote from '../common/LoadingNote'
 
 type Preview = {
     episodeIdentifier: EpisodeIdentifierValue
@@ -133,10 +133,9 @@ export default function ChangeIdentificationDialog({
             }}
         >
             {isLoading && (
-                <p className="change-identification-loading" role="status">
-                    <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/>
+                <LoadingNote>
                     Looking at what changes…
-                </p>
+                </LoadingNote>
             )}
             {isError && <p className="error" role="alert">VODLoft could not look up what the change does.</p>}
             {preview && target && (
