@@ -278,7 +278,7 @@ def test_retention_skips_kept_downloads_and_keep_filter_matches(db_session):
     _download(db_session, profile, kept, kept=True)
     _download(db_session, profile, favourite)
 
-    assert cleanup_older_episodes(db_session, profile) == 1
+    assert cleanup_older_episodes(db_session, profile).removed == 1
     assert _remaining(db_session) == {kept.id, favourite.id}
 
 
@@ -292,7 +292,7 @@ def test_retention_can_count_from_the_download_date(db_session):
     _download(db_session, profile, recent_download, downloaded_at=NOW - timedelta(days=2))
     _download(db_session, profile, old_download, downloaded_at=NOW - timedelta(days=31))
 
-    assert cleanup_older_episodes(db_session, profile) == 1
+    assert cleanup_older_episodes(db_session, profile).removed == 1
     assert _remaining(db_session) == {recent_download.id}
 
 
@@ -310,7 +310,7 @@ def test_only_date_lines_delete_downloads(db_session):
         _download(db_session, profile, episode)
 
     # The skipped trailer keeps its download; the date line leaves the older episode out and deletes it.
-    assert cleanup_older_episodes(db_session, profile) == 1
+    assert cleanup_older_episodes(db_session, profile).removed == 1
     assert _remaining(db_session) == {trailer.id, main.id}
 
 
@@ -564,7 +564,7 @@ def test_retention_waits_for_the_keep_answer_on_downloads_the_source_no_longer_h
     db_session.flush()
 
     # Nobody answered yet: retention leaves both alone and the Home page asks about both.
-    assert cleanup_older_episodes(db_session, profile) == 0
+    assert cleanup_older_episodes(db_session, profile).removed == 0
     assert {row.media_item_id for row in downloads_awaiting_keep_answer(db_session)} == {gone.id, also_gone.id}
 
     assert answer_keep_question(db_session, [gone.id], keep=True) == 1
@@ -572,7 +572,7 @@ def test_retention_waits_for_the_keep_answer_on_downloads_the_source_no_longer_h
     assert downloads_awaiting_keep_answer(db_session) == []
 
     # Kept stays; the other is judged by the date line as if it were still at the Source.
-    assert cleanup_older_episodes(db_session, profile) == 1
+    assert cleanup_older_episodes(db_session, profile).removed == 1
     assert _remaining(db_session) == {gone.id}
 
 
@@ -591,7 +591,7 @@ def test_a_released_download_takes_its_old_place_in_the_latest_episodes(db_sessi
     db_session.flush()
     answer_keep_question(db_session, [newer_gone.id, older_gone.id], keep=False)
 
-    assert cleanup_older_episodes(db_session, profile) == 1
+    assert cleanup_older_episodes(db_session, profile).removed == 1
     assert _remaining(db_session) == {newest.id, newer_gone.id}
 
 

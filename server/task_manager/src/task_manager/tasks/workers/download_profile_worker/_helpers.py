@@ -289,28 +289,49 @@ def trigger_next_pending_downloads(s: Session, *, budget: Optional[int] = None) 
     return dispatch_queued_media_download_operations(s, budget=budget)
 
 
-def cleanup_older_episodes(s: Session, profile: DownloadProfile) -> int:
-    """Remove downloads that a date line of the profile now leaves out.
+@dataclass(frozen=True)
+class RetentionCleanup:
+    """What a profile's retention took away: how many downloads it forgot, and the files on disk to delete.
+
+    The files go only once the transaction that forgot their downloads has committed (``remove_downloaded_files``).
+    Deleted any earlier, a transaction that runs again, or a file check that runs meanwhile, finds the download
+    still recorded with its file gone, and marks it missing.
+    """
+    removed: int = 0
+    files: tuple[tuple[str, tuple[str, ...]], ...] = ()
+
+
+def cleanup_older_episodes(s: Session, profile: DownloadProfile) -> RetentionCleanup:
+    """Forget the downloads that a date line of the profile now leaves out.
 
     Only date lines delete: changing the other filters later never deletes anything,
     and downloads kept by hand or by a Keep filter are never removed. With manual downloads
     included, the Collection's manual downloads in the profile's Local Media Profile go too. A download that
     is not on disk yet goes as soon as a date line leaves it out; one that is, only when
-    the profile deletes older episodes.
+    the profile deletes older episodes. Its files are returned to delete after the commit.
     """
     if not any(is_date_line(item) for item in profile.filters):
-        return 0
+        return RetentionCleanup()
     evaluation = evaluate(s, EpisodeSelection.of_profile(profile))
     rows = [
         row
         for row in retention_downloads(s, profile)
         if retention_removes(evaluation, row, delete_older_episodes=profile.delete_older_episodes)
     ]
+    files: list[tuple[str, tuple[str, ...]]] = []
     for row in rows:
         if profile.delete_older_episodes:
             had_file = row.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
             path = row.file_path
-            prepare_media_download_artifact(s, row)
+            # Find a file the user renamed in its folder, as any other removal does.
+            resolved = (
+                resolve_media_download_file(s, row)
+                if row.artifact_status != MediaDownloadArtifactStatus.ABSENT.value else None
+            )
+            removed_path = str(resolved) if resolved is not None else row.file_path
+            if removed_path:
+                # Temporary files of an unfinished attempt go too, also when nothing finished on disk.
+                files.append((removed_path, tuple(asset.path for asset in row.assets)))
             if had_file:
                 episode_deleted(s, row.media, path=path, reason=(
                     "It fell outside its Download Profile's limit." if row.download_profile_id is not None
@@ -322,4 +343,4 @@ def cleanup_older_episodes(s: Session, profile: DownloadProfile) -> int:
 
     if rows:
         s.flush()
-    return len(rows)
+    return RetentionCleanup(removed=len(rows), files=tuple(files))

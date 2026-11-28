@@ -700,7 +700,7 @@ def test_download_delay_does_not_remove_recent_artifact_from_retention_scope(db_
     )
     existing = _completed_download(db_session, episode, lmp, profile)
 
-    assert cleanup_older_episodes(db_session, profile) == 0
+    assert cleanup_older_episodes(db_session, profile).removed == 0
     assert existing.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
 
 
@@ -979,6 +979,7 @@ def test_cleanup_older_episodes_deletes_download_record_and_file(db_session, tmp
     from backend.db.models.media_download import EpisodeMediaDownload
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
+    from backend.services.collections import remove_downloaded_files
     from task_manager.tasks.workers.download_profile_worker._helpers import cleanup_older_episodes
 
     collection = _make_collection(db_session)
@@ -1007,8 +1008,13 @@ def test_cleanup_older_episodes_deletes_download_record_and_file(db_session, tmp
     db_session.add_all(rows)
     db_session.commit()
 
-    assert cleanup_older_episodes(db_session, profile) == 1
+    cleanup = cleanup_older_episodes(db_session, profile)
+    assert cleanup.removed == 1
+    # The file stays until the transaction that forgot its download has committed: deleted any earlier, a
+    # transaction that runs again or a file check meanwhile would find it gone and log it as missing.
+    assert old_file.exists()
     db_session.commit()
+    remove_downloaded_files(list(cleanup.files))
     assert not old_file.exists()
     assert recent_file.exists()
     remaining = {
@@ -1018,6 +1024,43 @@ def test_cleanup_older_episodes_deletes_download_record_and_file(db_session, tmp
     assert set(remaining) == {recent_episode.id}
     assert remaining[recent_episode.id].artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
     assert remaining[recent_episode.id].download_profile_id == profile.id
+
+
+def test_retention_that_runs_again_does_not_find_its_file_missing(db_session, tmp_path, caplog):
+    """A write transaction runs again when another one was in the way. Retention must not have deleted the file
+    in the first run, or the second finds the download's file gone and logs it as missing."""
+    from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadHistory
+    from backend.services.collections import remove_downloaded_files
+    from backend.types.media_download_history_types import MediaDownloadHistoryAction
+    from backend.types.media_types import MediaType
+    from task_manager.tasks.workers.download_profile_worker._helpers import cleanup_older_episodes
+
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
+    lmp = _make_local_media_profile(db_session)
+    episode = _make_episode(db_session, collection, season, slug="old", ep_id="ep.1", status="published_final", published_at=_now() - timedelta(days=30), index=1)
+    profile = _make_podcast_profile(db_session, collection, lmp, published_days(7), delete_older_episodes=True)
+    old_file = tmp_path / "old.m4a"
+    old_file.write_bytes(b"data")
+    db_session.add(EpisodeMediaDownload(
+        type=MediaType.EPISODE.value, media_item_id=episode.id, local_media_profile_id=lmp.id,
+        download_profile_id=profile.id, **available_artifact(), file_path=str(old_file),
+    ))
+    db_session.commit()
+
+    assert cleanup_older_episodes(db_session, profile).removed == 1
+    db_session.rollback()
+    with caplog.at_level("WARNING"):
+        cleanup = cleanup_older_episodes(db_session, profile)
+    assert cleanup.removed == 1
+    assert not db_session.query(MediaDownloadHistory).filter_by(
+        action=MediaDownloadHistoryAction.ARTIFACT_MISSING.value,
+    ).count()
+    db_session.commit()
+    remove_downloaded_files(list(cleanup.files))
+
+    assert "missing" not in caplog.text
+    assert not old_file.exists()
 
 
 # ---------- worker integration with universal operations ----------
