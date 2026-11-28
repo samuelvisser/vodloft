@@ -427,7 +427,7 @@ def test_an_adopted_file_belongs_to_the_download_profile_and_its_retention(libra
     adopted.download.artifact_status = "missing"
     session.flush()
 
-    assert cleanup_older_episodes(session, download_profile) == 1
+    assert cleanup_older_episodes(session, download_profile).removed == 1
     assert session.scalars(select(EpisodeMediaDownload)).all() == []
 
 

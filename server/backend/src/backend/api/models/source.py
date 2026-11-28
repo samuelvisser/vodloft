@@ -403,6 +403,17 @@ class MediaLinksAPIRead(ResponseBase):
     """The links of the request that are on a Site VODLoft knows, which the user can look up to add."""
 
 
+class MediaLinkCheckAPIRequest(RequestBase):
+    """A link of a description that is on a Site VODLoft knows, to check whether Add media can look it up."""
+
+    url: str = Field(min_length=1, max_length=2048)
+
+
+class MediaLinkCheckAPIRead(ResponseBase):
+    works: bool
+    """Add media finds something to add at the link."""
+
+
 class SiteAddAPIRequest(RequestBase):
     url: str = Field(min_length=1, max_length=2048)
     """A link to a page on the Site, or only its address, such as ``twitch.tv``."""
@@ -658,6 +669,10 @@ class SiteChoiceAPIRead(ResponseBase):
     """What VODLoft adds from the Site, in a few words, such as "Channels, playlists, Shorts and live streams"."""
     added: bool
     """VODLoft knows the Site already."""
+    suggested: bool
+    """One of the popular Sites VODLoft suggests, rather than one only added before."""
+    picked: bool
+    """The Site starts picked, such as YouTube in onboarding."""
 
     @computed_field
     @property

@@ -1,10 +1,12 @@
+import asyncio
 import threading
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.concurrency import run_in_threadpool
 
 from backend.api.models.source import (
     DownloadOptionsAPIRead, DownloadProfileDefaultsAPIRead, SiteOptionsAPIRead, YtdlpOptionLineAPIRead, YtdlpOptionsAPIRead, YtdlpOptionsAPIUpdate, YtdlpOptionsCheckAPIRequest,
-    ApiKeyAPIUpdate, ApiKeyNoteAPIIn, ApiKeyNoteAPIRead, ApiStatusAPIRead, EpisodeTagAPIRead, PublishStatusLabelAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, MediaLinksAPIRequest, MediaLinksAPIRead, SearchResultsAPIRead,
+    ApiKeyAPIUpdate, ApiKeyNoteAPIIn, ApiKeyNoteAPIRead, ApiStatusAPIRead, EpisodeTagAPIRead, PublishStatusLabelAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, MediaLinksAPIRequest, MediaLinksAPIRead, MediaLinkCheckAPIRequest, MediaLinkCheckAPIRead, SearchResultsAPIRead,
     CollectionDetailsAPIRead, SourceAPIRead, SourceSiteAPIRead, SourceSiteAPIUpdate, UpgradeChecksAPIRead,
     SiteAddAPIRequest, SiteAddedAPIRead, SiteChoiceAPIRead, SitesPickAPIRequest, SiteApiValuesAPIUpdate, SiteAuthenticationAPIRead,
     AccountValuesAPIUpdate, CodeSignInAPIRead,
@@ -29,9 +31,9 @@ from backend.services.source_options import save_ytdlp_source_options, ytdlp_sou
 from config.settings.site_settings import SiteSettingGroup
 
 from .service import (
-    LinkNotRecognisedError, SourceFeatureMissingError, UnknownSiteError, api_key_notes, get_api_status, put_off_api_key_note, get_program_status,
+    LinkNotRecognisedError, LinkQuestion, SourceFeatureMissingError, UnknownSiteError, api_key_notes, get_api_status, put_off_api_key_note, get_program_status,
     list_source_problems, list_source_sites,
-    link_preview, link_question, list_sources, lookup_show_details, sources_in_use, resolve_link, search_source, set_site_preference, source_with,
+    link_checks, link_preview, link_question, list_sources, lookup_show_details, sources_in_use, resolve_link, search_source, set_site_preference, source_with,
     update_source_program,
 )
 from backend.security.access import Access, Area, Level
@@ -192,6 +194,22 @@ def known_media_links(body: MediaLinksAPIRequest, access: Access = signed_in()):
         return MediaLinksAPIRead(urls=media_links(s, access, body.urls))
 
 
+@router.post("/media-links/check", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=MediaLinkCheckAPIRead)
+async def check_media_link(body: MediaLinkCheckAPIRequest, access: Access = signed_in()):
+    """Whether Add media finds something to add at a link of a description, so the UI only links those. The page asks
+    after it has shown the description; the lookup runs beside other checks a few at a time, and is kept a while."""
+    def question() -> LinkQuestion | None:
+        with db_session() as s:
+            try:
+                return link_question(s, access, body.url)
+            except (LinkNotRecognisedError, PermissionError):  # Not something this user can add.
+                return None
+
+    asked = await run_in_threadpool(question)
+    works = asked is not None and await asyncio.wrap_future(link_checks.check(access, asked))
+    return MediaLinkCheckAPIRead(works=works)
+
+
 @router.get("/sources/{source_id}/episode-tags", dependencies=[requires_any((Area.LIBRARY, Level.VIEW), (Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW))], response_model=list[EpisodeTagAPIRead])
 def episode_tags(
     source_id: str, url: str | None = Query(default=None, max_length=2048), collection_type: CollectionType | None = None,
@@ -310,9 +328,13 @@ def save_site_cookie_file(site_key: str, body: CookiesAPIUpdate):
         except SiteNotKnownError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+            raise _field_refused("content", exc) from exc
     _sign_in_changed(listing)
     return SiteAuthenticationAPIRead.model_validate(listing)
+
+
+def _field_refused(field: str, exc: Exception) -> HTTPException:
+    return HTTPException(status_code=422, detail=[{"loc": ["body", field], "msg": str(exc), "type": "value_error"}])
 
 
 @router.delete("/sources/authentication/{site_key}/cookies", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SiteAuthenticationAPIRead)

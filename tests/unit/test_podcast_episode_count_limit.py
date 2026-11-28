@@ -148,6 +148,7 @@ def test_episode_count_cleanup_removes_available_and_absent_artifacts_outside_li
     from backend.db.models.media_download import EpisodeMediaDownload
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
+    from backend.services.collections import remove_downloaded_files
     from task_manager.tasks.workers.download_profile_worker._helpers import cleanup_older_episodes
 
     collection = _make_collection(db_session)
@@ -189,8 +190,10 @@ def test_episode_count_cleanup_removes_available_and_absent_artifacts_outside_li
     db_session.add_all([completed, absent, kept])
     db_session.commit()
 
-    removed = cleanup_older_episodes(db_session, profile)
+    cleanup = cleanup_older_episodes(db_session, profile)
+    removed = cleanup.removed
     db_session.commit()
+    remove_downloaded_files(list(cleanup.files))
 
     assert removed == 2
     assert not completed_file.exists()
@@ -206,6 +209,7 @@ def test_episode_count_cleanup_keeps_available_files_when_delete_older_is_off(db
     from backend.db.models.media_download import EpisodeMediaDownload
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
+    from backend.services.collections import remove_downloaded_files
     from task_manager.tasks.workers.download_profile_worker._helpers import cleanup_older_episodes
 
     collection = _make_collection(db_session)
@@ -238,8 +242,10 @@ def test_episode_count_cleanup_keeps_available_files_when_delete_older_is_off(db
     db_session.add_all([completed, absent])
     db_session.commit()
 
-    removed = cleanup_older_episodes(db_session, profile)
+    cleanup = cleanup_older_episodes(db_session, profile)
+    removed = cleanup.removed
     db_session.commit()
+    remove_downloaded_files(list(cleanup.files))
 
     assert removed == 1
     assert completed_file.exists()
@@ -270,6 +276,7 @@ def _manual(session, episode, local_media_profile, path, **fields):
 def test_cleanup_deletes_manual_downloads_only_when_the_profile_includes_them(db_session, tmp_path, include_manual):
     from backend.db.models import LocalMediaProfile
     from backend.db.models.media_download import EpisodeMediaDownload
+    from backend.services.collections import remove_downloaded_files
     from task_manager.tasks.workers.download_profile_worker._helpers import cleanup_older_episodes
 
     collection = _make_collection(db_session)
@@ -294,8 +301,10 @@ def test_cleanup_deletes_manual_downloads_only_when_the_profile_includes_them(db
     other_library = _manual(db_session, old, other_media_profile, tmp_path / "other.m4a")
     db_session.commit()
 
-    removed = cleanup_older_episodes(db_session, profile)
+    cleanup = cleanup_older_episodes(db_session, profile)
+    removed = cleanup.removed
     db_session.commit()
+    remove_downloaded_files(list(cleanup.files))
 
     remaining = {row.id for row in db_session.query(EpisodeMediaDownload).all()}
     if include_manual:
@@ -331,5 +340,5 @@ def test_cleanup_leaves_a_waiting_manual_download_alone(db_session, tmp_path):
     db_session.add(waiting)
     db_session.commit()
 
-    assert cleanup_older_episodes(db_session, profile) == 0
+    assert cleanup_older_episodes(db_session, profile).removed == 0
     assert db_session.get(EpisodeMediaDownload, waiting.id) is not None
