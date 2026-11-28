@@ -110,8 +110,8 @@ def client(tube, session):
 
     app = FastAPI()
     app.add_exception_handler(ServiceError, lambda _request, exc: JSONResponse(status_code=422, content={"detail": str(exc)}))
-    app.include_router(creator_router_module.router, prefix="/api")
-    app.include_router(collection_router_module.router, prefix="/api")
+    app.include_router(creator_router_module.router, prefix="/api/v1")
+    app.include_router(collection_router_module.router, prefix="/api/v1")
     with TestClient(app) as test_client:
         yield test_client
 
@@ -166,14 +166,14 @@ def test_a_channel_collection_joins_the_creator_behind_its_link_and_keeps_what_i
     before = _collection(session, "workshop")
     settings = (before.link_seasons, before.outside_videos, before.feeds, before.title)
 
-    lines = [json.loads(line) for line in client.get("/api/collections/workshop/creator/match").text.splitlines()]
+    lines = [json.loads(line) for line in client.get("/api/v1/collections/workshop/creator/match").text.splitlines()]
     match = lines[-1]["match"]
     assert (match["title"], match["creatorSlug"]) == ("Northwind Workshop", None)
 
-    response = client.post("/api/collections/workshop/creator", json={"lookupId": match["lookupId"]})
+    response = client.post("/api/v1/collections/workshop/creator", json={"lookupId": match["lookupId"]})
     assert response.status_code == 200, response.text
 
-    page = client.get("/api/creators/workshop").json()
+    page = client.get("/api/v1/creators/workshop").json()
     assert [collection["slug"] for collection in page["collections"]] == ["workshop"]
     assert [account["site"]["key"] for account in page["accounts"]] == ["tube"]
     after = _collection(session, "workshop")
@@ -183,18 +183,18 @@ def test_a_channel_collection_joins_the_creator_behind_its_link_and_keeps_what_i
 
 def test_a_playlist_joins_the_creator_of_the_channel_that_made_it_beside_the_channel(client, session):
     _add("workshop", ROOT)
-    client.post("/api/collections/workshop/creator", json={})
+    client.post("/api/v1/collections/workshop/creator", json={})
     _add("cabin", PLAYLIST)
-    assert client.get("/api/collections/cabin").json()["canJoinCreator"] is True
+    assert client.get("/api/v1/collections/cabin").json()["canJoinCreator"] is True
 
-    lines = [json.loads(line) for line in client.get("/api/collections/cabin/creator/match").text.splitlines()]
+    lines = [json.loads(line) for line in client.get("/api/v1/collections/cabin/creator/match").text.splitlines()]
     match = lines[-1]["match"]
     # The playlist's creator is the channel that made it, who is in the Library already.
     assert (match["title"], match["creatorSlug"]) == ("Northwind Workshop", "workshop")
-    response = client.post("/api/collections/cabin/creator", json={"lookupId": match["lookupId"]})
+    response = client.post("/api/v1/collections/cabin/creator", json={"lookupId": match["lookupId"]})
     assert response.status_code == 200, response.text
 
-    page = client.get("/api/creators/workshop").json()
+    page = client.get("/api/v1/creators/workshop").json()
     # Two collections of one creator: the playlist stays a collection of its own, not a season of the channel.
     assert sorted(collection["slug"] for collection in page["collections"]) == ["cabin", "workshop"]
     assert _collection(session, "cabin").kind == "list"
@@ -202,10 +202,10 @@ def test_a_playlist_joins_the_creator_of_the_channel_that_made_it_beside_the_cha
 
 def test_a_playlist_joins_another_creator_in_the_library_by_hand(client, session):
     _add("workshop", ROOT)
-    client.post("/api/collections/workshop/creator", json={})
+    client.post("/api/v1/collections/workshop/creator", json={})
     _add("cabin", PLAYLIST)
 
-    response = client.post("/api/collections/cabin/creator", json={"creatorSlug": "workshop"})
+    response = client.post("/api/v1/collections/cabin/creator", json={"creatorSlug": "workshop"})
 
     assert response.status_code == 200, response.text
     assert _collection(session, "cabin").creator_id == _collection(session, "workshop").creator_id
@@ -217,27 +217,27 @@ def test_a_collection_of_only_playlists_joins_a_creator_by_hand_only(client, ses
     from backend.types.collection_types import CollectionType
 
     _add("workshop", ROOT)
-    client.post("/api/collections/workshop/creator", json={})
+    client.post("/api/v1/collections/workshop/creator", json={})
     run_write_transaction(lambda s: add_links_only_collection(s, title="Mixtape", collection_type=CollectionType.SERIES).slug)
-    assert client.get("/api/collections/mixtape").json()["canJoinCreator"] is True
+    assert client.get("/api/v1/collections/mixtape").json()["canJoinCreator"] is True
 
     # It has no link of its own to find a creator behind.
-    response = client.post("/api/collections/mixtape/creator", json={})
+    response = client.post("/api/v1/collections/mixtape/creator", json={})
     assert response.status_code == 422
     assert "has no link of its own" in response.text
 
-    response = client.post("/api/collections/mixtape/creator", json={"creatorSlug": "workshop"})
+    response = client.post("/api/v1/collections/mixtape/creator", json={"creatorSlug": "workshop"})
     assert response.status_code == 200, response.text
     assert _collection(session, "mixtape").creator_id == _collection(session, "workshop").creator_id
 
 
 def test_a_collection_on_a_site_without_creators_cannot_join_one(client, session):
     _add("workshop", ROOT)
-    client.post("/api/collections/workshop/creator", json={})
+    client.post("/api/v1/collections/workshop/creator", json={})
     _add("plain", "https://plain.example/everything", source_key="plain")
-    assert client.get("/api/collections/plain").json()["canJoinCreator"] is False
+    assert client.get("/api/v1/collections/plain").json()["canJoinCreator"] is False
 
-    response = client.post("/api/collections/plain/creator", json={"creatorSlug": "workshop"})
+    response = client.post("/api/v1/collections/plain/creator", json={"creatorSlug": "workshop"})
 
     assert response.status_code == 422
     assert "Plain has no creators VODLoft can add" in response.text
@@ -246,21 +246,21 @@ def test_a_collection_on_a_site_without_creators_cannot_join_one(client, session
 
 def test_leaving_a_creator_keeps_the_collection_as_it_is(client, session):
     _add("workshop", ROOT)
-    client.post("/api/collections/workshop/creator", json={})
+    client.post("/api/v1/collections/workshop/creator", json={})
 
-    assert client.delete("/api/collections/workshop/creator").status_code == 200
+    assert client.delete("/api/v1/collections/workshop/creator").status_code == 200
 
     assert _collection(session, "workshop").creator_id is None
-    assert client.get("/api/creators/workshop").json()["collections"] == []
+    assert client.get("/api/v1/creators/workshop").json()["collections"] == []
 
 
 def test_the_creator_page_offers_the_shows_of_a_host_with_what_the_library_has(client, session):
     _add("workbench", SHOW, source_key="cast")
-    assert client.post("/api/collections/workbench/creator", json={}).status_code == 200
+    assert client.post("/api/v1/collections/workbench/creator", json={}).status_code == 200
 
-    page = client.get("/api/creators/nw-live").json()
+    page = client.get("/api/v1/creators/nw-live").json()
     assert [account["offers"] for account in page["accounts"]] == [True]
-    offerings = client.get("/api/creators/nw-live/offerings").json()["accounts"][0]["offerings"]
+    offerings = client.get("/api/v1/creators/nw-live/offerings").json()["accounts"][0]["offerings"]
 
     assert [(item["title"], item["collectionSlug"], item["collectionJoined"]) for item in offerings] == [
         ("The Workbench", "workbench", True), ("The Garage", None, False),
@@ -271,23 +271,23 @@ def test_the_creator_page_offers_the_shows_of_a_host_with_what_the_library_has(c
 def test_combined_creators_keep_every_collection_and_split_by_site_again(client, session):
     _add("workshop", ROOT)
     _add("workbench", SHOW, source_key="cast")
-    client.post("/api/collections/workshop/creator", json={})
-    client.post("/api/collections/workbench/creator", json={})
+    client.post("/api/v1/collections/workshop/creator", json={})
+    client.post("/api/v1/collections/workbench/creator", json={})
 
-    combined = client.post("/api/creators/workshop/combine", json={"otherSlug": "nw-live"}).json()
+    combined = client.post("/api/v1/creators/workshop/combine", json={"otherSlug": "nw-live"}).json()
     assert sorted(collection["slug"] for collection in combined["collections"]) == ["workbench", "workshop"]
 
     cast = next(account for account in combined["accounts"] if account["site"]["key"] == "cast")
-    split = client.post(f"/api/creators/workshop/accounts/{cast['id']}/split").json()
+    split = client.post(f"/api/v1/creators/workshop/accounts/{cast['id']}/split").json()
     assert [collection["slug"] for collection in split["collections"]] == ["workbench"]
-    assert [collection["slug"] for collection in client.get("/api/creators/workshop").json()["collections"]] == ["workshop"]
+    assert [collection["slug"] for collection in client.get("/api/v1/creators/workshop").json()["collections"]] == ["workshop"]
 
 
 def test_deleting_a_creator_keeps_its_collections(client, session):
     _add("workshop", ROOT)
-    client.post("/api/collections/workshop/creator", json={})
+    client.post("/api/v1/collections/workshop/creator", json={})
 
-    assert client.delete("/api/creators/workshop").status_code == 204
+    assert client.delete("/api/v1/creators/workshop").status_code == 204
 
     collection = _collection(session, "workshop")
     assert collection is not None and collection.creator_id is None
@@ -328,27 +328,27 @@ def test_a_creators_own_ytdlp_options_reach_its_collections_before_their_own(cli
     from sources import ytdlp_runner
 
     _add("workshop", ROOT)
-    lines = [json.loads(line) for line in client.get("/api/collections/workshop/creator/match").text.splitlines()]
-    joined = client.post("/api/collections/workshop/creator", json={"lookupId": lines[-1]["match"]["lookupId"]})
+    lines = [json.loads(line) for line in client.get("/api/v1/collections/workshop/creator/match").text.splitlines()]
+    joined = client.post("/api/v1/collections/workshop/creator", json={"lookupId": lines[-1]["match"]["lookupId"]})
     assert joined.status_code == 200, joined.text
 
     # A Source without your own yt-dlp options has no field for them.
-    page = client.get("/api/creators/workshop").json()
+    page = client.get("/api/v1/creators/workshop").json()
     assert (page["takesYtdlpOptions"], page["ytdlpOptions"]) == (False, "")
-    refused = client.patch("/api/creators/workshop", json={"ytdlpOptions": "--impersonate chrome"})
+    refused = client.patch("/api/v1/creators/workshop", json={"ytdlpOptions": "--impersonate chrome"})
     assert refused.status_code == 422
 
     monkeypatch.setattr(CreatorSource, "features", CreatorSource.features | {Feature.YTDLP_OPTIONS})
-    assert client.get("/api/creators/workshop").json()["takesYtdlpOptions"] is True
+    assert client.get("/api/v1/creators/workshop").json()["takesYtdlpOptions"] is True
     # The same lines are refused as for a collection.
-    blocked = client.patch("/api/creators/workshop", json={"ytdlpOptions": "-o out.mp4"})
+    blocked = client.patch("/api/v1/creators/workshop", json={"ytdlpOptions": "-o out.mp4"})
     assert blocked.status_code == 422
     assert blocked.json()["detail"][0]["loc"][-1] == "ytdlpOptions"
 
-    saved = client.patch("/api/creators/workshop", json={"ytdlpOptions": "--impersonate chrome\n--proxy http://a:1\n"})
+    saved = client.patch("/api/v1/creators/workshop", json={"ytdlpOptions": "--impersonate chrome\n--proxy http://a:1\n"})
     assert saved.json()["ytdlpOptions"] == "--impersonate chrome\n--proxy http://a:1"
     # Leaving them out keeps them.
-    assert client.patch("/api/creators/workshop", json={"genre": "DIY"}).json()["ytdlpOptions"].startswith("--impersonate")
+    assert client.patch("/api/v1/creators/workshop", json={"genre": "DIY"}).json()["ytdlpOptions"].startswith("--impersonate")
 
     collection = _collection(session, "workshop")
     collection.ytdlp_options = "--proxy http://b:2"

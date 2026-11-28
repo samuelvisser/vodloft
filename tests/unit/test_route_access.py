@@ -37,7 +37,7 @@ def _access_dependencies(dependant):
 def _api_routes():
     from backend.app import create_app
 
-    return [(path, route) for path, route in _walk(create_app().routes) if path.startswith("/api/")]
+    return [(path, route) for path, route in _walk(create_app().routes) if path.startswith("/api/v1/")]
 
 
 def test_every_api_route_declares_the_access_it_needs():
@@ -46,7 +46,7 @@ def test_every_api_route_declares_the_access_it_needs():
     undeclared = [
         f"{','.join(sorted(route.methods))} {path}"
         for path, route in _api_routes()
-        if path not in PUBLIC_API_PATHS and not list(_access_dependencies(route.dependant))
+        if path.removeprefix("/api/v1") not in PUBLIC_API_PATHS and not list(_access_dependencies(route.dependant))
     ]
     assert undeclared == [], "Add requires(...) or signed_in() to: " + ", ".join(undeclared)
 
@@ -55,7 +55,7 @@ def test_public_api_paths_are_only_signing_in_public_config_and_health():
     from backend.app import PUBLIC_API_PATHS
 
     assert PUBLIC_API_PATHS == {
-        "/api/auth/status", "/api/auth/login", "/api/auth/logout", "/api/config/public", "/api/health", "/api/metrics",
+        "/auth/status", "/auth/login", "/auth/logout", "/config/public", "/metrics",
     }
 
 
@@ -88,7 +88,7 @@ def _client_for(app, template: str) -> TestClient:
     from backend.security.access import TEMPLATES
 
     admin = TestClient(app)
-    admin.put("/api/users/settings", json={
+    admin.put("/api/v1/users/settings", json={
         "enabled": True,
         "firstAdministrator": {"username": "admin", "passwordHash": derive_admin_password_client_value("admin-password")},
     })
@@ -96,14 +96,14 @@ def _client_for(app, template: str) -> TestClient:
         return admin
     levels = {area.value: level.value for area, level in TEMPLATES[template].levels.items()}
     password = derive_admin_password_client_value(f"{template}-password")
-    created = admin.post("/api/users", json={
+    created = admin.post("/api/v1/users", json={
         "username": template, "passwordHash": password,
         "access": {"templateKey": template, "levels": levels},
     })
     assert created.status_code == 201, created.text
     user = TestClient(app)
-    user.post("/api/auth/login", json={"username": template, "passwordHash": password})
-    user.post("/api/auth/password", json={
+    user.post("/api/v1/auth/login", json={"username": template, "passwordHash": password})
+    user.post("/api/v1/auth/password", json={
         "currentPasswordHash": password,
         "newPasswordHash": derive_admin_password_client_value(f"{template}-own-password"),
     })
@@ -128,7 +128,7 @@ def test_routes_outside_a_template_answer_not_allowed(app, template):
     client = _client_for(app, template)
     checked = 0
     for path, route in _walk(app.routes):
-        if not path.startswith("/api/") or path in PUBLIC_API_PATHS:
+        if not path.startswith("/api/v1/") or path.removeprefix("/api/v1") in PUBLIC_API_PATHS:
             continue
         refused = False
         for dependency in _access_dependencies(route.dependant):
@@ -157,27 +157,27 @@ class _RequestWith:
     [
         (
             "downloader",
-            ["/api/quick-downloads", "/api/quick-downloads/history", "/api/quick-downloads/settings", "/api/auth/me", "/api/pull", "/api/sources"],
-            ["/api/collections", "/api/movies", "/api/videos", "/api/library/counts", "/api/media-downloads", "/api/settings",
-             "/api/download-profiles", "/api/local-media-profiles", "/api/rss-stream-profiles",
-             "/api/tasks/runs", "/api/logs", "/api/users", "/api/sources/problems", "/api/settings/library-defaults"],
+            ["/api/v1/quick-downloads", "/api/v1/quick-downloads/history", "/api/v1/quick-downloads/settings", "/api/v1/auth/me", "/api/v1/pull", "/api/v1/sources"],
+            ["/api/v1/collections", "/api/v1/movies", "/api/v1/videos", "/api/v1/library/counts", "/api/v1/media-downloads", "/api/v1/settings",
+             "/api/v1/download-profiles", "/api/v1/local-media-profiles", "/api/v1/rss-stream-profiles",
+             "/api/v1/tasks/runs", "/api/v1/logs", "/api/v1/users", "/api/v1/sources/problems", "/api/v1/settings/library-defaults"],
         ),
         (
             "viewer",
-            ["/api/collections", "/api/movies", "/api/videos", "/api/library/counts", "/api/media-downloads", "/api/rss-stream-profiles",
-             "/api/settings/library-defaults"],
-            ["/api/quick-downloads", "/api/settings", "/api/tasks/runs", "/api/logs", "/api/users",
-             "/api/download-profiles"],
+            ["/api/v1/collections", "/api/v1/movies", "/api/v1/videos", "/api/v1/library/counts", "/api/v1/media-downloads", "/api/v1/rss-stream-profiles",
+             "/api/v1/settings/library-defaults"],
+            ["/api/v1/quick-downloads", "/api/v1/settings", "/api/v1/tasks/runs", "/api/v1/logs", "/api/v1/users",
+             "/api/v1/download-profiles"],
         ),
         (
             "library_manager",
-            ["/api/collections", "/api/media-downloads", "/api/download-profiles", "/api/local-media-profiles",
-             "/api/tasks/runs", "/api/quick-downloads"],
-            ["/api/settings", "/api/logs", "/api/users", "/api/sources/problems"],
+            ["/api/v1/collections", "/api/v1/media-downloads", "/api/v1/download-profiles", "/api/v1/local-media-profiles",
+             "/api/v1/tasks/runs", "/api/v1/quick-downloads"],
+            ["/api/v1/settings", "/api/v1/logs", "/api/v1/users", "/api/v1/sources/problems"],
         ),
         (
             "administrator",
-            ["/api/collections", "/api/settings", "/api/logs", "/api/users", "/api/tasks/runs", "/api/quick-downloads"],
+            ["/api/v1/collections", "/api/v1/settings", "/api/v1/logs", "/api/v1/users", "/api/v1/tasks/runs", "/api/v1/quick-downloads"],
             [],
         ),
     ],
@@ -194,10 +194,10 @@ def test_templates_reach_what_they_should(app, template, allowed, refused):
 def test_deleting_files_is_its_own_switch(app):
     client = _client_for(app, "library_manager")
     # Library manager may manage downloads, but not delete files from disk.
-    response = client.delete("/api/media-downloads/999999/files")
+    response = client.delete("/api/v1/media-downloads/999999/files")
     assert response.status_code == 403
     assert "delete downloaded files" in response.json()["detail"]
-    assert client.delete("/api/media-downloads/999999").status_code == 404
+    assert client.delete("/api/v1/media-downloads/999999").status_code == 404
 
 
 def test_users_only_see_their_own_operations(app):
@@ -205,7 +205,7 @@ def test_users_only_see_their_own_operations(app):
     from task_manager.scheduler.db import TaskOperation
 
     downloader = _client_for(app, "downloader")
-    me = downloader.get("/api/auth/me").json()["user"]["id"]
+    me = downloader.get("/api/v1/auth/me").json()["user"]["id"]
     def add(session):
         for op_id, requester in (("mine", me), ("theirs", None)):
             session.add(TaskOperation(
@@ -215,16 +215,16 @@ def test_users_only_see_their_own_operations(app):
 
     run_write_transaction(add)
 
-    assert [operation["id"] for operation in downloader.get("/api/operations").json()] == ["mine"]
-    assert downloader.get("/api/operations/theirs").status_code == 404
-    assert [operation["id"] for operation in downloader.get("/api/pull").json()["data"]["operations"]] == ["mine"]
+    assert [operation["id"] for operation in downloader.get("/api/v1/operations").json()] == ["mine"]
+    assert downloader.get("/api/v1/operations/theirs").status_code == 404
+    assert [operation["id"] for operation in downloader.get("/api/v1/pull").json()["data"]["operations"]] == ["mine"]
 
     # Acknowledging marks only the operations this user may see.
-    assert downloader.post("/api/operations/seen", json={"operationIds": ["mine", "theirs"]}).status_code == 204
+    assert downloader.post("/api/v1/operations/seen", json={"operationIds": ["mine", "theirs"]}).status_code == 204
 
     admin = TestClient(app)
-    admin.post("/api/auth/login", json={"username": "admin", "passwordHash": derive_admin_password_client_value("admin-password")})
-    seen = {operation["id"]: operation["notificationSeenAt"] for operation in admin.get("/api/operations").json()}
+    admin.post("/api/v1/auth/login", json={"username": "admin", "passwordHash": derive_admin_password_client_value("admin-password")})
+    seen = {operation["id"]: operation["notificationSeenAt"] for operation in admin.get("/api/v1/operations").json()}
     assert seen.keys() == {"mine", "theirs"}
     assert seen["mine"] is not None
     assert seen["theirs"] is None
@@ -256,7 +256,7 @@ def test_a_limited_user_is_refused_other_links_with_the_reason(app):
     from backend.security.access import TEMPLATES
 
     levels = {area.value: level.value for area, level in TEMPLATES["downloader"].levels.items()}
-    created = admin.post("/api/users", json={
+    created = admin.post("/api/v1/users", json={
         "username": "tim", "passwordHash": password,
         "access": {
             "templateKey": "downloader", "levels": levels,
@@ -267,24 +267,24 @@ def test_a_limited_user_is_refused_other_links_with_the_reason(app):
     assert created.json()["sources"] == [{"sourceKey": "ytdlp", "domains": ["youtu.be", "youtube.com"]}]
 
     tim = TestClient(app)
-    tim.post("/api/auth/login", json={"username": "tim", "passwordHash": password})
-    tim.post("/api/auth/password", json={
+    tim.post("/api/v1/auth/login", json={"username": "tim", "passwordHash": password})
+    tim.post("/api/v1/auth/password", json={
         "currentPasswordHash": password, "newPasswordHash": derive_admin_password_client_value("tim-own-password"),
     })
     for path, body in (
-        ("/api/resolve", {"url": "https://vimeo.com/1"}),
-        ("/api/quick-downloads/options", {"url": "https://vimeo.com/1"}),
-        ("/api/quick-downloads", {"url": "https://vimeo.com/1", "choice": {}}),
+        ("/api/v1/resolve", {"url": "https://vimeo.com/1"}),
+        ("/api/v1/quick-downloads/options", {"url": "https://vimeo.com/1"}),
+        ("/api/v1/quick-downloads", {"url": "https://vimeo.com/1", "choice": {}}),
     ):
         response = tim.post(path, json=body)
         assert response.status_code == 403, (path, response.text)
         assert "links on vimeo.com" in response.json()["detail"]
-    assert "youtube.com" in tim.post("/api/resolve", json={"url": "https://vimeo.com/1"}).json()["detail"]
+    assert "youtube.com" in tim.post("/api/v1/resolve", json={"url": "https://vimeo.com/1"}).json()["detail"]
 
 
 def test_unknown_sources_cannot_be_given_to_a_user(app):
     admin = _client_for(app, "administrator")
-    response = admin.post("/api/users", json={
+    response = admin.post("/api/v1/users", json={
         "username": "tim", "passwordHash": derive_admin_password_client_value("tim-password"),
         "access": {"levels": {"quick_downloads": "view"}, "sources": [{"sourceKey": "nope", "domains": None}]},
     })

@@ -82,9 +82,9 @@ def test_the_check_endpoint_reports_each_line():
     from backend.api.endpoints.sources import router as source_router_module
 
     app = FastAPI()
-    app.include_router(source_router_module.router, prefix="/api")
+    app.include_router(source_router_module.router, prefix="/api/v1")
     client = TestClient(app)
-    response = client.post("/api/sources/ytdlp-options/check", json={"text": "-N 4\n-P /tmp"})
+    response = client.post("/api/v1/sources/ytdlp-options/check", json={"text": "-N 4\n-P /tmp"})
     assert response.status_code == 200
     assert [(line["line"], line["status"]) for line in response.json()] == [(1, "valid"), (2, "blocked")]
 

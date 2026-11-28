@@ -238,7 +238,7 @@ def api_client(monkeypatch):
 
     monkeypatch.setattr(source_router_module, "db_session", db_session)
     app = FastAPI()
-    app.include_router(source_router_module.router, prefix="/api")
+    app.include_router(source_router_module.router, prefix="/api/v1")
     with TestClient(app) as test_client:
         yield test_client
     engine.dispose()
@@ -248,22 +248,22 @@ def test_the_api_key_endpoints(api_client, monkeypatch):
     sessions = [FakeSession(google_error(400, "API_KEY_INVALID")), FakeSession(FakeResponse(200, {"items": []}))]
     monkeypatch.setattr(client_module.requests, "Session", lambda: sessions.pop(0))
 
-    status = api_client.get("/api/sources/ytdlp/api").json()
+    status = api_client.get("/api/v1/sources/ytdlp/api").json()
     assert status["keyHint"] is None
     # Only the YouTube collection counts towards the checks.
     assert (status["collectionCount"], status["rescanUnits"]) == (1, 2)
     assert [share["name"] for share in status["shares"]] == ["checks", "search", "reserve"]
 
-    rejected = api_client.put("/api/sources/ytdlp/api/key", json={"key": "bad"})
+    rejected = api_client.put("/api/v1/sources/ytdlp/api/key", json={"key": "bad"})
     assert rejected.status_code == 422
     assert "does not accept" in rejected.json()["detail"]["message"]
     assert rejected.json()["detail"]["fixUrl"]
 
-    saved = api_client.put("/api/sources/ytdlp/api/key", json={"key": "AIzaGOOD"}).json()
+    saved = api_client.put("/api/v1/sources/ytdlp/api/key", json={"key": "AIzaGOOD"}).json()
     assert saved["keyHint"] == "OOD"
-    assert api_client.get("/api/sources/problems").json() == []
-    assert api_client.delete("/api/sources/ytdlp/api/key").json()["keyHint"] is None
-    assert api_client.get("/api/sources/dailywire/api").status_code == 404
+    assert api_client.get("/api/v1/sources/problems").json() == []
+    assert api_client.delete("/api/v1/sources/ytdlp/api/key").json()["keyHint"] is None
+    assert api_client.get("/api/v1/sources/dailywire/api").status_code == 404
 
 
 def test_debug_logging_shows_each_call_and_info_a_summary_of_each_day(caplog):

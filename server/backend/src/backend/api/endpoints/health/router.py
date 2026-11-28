@@ -10,13 +10,17 @@ from config import get_settings
 
 from backend.db import get_session
 from backend.api.models.health import HealthRead
+from backend.api.versions import HEALTH_PATH
 from backend.services.health import check_health, metrics_text
 
 
+# The health check stays outside every API version: Docker and uptime monitors only read its status code, so it
+# keeps one address whatever the API's version is. The metrics are versioned with the rest of the API.
+health_check_router = APIRouter(tags=["Health"])
 router = APIRouter(tags=["Health"])
 
 
-@router.get("/health", response_model=HealthRead, responses={503: {"model": HealthRead}})
+@health_check_router.get(HEALTH_PATH, response_model=HealthRead, responses={503: {"model": HealthRead}})
 def health():
     """200 while the database answers and the scheduler runs, 503 otherwise."""
     with get_session() as session:

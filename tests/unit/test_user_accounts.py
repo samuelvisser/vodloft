@@ -64,11 +64,11 @@ def sign_in(c: TestClient, password: str, username: str | None = None):
     body = {"passwordHash": pw(password)}
     if username is not None:
         body["username"] = username
-    return c.post("/api/auth/login", json=body)
+    return c.post("/api/v1/auth/login", json=body)
 
 
 def turn_accounts_on(c: TestClient, username: str = "samuel", password: str = "admin-password"):
-    return c.put("/api/users/settings", json={
+    return c.put("/api/v1/users/settings", json={
         "enabled": True,
         "firstAdministrator": {"username": username, "passwordHash": pw(password)},
     })
@@ -76,28 +76,28 @@ def turn_accounts_on(c: TestClient, username: str = "samuel", password: str = "a
 
 def test_without_accounts_or_password_everything_is_open(app):
     c = client(app)
-    me = c.get("/api/auth/me")
+    me = c.get("/api/v1/auth/me")
     assert me.status_code == 200, me.text
     body = me.json()
     assert body["accountsEnabled"] is False
     assert body["user"] is None
     assert body["administrator"] is True
-    assert c.get("/api/config/public").json()["userAccounts"] == {"enabled": False}
+    assert c.get("/api/v1/config/public").json()["userAccounts"] == {"enabled": False}
 
 
 def test_without_accounts_the_environment_password_signs_in(app, environment_password):
     c = client(app)
-    assert c.get("/api/auth/me").status_code == 401
+    assert c.get("/api/v1/auth/me").status_code == 401
     assert sign_in(c, "wrong-password").status_code == 400
     assert sign_in(c, environment_password).status_code == 204
-    assert c.get("/api/auth/me").json()["administrator"] is True
+    assert c.get("/api/v1/auth/me").json()["administrator"] is True
 
 
 def test_turning_accounts_on_creates_and_signs_in_the_first_administrator(app, environment_password):
     c = client(app)
     sign_in(c, environment_password)
 
-    refused = c.put("/api/users/settings", json={"enabled": True})
+    refused = c.put("/api/v1/users/settings", json={"enabled": True})
     assert refused.status_code == 422
     assert refused.json()["detail"][0]["loc"] == ["body", "firstAdministrator"]
 
@@ -105,7 +105,7 @@ def test_turning_accounts_on_creates_and_signs_in_the_first_administrator(app, e
     assert response.status_code == 200, response.text
     assert response.json()["enabled"] is True
 
-    me = c.get("/api/auth/me").json()
+    me = c.get("/api/v1/auth/me").json()
     assert me["accountsEnabled"] is True
     assert me["user"]["username"] == "samuel"
     assert me["user"]["mustChangePassword"] is False
@@ -122,7 +122,7 @@ def test_turning_accounts_on_creates_and_signs_in_the_first_administrator(app, e
 def test_a_new_user_must_choose_a_password_and_only_gets_their_access(app):
     admin = client(app)
     turn_accounts_on(admin)
-    created = admin.post("/api/users", json={"username": "tim", "passwordHash": pw("first-pw"), "access": DOWNLOADER})
+    created = admin.post("/api/v1/users", json={"username": "tim", "passwordHash": pw("first-pw"), "access": DOWNLOADER})
     assert created.status_code == 201, created.text
     assert created.json()["createdBy"] == "samuel"
     assert created.json()["levels"]["quick_downloads"] == "view"
@@ -130,18 +130,18 @@ def test_a_new_user_must_choose_a_password_and_only_gets_their_access(app):
 
     tim = client(app)
     assert sign_in(tim, "first-pw", "tim").status_code == 204
-    assert tim.get("/api/auth/me").json()["user"]["mustChangePassword"] is True
-    blocked = tim.get("/api/users")
+    assert tim.get("/api/v1/auth/me").json()["user"]["mustChangePassword"] is True
+    blocked = tim.get("/api/v1/users")
     assert blocked.status_code == 403
     assert blocked.json()["detail"] == "Choose a new password first."
 
-    wrong = tim.post("/api/auth/password", json={"currentPasswordHash": pw("nope"), "newPasswordHash": pw("tims-own-pw")})
+    wrong = tim.post("/api/v1/auth/password", json={"currentPasswordHash": pw("nope"), "newPasswordHash": pw("tims-own-pw")})
     assert wrong.status_code == 400
-    changed = tim.post("/api/auth/password", json={"currentPasswordHash": pw("first-pw"), "newPasswordHash": pw("tims-own-pw")})
+    changed = tim.post("/api/v1/auth/password", json={"currentPasswordHash": pw("first-pw"), "newPasswordHash": pw("tims-own-pw")})
     assert changed.status_code == 204, changed.text
-    assert tim.get("/api/auth/me").json()["user"]["mustChangePassword"] is False
+    assert tim.get("/api/v1/auth/me").json()["user"]["mustChangePassword"] is False
 
-    not_allowed = tim.get("/api/users")
+    not_allowed = tim.get("/api/v1/users")
     assert not_allowed.status_code == 403
     assert "access" in not_allowed.json()["detail"]
 
@@ -149,61 +149,61 @@ def test_a_new_user_must_choose_a_password_and_only_gets_their_access(app):
 def test_disabling_a_user_ends_their_open_session(app):
     admin = client(app)
     turn_accounts_on(admin)
-    user_id = admin.post("/api/users", json={"username": "tim", "passwordHash": pw("first-pw"), "access": DOWNLOADER}).json()["id"]
+    user_id = admin.post("/api/v1/users", json={"username": "tim", "passwordHash": pw("first-pw"), "access": DOWNLOADER}).json()["id"]
 
     tim = client(app)
     sign_in(tim, "first-pw", "tim")
-    assert tim.get("/api/auth/me").status_code == 200
+    assert tim.get("/api/v1/auth/me").status_code == 200
 
-    assert admin.patch(f"/api/users/{user_id}", json={"enabled": False}).status_code == 200
-    assert tim.get("/api/auth/me").status_code == 401
+    assert admin.patch(f"/api/v1/users/{user_id}", json={"enabled": False}).status_code == 200
+    assert tim.get("/api/v1/auth/me").status_code == 401
     assert sign_in(tim, "first-pw", "tim").status_code == 400
 
-    admin.patch(f"/api/users/{user_id}", json={"enabled": True})
+    admin.patch(f"/api/v1/users/{user_id}", json={"enabled": True})
     assert sign_in(tim, "first-pw", "tim").status_code == 204
-    admin.post(f"/api/users/{user_id}/sign-out")
-    assert tim.get("/api/auth/me").status_code == 401
+    admin.post(f"/api/v1/users/{user_id}/sign-out")
+    assert tim.get("/api/v1/auth/me").status_code == 401
 
 
 def test_a_reset_password_signs_the_user_out_and_must_be_changed(app):
     admin = client(app)
     turn_accounts_on(admin)
-    user_id = admin.post("/api/users", json={"username": "tim", "passwordHash": pw("first-pw"), "access": DOWNLOADER}).json()["id"]
+    user_id = admin.post("/api/v1/users", json={"username": "tim", "passwordHash": pw("first-pw"), "access": DOWNLOADER}).json()["id"]
     tim = client(app)
     sign_in(tim, "first-pw", "tim")
-    tim.post("/api/auth/password", json={"currentPasswordHash": pw("first-pw"), "newPasswordHash": pw("tims-own-pw")})
+    tim.post("/api/v1/auth/password", json={"currentPasswordHash": pw("first-pw"), "newPasswordHash": pw("tims-own-pw")})
 
-    assert admin.post(f"/api/users/{user_id}/password", json={"passwordHash": pw("reset-pw")}).status_code == 204
-    assert tim.get("/api/auth/me").status_code == 401
+    assert admin.post(f"/api/v1/users/{user_id}/password", json={"passwordHash": pw("reset-pw")}).status_code == 204
+    assert tim.get("/api/v1/auth/me").status_code == 401
     sign_in(tim, "reset-pw", "tim")
-    assert tim.get("/api/auth/me").json()["user"]["mustChangePassword"] is True
+    assert tim.get("/api/v1/auth/me").json()["user"]["mustChangePassword"] is True
 
 
 def test_the_last_administrator_cannot_be_disabled_demoted_or_deleted(app):
     admin = client(app)
     turn_accounts_on(admin)
-    me = admin.get("/api/auth/me").json()["user"]["id"]
+    me = admin.get("/api/v1/auth/me").json()["user"]["id"]
 
-    assert admin.patch(f"/api/users/{me}", json={"enabled": False}).status_code == 409
-    assert admin.patch(f"/api/users/{me}", json={"access": DOWNLOADER}).status_code == 409
-    assert admin.delete(f"/api/users/{me}?streamProfiles=transfer").status_code == 409
+    assert admin.patch(f"/api/v1/users/{me}", json={"enabled": False}).status_code == 409
+    assert admin.patch(f"/api/v1/users/{me}", json={"access": DOWNLOADER}).status_code == 409
+    assert admin.delete(f"/api/v1/users/{me}?streamProfiles=transfer").status_code == 409
 
-    second = admin.post("/api/users", json={
+    second = admin.post("/api/v1/users", json={
         "username": "marieke", "passwordHash": pw("first-pw"),
         "access": {"templateKey": "administrator", "levels": {"users": "manage"}},
     })
     assert second.json()["administrator"] is True
     assert second.json()["levels"]["library"] == "manage"
-    assert admin.patch(f"/api/users/{me}", json={"access": DOWNLOADER}).status_code == 200
+    assert admin.patch(f"/api/v1/users/{me}", json={"access": DOWNLOADER}).status_code == 200
 
 
 def test_usernames_are_unique_regardless_of_case(app):
     admin = client(app)
     turn_accounts_on(admin)
-    refused = admin.post("/api/users", json={"username": "Samuel", "passwordHash": pw("x-password"), "access": DOWNLOADER})
+    refused = admin.post("/api/v1/users", json={"username": "Samuel", "passwordHash": pw("x-password"), "access": DOWNLOADER})
     assert refused.status_code == 409
     assert refused.json()["detail"][0]["loc"] == ["body", "username"]
-    bad = admin.post("/api/users", json={"username": "no spaces", "passwordHash": pw("x-password"), "access": DOWNLOADER})
+    bad = admin.post("/api/v1/users", json={"username": "no spaces", "passwordHash": pw("x-password"), "access": DOWNLOADER})
     assert bad.status_code == 422
 
 
@@ -211,12 +211,12 @@ def test_turning_accounts_off_ends_user_sessions(app, environment_password):
     admin = client(app)
     sign_in(admin, environment_password)
     turn_accounts_on(admin)
-    assert admin.put("/api/users/settings", json={"enabled": False}).status_code == 200
+    assert admin.put("/api/v1/users/settings", json={"enabled": False}).status_code == 200
 
     # The user session no longer counts; the shared password does.
-    assert admin.get("/api/auth/me").status_code == 401
+    assert admin.get("/api/v1/auth/me").status_code == 401
     assert sign_in(admin, environment_password).status_code == 204
-    assert admin.get("/api/auth/me").json()["accountsEnabled"] is False
+    assert admin.get("/api/v1/auth/me").json()["accountsEnabled"] is False
 
 
 def test_the_environment_password_recovers_when_no_administrator_can_sign_in(app, database, environment_password):
@@ -231,14 +231,14 @@ def test_the_environment_password_recovers_when_no_administrator_can_sign_in(app
 
     rescuer = client(app)
     assert sign_in(rescuer, environment_password).status_code == 204
-    me = rescuer.get("/api/auth/me").json()
+    me = rescuer.get("/api/v1/auth/me").json()
     assert me["recovery"] is True
     assert me["administrator"] is True
 
-    user_id = rescuer.get("/api/users").json()[0]["id"]
-    assert rescuer.patch(f"/api/users/{user_id}", json={"enabled": True}).status_code == 200
+    user_id = rescuer.get("/api/v1/users").json()[0]["id"]
+    assert rescuer.patch(f"/api/v1/users/{user_id}", json={"enabled": True}).status_code == 200
     # With an administrator back, the recovery session ends.
-    assert rescuer.get("/api/auth/me").status_code == 401
+    assert rescuer.get("/api/v1/auth/me").status_code == 401
 
 
 def test_repeated_failures_slow_down_sign_in(app, environment_password, monkeypatch):

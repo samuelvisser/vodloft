@@ -48,7 +48,7 @@ def test_a_collection_of_one_list_takes_no_other_lists(client, session):
     _add("cabin", PLAYLIST)
 
     # Joining the creator of the channel that made it only groups it: it takes none of the channel's lists.
-    response = client.post("/api/collections/cabin/creator", json={})
+    response = client.post("/api/v1/collections/cabin/creator", json={})
 
     assert response.status_code == 200, response.text
     assert _collection(session, "cabin").lists == []
@@ -77,7 +77,7 @@ def test_the_migration_tells_a_playlist_from_a_channel_and_takes_the_playlist_ou
 
     _add("workshop", ROOT)
     _add("cabin", PLAYLIST)
-    client.post("/api/collections/workshop/creator", json={})
+    client.post("/api/v1/collections/workshop/creator", json={})
     creator_id = _collection(session, "workshop").creator_id
 
     def as_before(w):

@@ -18,7 +18,7 @@ def client(session, ytdlp_dir):
     from backend.api.endpoints.sources import router as sources_router
 
     app = FastAPI()
-    app.include_router(sources_router.router, prefix="/api")
+    app.include_router(sources_router.router, prefix="/api/v1")
     with TestClient(app) as test_client:
         yield test_client
 
@@ -34,7 +34,7 @@ def _collection(session, url):
 
 
 def _notes(client):
-    return client.get("/api/sources/api-key-notes").json()
+    return client.get("/api/v1/sources/api-key-notes").json()
 
 
 def test_youtube_collections_without_a_key_get_the_note(client, session):
@@ -67,7 +67,7 @@ def test_remind_me_later_puts_the_note_off_for_a_week(client, session):
 
     _collection(session, "https://www.youtube.com/@workshop")
 
-    assert client.post("/api/sources/api-key-notes", json={"action": "later"}).status_code == 204
+    assert client.post("/api/v1/sources/api-key-notes", json={"action": "later"}).status_code == 204
 
     assert _notes(client) == []
     settings = session.query(Settings).one()
@@ -81,6 +81,6 @@ def test_remind_me_later_puts_the_note_off_for_a_week(client, session):
 def test_never_turns_the_note_off(client, session):
     _collection(session, "https://www.youtube.com/@workshop")
 
-    assert client.post("/api/sources/api-key-notes", json={"action": "never"}).status_code == 204
+    assert client.post("/api/v1/sources/api-key-notes", json={"action": "never"}).status_code == 204
 
     assert _notes(client) == []
