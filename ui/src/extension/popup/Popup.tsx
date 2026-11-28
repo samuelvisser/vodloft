@@ -6,7 +6,7 @@ import {allows, can, loadAccess, type AuthMe} from '../../lib/access'
 import {apiJson} from '../../lib/api'
 import type {QuickDownloadSettingsForUser} from '../../lib/quickDownloads'
 import {
-    ext, isWebPage, messageOf, normalAddress, storeAddress, storedAddress, unreachable, connectTo, vodloftOrigins,
+    apiVersionProblem, ext, isWebPage, messageOf, normalAddress, storeAddress, storedAddress, unreachable, connectTo, vodloftOrigins,
 } from '../browser'
 import {ALL_SITES, sendCookies} from '../cookies'
 import ActionMenu, {type ActionMenuItem} from '../../components/ActionMenu/ActionMenu'
@@ -16,7 +16,7 @@ import QuickDownloadForm, {choicesWithoutVodloft} from './QuickDownloadForm'
 
 type Tab = {id: number; url?: string; title?: string; favIconUrl?: string; cookieStoreId?: string}
 /** How VODLoft answers: signed in, signed out, or not at all. */
-type Connection = 'checking' | 'signed-in' | 'sign-in' | 'vodloft'
+type Connection = 'checking' | 'signed-in' | 'sign-in' | 'vodloft' | 'outdated'
 
 /** What the user's account could do, and its Quick download settings, the last time VODLoft answered: for when it
  *  does not. Kept with the address they came from, so another VODLoft starts without them. */
@@ -155,6 +155,7 @@ export default function Popup() {
     const [tab, setTab] = useState<Tab | undefined>(undefined)
     const [changing, setChanging] = useState(false)
     const [connection, setConnection] = useState<Connection>('checking')
+    const [versionProblem, setVersionProblem] = useState<string | null>(null)
     const [lastKnown, setLastKnown] = useState<LastKnown | undefined>(undefined)
 
     useEffect(() => {
@@ -185,6 +186,13 @@ export default function Popup() {
                 return
             }
             try {
+                const problem = await apiVersionProblem(address)
+                if (stale) return
+                setVersionProblem(problem)
+                if (problem) {
+                    setConnection('outdated')
+                    return
+                }
                 const access = await loadAccess()
                 if (stale) return
                 if (access) remember({access})
@@ -251,6 +259,8 @@ export default function Popup() {
                 <article className="add-media-preview add-media-preview--loading creator-skeleton" aria-busy="true" aria-label="Reaching VODLoft">
                     <span className="add-media-preview-art skeleton-block" aria-hidden="true"/>
                 </article>
+            ) : connection === 'outdated' ? (
+                <p className="form-error-card extension-problem" role="alert">{versionProblem}</p>
             ) : connection === 'signed-in' ? (
                 <PageMedia address={address} pageUrl={page.url!} settings={settings} onLost={setConnection}/>
             ) : (

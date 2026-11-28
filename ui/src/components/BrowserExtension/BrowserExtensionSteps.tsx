@@ -1,9 +1,9 @@
 import type {ReactNode} from 'react'
-import {apiUrl} from '../../lib/api'
+import {apiUrl, publicAddress} from '../../lib/api'
 
-/** The address the browser extension reaches this VODLoft on: where its API is, without ``/api``. */
+/** The address the browser extension reaches this VODLoft on: where its API is, without ``/api`` and its version. */
 function vodloftAddress() {
-    return new URL(apiUrl(), window.location.href).href.replace(/\/api\/?$/, '')
+    return publicAddress('/').replace(/\/$/, '')
 }
 
 /**

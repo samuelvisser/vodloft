@@ -8,7 +8,7 @@ import {apiJson} from '../lib/api'
 import {quickDownloadFileUrl, removeQuickDownload, startQuickDownload} from '../lib/quickDownloads'
 import {QuickDownloadsSchema} from '../types/schemas/quick_download'
 import {TaskOperationReadSchema} from '../types/schemas/operation'
-import {ext, messageOf, signedOut, storedAddress, unreachable, connectTo} from './browser'
+import {apiVersionProblem, ext, messageOf, signedOut, storedAddress, unreachable, connectTo} from './browser'
 import {
     autoSave, finished, loadQueue, storeQueue,
     type QueueMessage, type QueuedDownload,
@@ -139,6 +139,13 @@ async function check(queue: QueuedDownload[]): Promise<void> {
     if (address) {
         connectTo(address)
         try {
+            const problem = await apiVersionProblem(address)
+            // A download VODLoft cannot take fails with the reason, rather than wait for an update that may not come.
+            if (problem) {
+                for (const download of queue.filter((item) => item.state === 'waiting')) {
+                    patch(queue, download.id, {state: 'failed', message: problem, waitingFor: undefined})
+                }
+            }
             await send(queue)
             await follow(queue)
         } catch (exc) {

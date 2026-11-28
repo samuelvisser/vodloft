@@ -29,6 +29,9 @@ Click the VODLoft icon and type the address you open VODLoft on, such as `https:
 extension on a VODLoft tab and it fills that address in for you. Choose **Save**, and allow the extension to reach
 that address when your browser asks.
 
+The extension and VODLoft are updated apart. When the extension does not work with your VODLoft, it says which of the
+two to update: update VODLoft, or download the extension again from VODLoft and load it in place of the old one.
+
 Stay signed in to VODLoft in the same browser: the extension works as you, so it can do what your account may do in
 VODLoft, and nothing more. When you are signed out, it says so and links to VODLoft to sign in.
 

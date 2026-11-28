@@ -12,11 +12,13 @@ same components, styles and API functions as Add media and Quick download, and i
 - `npm run build:extension` (in `ui/`) builds it into `ui/dist-extension`; `npm run build` builds it with the UI, and
   `npm run dev:extension` rebuilds it on every change. Load `ui/dist-extension` with **Load unpacked** in
   `chrome://extensions`, or as a **Temporary Add-on** in Firefox's `about:debugging`.
-- VODLoft offers the built folder as a zip at `GET /api/browser-extension`; the Docker image copies it from the UI build.
+- VODLoft offers the built folder as a zip at `GET /api/v1/browser-extension`; the Docker image copies it from the UI build.
 - It talks straight to VODLoft's API with the browser's own VODLoft session, after the user allowed it to reach the
   VODLoft address. With that host permission the browser lets it past CORS and sends the session cookie, so VODLoft
   needs no CORS entry and no API token for it.
 - Quick downloads wait in the extension's own queue (`queue.ts`) while VODLoft does not answer or the user is signed
   out. The background script hands them to VODLoft once it answers, follows them, and saves each file into the
   browser's downloads when it is ready. An alarm wakes it every half minute while anything is under way.
+- It speaks API version `v1` (`API_VERSION` in `lib/api.ts`) and asks `GET /api/versions` first, outside every
+  version and before signing in, so it can say whether VODLoft or the extension needs updating.
 - Reading cookies takes access to every site, which it asks for only when the user first sends cookies.

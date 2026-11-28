@@ -2,7 +2,7 @@
  * What the extension's popup and background share: the browser's extension API, the address of the user's VODLoft,
  * and telling a VODLoft that is down from one that refused.
  */
-import {ApiError} from '../lib/api'
+import {API_VERSION, ApiError} from '../lib/api'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /** Firefox's ``browser`` or Chrome's ``chrome``: both take promises in Manifest V3. */
@@ -38,6 +38,23 @@ export function vodloftOrigins(address: string) {
 /** Point VODLoft's own API code at the user's VODLoft, as its UI's config does. */
 export function connectTo(address: string): void {
     (globalThis as any).appConfig = {API_URL: `${address}/api`}
+}
+
+/**
+ * Why this extension cannot work with the VODLoft at ``address``, or null when it can: VODLoft lists the API versions
+ * it answers at ``/api/versions``, outside every version, so this works before signing in. The extension is updated
+ * apart from VODLoft, so either can be the older one. Throws as a request does when VODLoft does not answer.
+ */
+export async function apiVersionProblem(address: string): Promise<string | null> {
+    const response = await fetch(`${address}/api/versions`, {credentials: 'include'})
+    if (response.status >= 502 && response.status <= 504) throw new ApiError('VODLoft does not answer.', response.status)
+    const listed: unknown = response.ok ? await response.json().catch(() => null) : null
+    const versions = (listed as {versions?: unknown} | null)?.versions
+    if (!Array.isArray(versions)) {
+        return 'This VODLoft is older than the extension. Update VODLoft to use the extension with it.'
+    }
+    if (versions.includes(API_VERSION)) return null
+    return 'This VODLoft is newer than the extension. Download the extension again from VODLoft, on Add media, and load it in place of this one.'
 }
 
 /** VODLoft did not answer: it is down, restarting, or the network is. */
