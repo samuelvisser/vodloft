@@ -166,13 +166,13 @@ def test_the_episode_tags_endpoint_and_profiles_accept_source_tags():
     from pydantic import ValidationError
 
     app = FastAPI()
-    app.include_router(source_router_module.router, prefix="/api")
+    app.include_router(source_router_module.router, prefix="/api/v1")
     client = TestClient(app)
-    tags = client.get("/api/sources/ytdlp/episode-tags", params={"url": "https://youtu.be/dQw4w9WgXcQ"}).json()
+    tags = client.get("/api/v1/sources/ytdlp/episode-tags", params={"url": "https://youtu.be/dQw4w9WgXcQ"}).json()
     assert [(tag["key"], tag["rssEpisodeType"], tag["main"]) for tag in tags] == [
         ("ep", "full", True), ("short", "bonus", False), ("livestream", "full", False),
     ]
-    assert client.get("/api/sources/nope/episode-tags").status_code == 404
+    assert client.get("/api/v1/sources/nope/episode-tags").status_code == 404
 
     body = {
         "collection_id": 1, "local_media_profile_id": 1, "enable_profile": True,
@@ -189,12 +189,12 @@ def test_the_episode_tags_endpoint_names_the_main_tag_by_collection_type():
     from backend.api.endpoints.sources import router as source_router_module
 
     app = FastAPI()
-    app.include_router(source_router_module.router, prefix="/api")
+    app.include_router(source_router_module.router, prefix="/api/v1")
     client = TestClient(app)
 
     def labels(url, collection_type=None):
         params = {"url": url, **({"collection_type": collection_type} if collection_type else {})}
-        return [tag["label"] for tag in client.get("/api/sources/ytdlp/episode-tags", params=params).json()]
+        return [tag["label"] for tag in client.get("/api/v1/sources/ytdlp/episode-tags", params=params).json()]
 
     assert labels("https://x.bandcamp.com/music", "music") == ["Track"]
     assert labels("https://www.youtube.com/@a", "music")[0] == "Music video"

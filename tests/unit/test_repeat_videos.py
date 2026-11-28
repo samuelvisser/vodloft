@@ -171,17 +171,17 @@ def test_the_seasons_dialog_sets_it_in_the_collections_words(source, session):
     _index(session, collection, source)
 
     app = FastAPI()
-    app.include_router(router.router, prefix="/api")
+    app.include_router(router.router, prefix="/api/v1")
     client = TestClient(app)
 
-    view = client.get(f"/api/collections/{collection.slug}/season-settings").json()
+    view = client.get(f"/api/v1/collections/{collection.slug}/season-settings").json()
     assert (view["repeatVideos"], view["repeatedCount"], view["words"]["inSeason"]) == ("each_season", 1, "on")
 
     body = {
         "seasons": [{"id": season["id"], "name": season["name"]} for season in view["seasons"]],
         "customSeasonOrder": False, "linkSeasons": "on", "repeatVideos": "one_season",
     }
-    saved = client.put(f"/api/collections/{collection.slug}/season-settings", json=body)
+    saved = client.put(f"/api/v1/collections/{collection.slug}/season-settings", json=body)
     assert saved.status_code == 200, saved.text
     assert (saved.json()["repeatVideos"], saved.json()["repeatedCount"]) == ("one_season", 0)
     assert [episode.season.name for episode in _episodes(session, "b")] == ["First Album"]

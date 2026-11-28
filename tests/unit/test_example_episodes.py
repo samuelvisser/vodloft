@@ -108,7 +108,7 @@ def client(monkeypatch, newest):
     ])
     app = FastAPI()
     for module in (download_profiles, local_media_profiles, regex):
-        app.include_router(module.router, prefix="/api")
+        app.include_router(module.router, prefix="/api/v1")
     return TestClient(app)
 
 
@@ -119,7 +119,7 @@ EXAMPLE = {
 
 
 def test_the_examples_are_template_sources_newest_first(client):
-    body = client.post("/api/local-media-profiles/template/sources/examples", json=EXAMPLE).json()
+    body = client.post("/api/v1/local-media-profiles/template/sources/examples", json=EXAMPLE).json()
 
     assert [source["values"]["episode_title"] for source in body] == ["Weekly highlights", "Short clip", "Highlights of the year"]
     assert body[0]["id"] == "new-episode:c"
@@ -128,7 +128,7 @@ def test_the_examples_are_template_sources_newest_first(client):
 
 
 def test_the_regex_test_runs_on_the_examples(client):
-    body = client.post("/api/regex/check", json={
+    body = client.post("/api/v1/regex/check", json={
         "pattern": r"\bhighlights\b", "ignoreCase": True, "exampleCollection": EXAMPLE, "field": "title",
     }).json()
 
@@ -136,7 +136,7 @@ def test_the_regex_test_runs_on_the_examples(client):
 
 
 def test_which_episodes_counts_the_examples(client):
-    body = client.post("/api/download-profiles/which-episodes", json={
+    body = client.post("/api/v1/download-profiles/which-episodes", json={
         "exampleCollection": EXAMPLE, "downloadWithCountdown": False, "includeEpisodes": True, "filters": [
             {"action": "only", "field": "types", "episodeTypes": ["ep"]},
             {"action": "only", "field": "published", "count": 1},
@@ -148,7 +148,7 @@ def test_which_episodes_counts_the_examples(client):
 
 
 def test_which_episodes_needs_one_collection(client):
-    response = client.post("/api/download-profiles/which-episodes", json={
+    response = client.post("/api/v1/download-profiles/which-episodes", json={
         "downloadWithCountdown": False,
     })
 

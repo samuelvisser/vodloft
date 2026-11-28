@@ -259,7 +259,7 @@ def client(monkeypatch):
     changed = []
     monkeypatch.setattr(router_module, "access_changed", changed.append)
     app = FastAPI()
-    app.include_router(router_module.router, prefix="/api")
+    app.include_router(router_module.router, prefix="/api/v1")
     with TestClient(app) as test_client:
         test_client.changed = changed
         yield test_client
@@ -268,22 +268,22 @@ def client(monkeypatch):
 
 def test_signing_in_and_out_under_authentication(client, monkeypatch):
     monkeypatch.setattr(requests.Session, "post", lambda self, url, **kwargs: _Answer(data={"key": "api-token"}))
-    listed = {site["key"]: site for site in client.get("/api/sources/authentication").json()}
+    listed = {site["key"]: site for site in client.get("/api/v1/sources/authentication").json()}
     assert listed["nebula"]["accountSignIn"]["kind"] == "password"
     assert listed["nebula"]["accountStatus"] == {"signedIn": False, "account": None, "problem": None}
 
-    signed_in = client.put("/api/sources/authentication/nebula/account", json={"values": {"email": "me@example.com", "password": "x"}})
+    signed_in = client.put("/api/v1/sources/authentication/nebula/account", json={"values": {"email": "me@example.com", "password": "x"}})
     assert signed_in.status_code == 200
     assert signed_in.json()["accountStatus"]["account"] == "me@example.com"
     assert client.changed == ["ytdlp"]
 
-    signed_out = client.delete("/api/sources/authentication/nebula/account")
+    signed_out = client.delete("/api/v1/sources/authentication/nebula/account")
     assert signed_out.json()["accountStatus"]["signedIn"] is False
 
 
 def test_a_refused_sign_in_lands_under_its_field(client, monkeypatch):
     monkeypatch.setattr(requests.Session, "post", lambda self, url, **kwargs: _Answer(400, {"detail": "no"}))
-    refused = client.put("/api/sources/authentication/nebula/account", json={"values": {"email": "me@example.com", "password": "x"}})
+    refused = client.put("/api/v1/sources/authentication/nebula/account", json={"values": {"email": "me@example.com", "password": "x"}})
     assert refused.status_code == 422
     assert refused.json()["detail"][0]["loc"] == ["body", "values", "password"]
 
@@ -296,15 +296,15 @@ def test_signing_in_with_a_code_under_authentication(client, monkeypatch):
         if url.endswith("/device") else {"access_token": "the-token"}
     )))
     monkeypatch.setattr(twitch_account.requests, "get", lambda *args, **kwargs: _Answer(data={"login": "somebody", "expires_in": 0}))
-    started = client.post("/api/sources/authentication/twitch/account/code").json()
+    started = client.post("/api/v1/sources/authentication/twitch/account/code").json()
     # The Site's own device code never reaches the UI.
     assert started["userCode"] == "ABCDEFGH" and "device" not in started.values()
 
-    finished = client.post(f"/api/sources/authentication/twitch/account/code/{started['id']}")
+    finished = client.post(f"/api/v1/sources/authentication/twitch/account/code/{started['id']}")
     assert finished.status_code == 200
     assert finished.json()["accountStatus"] == {"signedIn": True, "account": "somebody", "problem": None}
     # A code is used once.
-    assert client.post(f"/api/sources/authentication/twitch/account/code/{started['id']}").status_code == 410
+    assert client.post(f"/api/v1/sources/authentication/twitch/account/code/{started['id']}").status_code == 410
 
 
 def test_cancelling_a_sign_in_with_a_code_stops_asking_twitch(client, monkeypatch):
@@ -317,7 +317,7 @@ def test_cancelling_a_sign_in_with_a_code_stops_asking_twitch(client, monkeypatc
         return _Answer(data={"device_code": "device", "user_code": "ABCDEFGH", "verification_uri": "https://www.twitch.tv/activate", "expires_in": 1800, "interval": 1})
 
     monkeypatch.setattr(twitch_account.requests, "post", post)
-    started = client.post("/api/sources/authentication/twitch/account/code").json()
-    assert client.delete(f"/api/sources/authentication/twitch/account/code/{started['id']}").status_code == 204
-    assert client.post(f"/api/sources/authentication/twitch/account/code/{started['id']}").status_code == 410
+    started = client.post("/api/v1/sources/authentication/twitch/account/code").json()
+    assert client.delete(f"/api/v1/sources/authentication/twitch/account/code/{started['id']}").status_code == 204
+    assert client.post(f"/api/v1/sources/authentication/twitch/account/code/{started['id']}").status_code == 410
     assert asked == ["https://id.twitch.tv/oauth2/device"]

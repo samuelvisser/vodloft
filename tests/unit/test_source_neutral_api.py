@@ -88,7 +88,7 @@ def client(stub_sources, session, monkeypatch):
 
     monkeypatch.setattr(source_router_module, "db_session", db_session)
     app = FastAPI()
-    app.include_router(source_router_module.router, prefix="/api")
+    app.include_router(source_router_module.router, prefix="/api/v1")
     app.add_exception_handler(SourceRequestError, source_request_error_handler)
     with TestClient(app) as test_client:
         yield test_client
@@ -144,7 +144,7 @@ def test_a_daily_wire_host_link_is_recognised(monkeypatch):
 
 def _resolve(client, body):
     """The last line /resolve sends: the link it found, or what went wrong."""
-    response = client.post("/api/resolve", json=body)
+    response = client.post("/api/v1/resolve", json=body)
     assert response.status_code == 200, response.text
     return json.loads(response.text.strip().splitlines()[-1])
 
@@ -156,7 +156,7 @@ def _resolved(client, body):
 
 
 def test_resolve_stops_at_the_first_source_that_recognises_the_link(client):
-    lines = [json.loads(line) for line in client.post("/api/resolve", json={"url": "stub.example/watch/clip-1"}).text.splitlines()]
+    lines = [json.loads(line) for line in client.post("/api/v1/resolve", json={"url": "stub.example/watch/clip-1"}).text.splitlines()]
     # The plan of the lookup comes first, as it goes, then the link.
     assert lines[0]["plan"]["stages"][0]["label"] == "Finding the service the link comes from"
     assert lines[-2]["plan"]["stages"][-1]["id"] == "check_library"
@@ -177,7 +177,7 @@ def test_resolve_stops_at_the_first_source_that_recognises_the_link(client):
 
 def test_resolve_explains_an_unrecognised_link(client, monkeypatch):
     monkeypatch.setattr(registry, "_sources", {"stub": StubSource()})
-    response = client.post("/api/resolve", json={"url": "https://nothing.example/x"})
+    response = client.post("/api/v1/resolve", json={"url": "https://nothing.example/x"})
     assert response.status_code == 422
     assert "No Source recognises" in response.json()["detail"]
 
@@ -222,7 +222,7 @@ def test_resolve_finds_the_collection_of_a_known_episode(client, session, monkey
 
 
 def test_source_list_names_each_source_and_its_features(client):
-    sources = {source["id"]: source for source in client.get("/api/sources").json()}
+    sources = {source["id"]: source for source in client.get("/api/v1/sources").json()}
     assert sources["stub"]["features"] == []
     assert "membership_levels" in sources["dailywire"]["features"]
     assert sources["dailywire"]["domains"] == ["dailywire.com"]
@@ -303,27 +303,27 @@ def test_a_preferred_source_is_asked_first(client, stub_sources):
 
     picked = _resolved(client, {"url": "https://stub.example/watch/clip-1", "sourceKey": "catch_all"})
     assert picked["source"]["id"] == "catch_all"
-    assert client.post("/api/resolve", json={"url": "https://stub.example/x", "sourceKey": "nope"}).status_code == 422
+    assert client.post("/api/v1/resolve", json={"url": "https://stub.example/x", "sourceKey": "nope"}).status_code == 422
 
 
 def test_the_preferred_source_per_site_is_saved(client):
     # Only a Site added to VODLoft is listed.
-    assert "stub" not in {row["key"] for row in client.get("/api/sources/sites").json()}
-    assert client.post("/api/sources/sites", json={"url": "https://stub.example/"}).status_code == 200
-    sites = {row["key"]: row for row in client.get("/api/sources/sites").json()}
+    assert "stub" not in {row["key"] for row in client.get("/api/v1/sources/sites").json()}
+    assert client.post("/api/v1/sources/sites", json={"url": "https://stub.example/"}).status_code == 200
+    sites = {row["key"]: row for row in client.get("/api/v1/sources/sites").json()}
     assert sites["stub"] == {
         "key": "stub", "name": "Stub", "domains": ["stub.example"], "sourceKeys": ["stub", "catch_all"],
         "defaultSourceKey": "stub", "preferredSourceKey": None,
     }
 
-    saved = client.put("/api/sources/sites/stub", json={"preferredSourceKey": "catch_all"}).json()
+    saved = client.put("/api/v1/sources/sites/stub", json={"preferredSourceKey": "catch_all"}).json()
     assert saved["preferredSourceKey"] == "catch_all"
     body = _resolved(client, {"url": "https://stub.example/watch/clip-1"})
     assert body["source"]["id"] == "catch_all"
 
-    assert client.put("/api/sources/sites/stub", json={"preferredSourceKey": "nope"}).status_code == 422
-    assert client.put("/api/sources/sites/other", json={"preferredSourceKey": "stub"}).status_code == 422
-    reset = client.put("/api/sources/sites/stub", json={"preferredSourceKey": None}).json()
+    assert client.put("/api/v1/sources/sites/stub", json={"preferredSourceKey": "nope"}).status_code == 422
+    assert client.put("/api/v1/sources/sites/other", json={"preferredSourceKey": "stub"}).status_code == 422
+    reset = client.put("/api/v1/sources/sites/stub", json={"preferredSourceKey": None}).json()
     assert reset["preferredSourceKey"] is None
     assert _resolved(client, {"url": "https://stub.example/watch/clip-1"})["source"]["id"] == "stub"
 
@@ -332,16 +332,16 @@ def test_a_source_with_search_is_searched_by_name(client, monkeypatch):
     from sources import Feature
 
     stub = registry.get_source("stub")
-    assert client.get("/api/sources/stub/search", params={"site": "stub", "q": "clip"}).status_code == 404
+    assert client.get("/api/v1/sources/stub/search", params={"site": "stub", "q": "clip"}).status_code == 404
 
     monkeypatch.setattr(type(stub), "features", frozenset({Feature.SEARCH}))
     monkeypatch.setattr(type(stub), "search_sites", (Site("stub", "Stub Site", searchable=True),))
-    assert client.get("/api/sources/stub/search", params={"site": "other", "q": "clip"}).status_code == 404
+    assert client.get("/api/v1/sources/stub/search", params={"site": "other", "q": "clip"}).status_code == 404
     monkeypatch.setattr(stub, "search", lambda site, query: SearchResults([
         ResolvedLink(kind=LinkKind.COLLECTION, slug="clips", url="https://stub.example/collection/clips", title=f"{query} collection",
                      kind_label="Channel", facts=("3 videos",)),
     ], SearchNotice(badge="Search via stub", text="Answered by the stub")), raising=False)
-    body = client.get("/api/sources/stub/search", params={"site": "stub", "q": "clip"}).json()
+    body = client.get("/api/v1/sources/stub/search", params={"site": "stub", "q": "clip"}).json()
     assert body == {
         "results": [{
             "kind": "collection", "slug": "clips", "url": "https://stub.example/collection/clips", "title": "clip collection",
@@ -379,7 +379,7 @@ def test_a_quick_first_look_comes_before_the_link(client, monkeypatch):
 
     monkeypatch.setattr(stub, "preview", preview)
     monkeypatch.setattr(stub, "resolve", resolve)
-    lines = [json.loads(line) for line in client.post("/api/resolve", json={"url": "https://stub.example/watch/clip-1"}).text.splitlines()]
+    lines = [json.loads(line) for line in client.post("/api/v1/resolve", json={"url": "https://stub.example/watch/clip-1"}).text.splitlines()]
     first_look = next(line["preview"] for line in lines if "preview" in line)
     # What the link is, so Add media can go on with it before the full lookup is done.
     assert first_look.pop("source")["id"] == "stub"

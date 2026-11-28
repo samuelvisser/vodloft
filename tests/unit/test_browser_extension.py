@@ -10,10 +10,10 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture
 def client():
-    from backend.api.endpoints import meta_router
+    from backend.api.endpoints import browser_extension_router
 
     app = FastAPI()
-    app.include_router(meta_router, prefix="/api")
+    app.include_router(browser_extension_router, prefix="/api/v1")
     with TestClient(app) as test_client:
         yield test_client
 
@@ -29,7 +29,7 @@ def test_the_built_extension_downloads_as_a_zip_to_load_into_a_browser(client, t
     (built / "assets" / "popup.js").write_text("")
     monkeypatch.setattr(browser_extension, "EXTENSION_DIRECTORY", built)
 
-    downloaded = client.get("/api/browser-extension")
+    downloaded = client.get("/api/v1/browser-extension")
     assert downloaded.status_code == 200
     assert downloaded.headers["content-type"] == "application/zip"
     assert 'filename="vodloft-browser-extension.zip"' in downloaded.headers["content-disposition"]
@@ -46,7 +46,7 @@ def test_without_a_built_extension_the_download_says_so(client, tmp_path, monkey
     from backend.services import browser_extension
 
     monkeypatch.setattr(browser_extension, "EXTENSION_DIRECTORY", tmp_path / "missing")
-    refused = client.get("/api/browser-extension")
+    refused = client.get("/api/v1/browser-extension")
     assert refused.status_code == 404
     assert "Build the UI" in refused.json()["detail"]
 

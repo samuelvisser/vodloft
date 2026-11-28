@@ -126,16 +126,16 @@ def test_grouping_a_suggestion_puts_its_collections_in_one_new_creator(source, s
     from backend.db.models import Collection
 
     app = FastAPI()
-    app.include_router(router.router, prefix="/api")
+    app.include_router(router.router, prefix="/api/v1")
 
     _check(_collections(session, "ann/a", "ann/b", "ann/c"))
     session.rollback()
 
     with TestClient(app) as client:
-        response = client.post("/api/collections/health/creators/creators/ann/group")
+        response = client.post("/api/v1/collections/health/creators/creators/ann/group")
         assert response.status_code == 200, response.text
         assert response.json() == {"creatorSlug": "ann"}
-        assert client.get("/api/collections/health").json()["creatorSuggestions"] == []
+        assert client.get("/api/v1/collections/health").json()["creatorSuggestions"] == []
 
     session.expire_all()
     creator_ids = {collection.creator_id for collection in session.scalars(select(Collection))}

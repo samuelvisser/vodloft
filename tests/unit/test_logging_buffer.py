@@ -18,15 +18,15 @@ def _access_record(path: str) -> logging.LogRecord:
 def test_logs_endpoint_access_is_not_captured():
     from backend.logging_buffer import is_logs_endpoint_access
 
-    assert is_logs_endpoint_access(_access_record("/api/logs"))
-    assert is_logs_endpoint_access(_access_record("/api/logs?limit=20000&level=INFO"))
+    assert is_logs_endpoint_access(_access_record("/api/v1/logs"))
+    assert is_logs_endpoint_access(_access_record("/api/v1/logs?limit=20000&level=INFO"))
 
 
 def test_other_access_logs_are_still_captured():
     from backend.logging_buffer import is_logs_endpoint_access
 
-    assert not is_logs_endpoint_access(_access_record("/api/pull"))
-    assert not is_logs_endpoint_access(_access_record("/api/tasks/ledger?limit=100"))
+    assert not is_logs_endpoint_access(_access_record("/api/v1/pull"))
+    assert not is_logs_endpoint_access(_access_record("/api/v1/tasks/ledger?limit=100"))
 
 
 def test_logs_endpoint_returns_newest_records_shortened_and_without_pull_requests(monkeypatch):
@@ -43,7 +43,7 @@ def test_logs_endpoint_returns_newest_records_shortened_and_without_pull_request
     entries.append(
         ApplicationLogEntry(
             id=1501, timestamp=now, level="INFO", logger="uvicorn.access",
-            message='127.0.0.1:1 - "GET /api/pull?since=1 HTTP/1.1" 200',
+            message='127.0.0.1:1 - "GET /api/v1/pull?since=1 HTTP/1.1" 200',
         )
     )
     entries.append(ApplicationLogEntry(id=1502, timestamp=now, level="INFO", logger="vodloft", message="x" * 50_000))

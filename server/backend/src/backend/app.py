@@ -19,6 +19,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from sqlalchemy.exc import IntegrityError
 
+from backend.api.versions import CURRENT_API_PREFIX, api_version_of
 from backend.api.errors import (
     collection_already_added_handler, integrity_error_handler, source_request_error_handler, validation_error_handler,
 )
@@ -36,15 +37,14 @@ from config.network import NO_INTERNET_CONNECTION_MESSAGE, is_no_internet_error
 
 logger = logging.getLogger(__name__)
 
-# API paths anyone may call, signed in or not.
+# Paths within each API version that anyone may call, signed in or not.
 PUBLIC_API_PATHS = frozenset({
-    "/api/auth/status",
-    "/api/auth/login",
-    "/api/auth/logout",
-    "/api/config/public",
-    # For Docker's health check and Prometheus; they only report health and counts.
-    "/api/health",
-    "/api/metrics",
+    "/auth/status",
+    "/auth/login",
+    "/auth/logout",
+    "/config/public",
+    # For Prometheus; it only reports counts.
+    "/metrics",
 })
 
 
@@ -231,7 +231,7 @@ def create_app() -> FastAPI:
             status_code=error.status_code,
         )
 
-    # Auth middleware: every /api/* call needs someone signed in, except signing
+    # Auth middleware: every /api/<version>/* call needs someone signed in, except signing
     # in itself and the public config the login page reads. Who it is, and what
     # they may do, travels on request.state.access to the routes' requires(...).
     @app.middleware("http")
@@ -243,12 +243,14 @@ def create_app() -> FastAPI:
             if request.method == "OPTIONS":
                 return await call_next(request)
 
-            path = request.url.path
-            if path.startswith("/api/") and path not in PUBLIC_API_PATHS:
+            # Outside every API version are only the health check, the list of versions and the answer that
+            # tells a client its version is not one of them, which anyone may read.
+            version, path = api_version_of(request.url.path)
+            if version is not None and path not in PUBLIC_API_PATHS:
                 access = await run_in_threadpool(resolve_access, request)
                 if access is None:
                     return JSONResponse({"detail": "Not authenticated"}, status_code=401)
-                if access.must_change_password and not path.startswith("/api/auth/"):
+                if access.must_change_password and not path.startswith("/auth/"):
                     return JSONResponse({"detail": "Choose a new password first."}, status_code=403)
                 request.state.access = access
                 # Operations created while handling this request remember who asked.
@@ -317,7 +319,6 @@ def create_app() -> FastAPI:
         local_media_profile_router,
         collection_local_media_profile_router,
         video_local_media_profile_router,
-        meta_router,
         config_router,
         rss_stream_profile_router,
         iptv_stream_profile_router,
@@ -333,57 +334,64 @@ def create_app() -> FastAPI:
         import_router,
         assets_router,
         health_router,
+        health_check_router,
         regex_router,
         notification_router,
         account_notification_router,
         push_router,
+        api_versions_router,
+        browser_extension_router,
     )
     from backend.api.endpoints.auth.router import router as auth_router
 
     # Signing in, and who is signed in
-    app.include_router(auth_router, prefix="/api")
+    app.include_router(auth_router, prefix=CURRENT_API_PREFIX)
 
     # Keep podcast feed, IPTV and WebDAV endpoints outside of /api to prevent authentication
     app.include_router(feeds_router)
     app.include_router(iptv_router)
     app.include_router(webdav_router)
-    app.include_router(health_router, prefix="/api")
+    app.include_router(health_check_router)
+    app.include_router(health_router, prefix=CURRENT_API_PREFIX)
 
     # Protected API endpoints (shielded by middleware above)
-    app.include_router(dailywire_router, prefix="/api")
-    app.include_router(download_profile_router, prefix="/api")
-    app.include_router(episode_router, prefix="/api")
-    app.include_router(season_router, prefix="/api")
-    app.include_router(media_download_router, prefix="/api")
-    app.include_router(collection_router, prefix="/api")
-    app.include_router(creator_router, prefix="/api")
-    app.include_router(movie_router, prefix="/api")
-    app.include_router(video_router, prefix="/api")
-    app.include_router(library_router, prefix="/api")
-    app.include_router(onboarding_router, prefix="/api")
-    app.include_router(source_router, prefix="/api")
-    app.include_router(operation_router, prefix="/api")
-    app.include_router(puller_router, prefix="/api")
-    app.include_router(quick_download_router, prefix="/api")
-    app.include_router(setting_router, prefix="/api")
-    app.include_router(import_router, prefix="/api")
-    app.include_router(regex_router, prefix="/api")
-    app.include_router(local_media_profile_router, prefix="/api")
-    app.include_router(collection_local_media_profile_router, prefix="/api")
-    app.include_router(video_local_media_profile_router, prefix="/api")
-    app.include_router(custom_metadata_router, prefix="/api")
-    app.include_router(meta_router, prefix="/api")
-    app.include_router(config_router, prefix="/api")
-    app.include_router(rss_stream_profile_router, prefix="/api")
-    app.include_router(iptv_stream_profile_router, prefix="/api")
-    app.include_router(webdav_stream_profile_router, prefix="/api")
-    app.include_router(stream_profile_router, prefix="/api")
-    app.include_router(task_router, prefix="/api")
-    app.include_router(logs_router, prefix="/api")
-    app.include_router(user_router, prefix="/api")
-    app.include_router(assets_router, prefix="/api")
-    app.include_router(notification_router, prefix="/api")
-    app.include_router(account_notification_router, prefix="/api")
-    app.include_router(push_router, prefix="/api")
+    app.include_router(dailywire_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(download_profile_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(episode_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(season_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(media_download_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(collection_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(creator_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(movie_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(video_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(library_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(onboarding_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(source_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(operation_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(puller_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(quick_download_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(setting_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(import_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(regex_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(local_media_profile_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(collection_local_media_profile_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(video_local_media_profile_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(custom_metadata_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(config_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(rss_stream_profile_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(iptv_stream_profile_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(webdav_stream_profile_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(stream_profile_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(task_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(logs_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(user_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(assets_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(notification_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(account_notification_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(push_router, prefix=CURRENT_API_PREFIX)
+    app.include_router(browser_extension_router, prefix=CURRENT_API_PREFIX)
+
+    # Last, so its catch-all for paths outside every API version comes after every real route.
+    app.include_router(api_versions_router)
 
     return app

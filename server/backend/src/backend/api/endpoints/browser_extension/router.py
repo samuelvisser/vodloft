@@ -1,17 +1,10 @@
 from fastapi import APIRouter, HTTPException, Response
 
-from .meta_service import *
-from ..models.meta import *
 from backend.security.access import Area, Level
-from backend.security.deps import requires_any, signed_in
+from backend.security.deps import requires_any
 from backend.services.browser_extension import ZIP_NAME, extension_zip
 
-router = APIRouter(tags=["Meta"])
-
-
-@router.get("/health", dependencies=[signed_in()], response_model=HealthAPIRead)
-def health():
-    return get_health()
+router = APIRouter(tags=["Browser extension"])
 
 
 # Everyone the extension is of use to: who adds media or quick downloads, or sends a site's cookies.

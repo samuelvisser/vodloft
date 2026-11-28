@@ -168,7 +168,7 @@ services:
 * `TZ` -- Container timezone. Defaults to `UTC`.
 * `VL_ADMIN_AUTH__PASSWORD` -- Set this to require a password to access the Web UI. Leave it unset for open access on your local network. Always set this when exposing VODLoft through a reverse proxy.
 * `VL_DATABASE_URL` -- Keep the database in PostgreSQL instead of SQLite, for example `postgresql+psycopg://vodloft:password@postgres/vodloft`. [`.docker/docker-compose.postgresql.yml`](.docker/docker-compose.postgresql.yml) sets this up with a PostgreSQL container. An empty PostgreSQL database is filled from the existing SQLite database on its first start. See [Installation](https://github.com/samuelvisser/vodloft/wiki/Installation#choose-a-database).
-* `API_URL` -- Override the API base URL given to the Web UI. This defaults to the relative `/api`, which works out of the box regardless of which host port you map.
+* `API_URL` -- Override the API base URL given to the Web UI. This defaults to the relative `/api`, which works out of the box regardless of which host port you map. The Web UI adds the API version itself (`/api/v1/...`), so leave it out here.
 
 Literally every setting VODLoft provides can be managed by environment variables, too. However, I generally do not advise
 using environment variables for anything but the above examples. Any setting configured by environment variable cannot be changed in the VODLoft UI.
