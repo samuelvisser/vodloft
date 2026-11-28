@@ -322,11 +322,15 @@ def test_onboarding_suggests_popular_sites_and_any_other_site_vodloft_knows(sess
     from backend.services.sites import site_choices
 
     _site(session, "nebula", "Nebula", "nebula.tv")
+    _site(session, "twitch", "Twitch", "twitch.tv")
     choices = site_choices(session)
 
     assert [choice.key for choice in choices] == ["youtube", "twitch", "dailywire", "soundcloud", "tiktok", "vimeo", "nebula"]
-    assert [choice.key for choice in choices if choice.added] == ["nebula"]
+    assert [choice.key for choice in choices if choice.added] == ["twitch", "nebula"]
+    assert [choice.key for choice in choices if choice.suggested] == ["youtube", "twitch", "dailywire", "soundcloud", "tiktok", "vimeo"]
     assert all(choice.pitch for choice in choices[:6])
+    # Only YouTube starts picked, also where an older VODLoft added other Sites.
+    assert [choice.key for choice in choices if choice.picked] == ["youtube"]
 
 
 def test_picking_sites_keeps_only_those(session):

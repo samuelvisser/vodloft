@@ -10,7 +10,13 @@ import {getErrorMessageFromResponse} from '../../utils/helpers'
 import SiteIcon from '../common/SiteIcon'
 import AddSiteByLink from '../Settings/AddSiteByLink'
 
+/** What the user picked on this step, kept by the flow so going back shows it again. ``others`` are the Sites
+ *  they added by address here, which stay in the grid even when unpicked. */
+export type SitePicks = {picked: string[]; others: string[]}
+
 type Props = {
+    picks: SitePicks | null
+    onPicks: (picks: SitePicks) => void
     onBack: () => void
     onContinue: () => void
 }
@@ -41,26 +47,28 @@ function SiteTile({site, picked, onToggle}: {site: SiteChoiceRead; picked: boole
 
 /** Onboarding's Sites step: the user picks the Sites they use from the popular ones, or adds any other by its
  *  address. At least one is needed to continue. Continuing makes the picked Sites the ones VODLoft knows. */
-export default function OnboardingSitesStep({onBack, onContinue}: Props) {
+export default function OnboardingSitesStep({picks, onPicks, onBack, onContinue}: Props) {
     const queryClient = useQueryClient()
     const {data: choices, error: loadError} = useSiteChoices()
-    const [picked, setPicked] = useState<Set<string> | null>(null)
     const [saving, setSaving] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
-    // The Sites already added start picked, such as after going back to this step.
+    // Only the Site VODLoft picks first starts picked, whatever an older VODLoft added before.
     useEffect(() => {
-        if (choices && picked === null) setPicked(new Set(choices.filter((site) => site.added).map((site) => site.key)))
-    }, [choices, picked])
+        if (choices && picks === null) onPicks({picked: choices.filter((site) => site.picked).map((site) => site.key), others: []})
+    }, [choices, picks, onPicks])
 
-    const chosen = picked ?? new Set<string>()
-    const toggle = (key: string) => setPicked((current) => {
-        const next = new Set(current ?? [])
+    // Until the flow keeps the picks, show the first ones straight away instead of a moment without.
+    const chosen = new Set(picks?.picked ?? (choices ?? []).filter((site) => site.picked).map((site) => site.key))
+    const others = picks?.others ?? []
+    const shown = (choices ?? []).filter((site) => site.suggested || others.includes(site.key))
+    const toggle = (key: string) => {
+        const next = new Set(chosen)
         if (next.has(key)) next.delete(key)
         else next.add(key)
-        return next
-    })
-    const pickedNames = (choices ?? []).filter((site) => chosen.has(site.key)).map((site) => site.name)
+        onPicks({picked: [...next], others})
+    }
+    const pickedNames = shown.filter((site) => chosen.has(site.key)).map((site) => site.name)
 
     const save = async () => {
         setSaving(true)
@@ -99,7 +107,7 @@ export default function OnboardingSitesStep({onBack, onContinue}: Props) {
             {loadError && <div className="form-error-card" role="alert">Could not load the sites: {loadError.message}</div>}
             {choices && (
                 <div className="onboarding-sites" role="group" aria-label="Sites you use">
-                    {choices.map((site) => (
+                    {shown.map((site) => (
                         <SiteTile key={site.key} site={site} picked={chosen.has(site.key)} onToggle={() => toggle(site.key)}/>
                     ))}
                 </div>
@@ -107,7 +115,10 @@ export default function OnboardingSitesStep({onBack, onContinue}: Props) {
             <div className="onboarding-sites-other">
                 <AddSiteByLink
                     help="Another site? Type its address, such as nebula.tv, or paste a link to a page on it."
-                    onAdded={(site) => setPicked((current) => new Set([...(current ?? []), site.key]))}
+                    onAdded={(site) => onPicks({
+                        picked: [...new Set([...chosen, site.key])],
+                        others: others.includes(site.key) ? others : [...others, site.key],
+                    })}
                 />
             </div>
             {error && <div className="form-error-card" role="alert">{error}</div>}
