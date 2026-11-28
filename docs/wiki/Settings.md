@@ -294,11 +294,8 @@ signed in and whether it has an API key; open it to change that.
   where you are signed in on that site, with a browser extension made for that. Every Source that fetches the site uses
   the site's own file, for every lookup and download there: yt-dlp on YouTube, and both NPO Start and yt-dlp on npo.nl.
   A site keeps only its own cookies from the file you choose, so a file with cookies of other sites is fine.
-  There are three ways to give a site its cookies:
-  - **Send cookies to VODLoft** with [[VODLoft's browser extension|Browser-Extension]]: open a page of the site while you
-    are signed in there, and send its cookies with one click. VODLoft adds the site if it did not know it yet.
-  - **Paste cookies**: paste the text of a `cookies.txt` file, such as a cookie-export extension shows.
-  - **Choose file**: pick a `cookies.txt` file you saved.
+  Choose **Choose file** to pick a `cookies.txt` file you saved, or **Paste cookies** to paste its text, such as a
+  cookie-export extension shows.
 - **Some sites also let you sign in with your account**, without a cookies file. The cookies file stays available on
   them too, and when you use both, the sign-in counts where they overlap.
   - **Nebula, CuriosityStream, Dropout and Niconico**: fill in your email address and password. Nebula and
