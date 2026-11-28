@@ -10,6 +10,7 @@ from backend.db.models import DownloadProfile, Episode
 from backend.db.core import run_write_transaction
 from backend.db.models.media_download import MediaDownloadBase
 from backend.services.episode_download_delay import episode_download_delay_ready_at
+from backend.services.collections import remove_downloaded_files
 from backend.services.episode_filters import has_latest_count
 from task_manager.scheduler.types import OperationSource
 from task_manager.tasks.helpers.download_profiles import lock_enabled_download_profile
@@ -23,6 +24,7 @@ from task_manager.tasks.media_download_operations import (
 )
 
 from ._helpers import (
+    RetentionCleanup,
     cleanup_older_episodes,
     dismissed_episodes,
     ensure_episode_download,
@@ -151,7 +153,8 @@ def _reconcile_profile(s: Session, profile_id: int, only_episode_id: Optional[in
         created += made
 
     if cleanup:
-        run_write_transaction(lambda w: _cleanup_older_episodes(w, profile_id, version))
+        retention = run_write_transaction(lambda w: _cleanup_older_episodes(w, profile_id, version))
+        remove_downloaded_files(list(retention.files))
     return created
 
 
@@ -213,6 +216,6 @@ def _reconcile_episodes(s: Session, profile_id: int, version: tuple, episode_ids
     return created
 
 
-def _cleanup_older_episodes(s: Session, profile_id: int, version: tuple) -> int:
+def _cleanup_older_episodes(s: Session, profile_id: int, version: tuple) -> RetentionCleanup:
     profile = _locked_profile(s, profile_id, version)
-    return cleanup_older_episodes(s, profile) if profile is not None else 0
+    return cleanup_older_episodes(s, profile) if profile is not None else RetentionCleanup()

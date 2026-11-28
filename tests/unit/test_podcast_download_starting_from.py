@@ -194,7 +194,7 @@ def test_starting_from_never_deletes_older_downloads(db_session, tmp_path):
     db_session.add(existing)
     db_session.commit()
 
-    assert cleanup_older_episodes(db_session, profile) == 0
+    assert cleanup_older_episodes(db_session, profile).removed == 0
     assert existing_file.exists()
     assert db_session.get(EpisodeMediaDownload, existing.id) is existing
 
