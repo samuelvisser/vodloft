@@ -635,8 +635,10 @@ export async function saveSourceYtdlpOptions(sourceId: string, text: string): Pr
 /** The tags a Source gives episodes of the show at ``url``, or of any of its shows without one. */
 /** A Source's episode tags for the collection at ``url``; with ``collectionType``, the main one is named as a collection
  *  of that type names its episodes. */
-export function useEpisodeTags(sourceKey?: string | null, url?: string | null, collectionType?: string | null) {
-    return useQuery<EpisodeTagRead[], Error, EpisodeTagRead[], readonly ['episodeTags', string, string | null, string | null]>({
+/** The episode tags of a Source, for a link at it. Add collection's first page starts it for the collection it shows,
+ * so the later pages have it ready. */
+export function episodeTagsQuery(sourceKey?: string | null, url?: string | null, collectionType?: string | null) {
+    return queryOptions<EpisodeTagRead[], Error, EpisodeTagRead[], readonly ['episodeTags', string, string | null, string | null]>({
         queryKey: ['episodeTags', sourceKey ?? '', url ?? null, collectionType ?? null] as const,
         enabled: !!sourceKey,
         staleTime: Infinity,
@@ -647,6 +649,10 @@ export function useEpisodeTags(sourceKey?: string | null, url?: string | null, c
             signal,
         ),
     })
+}
+
+export function useEpisodeTags(sourceKey?: string | null, url?: string | null, collectionType?: string | null) {
+    return useQuery(episodeTagsQuery(sourceKey, url, collectionType))
 }
 
 /** What a Source calls each publish status, by status. */
@@ -1504,8 +1510,10 @@ export function useWaitingForCountdown(collectionId?: number, enabled = true) {
 }
 
 /** Choices only some sites offer, for a saved Collection or for the link of one that is being added. */
-export function useSiteOptions({collectionId, sourceKey, url}: {collectionId?: number; sourceKey?: string; url?: string | null}) {
-    return useQuery({
+/** What a collection's Site offers. Add collection's first page starts it for the collection it shows, so the next
+ * page shows only the choices the Site has, without first showing them all. */
+export function siteOptionsQuery({collectionId, sourceKey, url}: {collectionId?: number; sourceKey?: string; url?: string | null}) {
+    return queryOptions({
         queryKey: ['siteOptions', collectionId, sourceKey, url] as const,
         enabled: collectionId !== undefined || (!!sourceKey && !!url),
         queryFn: ({signal}) => fetchParsed(
@@ -1517,6 +1525,10 @@ export function useSiteOptions({collectionId, sourceKey, url}: {collectionId?: n
         ),
         staleTime: Infinity,
     })
+}
+
+export function useSiteOptions(params: {collectionId?: number; sourceKey?: string; url?: string | null}) {
+    return useQuery(siteOptionsQuery(params))
 }
 
 export function useDownloadProfilesByCollectionSlug(collectionSlug?: string) {

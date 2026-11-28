@@ -12,6 +12,7 @@ import SeasonsReview, {GoBack, SavingDoes, SavingProgress} from './SeasonsReview
 import {useSavingSteps} from './savingProgress'
 import {dialogWords, newToken, useNarrow} from './seasonsSettings'
 import './SeasonsDialog.css'
+import LoadingNote from '../common/LoadingNote'
 
 const BulkReviewSchema = z.object({
     collections: z.object({
@@ -104,7 +105,7 @@ export default function BulkSeasonsReview({ids, changes, onReady, onBack, saving
     return (
         <div className="bulk-seasons-review">
             {saving ? (
-                <p className="change-identification-loading" role="status">
+                <p className="loading-note" role="status">
                     <FontAwesomeIcon icon={faIcon('fass', savingNow || savedCount < toSave ? 'spinner' : 'circle-check')} spin={!!savingNow || savedCount < toSave} aria-hidden="true"/>
                     {savingNow
                         ? `Saving ${savingNow.title} (${(savedCount + 1).toLocaleString()} of ${toSave.toLocaleString()})…`
@@ -154,10 +155,9 @@ export default function BulkSeasonsReview({ids, changes, onReady, onBack, saving
                 })}
             </ul>
             {pending > 0 && (
-                <p className="change-identification-loading" role="status">
-                    <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/>
+                <LoadingNote>
                     Looking at what changes in {pending.toLocaleString()} collection{pending === 1 ? '' : 's'}…
-                </p>
+                </LoadingNote>
             )}
             {unchanged > 0 && (
                 <p className="help">

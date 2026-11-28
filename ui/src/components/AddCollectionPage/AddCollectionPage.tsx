@@ -186,7 +186,7 @@ function AddCollectionWizard({onCancel, onCreated, initialUrl, initialCreator, o
     // The filters to start with come from the show's Source and seasons once the show is chosen.
     const {data: collectionEpisodeTags} = useEpisodeTags(collectionSubmit?.sourceKey, collectionSubmit?.sharingUrl)
     // Streaming is offered when the collection's Site, such as YouTube, can stream.
-    const {data: collectionSite} = useSiteOptions({sourceKey: collectionSubmit?.sourceKey, url: collectionSubmit?.sharingUrl})
+    const {data: collectionSite, isPending: collectionSitePending} = useSiteOptions({sourceKey: collectionSubmit?.sourceKey, url: collectionSubmit?.sharingUrl})
     const tagDefaultsAppliedFor = useRef(persisted?.downloadProfile.input ? filterDefaultsKey(persisted?.collection.submit, persisted?.seasons) : undefined)
     useEffect(() => {
         const key = filterDefaultsKey(collectionSubmit, seasonsSubmit)
@@ -407,7 +407,7 @@ function AddCollectionWizard({onCancel, onCreated, initialUrl, initialCreator, o
                         }
                         // The download options follow how the show identifies its episodes, and its Source's episode tags.
                         if (collectionSubmit?.episodeIdentifier !== value.episodeIdentifier || collectionTagsKey(collectionSubmit) !== collectionTagsKey(value)) {
-                            const tags = qc.getQueryData<EpisodeTagRead[]>(['episodeTags', value.sourceKey, value.sharingUrl])
+                            const tags = qc.getQueryData<EpisodeTagRead[]>(['episodeTags', value.sourceKey ?? '', value.sharingUrl ?? null, null])
                             setDownloadProfileInput(defaultDownloadProfile(value.episodeIdentifier, tags))
                             // The starting filters follow once the show's seasons are known too.
                             tagDefaultsAppliedFor.current = undefined
@@ -427,7 +427,8 @@ function AddCollectionWizard({onCancel, onCreated, initialUrl, initialCreator, o
             {step === 2 && (
                 <CollectionActionStep
                     value={collectionAction}
-                    canStreamFromSource={!collectionSubmit || (collectionSite ? collectionSite.streamMethods.length > 0 : true)}
+                    canStreamFromSource={!collectionSite || collectionSite.streamMethods.length > 0}
+                    loading={!!collectionSubmit && collectionSitePending}
                     onChange={setCollectionAction}
                     onBack={() => setStep(1)}
                     onContinue={handleActionContinue}

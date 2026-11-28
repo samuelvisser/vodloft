@@ -13,6 +13,7 @@ import type {ProgressStep} from '../../types/progress'
 import {useOperations} from '../OperationNotifier/OperationNotifier'
 import {presentOperationProgress} from '../../lib/operationProgress'
 import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
+import LoadingNote from '../common/LoadingNote'
 
 /** The second step of the Seasons dialog: what saving does, as the Move dialog shows a move, with the cards only the
  * Seasons dialog needs besides: the seasons it makes, the videos that get downloaded, the ones that leave, and the
@@ -42,10 +43,9 @@ export default function SeasonsReview({view, review, failed, changes, words, lis
     if (failed) return <p className="error" role="alert">{failed}</p>
     if (!review) {
         return (
-            <p className="change-identification-loading" role="status">
-                <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/>
+            <LoadingNote>
                 Looking at what changes…
-            </p>
+            </LoadingNote>
         )
     }
     if (review.busy && listing && listings.length > 0) {
@@ -55,10 +55,9 @@ export default function SeasonsReview({view, review, failed, changes, words, lis
         const steps = [...listings].sort((a, b) => (order[a.state] ?? 2) - (order[b.state] ?? 2))
         return (
             <div className="seasons-review-busy">
-                <p className="change-identification-loading" role="status">
-                    <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/>
+                <LoadingNote>
                     <span>Listing what you switched on: <b>{done.toLocaleString()} of {listings.length.toLocaleString()}</b> done</span>
-                </p>
+                </LoadingNote>
                 <ProgressSteps steps={steps} className="is-plain seasons-review-listings" label="Listings"/>
                 <p className="help">
                     Once VODLoft knows what is in each of them, this shows exactly what moves. Nothing is saved yet, and
@@ -70,10 +69,9 @@ export default function SeasonsReview({view, review, failed, changes, words, lis
     if (review.busy && review.busyOperation) return <WaitingFor operationId={review.busyOperation} text={review.busy}/>
     if (review.busy) {
         return (
-            <p className="change-identification-loading" role="status">
-                <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/>
+            <LoadingNote>
                 {review.busy}
-            </p>
+            </LoadingNote>
         )
     }
     const rows = [
@@ -225,10 +223,9 @@ function WaitingFor({operationId, text}: {operationId: string, text: string}) {
     return (
         <div className="seasons-review-busy">
             <section className="seasons-saving" aria-live="polite">
-                <p className="change-identification-loading" role="status">
-                    <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/>
+                <LoadingNote>
                     <b>{definition?.label ?? 'Working on it'}</b>
-                </p>
+                </LoadingNote>
                 {steps.length > 0
                     ? <ProgressSteps steps={steps} className="is-plain" label="What VODLoft is doing"/>
                     : progress?.detail && <p className="help">{progress.detail}</p>}
@@ -242,10 +239,9 @@ export function SavingProgress({steps}: {steps: ProgressStep[]}) {
     const now = steps.find((step) => step.state === 'running')
     return (
         <section className="seasons-saving" aria-live="polite">
-            <p className="change-identification-loading" role="status">
-                <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/>
+            <LoadingNote>
                 <b>{now ? now.label : 'Saving'}…</b>
-            </p>
+            </LoadingNote>
             {steps.length > 0 && <ProgressSteps steps={steps} className="is-plain" label="What saving does"/>}
         </section>
     )
