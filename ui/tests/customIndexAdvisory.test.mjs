@@ -4,23 +4,35 @@ import {createRequire} from 'node:module'
 import {dirname, resolve} from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {test} from 'node:test'
+import {transformSync} from 'esbuild'
 
 const require = createRequire(import.meta.url)
-const ts = require('typescript')
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+
+// Test-only: CommonJS output, so each module runs with the mocked require it is given.
+function transpile(source, filename) {
+    return transformSync(source, {
+        loader: filename.endsWith('.tsx') ? 'tsx' : 'ts',
+        format: 'cjs',
+        target: 'es2022',
+        jsx: 'automatic',
+        sourcefile: filename,
+    }).code
+}
+
+// Mocks are ES modules: their `default` is the default export, as it is in the real module.
+const esModule = (exports) => ({__esModule: true, ...exports})
+
 
 // Test-only loader: exercise the actual TypeScript without requiring a browser
 // or adding a second application test framework. TypeScript is a UI devDependency.
-function loadTs(relative, mocks = {}, compilerOptions = {}) {
+function loadTs(relative, mocks = {}) {
     const filename = resolve(root, relative)
     const source = readFileSync(filename, 'utf8')
-    const js = ts.transpileModule(source, {
-        compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, ...compilerOptions},
-        fileName: filename,
-    }).outputText
+    const js = transpile(source, filename)
     const module = {exports: {}}
     new Function('require', 'module', 'exports', js)((name) => {
-        if (name in mocks) return mocks[name]
+        if (name in mocks) return esModule(mocks[name])
         if (name.startsWith('.')) return loadTs(resolve(dirname(filename), name + '.ts'), mocks)
         return require(name)
     }, module, module.exports)
@@ -108,19 +120,17 @@ function hookHarness() {
     // Only React scheduling, the API base URL and network are mocked. The hook itself is the
     // production source; response-schema validation has its own API tests.
     const file = resolve(root, 'src/lib/useCustomIndexAdvisory.ts')
-    const js = ts.transpileModule(readFileSync(file, 'utf8'), {
-        compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022},
-    }).outputText
-    const exports = {}
-    new Function('require', 'exports', 'window', 'fetch', js)((name) => {
+    const js = transpile(readFileSync(file, 'utf8'), file)
+    const module = {exports: {}}
+    new Function('require', 'module', 'exports', 'window', 'fetch', js)((name) => {
         if (name === 'react') return {useState, useEffect}
         if (name === './api') return {apiUrl: (path = '') => `${window.appConfig.API_URL}${path}`}
         return {CustomIndexAdvisoryResultSchema: {parse: (value) => value}}
-    }, exports, window, fetch)
+    }, module, module.exports, window, fetch)
     return {
         requests,
         render(body) {
-            const result = exports.useCustomIndexAdvisory(body)
+            const result = module.exports.useCustomIndexAdvisory(body)
             if (scheduled) {cleanup = scheduled(); scheduled = null}
             return result
         },
@@ -192,11 +202,7 @@ test('unavailable advisory and syntax errors do not become form-validation error
 
 function componentTree(props, advisoryState = {advisories: [], unavailable: false}) {
     const filename = resolve(root, 'src/components/LocalMediaProfile/CustomIndexAdvisories.tsx')
-    const js = ts.transpileModule(readFileSync(filename, 'utf8'), {
-        compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX},
-        fileName: filename,
-    }).outputText
-    const exports = {}
+    const js = transpile(readFileSync(filename, 'utf8'), filename)
     let sentRequest
     // Render the read-only code component too, so assertions see its CodeMirror props.
     const jsx = (type, props, key) => typeof type === 'function' ? type(props) : {type, props, key}
@@ -218,10 +224,11 @@ function componentTree(props, advisoryState = {advisories: [], unavailable: fals
         './ReadOnlyOutputTemplateCode.css': {},
     }
     dependencies['./ReadOnlyOutputTemplateCode'] = loadTs(
-        'src/components/LocalMediaProfile/ReadOnlyOutputTemplateCode.tsx', dependencies, {jsx: ts.JsxEmit.ReactJSX},
+        'src/components/LocalMediaProfile/ReadOnlyOutputTemplateCode.tsx', dependencies,
     )
-    new Function('require', 'exports', js)((name) => dependencies[name], exports)
-    const tree = exports.default(props)
+    const module = {exports: {}}
+    new Function('require', 'module', 'exports', js)((name) => esModule(dependencies[name]), module, module.exports)
+    const tree = module.exports.default(props)
     const elements = []
     function visit(node) {
         if (Array.isArray(node)) {node.forEach(visit); return}

@@ -1,27 +1,36 @@
 import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
-import {createRequire} from 'node:module'
 import {dirname, resolve} from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {test} from 'node:test'
+import {transformSync} from 'esbuild'
 
-const require = createRequire(import.meta.url)
-const ts = require('typescript')
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+
+// Test-only: CommonJS output, so each module runs with the mocked require it is given.
+function transpile(source, filename) {
+    return transformSync(source, {
+        loader: filename.endsWith('.tsx') ? 'tsx' : 'ts',
+        format: 'cjs',
+        target: 'es2022',
+        jsx: 'automatic',
+        sourcefile: filename,
+    }).code
+}
+
+// Mocks are ES modules: their `default` is the default export, as it is in the real module.
+const esModule = (exports) => ({__esModule: true, ...exports})
 
 function load(relative, mocks) {
     const filename = resolve(root, relative)
     const source = readFileSync(filename, 'utf8')
-    const js = ts.transpileModule(source, {
-        compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX},
-        fileName: filename,
-    }).outputText
-    const exports = {}
-    new Function('require', 'exports', js)((name) => {
-        if (name in mocks) return mocks[name]
+    const js = transpile(source, filename)
+    const module = {exports: {}}
+    new Function('require', 'module', 'exports', js)((name) => {
+        if (name in mocks) return esModule(mocks[name])
         throw new Error(`Unexpected dependency ${name}`)
-    }, exports)
-    return exports
+    }, module, module.exports)
+    return module.exports
 }
 
 function component(advisories) {

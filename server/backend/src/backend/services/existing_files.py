@@ -9,6 +9,7 @@ the scan is finished, so they only see the episodes that still have no file.
 from __future__ import annotations
 
 import os
+import posixpath
 from collections.abc import Iterable, Sequence
 from dataclasses import asdict
 from pathlib import Path, PurePosixPath
@@ -74,8 +75,9 @@ def default_folder(output_template: str) -> str:
                 break
             text += part
         starts.append(text)
-    fixed = os.path.commonprefix(starts) if starts else ""
-    folder = fixed[: fixed.rfind("/")] if "/" in fixed else ""
+    # The folder each variant's fixed start ends in, then the folder they all share.
+    folders = [posixpath.dirname(start) for start in starts]
+    folder = posixpath.commonpath(folders) if folders and all(f.startswith("/") for f in folders) else ""
     return folder if folder.startswith("/downloads") else "/downloads"
 
 

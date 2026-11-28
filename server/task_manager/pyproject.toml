@@ -3,12 +3,12 @@ name = "task-manager"
 version = "0.10.0"
 description = "Task scheduling and event management system for VODLoft."
 authors = [{ name = "Samuël Visser", email = "samuvisser@gmail.com" }]
-requires-python = ">=3.13,<3.14"
+requires-python = ">=3.15,<3.16"
 dependencies = [
-  "APScheduler>=3.11.0,<4.0",
-  "pyventus>=0.7.2",
-  "portalocker[win32]>=4.0,<5",
-  "SQLAlchemy>=2.0.43,<3.0",
+  "APScheduler>=3.11.3,<4.0",
+  "pyventus>=0.8.0",
+  "portalocker[win32]>=4.4.2,<5",
+  "SQLAlchemy>=2.1.9,<3.0",
   "backend",
   "downloader",
   "progress-plan",
@@ -18,5 +18,5 @@ dependencies = [
 ]
 
 [build-system]
-requires = ["uv_build>=0.8.17,<0.9.0"]
+requires = ["uv_build>=0.13.10,<0.14.0"]
 build-backend = "uv_build"

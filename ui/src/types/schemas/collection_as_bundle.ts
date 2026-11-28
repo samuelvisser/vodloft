@@ -1,7 +1,7 @@
 import {CollectionCreatePayloadSchema} from './collection'
 import {DownloadProfileSchemaRequest} from './download_profile'
 import {CollectionLocalMediaProfileCreateSchema} from './collection_local_media_profile'
-import {RssStreamProfileCreateSchema} from './rss_stream_profile'
+import {RssStreamProfileBundleSchema} from './rss_stream_profile'
 import {z} from 'zod'
 import {SeasonDetachedSchema} from './season'
 
@@ -36,7 +36,7 @@ export type LocalMediaProfileChoiceIn = z.input<typeof LocalMediaProfileChoiceSc
 export type LocalMediaProfileChoiceOut = z.output<typeof LocalMediaProfileChoiceSchema>
 
 
-export const RssStreamProfileBundleSchema = RssStreamProfileCreateSchema.omit({collectionId: true})
+export {RssStreamProfileBundleSchema}
 export type RssStreamProfileBundleIn = z.input<typeof RssStreamProfileBundleSchema>
 export type RssStreamProfileBundleOut = z.output<typeof RssStreamProfileBundleSchema>
 

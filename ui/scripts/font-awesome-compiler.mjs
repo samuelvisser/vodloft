@@ -1,7 +1,7 @@
 import {readdir, readFile} from 'node:fs/promises'
 import {extname, join, relative} from 'node:path'
 import {fileURLToPath} from 'node:url'
-import ts from 'typescript'
+import {parseSync, Visitor} from 'vite'
 
 const SOURCE_ROOT = fileURLToPath(new URL('../src/', import.meta.url))
 const FALLBACKS_PATH = fileURLToPath(new URL('../src/icons/freeIconFallbacks.json', import.meta.url))
@@ -55,21 +55,29 @@ async function sourceFiles(directory = SOURCE_ROOT) {
   return files.sort()
 }
 
-function sourceLocation(sourceFile, node) {
-  const position = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
-  return `${relative(SOURCE_ROOT, sourceFile.fileName)}:${position.line + 1}:${position.character + 1}`
+function sourceLocation(file, source, node) {
+  const before = source.slice(0, node.start)
+  const line = before.split('\n').length
+  const column = node.start - before.lastIndexOf('\n')
+  return `${relative(SOURCE_ROOT, file)}:${line}:${column}`
 }
 
 function literalStrings(expression) {
-  if (ts.isStringLiteralLike(expression)) return [expression.text]
-  if (ts.isParenthesizedExpression(expression)) return literalStrings(expression.expression)
-  if (ts.isAsExpression(expression) || ts.isTypeAssertionExpression(expression) || ts.isNonNullExpression(expression)) {
+  if (expression.type === 'Literal' && typeof expression.value === 'string') return [expression.value]
+  if (expression.type === 'TemplateLiteral' && !expression.expressions.length) return [expression.quasis[0].value.cooked]
+  if (
+    expression.type === 'ParenthesizedExpression'
+    || expression.type === 'TSAsExpression'
+    || expression.type === 'TSSatisfiesExpression'
+    || expression.type === 'TSTypeAssertion'
+    || expression.type === 'TSNonNullExpression'
+  ) {
     return literalStrings(expression.expression)
   }
-  if (ts.isConditionalExpression(expression)) {
+  if (expression.type === 'ConditionalExpression') {
     const values = [
-      ...literalStrings(expression.whenTrue),
-      ...literalStrings(expression.whenFalse),
+      ...literalStrings(expression.consequent),
+      ...literalStrings(expression.alternate),
     ]
     return [...new Set(values)]
   }
@@ -83,56 +91,52 @@ async function scanIconReferences(files) {
 
   for (const file of files) {
     const source = await readFile(file, 'utf8')
-    const scriptKind = file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
-    const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, scriptKind)
+    const parsed = parseSync(file, source, {lang: file.endsWith('.tsx') ? 'tsx' : 'ts', preserveParens: true})
+    if (parsed.errors.length) {
+      errors.push(`${relative(SOURCE_ROOT, file)} could not be parsed: ${parsed.errors[0].message}`)
+      continue
+    }
+    const location = (node) => sourceLocation(file, source, node)
 
-    function visit(node) {
-      if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
-        const moduleName = node.moduleSpecifier.text
+    new Visitor({
+      ImportDeclaration(node) {
+        const moduleName = node.source.value
         if (
           moduleName.startsWith('@awesome.me/')
           || /^@fortawesome\/(?:free|pro)-.*-svg-icons$/.test(moduleName)
         ) {
           errors.push(
-            `${sourceLocation(sourceFile, node)} imports '${moduleName}' directly. `
+            `${location(node)} imports '${moduleName}' directly. `
             + 'Application code must use faIcon(prefix, iconName); icon packs are compiler-only.',
           )
         }
-      }
-
-      if (
-        ts.isCallExpression(node)
-        && ts.isIdentifier(node.expression)
-        && node.expression.text === 'faIcon'
-      ) {
+      },
+      CallExpression(node) {
+        if (node.callee.type !== 'Identifier' || node.callee.name !== 'faIcon') return
         if (node.arguments.length !== 2) {
-          errors.push(`${sourceLocation(sourceFile, node)} faIcon() requires exactly a prefix and icon name.`)
-        } else {
-          const prefixes = literalStrings(node.arguments[0])
-          const iconNames = literalStrings(node.arguments[1])
+          errors.push(`${location(node)} faIcon() requires exactly a prefix and icon name.`)
+          return
+        }
+        const prefixes = literalStrings(node.arguments[0])
+        const iconNames = literalStrings(node.arguments[1])
 
-          if (!prefixes.length || !iconNames.length) {
-            errors.push(
-              `${sourceLocation(sourceFile, node)} faIcon() arguments must be statically analyzable strings `
-              + 'or conditional expressions whose branches are strings.',
-            )
-          } else {
-            for (const prefix of prefixes) {
-              for (const iconName of iconNames) {
-                const key = referenceKey(prefix, iconName)
-                const locations = references.get(key) ?? []
-                locations.push(sourceLocation(sourceFile, node))
-                references.set(key, locations)
-              }
-            }
+        if (!prefixes.length || !iconNames.length) {
+          errors.push(
+            `${location(node)} faIcon() arguments must be statically analyzable strings `
+            + 'or conditional expressions whose branches are strings.',
+          )
+          return
+        }
+        for (const prefix of prefixes) {
+          for (const iconName of iconNames) {
+            const key = referenceKey(prefix, iconName)
+            const locations = references.get(key) ?? []
+            locations.push(location(node))
+            references.set(key, locations)
           }
         }
-      }
-
-      ts.forEachChild(node, visit)
-    }
-
-    visit(sourceFile)
+      },
+    }).visit(parsed.program)
   }
 
   if (errors.length) {

@@ -100,6 +100,8 @@ never passed as a CLI argument and never printed.
 A web UI is included for navigation and demonstration purposes. It now uses a proper build step so you can write JSX and TypeScript.
 
 ### Develop (recommended)
+The UI needs Node.js 26 or newer. The backend runs on Python 3.15; `uv sync` downloads it for you when it is missing.
+
 Bash:
 ```bash
 npm --prefix ui ci --registry=https://registry.npmjs.org
